@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-DEFAULT_CHATKIT_BASE = "https://api.openai.com"
+DEFAULT_CHATKIT_BASE = "http://localhost:3000/api/ai" # "https://api.openai.com"
 SESSION_COOKIE_NAME = "chatkit_session_id"
 SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
@@ -35,12 +35,12 @@ async def health() -> Mapping[str, str]:
 @app.post("/api/create-session")
 async def create_session(request: Request) -> JSONResponse:
     """Exchange a workflow id for a ChatKit client secret."""
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = "sk-x-RO8SznikOM7vy_jt8jh8NadvuwLhyObHq4XcMObyKRRhVBbQnIOmzaEzjL0G5KXtXjgllcgg2wSeiEylqODeC2hpEe3g2ifYaCmT" #os.getenv("XPERTAI_API_KEY")
     if not api_key:
-        return respond({"error": "Missing OPENAI_API_KEY environment variable"}, 500)
+        return respond({"error": "Missing XPERTAI_API_KEY environment variable"}, 500)
 
     body = await read_json_body(request)
-    workflow_id = resolve_workflow_id(body)
+    workflow_id = "123" # resolve_workflow_id(body)
     if not workflow_id:
         return respond({"error": "Missing workflow id"}, 400)
 
