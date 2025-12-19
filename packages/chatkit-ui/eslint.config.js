@@ -21,7 +21,7 @@ export default defineConfig(
       'react-hooks': reactHooksPlugin,
     },
     settings: {
-      react: { version: '18.0' },
+      react: { version: 'detect' },
     },
     rules: {
       '@typescript-eslint/no-namespace': 'off',

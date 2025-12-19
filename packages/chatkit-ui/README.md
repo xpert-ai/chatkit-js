@@ -1,8 +1,15 @@
 # @xpert-ai/chatkit-ui
 
-React bindings for the ChatKit web component. Use this package when you want
-hooks and JSX helpers that wrap `<xpertai-chatkit />`.
+React UI components for building ChatKit experiences in React.
 
-- Render the ChatKit widget with the `ChatKit` component
-- Manage configuration and events with the `useChatKit` hook
-- Keep parity with the vanilla JS API while staying inside React
+## BasicChat
+
+This package also exports a minimal shadcn-style chat UI scaffold:
+
+```tsx
+import { BasicChat } from '@xpert-ai/chatkit-ui';
+
+export function App() {
+  return <BasicChat className="h-[600px]" />;
+}
+```

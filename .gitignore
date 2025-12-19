@@ -8,3 +8,4 @@ node_modules/
 .DS_Store
 *.tsbuildinfo
 pnpm-debug.log*
+example-app/
