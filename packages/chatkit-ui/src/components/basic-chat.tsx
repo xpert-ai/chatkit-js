@@ -15,8 +15,16 @@ export type BasicChatProps = {
   className?: string;
   title?: string;
   placeholder?: string;
+  messages?: BasicChatMessage[];
   initialMessages?: BasicChatMessage[];
-  onSendMessage?: (content: string) => void | Promise<void>;
+  onMessagesChange?: (messages: BasicChatMessage[]) => void;
+  onSendMessage?: (
+    content: string,
+  ) =>
+    | void
+    | BasicChatMessage
+    | BasicChatMessage[]
+    | Promise<void | BasicChatMessage | BasicChatMessage[]>;
 };
 
 export function BasicChat({
@@ -24,16 +32,27 @@ export function BasicChat({
   title = 'Chat',
   placeholder = 'Type a message…',
   initialMessages = [],
+  messages: controlledMessages,
+  onMessagesChange,
   onSendMessage,
 }: BasicChatProps) {
-  const [messages, setMessages] = React.useState<BasicChatMessage[]>(initialMessages);
+  const isControlled = controlledMessages !== undefined;
+  const [uncontrolledMessages, setUncontrolledMessages] =
+    React.useState<BasicChatMessage[]>(initialMessages);
   const [draft, setDraft] = React.useState('');
   const [sending, setSending] = React.useState(false);
   const scrollerRef = React.useRef<HTMLDivElement | null>(null);
 
+  const messages = isControlled ? controlledMessages : uncontrolledMessages;
+
   React.useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight });
   }, [messages.length]);
+
+  function commitMessages(next: BasicChatMessage[]) {
+    if (!isControlled) setUncontrolledMessages(next);
+    onMessagesChange?.(next);
+  }
 
   async function handleSend(nextContent: string) {
     const content = nextContent.trim();
@@ -50,14 +69,32 @@ export function BasicChat({
       createdAt: new Date(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    const baseMessages = [...(messages ?? []), newMessage];
+    commitMessages(baseMessages);
     setDraft('');
 
     if (!onSendMessage) return;
 
     try {
       setSending(true);
-      await onSendMessage(content);
+      const result = await onSendMessage(content);
+      const assistantMessages = Array.isArray(result)
+        ? result
+        : result
+          ? [result]
+          : [];
+
+      if (assistantMessages.length > 0) {
+        const normalized = assistantMessages.map((message) => ({
+          createdAt: message.createdAt ?? new Date(),
+          ...message,
+          id:
+            message.id ??
+            (globalThis.crypto?.randomUUID?.() ??
+              `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`),
+        }));
+        commitMessages([...baseMessages, ...normalized]);
+      }
     } finally {
       setSending(false);
     }
