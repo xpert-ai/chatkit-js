@@ -5,23 +5,67 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from typing import Any, Mapping
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-DEFAULT_CHATKIT_BASE = "http://localhost:3000/api/ai" # "https://api.openai.com"
+DEFAULT_CHATKIT_BASE = "https://api.openai.com"
 SESSION_COOKIE_NAME = "chatkit_session_id"
 SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 app = FastAPI(title="Managed ChatKit Session API")
 
+
+def load_env_file(path: Path) -> None:
+    if not path.is_file():
+        return
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("'").strip('"')
+        if not key:
+            continue
+        os.environ.setdefault(key, value)
+
+
+_BASE_DIR = Path(__file__).resolve().parents[1]
+load_env_file(_BASE_DIR / ".env")
+load_env_file(_BASE_DIR / ".env.local")
+
+
+def cors_config() -> tuple[list[str], str | None, bool]:
+    raw = os.getenv("CORS_ALLOW_ORIGINS")
+    if raw:
+        if raw.strip() == "*":
+            return ([], ".*", False)
+        origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+        return (origins, None, True)
+
+    if is_prod():
+        return ([], None, False)
+
+    # Dev default: allow Vite dev servers on localhost/127.0.0.1 any port.
+    return ([], r"^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$", True)
+
+
+_cors_origins, _cors_origin_regex, _cors_allow_credentials = cors_config()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_origin_regex=_cors_origin_regex,
+    allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -35,12 +79,15 @@ async def health() -> Mapping[str, str]:
 @app.post("/api/create-session")
 async def create_session(request: Request) -> JSONResponse:
     """Exchange a workflow id for a ChatKit client secret."""
-    api_key = "sk-x-RO8SznikOM7vy_jt8jh8NadvuwLhyObHq4XcMObyKRRhVBbQnIOmzaEzjL0G5KXtXjgllcgg2wSeiEylqODeC2hpEe3g2ifYaCmT" #os.getenv("XPERTAI_API_KEY")
+    api_key = os.getenv("XPERTAI_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return respond({"error": "Missing XPERTAI_API_KEY environment variable"}, 500)
+        return respond(
+            {"error": "Missing XPERTAI_API_KEY (or OPENAI_API_KEY) environment variable"},
+            500,
+        )
 
     body = await read_json_body(request)
-    workflow_id = "123" # resolve_workflow_id(body)
+    workflow_id = resolve_workflow_id(body)
     if not workflow_id:
         return respond({"error": "Missing workflow id"}, 400)
 
@@ -91,6 +138,65 @@ async def create_session(request: Request) -> JSONResponse:
         200,
         cookie_value,
     )
+
+
+@app.post("/api/chat")
+async def chat(request: Request) -> JSONResponse:
+    """Simple chat endpoint for the demo UI (server-side API key)."""
+    api_key = os.getenv("XPERTAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return respond(
+            {"error": "Missing XPERTAI_API_KEY (or OPENAI_API_KEY) environment variable"},
+            500,
+        )
+
+    body = await read_json_body(request)
+    messages = body.get("messages")
+    if not isinstance(messages, Sequence):
+        return respond({"error": "Missing messages"}, 400)
+
+    model = os.getenv("CHAT_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+    api_base = chatkit_api_base()
+
+    try:
+        async with httpx.AsyncClient(base_url=api_base, timeout=30.0) as client:
+            upstream = await client.post(
+                "/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": body.get("temperature", 0.7),
+                },
+            )
+    except httpx.RequestError as error:
+        return respond({"error": f"Failed to reach model API: {error}"}, 502)
+
+    payload = parse_json(upstream)
+    if not upstream.is_success:
+        message = None
+        if isinstance(payload, Mapping):
+            message = payload.get("error")
+        message = message or upstream.reason_phrase or "Failed to generate response"
+        return respond({"error": message}, upstream.status_code)
+
+    content = None
+    if isinstance(payload, Mapping):
+        choices = payload.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, Mapping):
+                message = first.get("message")
+                if isinstance(message, Mapping):
+                    content = message.get("content")
+
+    if not content:
+        return respond({"error": "Missing assistant content in response"}, 502)
+
+    return respond({"content": content}, 200)
 
 
 def respond(
