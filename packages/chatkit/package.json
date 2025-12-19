@@ -1,0 +1,30 @@
+{
+  "name": "@xpert-ai/chatkit",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Type definitions for the ChatKit Web Component.",
+  "sideEffects": false,
+  "files": [
+    "types",
+    "README.md"
+  ],
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts"
+    }
+  },
+  "scripts": {
+    "types": "tsc",
+    "clean": "rimraf dist"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": false
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  },
+  "license": "MIT"
+}
