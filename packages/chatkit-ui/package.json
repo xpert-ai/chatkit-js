@@ -24,6 +24,8 @@
     "react-dom": ">=19"
   },
   "dependencies": {
+    "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-scroll-area": "^1.2.10",
     "@xpert-ai/chatkit": "workspace:*",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.3.1"
@@ -33,9 +35,9 @@
     "@types/react-dom": "^19.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "vitest": "^3.2.4",
+    "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
-    "rimraf": "^5.0.0"
+    "vitest": "^3.2.4"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",

@@ -1,17 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BasicChat, type BasicChatMessage } from '@xpert-ai/chatkit-ui';
+import { EnhancedChat, type EnhancedChatMessage } from '@xpert-ai/chatkit-ui';
 
 type ChatApiResponse = { content: string } | { error: string };
 
 export default function App() {
-  const [messages, setMessages] = useState<BasicChatMessage[]>([
-    {
-      id: 'seed-1',
-      role: 'assistant',
-      content: '你好！这是一个最简 ChatKit UI demo。',
-      createdAt: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<EnhancedChatMessage[]>([]);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -95,33 +88,22 @@ export default function App() {
       role: 'assistant',
       content: assistantContent,
       createdAt: new Date(),
-    } satisfies BasicChatMessage;
+      name: 'AI Assistant',
+    } satisfies EnhancedChatMessage;
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col gap-4 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Managed ChatKit Demo</h1>
-          <div className="text-sm text-muted-foreground">
-            {sessionLoading
-              ? 'Creating session…'
-              : sessionError
-                ? `Session error: ${sessionError}`
-                : clientSecret
-                  ? `Session ready: ${clientSecret.slice(0, 12)}…`
-                  : 'Session not created'}
-          </div>
-        </div>
-      </div>
-      <BasicChat
-        className="h-[600px]"
+    <div className="flex h-screen">
+      <EnhancedChat
+        className="flex-1"
         title="Chat"
         clientSecret={clientSecret}
         placeholder="输入消息..."
         messages={messages}
         onMessagesChange={setMessages}
         onSendMessage={handleSendMessage}
+        showAvatar={true}
+        showTimestamp={true}
       />
     </div>
   );
