@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-DEFAULT_CHATKIT_BASE = "https://api.openai.com"
+DEFAULT_CHATKIT_BASE = "https://api.mtda.cloud/api/ai"
 SESSION_COOKIE_NAME = "chatkit_session_id"
 SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
@@ -43,6 +43,9 @@ _BASE_DIR = Path(__file__).resolve().parents[1]
 load_env_file(_BASE_DIR / ".env")
 load_env_file(_BASE_DIR / ".env.local")
 
+def is_prod() -> bool:
+    env = (os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "").lower()
+    return env == "production"
 
 def cors_config() -> tuple[list[str], str | None, bool]:
     raw = os.getenv("CORS_ALLOW_ORIGINS")
@@ -79,17 +82,15 @@ async def health() -> Mapping[str, str]:
 @app.post("/api/create-session")
 async def create_session(request: Request) -> JSONResponse:
     """Exchange a workflow id for a ChatKit client secret."""
-    api_key = os.getenv("XPERTAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("XPERTAI_API_KEY")
     if not api_key:
-        return respond(
-            {"error": "Missing XPERTAI_API_KEY (or OPENAI_API_KEY) environment variable"},
-            500,
-        )
+        return respond({"error": "Missing XPERTAI_API_KEY environment variable"}, 500)
 
     body = await read_json_body(request)
-    workflow_id = resolve_workflow_id(body)
-    if not workflow_id:
-        return respond({"error": "Missing workflow id"}, 400)
+    assistant_id = resolve_assistant_id(body)
+    
+    if not assistant_id:
+        return respond({"error": "Missing assistant id"}, 400)
 
     user_id, cookie_value = resolve_user(request.cookies)
     api_base = chatkit_api_base()
@@ -103,7 +104,7 @@ async def create_session(request: Request) -> JSONResponse:
                     "OpenAI-Beta": "chatkit_beta=v1",
                     "Content-Type": "application/json",
                 },
-                json={"workflow": {"id": workflow_id}, "user": user_id},
+                json={"assistant": {"id": assistant_id}, "user": user_id},
             )
     except httpx.RequestError as error:
         return respond(
@@ -216,11 +217,6 @@ def respond(
     return response
 
 
-def is_prod() -> bool:
-    env = (os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "").lower()
-    return env == "production"
-
-
 async def read_json_body(request: Request) -> Mapping[str, Any]:
     raw = await request.body()
     if not raw:
@@ -232,19 +228,19 @@ async def read_json_body(request: Request) -> Mapping[str, Any]:
     return parsed if isinstance(parsed, Mapping) else {}
 
 
-def resolve_workflow_id(body: Mapping[str, Any]) -> str | None:
-    workflow = body.get("workflow", {})
-    workflow_id = None
-    if isinstance(workflow, Mapping):
-        workflow_id = workflow.get("id")
-    workflow_id = workflow_id or body.get("workflowId")
-    env_workflow = os.getenv("CHATKIT_WORKFLOW_ID") or os.getenv(
-        "VITE_CHATKIT_WORKFLOW_ID"
+def resolve_assistant_id(body: Mapping[str, Any]) -> str | None:
+    assistant = body.get("assistant", {})
+    assistant_id = None
+    if isinstance(assistant, Mapping):
+        assistant_id = assistant.get("id")
+    assistant_id = assistant_id or body.get("assistantId")
+    env_assistant = os.getenv("CHATKIT_ASSISTANT_ID") or os.getenv(
+        "VITE_CHATKIT_ASSISTANT_ID"
     )
-    if not workflow_id and env_workflow:
-        workflow_id = env_workflow
-    if workflow_id and isinstance(workflow_id, str) and workflow_id.strip():
-        return workflow_id.strip()
+    if not assistant_id and env_assistant:
+        assistant_id = env_assistant
+    if assistant_id and isinstance(assistant_id, str) and assistant_id.strip():
+        return assistant_id.strip()
     return None
 
 

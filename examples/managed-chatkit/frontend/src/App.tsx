@@ -17,7 +17,7 @@ export default function App() {
   const [sessionLoading, setSessionLoading] = useState(false);
 
   const backendOrigin = (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ?? '';
-  const workflowId = (import.meta.env.VITE_CHATKIT_WORKFLOW_ID as string | undefined) ?? '';
+  const assistantId = (import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined) ?? '';
 
   const createSessionUrl = useMemo(() => {
     const base = backendOrigin.replace(/\/$/, '');
@@ -36,7 +36,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify(workflowId ? { workflowId } : {}),
+          body: JSON.stringify(assistantId ? { assistantId } : {}),
         });
 
         const payload = (await response.json().catch(() => null)) as
@@ -62,7 +62,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [createSessionUrl, workflowId]);
+  }, [createSessionUrl, assistantId]);
 
   async function handleSendMessage(content: string) {
     const response = await fetch(`${backendOrigin.replace(/\/$/, '')}/api/chat`, {
@@ -117,6 +117,7 @@ export default function App() {
       <BasicChat
         className="h-[600px]"
         title="Chat"
+        clientSecret={clientSecret}
         placeholder="输入消息..."
         messages={messages}
         onMessagesChange={setMessages}

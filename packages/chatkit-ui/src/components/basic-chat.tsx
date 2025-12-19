@@ -15,6 +15,7 @@ export type BasicChatProps = {
   className?: string;
   title?: string;
   placeholder?: string;
+  clientSecret?: string;
   messages?: BasicChatMessage[];
   initialMessages?: BasicChatMessage[];
   onMessagesChange?: (messages: BasicChatMessage[]) => void;
@@ -30,6 +31,7 @@ export type BasicChatProps = {
 export function BasicChat({
   className,
   title = 'Chat',
+  clientSecret = '',
   placeholder = 'Type a message…',
   initialMessages = [],
   messages: controlledMessages,
@@ -77,6 +79,18 @@ export function BasicChat({
 
     try {
       setSending(true);
+
+      const result1 = await fetch('http://localhost:3000/api/ai/assistants/count', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${clientSecret}`,
+        },
+        body: JSON.stringify({ metadata: {} })
+      });
+
+      console.log('Response from /api/chatkit/message:', await result1.text());
+
       const result = await onSendMessage(content);
       const assistantMessages = Array.isArray(result)
         ? result
