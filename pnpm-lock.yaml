@@ -59,6 +59,9 @@ importers:
 
   examples/managed-chatkit/frontend:
     dependencies:
+      '@xpert-ai/chatkit':
+        specifier: workspace:*
+        version: link:../../../packages/chatkit
       '@xpert-ai/chatkit-ui':
         specifier: workspace:*
         version: link:../../../packages/chatkit-ui

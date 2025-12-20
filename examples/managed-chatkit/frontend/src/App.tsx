@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type EnhancedChatMessage } from '@xpert-ai/chatkit-ui';
+import type { ChatkitMessage } from '@xpert-ai/chatkit';
 
 type ChatApiResponse = { content: string } | { error: string };
 
 export default function App() {
-  const [messages, setMessages] = useState<EnhancedChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatkitMessage[]>([]);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -113,7 +113,7 @@ export default function App() {
       content: assistantContent,
       createdAt: new Date(),
       name: 'AI Assistant',
-    } satisfies EnhancedChatMessage;
+    } satisfies ChatkitMessage;
   }
 
   return (
