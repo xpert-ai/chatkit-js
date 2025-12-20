@@ -40,6 +40,7 @@
     "vitest": "^3.2.4"
   },
   "scripts": {
+    "dev": "vite",
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "test": "vitest",
     "types": "tsc",

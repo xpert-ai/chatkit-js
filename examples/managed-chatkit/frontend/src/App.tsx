@@ -94,17 +94,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen">
-      <EnhancedChat
-        className="flex-1"
-        title="Chat"
-        clientSecret={clientSecret}
-        placeholder="输入消息..."
-        messages={messages}
-        onMessagesChange={setMessages}
-        onSendMessage={handleSendMessage}
-        showAvatar={true}
-        showTimestamp={true}
-      />
+      <iframe src='http://localhost:5173/' className="flex-1" title="Chat"></iframe>
     </div>
   );
 }
