@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type EnhancedChatMessage } from '@xpert-ai/chatkit-ui';
 
 type ChatApiResponse = { content: string } | { error: string };
@@ -8,6 +8,7 @@ export default function App() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const backendOrigin = (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ?? '';
   const assistantId = (import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined) ?? '';
@@ -17,6 +18,24 @@ export default function App() {
     const base = backendOrigin.replace(/\/$/, '');
     return `${base}/api/create-session`;
   }, [backendOrigin]);
+
+  const chatkitOrigin = useMemo(() => {
+    try {
+      return new URL(chatkitTarget, window.location.origin).origin;
+    } catch {
+      return '*';
+    }
+  }, [chatkitTarget]);
+
+  const postClientSecretToIframe = useCallback(() => {
+    if (!clientSecret) return;
+    const targetWindow = iframeRef.current?.contentWindow;
+    if (!targetWindow) return;
+    targetWindow.postMessage(
+      { type: 'chatkit:client-secret', clientSecret },
+      chatkitOrigin,
+    );
+  }, [clientSecret, chatkitOrigin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +76,10 @@ export default function App() {
       cancelled = true;
     };
   }, [createSessionUrl, assistantId]);
+
+  useEffect(() => {
+    postClientSecretToIframe();
+  }, [postClientSecretToIframe]);
 
   async function handleSendMessage(content: string) {
     const response = await fetch(`${backendOrigin.replace(/\/$/, '')}/api/chat`, {
@@ -99,7 +122,13 @@ export default function App() {
         <h1 className="text-2xl font-bold mb-4">Managed Chatkit Example</h1>
         {sessionLoading && <p>Creating session...</p>}
       </div>
-      <iframe src={chatkitTarget} className="flex-1" title="Chat"></iframe>
+      <iframe
+        ref={iframeRef}
+        src={chatkitTarget}
+        className="flex-1"
+        title="Chat"
+        onLoad={postClientSecretToIframe}
+      ></iframe>
     </div>
   );
 }

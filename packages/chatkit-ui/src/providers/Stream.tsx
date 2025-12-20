@@ -419,7 +419,9 @@ const StreamSession = ({
   const abortRef = useRef<AbortController | null>(null);
 
   const client = useMemo(
-    () => new Client<StateType>({ apiUrl, apiKey }),
+    () => new Client<StateType>({ apiUrl, apiKey, defaultHeaders: {
+      'Authorization': apiKey ? `Bearer ${apiKey}` : undefined,
+    } }),
     [apiKey, apiUrl],
   );
 
