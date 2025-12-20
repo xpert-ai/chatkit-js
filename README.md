@@ -22,6 +22,9 @@ Just add the ChatKit component, give it a client token, and customize the chat e
 
 ## Quickstart
 
+- `pnpm dev:ui` Start Chatkit ui webapp.
+- `pnpm managed-chatkit:dev` Start example: managed-chatkit (frontend and backend)
+
 ## Demos
 
 - `examples/managed-chatkit/frontend`: `pnpm -C examples/managed-chatkit/frontend dev`

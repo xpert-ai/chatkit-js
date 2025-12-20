@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { EnhancedChat, type EnhancedChatMessage } from '@xpert-ai/chatkit-ui';
+import { type EnhancedChatMessage } from '@xpert-ai/chatkit-ui';
 
 type ChatApiResponse = { content: string } | { error: string };
 
@@ -11,6 +11,7 @@ export default function App() {
 
   const backendOrigin = (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ?? '';
   const assistantId = (import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined) ?? '';
+  const chatkitTarget = (import.meta.env.VITE_CHATKIT_TARGET as string | undefined) ?? '';
 
   const createSessionUrl = useMemo(() => {
     const base = backendOrigin.replace(/\/$/, '');
@@ -94,7 +95,11 @@ export default function App() {
 
   return (
     <div className="flex h-screen">
-      <iframe src='http://localhost:5173/' className="flex-1" title="Chat"></iframe>
+      <div className="w-96 p-4 border-r border-gray-300">
+        <h1 className="text-2xl font-bold mb-4">Managed Chatkit Example</h1>
+        {sessionLoading && <p>Creating session...</p>}
+      </div>
+      <iframe src={chatkitTarget} className="flex-1" title="Chat"></iframe>
     </div>
   );
 }

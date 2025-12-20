@@ -141,63 +141,63 @@ async def create_session(request: Request) -> JSONResponse:
     )
 
 
-@app.post("/api/chat")
-async def chat(request: Request) -> JSONResponse:
-    """Simple chat endpoint for the demo UI (server-side API key)."""
-    api_key = os.getenv("XPERTAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return respond(
-            {"error": "Missing XPERTAI_API_KEY (or OPENAI_API_KEY) environment variable"},
-            500,
-        )
+# @app.post("/api/chat")
+# async def chat(request: Request) -> JSONResponse:
+#     """Simple chat endpoint for the demo UI (server-side API key)."""
+#     api_key = os.getenv("XPERTAI_API_KEY")
+#     if not api_key:
+#         return respond(
+#             {"error": "Missing XPERTAI_API_KEY environment variable"},
+#             500,
+#         )
 
-    body = await read_json_body(request)
-    messages = body.get("messages")
-    if not isinstance(messages, Sequence):
-        return respond({"error": "Missing messages"}, 400)
+#     body = await read_json_body(request)
+#     messages = body.get("messages")
+#     if not isinstance(messages, Sequence):
+#         return respond({"error": "Missing messages"}, 400)
 
-    model = os.getenv("CHAT_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
-    api_base = chatkit_api_base()
+#     model = os.getenv("CHAT_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+#     api_base = chatkit_api_base()
 
-    try:
-        async with httpx.AsyncClient(base_url=api_base, timeout=30.0) as client:
-            upstream = await client.post(
-                "/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": body.get("temperature", 0.7),
-                },
-            )
-    except httpx.RequestError as error:
-        return respond({"error": f"Failed to reach model API: {error}"}, 502)
+#     try:
+#         async with httpx.AsyncClient(base_url=api_base, timeout=30.0) as client:
+#             upstream = await client.post(
+#                 "/v1/chat/completions",
+#                 headers={
+#                     "Authorization": f"Bearer {api_key}",
+#                     "Content-Type": "application/json",
+#                 },
+#                 json={
+#                     "model": model,
+#                     "messages": messages,
+#                     "temperature": body.get("temperature", 0.7),
+#                 },
+#             )
+#     except httpx.RequestError as error:
+#         return respond({"error": f"Failed to reach model API: {error}"}, 502)
 
-    payload = parse_json(upstream)
-    if not upstream.is_success:
-        message = None
-        if isinstance(payload, Mapping):
-            message = payload.get("error")
-        message = message or upstream.reason_phrase or "Failed to generate response"
-        return respond({"error": message}, upstream.status_code)
+#     payload = parse_json(upstream)
+#     if not upstream.is_success:
+#         message = None
+#         if isinstance(payload, Mapping):
+#             message = payload.get("error")
+#         message = message or upstream.reason_phrase or "Failed to generate response"
+#         return respond({"error": message}, upstream.status_code)
 
-    content = None
-    if isinstance(payload, Mapping):
-        choices = payload.get("choices")
-        if isinstance(choices, list) and choices:
-            first = choices[0]
-            if isinstance(first, Mapping):
-                message = first.get("message")
-                if isinstance(message, Mapping):
-                    content = message.get("content")
+#     content = None
+#     if isinstance(payload, Mapping):
+#         choices = payload.get("choices")
+#         if isinstance(choices, list) and choices:
+#             first = choices[0]
+#             if isinstance(first, Mapping):
+#                 message = first.get("message")
+#                 if isinstance(message, Mapping):
+#                     content = message.get("content")
 
-    if not content:
-        return respond({"error": "Missing assistant content in response"}, 502)
+#     if not content:
+#         return respond({"error": "Missing assistant content in response"}, 502)
 
-    return respond({"content": content}, 200)
+#     return respond({"content": content}, 200)
 
 
 def respond(

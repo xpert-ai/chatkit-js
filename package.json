@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "types": "pnpm -r run types",
     "clean": "pnpm -r run clean",
-    "check": "prettier --check . && pnpm -r run lint && pnpm types && pnpm -r run test"
+    "check": "prettier --check . && pnpm -r run lint && pnpm types && pnpm -r run test",
+    "managed-chatkit:dev": "pnpm --filter managed-chatkit dev"
   },
   "devDependencies": {
     "@changesets/cli": "2.27.10",
