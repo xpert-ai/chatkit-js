@@ -13,3 +13,21 @@ export function App() {
   return <BasicChat className="h-[600px]" />;
 }
 ```
+
+## Components
+
+Chat surfaces:
+
+- `BasicChat`
+- `EnhancedChat`
+
+UI primitives:
+
+- `Avatar`
+- `Badge`
+- `Button`
+- `Card`
+- `Input`
+- `ScrollArea`
+- `Separator`
+- `Tabs`

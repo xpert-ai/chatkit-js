@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev:docs": "pnpm -F docs dev",
+    "dev:ui": "pnpm --filter @xpert-ai/chatkit-ui dev",
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
     "format:check": "prettier --check .",

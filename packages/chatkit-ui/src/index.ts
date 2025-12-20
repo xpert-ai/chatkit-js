@@ -8,3 +8,15 @@ export { Button } from './components/ui/button';
 export { Input } from './components/ui/input';
 export { ScrollArea, ScrollBar } from './components/ui/scroll-area';
 export { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
+export { Badge } from './components/ui/badge';
+export {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from './components/ui/card';
+export { Separator } from './components/ui/separator';
+export { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
