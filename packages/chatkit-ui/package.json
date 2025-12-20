@@ -24,11 +24,18 @@
     "react-dom": ">=19"
   },
   "dependencies": {
+    "@langchain/core": "^1.0.2",
+    "@langchain/langgraph-sdk": "^1.0.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@xpert-ai/chatkit": "workspace:*",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^3.3.1"
+    "framer-motion": "^12.4.9",
+    "nuqs": "^2.4.1",
+    "tailwind-merge": "^3.3.1",
+    "sonner": "^2.0.1",
+    "uuid": "^11.1.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

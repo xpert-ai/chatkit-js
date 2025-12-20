@@ -5,15 +5,10 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Thread } from './thread';
+import type { Message } from '@langchain/langgraph-sdk';
 
-export type EnhancedChatMessage = {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  createdAt?: Date;
-  avatar?: string;
-  name?: string;
-};
+export type EnhancedChatMessage = Message
 
 export type EnhancedChatProps = {
   className?: string;
@@ -79,9 +74,8 @@ export function EnhancedChat({
 
     const newMessage: EnhancedChatMessage = {
       id,
-      role: 'user',
+      type: 'human',
       content,
-      createdAt: new Date(),
     };
 
     const baseMessages = [...(messages ?? []), newMessage];
@@ -101,7 +95,6 @@ export function EnhancedChat({
 
       if (assistantMessages.length > 0) {
         const normalized = assistantMessages.map((message) => ({
-          createdAt: message.createdAt ?? new Date(),
           ...message,
           id:
             message.id ??
@@ -183,17 +176,18 @@ export function EnhancedChat({
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((message, index) => (
+              <Thread  />
+
+              {messages.map((message) => (
                 <div
                   key={message.id}
                   className={cn(
                     'flex gap-3',
-                    message.role === 'user' ? 'justify-end' : 'justify-start',
+                    message.type === 'human' ? 'justify-end' : 'justify-start',
                   )}
                 >
-                  {message.role === 'assistant' && showAvatar && (
+                  {message.type === 'ai' && showAvatar && (
                     <Avatar className="mt-1 h-8 w-8">
-                      <AvatarImage src={message.avatar} alt={message.name || 'AI'} />
                       <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                         AI
                       </AvatarFallback>
@@ -203,36 +197,15 @@ export function EnhancedChat({
                   <div
                     className={cn(
                       'max-w-[70%] rounded-2xl px-4 py-2.5',
-                      message.role === 'user'
+                      message.type === 'human'
                         ? 'bg-primary text-primary-foreground'
-                        : message.role === 'system'
+                        : message.type === 'system'
                         ? 'bg-muted text-muted-foreground text-xs'
                         : 'bg-muted',
                     )}
                   >
-                    <p className="text-sm leading-relaxed break-words">{message.content}</p>
-                    {showTimestamp && message.createdAt && (
-                      <p
-                        className={cn(
-                          'mt-1 text-xs',
-                          message.role === 'user'
-                            ? 'text-primary-foreground/70'
-                            : 'text-muted-foreground',
-                        )}
-                      >
-                        {formatTime(message.createdAt)}
-                      </p>
-                    )}
+                    <p className="text-sm leading-relaxed break-words">{JSON.stringify(message.content)}</p>
                   </div>
-
-                  {message.role === 'user' && showAvatar && (
-                    <Avatar className="mt-1 h-8 w-8">
-                      <AvatarImage src={message.avatar} alt={message.name || 'You'} />
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                        YU
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
                 </div>
               ))}
               {sending && (
