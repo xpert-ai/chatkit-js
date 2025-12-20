@@ -8,7 +8,7 @@ import './index.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <NuqsAdapter>
-      <App />
+      <App clientSecret="" />
     </NuqsAdapter>
   </React.StrictMode>,
 );

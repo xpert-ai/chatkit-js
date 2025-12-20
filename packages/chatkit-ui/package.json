@@ -31,6 +31,7 @@
     "@xpert-ai/chatkit": "workspace:*",
     "clsx": "^2.1.1",
     "framer-motion": "^12.4.9",
+    "lodash-es": "^4.17.21",
     "nuqs": "^2.4.1",
     "tailwind-merge": "^3.3.1",
     "sonner": "^2.0.1",
@@ -38,6 +39,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/lodash-es": "^4.17.12",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "react": "^19.0.0",

@@ -1,6 +1,9 @@
 export { BasicChat } from './components/basic-chat';
 export type { BasicChatMessage, BasicChatProps } from './components/basic-chat';
 
+export { Chat } from './components/chat';
+export type { ChatProps } from './components/chat';
+
 export { EnhancedChat } from './components/enhanced-chat';
 export type { EnhancedChatMessage, EnhancedChatProps } from './components/enhanced-chat';
 

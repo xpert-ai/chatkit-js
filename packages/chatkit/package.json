@@ -6,12 +6,15 @@
   "sideEffects": false,
   "files": [
     "types",
-    "README.md"
+    "README.md",
+    "index.js"
   ],
   "types": "./types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts"
+      "types": "./types/index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
     }
   },
   "scripts": {
@@ -26,5 +29,9 @@
     "type": "git",
     "url": "https://github.com/xpert-ai/chatkit-js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "peerDependencies": {
+    "@langchain/core": "^1.0.2",
+    "@langchain/langgraph-sdk": "^1.0.0"
+  }
 }
