@@ -49,14 +49,6 @@ function safeJson(value: unknown) {
   }
 }
 
-function formatText(text: string) {
-  return (
-    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
-      {text}
-    </p>
-  );
-}
-
 function ReasoningBlock({ reasoning }: { reasoning: TMessageContentReasoning[] }) {
   const blocks = reasoning.filter((item) => item.text?.trim());
   if (blocks.length === 0) return null;
@@ -169,11 +161,13 @@ function renderContentItem(
   index: number,
 ): React.ReactNode {
   if (typeof content === 'string') {
-    return <div key={`text-${index}`}>{formatText(content)}</div>;
+    return <div key={`text-${index}`}>
+      <MarkdownText>{content}</MarkdownText>;
+    </div>;
   }
 
   if (isTextContent(content)) {
-    return <div key={content.id ?? `text-${index}`}>{formatText(content.text)}</div>;
+    return <div key={content.id ?? `text-${index}`}><MarkdownText>{content.text}</MarkdownText></div>;
   }
 
   if (isReasoningContent(content)) {
