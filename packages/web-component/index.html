@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xpert Chatkit Web Component - Development</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #007bff;
+      color: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 300px;
+      background: #f8f9fa;
+      padding: 1.5rem;
+      border-right: 1px solid #dee2e6;
+      overflow-y: auto;
+    }
+
+    .sidebar h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.25rem;
+      color: #495057;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 0.5rem;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      font-family: inherit;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: monospace;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.5rem 1rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    button:active {
+      background: #004085;
+    }
+
+    .chat-container {
+      flex: 1;
+      position: relative;
+    }
+
+    xpert-chatkit {
+      width: 100%;
+      height: 100%;
+    }
+
+    .info {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #e7f3ff;
+      border-left: 3px solid #007bff;
+      font-size: 0.813rem;
+      color: #004085;
+      border-radius: 4px;
+    }
+
+    .code {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.75rem;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚀 Xpert Chatkit Web Component - Development</h1>
+  </header>
+
+  <main>
+    <aside class="sidebar">
+      <h2>Configuration</h2>
+
+      <div class="form-group">
+        <label for="backend-url">Backend URL *</label>
+        <input
+          type="text"
+          id="backend-url"
+          value=""
+          placeholder="Leave empty to use proxy (recommended for dev)"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="chatkit-url">Chatkit URL *</label>
+        <input
+          type="text"
+          id="chatkit-url"
+          value="http://localhost:5176"
+          placeholder="https://chatkit.xpert.ai"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="assistant-id">Assistant ID</label>
+        <input
+          type="text"
+          id="assistant-id"
+          value="e6342c69-372c-4bd3-8e96-3ab4ddd5be37"
+          placeholder="assistant_123"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="style-config">Style Config (JSON) - 暂时禁用</label>
+        <textarea
+          id="style-config"
+          placeholder='{"primaryColor": "#007bff"}'
+          disabled
+        ></textarea>
+      </div>
+
+      <button onclick="loadChatkit()">🔄 Load Chatkit</button>
+
+      <div class="info">
+        <strong>📝 Development Mode</strong><br>
+        Make sure:
+        <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+          <li>Backend is running on port 8000</li>
+          <li>Chatkit iframe is running on port 5176</li>
+          <li>Leave Backend URL empty (uses proxy)</li>
+        </ul>
+      </div>
+
+      <div class="code">
+        <strong>Usage:</strong><br>
+        &lt;xpert-chatkit<br>
+        &nbsp;&nbsp;backend-url="..."<br>
+        &nbsp;&nbsp;chatkit-url="..."<br>
+        &nbsp;&nbsp;assistant-id="..."<br>
+        &nbsp;&nbsp;style-config='{...}'&gt;<br>
+        &lt;/xpert-chatkit&gt;
+      </div>
+    </aside>
+
+    <div class="chat-container" id="chat-container">
+      <!-- Chatkit will be loaded here -->
+    </div>
+  </main>
+
+  <!-- Load the web component from source in dev mode -->
+  <script type="module" src="/src/xpert-chatkit.ts"></script>
+
+  <script>
+    function loadChatkit() {
+      const container = document.getElementById('chat-container');
+      const backendUrl = document.getElementById('backend-url').value;
+      const chatkitUrl = document.getElementById('chatkit-url').value;
+      const assistantId = document.getElementById('assistant-id').value;
+      const styleConfig = document.getElementById('style-config').value;
+
+      if (!chatkitUrl) {
+        alert('Chatkit URL is required!');
+        return;
+      }
+
+      // Clear existing chatkit
+      container.innerHTML = '';
+
+      // Create new chatkit element
+      const chatkit = document.createElement('xpert-chatkit');
+      chatkit.setAttribute('backend-url', backendUrl);
+      chatkit.setAttribute('chatkit-url', chatkitUrl);
+
+      if (assistantId) {
+        chatkit.setAttribute('assistant-id', assistantId);
+      }
+
+      if (styleConfig && styleConfig.trim()) {
+        try {
+          JSON.parse(styleConfig); // Validate JSON
+          chatkit.setAttribute('style-config', styleConfig);
+        } catch (e) {
+          alert('Invalid JSON in Style Config: ' + e.message);
+          return;
+        }
+      }
+
+      container.appendChild(chatkit);
+      console.log('✅ Chatkit loaded with config:', {
+        backendUrl,
+        chatkitUrl,
+        assistantId,
+        styleConfig: styleConfig ? JSON.parse(styleConfig) : null
+      });
+    }
+
+    // Auto-load on page load
+    window.addEventListener('load', () => {
+      console.log('🚀 Starting Xpert Chatkit Web Component...');
+      loadChatkit();
+    });
+  </script>
+</body>
+</html>
