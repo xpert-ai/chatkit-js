@@ -140,8 +140,11 @@ export type TMessageContentComplex = (TMessageContentText | TMessageContentReaso
   agentKey?: string;
   created_date?: Date | string
 }
+
 /**
  * Enhance {@link MessageContent} in Langchain.js
+ * 
+ * @deprecated use {@link TMessageItems} instead
  */
 export type TMessageContent = string | TMessageContentComplex[];
 
@@ -186,8 +189,10 @@ export type TChatEventMessage = {
 
 export interface ChatkitMessage {
   status?: string
-  content: TMessageContent
+  content: TMessageItems
   reasoning?: TMessageContentReasoning[]
   type: 'user' | 'assistant' | 'system' | 'tool' | 'event'
   id: string
 }
+
+export type TMessageItems = TMessageContentComplex[];

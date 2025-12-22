@@ -1,23 +1,27 @@
 {
   "name": "@xpert-ai/chatkit-types",
-  "version": "0.0.1",
-  "type": "module",
+  "version": "0.0.4",
   "description": "Type definitions for the ChatKit Web Component.",
   "sideEffects": false,
-  "files": [
-    "types",
-    "README.md",
-    "index.js"
-  ],
-  "types": "./types/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
+    "./package.json": "./package.json",
     ".": {
-      "types": "./types/index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "!**/*.tsbuildinfo"
+  ],
   "scripts": {
+    "build": "vite build",
     "types": "tsc",
     "clean": "rimraf dist"
   },
@@ -33,5 +37,9 @@
   "peerDependencies": {
     "@langchain/core": "^1.0.2",
     "@langchain/langgraph-sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "^3.7.0"
   }
 }

@@ -35,3 +35,5 @@ Client tools let the model request that kind of data mid-turn:
 - ChatKit sends the result back to the server, which starts a new stream to continue the run with the tool output included as model input.
 
 Use client tools when the model needs fresh, local context it cannot safely obtain from server-side state alone.
+
+`InterruptPayload` provides a structured way to define client tool calls and their expected outputs.
