@@ -32,6 +32,7 @@ Just add the ChatKit component, give it a client token, and customize the chat e
 ## 🗺️ Roadmap
 
 - [ ] Theming and customization
+- [ ] Tools (Effect and Tool Call)
 - [ ] Widgets
 - [ ] Actions
 - [ ] Events and CustomEvent
