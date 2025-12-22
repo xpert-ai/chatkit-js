@@ -1,9 +1,11 @@
 import * as React from 'react';
 
 import type { Message } from '@langchain/langgraph-sdk';
+import type { ChatkitMessage } from '@xpert-ai/chatkit-types';
 
 import { cn } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
+import { AssistantMessage } from './thread/messages/ai';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -28,7 +30,7 @@ function createMessageId() {
   );
 }
 
-function formatMessageContent(content: Message['content']) {
+function formatMessageContent(content: Message['content'][number]) {
   if (typeof content === 'string') {
     return content;
   }
@@ -178,39 +180,61 @@ export function Chat({
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((message, index) => (
-                <div
-                  key={message.id ?? `${message.type}-${index}`}
-                  className={cn(
-                    'flex gap-3',
-                    message.type === 'human'
-                      ? 'justify-end'
-                      : 'justify-start',
-                  )}
-                >
-                  {message.type !== 'human' && showAvatar && (
-                    <Avatar className="mt-1 h-8 w-8">
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                        AI
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
+              {messages.map((message, index) => {
+                const messageType = String(message.type);
+                const isAssistantMessage =
+                  messageType === 'assistant' || messageType === 'ai';
+
+                return (
                   <div
+                    key={message.id ?? `${message.type}-${index}`}
                     className={cn(
-                      'max-w-[70%] rounded-2xl px-4 py-2.5',
+                      'flex gap-3',
                       message.type === 'human'
-                        ? 'bg-primary text-primary-foreground'
-                        : message.type === 'system'
-                          ? 'bg-muted text-muted-foreground text-xs'
-                          : 'bg-muted',
+                        ? 'justify-end'
+                        : 'justify-start',
                     )}
                   >
-                    <p className="break-words text-sm leading-relaxed">
-                      {formatMessageContent(message.content)}
-                    </p>
+                    {message.type !== 'human' && showAvatar && (
+                      <Avatar className="mt-1 h-8 w-8">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          AI
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                    <div
+                      className={cn(
+                        'max-w-[70%] rounded-2xl px-4 py-2.5',
+                        message.type === 'human'
+                          ? 'bg-primary text-primary-foreground'
+                          : message.type === 'system'
+                            ? 'bg-muted text-muted-foreground text-xs'
+                            : 'bg-muted',
+                      )}
+                    >
+                      {isAssistantMessage ? (
+                        <AssistantMessage
+                          message={{
+                            ...(message as ChatkitMessage),
+                            type: 'assistant',
+                          }}
+                        />
+                      ) : Array.isArray(message.content) ? (
+                        message.content.map((part, partIndex) => (
+                          <p
+                            key={`${part.type}-${partIndex}`}
+                            className="break-words text-sm leading-relaxed"
+                          >
+                            {formatMessageContent(part)}
+                          </p>
+                        ))
+                      ) : (
+                        formatMessageContent(message.content)
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {stream.isLoading && (
                 <div className="flex justify-start gap-3">
                   {showAvatar && (
