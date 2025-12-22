@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { ChatkitMessage } from '@xpert-ai/chatkit-types';
 import '@xpert-ai/chatkit-web-component';
 
 export default function App() {

@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@xpert-ai/chatkit": "workspace:*",
+    "@xpert-ai/chatkit-types": "workspace:*",
     "@xpert-ai/chatkit-ui": "workspace:*",
     "@xpert-ai/chatkit-web-component": "workspace:*",
     "react": "^19.0.0",
