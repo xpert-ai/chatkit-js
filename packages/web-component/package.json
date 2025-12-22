@@ -1,0 +1,28 @@
+{
+  "name": "@xpert-ai/chatkit-web-component",
+  "version": "0.1.0",
+  "description": "Web Component for Xpert Chatkit",
+  "type": "module",
+  "main": "./dist/xpert-chatkit.js",
+  "types": "./dist/xpert-chatkit.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "preview": "vite preview --open",
+    "serve": "vite --open",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "chatkit",
+    "web-component",
+    "custom-element"
+  ],
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "^3.7.0"
+  }
+}
