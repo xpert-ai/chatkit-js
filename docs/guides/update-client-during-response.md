@@ -10,7 +10,7 @@ This guide covers three patterns:
 
 ## Show progress while tools run
 
-Use `ProgressUpdateEvent` when you need lightweight, real-time status. These updates stream immediately to the client and disappear after the turn—they are not stored in the thread.
+Use `ProgressUpdateEvent` when you need lightweight, real-time status. These updates stream immediately to the client and **disappear** after the turn—they are not stored in the thread.
 
 ### From tools
 
@@ -162,3 +162,69 @@ const chatkit = useChatKit({
 In `respond`, stream via `stream_agent_response` as usual. ChatKit emits a pending client tool call item; the frontend runs your registered client tool, posts the output back, and the server continues the run.
 
 When the client posts the tool result, ChatKit stores it as a `ClientToolCallItem`. The continued inference after the client tool call handler returns the result feeds both the call and its output back to the model through `ThreadItemConverter.client_tool_call_to_input`, which emits a `function_call` plus matching `function_call_output` so the model sees the browser-provided context.
+
+## Best Practices
+
+### Client UI Updates During Tool Execution (Server-Side)
+
+When your server invokes tools (e.g., database queries, retrieval, external API calls) during an assistant response, you can emit thread events to provide real-time UI feedback such as “Fetching record…” or “Using tool: get_record”. This helps users understand that work is in progress before the final streamed response is completed.
+
+#### Recommended Event Types
+
+##### 1) `progress_update` (Ephemeral Status)
+
+**Purpose:** Provide lightweight, non-persistent progress signals.  
+**Behavior:**
+
+- Renders as a shimmering text title.
+- Visible only while it remains the latest item in the thread.
+- Automatically disappears (non-persistent) once superseded by another item.
+- You can emit multiple `progress_update` items and they will rotate/display cleanly.
+
+**Use when:**
+
+- You want frequent updates without cluttering the conversation history.
+- You’re indicating transient states like “Connecting…”, “Searching…”, “Fetching record…”.
+
+---
+
+##### 2) `task` (Persistent Action Record)
+
+**Purpose:** Display a persistent, user-visible record of an action/tool call.  
+**Behavior:**
+
+- Renders as a shimmering title while pending (when it is the latest item).
+- Remains in the thread permanently as part of the timeline.
+- Can use a custom icon.
+- Can include optional expandable content (markdown) for details/logs/results.
+- Can be updated from a present-tense/pending state to a completed, past-tense state.
+
+**Use when:**
+
+- You want tool calls or key actions to remain visible for auditability or user clarity.
+- You want a “pending → completed” UX (e.g., “Fetching records…” → “Found 56 records.”).
+
+---
+
+##### 3) `workflow` (Grouped Multi-Step Execution)
+
+**Purpose:** Group a multi-step process into a structured, user-friendly container.  
+**Behavior:**
+
+- Organizes multiple tasks/steps under a single workflow.
+- Supports different styles depending on whether you provide a summary at the start or only at completion.
+
+**Use when:**
+
+- You have complex, multi-step operations (e.g., plan → retrieve → compute → format).
+- You want a clear hierarchy and summary for the user.
+
+#### Rule of Thumb
+
+- **Use `progress_update` liberally** for ephemeral feedback that should not clutter the thread.
+- **Use `task`** for tool calls or actions you want to **persist** and potentially update with results.
+- **Use `workflow`** when multiple tasks should be **grouped** into a single coherent unit.
+
+#### Notes on Other Event Types
+
+Other thread item types (e.g., `user_message`, `assistant_message`, `client_tool_call`, `widget`, `end_of_turn`, `hidden_context`) exist, but for **server-side “tool is running”** UI feedback, `progress_update`, `task`, and `workflow` are the primary options.
