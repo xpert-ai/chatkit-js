@@ -1,4 +1,4 @@
-import type { ChatkitMessage, TMessageContentComplex, TMessageContentComponent, TMessageContentReasoning, TMessageContentText } from "@xpert-ai/chatkit"
+import type { ChatkitMessage, TMessageContentComplex, TMessageContentComponent, TMessageContentReasoning, TMessageContentText } from "@xpert-ai/chatkit-types"
 import { isNil, omitBy } from "lodash-es"
 
 /**

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChatkitMessage } from '@xpert-ai/chatkit';
+import type { ChatkitMessage } from '@xpert-ai/chatkit-types';
 
 type ChatApiResponse = { content: string } | { error: string };
 

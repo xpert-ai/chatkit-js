@@ -1,5 +1,5 @@
 {
-  "name": "@xpert-ai/chatkit",
+  "name": "@xpert-ai/chatkit-types",
   "version": "0.0.1",
   "type": "module",
   "description": "Type definitions for the ChatKit Web Component.",

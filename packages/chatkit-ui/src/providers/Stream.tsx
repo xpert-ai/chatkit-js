@@ -16,7 +16,7 @@ import {
   type Message,
   type StreamMode,
 } from '@langchain/langgraph-sdk';
-import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type TMessageContent } from '@xpert-ai/chatkit';
+import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type TMessageContent } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 
 export type StateType = { messages: Message[] };
