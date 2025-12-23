@@ -21,7 +21,7 @@ export type ChatProps = {
   placeholder?: string;
   clientSecret?: string;
   showAvatar?: boolean;
-  options: ChatKitOptions
+  options?: ChatKitOptions | null;
 };
 
 const apiUrl = import.meta.env.VITE_CHATKIT_API_BASE as string | undefined;
@@ -66,12 +66,14 @@ function formatMessageContent(content: Message['content'][number]): string {
 
 export function Chat({
   className,
-  options: { composer, startScreen },
+  options,
   title = 'Chat',
   placeholder = 'Type a message...',
   clientSecret = '',
   showAvatar = true,
 }: ChatProps) {
+  const composer = options?.composer;
+  const startScreen = options?.startScreen;
   const stream = useStreamContext();
 
   const [draft, setDraft] = React.useState('');
