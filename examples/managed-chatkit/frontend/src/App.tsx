@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { useChatKit, XpertChatKit, type ChatKitOptions } from '@xpert-ai/chatkit-react';
+import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
+import { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
 // Example options configuration - try changing these values to see the effect!
 const chatkitOptions: ChatKitOptions = {
@@ -69,7 +70,10 @@ const chatkitOptions: ChatKitOptions = {
       text: 'Xpert Assistant',
     },
   },
-};
+  api: {
+
+  }
+} as ChatKitOptions
 
 export default function App() {
   const backendOrigin = (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ?? '';
@@ -113,10 +117,9 @@ export default function App() {
   useEffect(() => {
     console.log('Managed Chatkit Example with React Component');
     console.log('Backend:', backendOrigin || '(using proxy)');
-    console.log('Chatkit URL:', control.chatkitUrl);
     console.log('Assistant ID:', assistantId);
     console.log('Theme:', chatkitOptions.theme);
-  }, [backendOrigin, control.chatkitUrl, assistantId]);
+  }, [backendOrigin, assistantId]);
 
   return (
     <div className="flex h-screen">
@@ -131,14 +134,11 @@ export default function App() {
           <div>
             <strong>Chatkit URL:</strong>
             <div className="break-all mt-1 p-1 bg-gray-100 rounded text-[10px]">
-              {control.chatkitUrl}
+              {'xxx'}
             </div>
           </div>
           <div>
             <strong>Assistant:</strong> {assistantId || '(default)'}
-          </div>
-          <div>
-            <strong>Status:</strong> {control.status}
           </div>
           <div className="pt-2 border-t">
             <strong>Theme Config:</strong>
@@ -149,7 +149,7 @@ export default function App() {
         </div>
       </div>
 
-      <XpertChatKit control={control} className="flex-1" />
+      <ChatKit control={control} className="flex-1" />
     </div>
   );
 }

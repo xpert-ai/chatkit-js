@@ -17,7 +17,7 @@ import { getCapabilities } from "@xpert-ai/chatkit-web-shared"
 import type { Capabilities, Capability } from "@xpert-ai/chatkit-web-shared"
 import { IntegrationError, fromPossibleFrameSafeError } from "@xpert-ai/chatkit-web-shared"
 
-const CHATKIT_FRAME_URL = import.meta.env.CHATKIT_FRAME_URL
+const CHATKIT_FRAME_URL = import.meta.env.VITE_CHATKIT_FRAME_URL
 
 // Compute inner options by removing methods (to make options serializable)
 function getInnerOptions(options: ChatKitOptions): ChatKitInnerOptions {
@@ -250,6 +250,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     wrapper.className = "ck-wrapper"
     wrapper.appendChild(frame)
     this.#wrapper = wrapper
+    console.log("+++++++", this.#wrapper)
 
     this.#shadow.append(style)
 
@@ -296,7 +297,14 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
     frame.addEventListener("load", this.#handleFrameLoad, { once: true })
 
-    this.#maybeInit()
+    try {
+      this.#maybeInit()
+    } catch (error) {
+      console.error(error)
+      this.#emitAndThrow(
+        error instanceof Error ? error : new IntegrationError("Failed to initialize ChatKit"),
+      )
+    }
   }
 
   #initialized = false

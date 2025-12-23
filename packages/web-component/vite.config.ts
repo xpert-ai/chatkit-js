@@ -35,7 +35,8 @@ export default defineConfig(({ command }) => {
         },
       },
       sourcemap: true,
-      minify: 'esbuild',
+      minify: false,
+      envPrefix: ['VITE_'],
     },
   };
 });

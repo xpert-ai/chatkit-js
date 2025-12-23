@@ -1,11 +1,11 @@
-import type { XpertChatkitOptions } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { Chat } from "./components/chat";
 import { StreamProvider } from "./providers/Stream";
 import { ThemeProvider } from "./providers/Theme";
 
 export type AppProps = {
   clientSecret?: string;
-  options?: XpertChatkitOptions | null;
+  options?: ChatKitOptions | null;
 };
 
 export function App({ clientSecret = "", options }: AppProps) {

@@ -1,10 +1,9 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import * as React from 'react';
 import type {
-  UseChatKitOptions,
-  UseChatKitReturn,
-  ChatKitControl,
-  ChatKitStatus,
+  ChatKitOptions,
 } from './types';
+import { ChatKitEvents, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import { useStableOptions } from './useStableOptions';
 
 /**
  * Encode options to base64 for URL
@@ -29,86 +28,101 @@ function buildChatKitUrl(baseUrl: string, options?: Record<string, unknown>): st
   return `${baseUrl}${separator}options=${encoded}`;
 }
 
-/**
- * Hook for managing Xpert ChatKit state and authentication
- *
- * @example
- * ```tsx
- * const { control } = useChatKit({
- *   chatkitUrl: 'https://chatkit.example.com',
- *   api: {
- *     getClientSecret: async () => {
- *       const res = await fetch('/api/create-session', { method: 'POST' });
- *       const data = await res.json();
- *       return data.client_secret;
- *     }
- *   },
- *   options: {
- *     theme: {
- *       colorScheme: 'dark',
- *       radius: 'round',
- *     },
- *     startScreen: {
- *       greeting: 'Hello! How can I help you?',
- *     },
- *   },
- *   onError: (error) => console.error('Failed to get secret:', error),
- * });
- *
- * return <XpertChatKit control={control} className="h-full" />;
- * ```
- */
-export function useChatKit(hookOptions: UseChatKitOptions): UseChatKitReturn {
-  const { api, chatkitUrl: baseChatKitUrl, options, onError, onSecretReady } = hookOptions;
+type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
+  ? `${Head}${Capitalize<DotToCamelCase<Tail>>}`
+  : S;
 
-  const [status, setStatus] = useState<ChatKitStatus>('idle');
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [error, setError] = useState<Error | null>(null);
+const CHATKIT_METHOD_NAMES = Object.freeze([
+  'focusComposer',
+  'setThreadId',
+  'sendUserMessage',
+  'setComposerValue',
+  'fetchUpdates',
+  'sendCustomAction',
+] as const);
 
-  // Keep refs for callbacks to avoid stale closures
-  const getClientSecretRef = useRef(api.getClientSecret);
-  const onErrorRef = useRef(onError);
-  const onSecretReadyRef = useRef(onSecretReady);
+type ChatKitMethod = (typeof CHATKIT_METHOD_NAMES)[number];
 
-  // Update refs on each render
-  getClientSecretRef.current = api.getClientSecret;
-  onErrorRef.current = onError;
-  onSecretReadyRef.current = onSecretReady;
+type ChatKitMethods = {
+  [K in ChatKitMethod]: XpertAIChatKit[K];
+};
 
-  // Build full URL with options encoded
-  const chatkitUrl = useMemo(() => {
-    return buildChatKitUrl(baseChatKitUrl, options);
-  }, [baseChatKitUrl, options]);
+export type ToEventHandlerKey<K extends keyof ChatKitEvents> =
+  DotToCamelCase<K> extends `chatkit${infer EventName}`
+    ? `on${Capitalize<EventName>}`
+    : never;
+type ChatKitEventHandlers = Partial<{
+  [K in keyof ChatKitEvents as ToEventHandlerKey<K>]: ChatKitEvents[K] extends CustomEvent<
+    infer Detail
+  >
+    ? Detail extends undefined
+      ? () => void
+      : (event: Detail) => void
+    : never;
+}>;
 
-  const fetchSecret = useCallback(async () => {
-    setStatus('loading');
-    setError(null);
+export type UseChatKitOptions = ChatKitOptions & ChatKitEventHandlers;
 
-    try {
-      const secret = await getClientSecretRef.current(clientSecret);
-      setClientSecret(secret);
-      setStatus('ready');
-      onSecretReadyRef.current?.(secret);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      setError(error);
-      setStatus('error');
-      onErrorRef.current?.(error);
-    }
-  }, [clientSecret]);
+export type ChatKitControl = {
+  setInstance: (instance: XpertAIChatKit | null) => void;
+  options: ChatKitOptions;
+  handlers: ChatKitEventHandlers;
+};
 
-  // Fetch secret on mount
-  useEffect(() => {
-    fetchSecret();
+export type UseChatKitReturn = ChatKitMethods & {
+  control: ChatKitControl;
+  ref: React.RefObject<XpertAIChatKit | null>;
+};
+
+
+export function useChatKit(options: UseChatKitOptions): UseChatKitReturn {
+  const ref = React.useRef<XpertAIChatKit | null>(null);
+  const stableOptions = useStableOptions(options);
+
+  const methods: ChatKitMethods = React.useMemo(() => {
+    return CHATKIT_METHOD_NAMES.reduce((acc, key) => {
+      acc[key] = (...args: any[]) => {
+        if (!ref.current) {
+          console.warn('ChatKit element is not mounted');
+          return;
+        }
+
+        return (ref.current as any)[key](...args);
+      };
+      return acc;
+    }, {} as ChatKitMethods);
   }, []);
 
-  const control: ChatKitControl = {
-    status,
-    clientSecret,
-    error,
-    chatkitUrl,
-    refreshSecret: fetchSecret,
-  };
+  const setInstance = React.useCallback(
+    (instance: XpertAIChatKit | null): void => {
+      ref.current = instance;
+    },
+    [],
+  );
 
-  return { control };
+  const control: ChatKitControl = React.useMemo(() => {
+    const options = {} as ChatKitOptions;
+    const handlers: ChatKitEventHandlers = {};
+
+    for (const [key, value] of Object.entries(stableOptions)) {
+      if (/^on[A-Z]/.test(key) && key !== 'onClientTool') {
+        // @ts-expect-error - too dynamic for TypeScript
+        handlers[key] = value;
+      } else {
+        // @ts-expect-error - too dynamic for TypeScript
+        options[key] = value;
+      }
+    }
+
+    return {
+      setInstance,
+      options,
+      handlers,
+    };
+  }, [stableOptions, setInstance]);
+
+  return React.useMemo(
+    () => ({ ...methods, control, ref }),
+    [methods, control],
+  );
 }

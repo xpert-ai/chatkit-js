@@ -1,7 +1,6 @@
 
 // ============================================================================
 // ChatKitOptions - Configuration options for ChatKit
-// Based on OpenAI ChatKit options structure
 // ============================================================================
 
 export declare type ChatKitReq = any;
@@ -96,6 +95,8 @@ export type ChatKitOptions = {
   onClientTool: ({ name, params }: { name: string; params: Record<string, unknown> }) => any;
 
   entities?: any
+
+  widgets?: any
 };
 
 /** The color scheme to use for the ChatKit UI. */

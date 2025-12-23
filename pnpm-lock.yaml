@@ -68,6 +68,9 @@ importers:
       '@xpert-ai/chatkit-react':
         specifier: workspace:*
         version: link:../../../packages/chatkit-react
+      '@xpert-ai/chatkit-types':
+        specifier: workspace:*
+        version: link:../../../packages/chatkit
       react:
         specifier: ^19.0.0
         version: 19.2.3

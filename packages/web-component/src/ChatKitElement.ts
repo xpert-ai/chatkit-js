@@ -16,7 +16,7 @@ export class ChatKitElement extends ChatKitElementBase<ChatKitOptions> {
   }
 }
 
-export function registerChatKitElement(tag = "openai-chatkit") {
+export function registerChatKitElement(tag = "xpertai-chatkit") {
   // SSR-safe guard
   if (!("customElements" in globalThis)) return
 
