@@ -1,12 +1,13 @@
 /**
  * Xpert Chatkit Web Component
  * A custom element that embeds the Chatkit iframe with postMessage communication
+ *
+ * Options are passed via URL parameter (base64 encoded), clientSecret via postMessage
  */
 
 interface ChatkitInitMessage {
   type: 'chatkit:init';
   clientSecret: string;
-  styleConfig?: Record<string, unknown>;
 }
 
 /**
@@ -14,16 +15,14 @@ interface ChatkitInitMessage {
  *
  * @element xpert-chatkit
  *
- * @attr {string} chatkit-url - Chatkit iframe URL
- * @attr {string} [client-secret] - Client secret for authentication
- * @attr {string} [style-config] - Optional JSON string for style configuration
+ * @attr {string} chatkit-url - Chatkit iframe URL (may include ?options=base64 parameter)
+ * @attr {string} [client-secret] - Client secret for authentication (sent via postMessage)
  *
  * @example
  * ```html
  * <xpert-chatkit
- *   chatkit-url="https://chatkit.example.com"
- *   client-secret="cs_xxx"
- *   style-config='{"primaryColor": "#007bff"}'>
+ *   chatkit-url="https://chatkit.example.com?options=eyJ0aGVtZSI6eyJjb2xvclNjaGVtZSI6ImRhcmsifX0="
+ *   client-secret="cs_xxx">
  * </xpert-chatkit>
  * ```
  */
@@ -36,7 +35,7 @@ class XpertChatkit extends HTMLElement {
 
   // Observed attributes
   static get observedAttributes() {
-    return ['chatkit-url', 'client-secret', 'style-config'];
+    return ['chatkit-url', 'client-secret'];
   }
 
   constructor() {
@@ -127,7 +126,7 @@ class XpertChatkit extends HTMLElement {
   }
 
   /**
-   * Sends initialization message to iframe
+   * Sends initialization message (clientSecret) to iframe via postMessage
    */
   private sendInitMessage() {
     const clientSecret = this.getAttribute('client-secret');
@@ -151,21 +150,9 @@ class XpertChatkit extends HTMLElement {
       chatkitOrigin = '*';
     }
 
-    // Parse style config if provided
-    let styleConfig: Record<string, unknown> | undefined;
-    const styleConfigAttr = this.getAttribute('style-config');
-    if (styleConfigAttr) {
-      try {
-        styleConfig = JSON.parse(styleConfigAttr);
-      } catch (error) {
-        console.warn('[xpert-chatkit] Invalid style-config JSON:', error);
-      }
-    }
-
     const message: ChatkitInitMessage = {
       type: 'chatkit:init',
       clientSecret,
-      ...(styleConfig && { styleConfig }),
     };
 
     // Send immediately
@@ -182,13 +169,6 @@ class XpertChatkit extends HTMLElement {
    */
   public setClientSecret(secret: string) {
     this.setAttribute('client-secret', secret);
-  }
-
-  /**
-   * Programmatically set the style configuration
-   */
-  public setStyleConfig(styleConfig: Record<string, unknown>) {
-    this.setAttribute('style-config', JSON.stringify(styleConfig));
   }
 }
 

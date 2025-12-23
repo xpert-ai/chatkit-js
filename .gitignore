@@ -1,6 +1,7 @@
 dist/
 .astro/
 node_modules/
+.pnpm-store/
 
 .env
 .env.production

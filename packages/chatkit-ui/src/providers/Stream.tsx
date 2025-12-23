@@ -48,6 +48,8 @@ export type StreamContextType = {
     options?: StreamSubmitOptions,
   ) => Promise<void>;
   stop: () => void;
+  reset: (newThreadId?: string | null) => void;
+  setThreadId: (threadId: string | null) => void;
 };
 
 const StreamContext = createContext<StreamContextType | undefined>(undefined);
@@ -431,6 +433,17 @@ const StreamSession = ({
     setIsLoading(false);
   }, []);
 
+  const reset = useCallback((newThreadId?: string | null) => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsLoading(false);
+    setError(null);
+    setValues({ messages: [] });
+    if (newThreadId !== undefined) {
+      setThreadId(newThreadId);
+    }
+  }, [setThreadId]);
+
   const submit = useCallback(
     async (
       input?: Record<string, unknown> | null,
@@ -507,6 +520,8 @@ const StreamSession = ({
     error,
     submit,
     stop,
+    reset,
+    setThreadId,
   };
 
   return (

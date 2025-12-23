@@ -1,17 +1,42 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { NuqsAdapter } from "nuqs/adapters/react";
+import type { XpertChatkitOptions } from '@xpert-ai/chatkit-types';
 
 import App from './App';
 import './index.css';
+
+/**
+ * Decode base64 options from URL parameter
+ */
+function decodeOptionsFromUrl(): XpertChatkitOptions | null {
+  if (typeof window === 'undefined') return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const encoded = params.get('options');
+
+  if (!encoded) return null;
+
+  try {
+    const json = decodeURIComponent(escape(atob(encoded)));
+    return JSON.parse(json) as XpertChatkitOptions;
+  } catch (error) {
+    console.warn('[chatkit-ui] Failed to decode options from URL:', error);
+    return null;
+  }
+}
 
 const initialClientSecret =
   typeof window === 'undefined'
     ? ''
     : new URLSearchParams(window.location.search).get('clientSecret') ?? '';
 
+// Parse options from URL on initial load
+const initialOptions = decodeOptionsFromUrl();
+
 const AppContainer = () => {
   const [clientSecret, setClientSecret] = React.useState(initialClientSecret);
+  const [options] = React.useState<XpertChatkitOptions | null>(initialOptions);
 
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -21,17 +46,13 @@ const AppContainer = () => {
       const payload = event.data as {
         type?: string;
         clientSecret?: string;
-        styleConfig?: Record<string, unknown>;
       };
 
-      // Support both old and new message formats
+      // Handle client secret from postMessage
       if (payload.type === 'chatkit:init' || payload.type === 'chatkit:client-secret') {
         if (typeof payload.clientSecret === 'string') {
           setClientSecret(payload.clientSecret);
         }
-
-        // TODO: Handle styleConfig when needed
-        // if (payload.styleConfig) { ... }
       }
     };
 
@@ -39,7 +60,7 @@ const AppContainer = () => {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  return <App clientSecret={clientSecret} />;
+  return <App clientSecret={clientSecret} options={options} />;
 };
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

@@ -1,10 +1,33 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type {
   UseXpertChatkitOptions,
   UseXpertChatkitReturn,
   ChatkitControl,
   ChatkitStatus,
 } from './types';
+
+/**
+ * Encode options to base64 for URL
+ */
+function encodeOptionsToBase64(options: Record<string, unknown>): string {
+  const json = JSON.stringify(options);
+  // Use btoa for browser, handle unicode characters
+  const encoded = btoa(unescape(encodeURIComponent(json)));
+  return encoded;
+}
+
+/**
+ * Build the full chatkit URL with options encoded
+ */
+function buildChatkitUrl(baseUrl: string, options?: Record<string, unknown>): string {
+  if (!options || Object.keys(options).length === 0) {
+    return baseUrl;
+  }
+
+  const encoded = encodeOptionsToBase64(options);
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  return `${baseUrl}${separator}options=${encoded}`;
+}
 
 /**
  * Hook for managing Xpert Chatkit state and authentication
@@ -18,14 +41,23 @@ import type {
  *     const data = await res.json();
  *     return data.client_secret;
  *   },
+ *   options: {
+ *     theme: {
+ *       colorScheme: 'dark',
+ *       radius: 'round',
+ *     },
+ *     startScreen: {
+ *       greeting: 'Hello! How can I help you?',
+ *     },
+ *   },
  *   onError: (error) => console.error('Failed to get secret:', error),
  * });
  *
  * return <XpertChatkit control={control} className="h-full" />;
  * ```
  */
-export function useXpertChatkit(options: UseXpertChatkitOptions): UseXpertChatkitReturn {
-  const { getClientSecret, chatkitUrl, styleConfig, onError, onSecretReady } = options;
+export function useXpertChatkit(hookOptions: UseXpertChatkitOptions): UseXpertChatkitReturn {
+  const { getClientSecret, chatkitUrl: baseChatkitUrl, options, onError, onSecretReady } = hookOptions;
 
   const [status, setStatus] = useState<ChatkitStatus>('idle');
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -40,6 +72,11 @@ export function useXpertChatkit(options: UseXpertChatkitOptions): UseXpertChatki
   getClientSecretRef.current = getClientSecret;
   onErrorRef.current = onError;
   onSecretReadyRef.current = onSecretReady;
+
+  // Build full URL with options encoded
+  const chatkitUrl = useMemo(() => {
+    return buildChatkitUrl(baseChatkitUrl, options);
+  }, [baseChatkitUrl, options]);
 
   const fetchSecret = useCallback(async () => {
     setStatus('loading');
@@ -69,7 +106,6 @@ export function useXpertChatkit(options: UseXpertChatkitOptions): UseXpertChatki
     clientSecret,
     error,
     chatkitUrl,
-    styleConfig,
     refreshSecret: fetchSecret,
   };
 

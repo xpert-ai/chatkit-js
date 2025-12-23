@@ -2,6 +2,11 @@
  * Type definitions for Xpert Chatkit React
  */
 
+import type { XpertChatkitOptions } from '@xpert-ai/chatkit-types';
+
+// Re-export types from chatkit-types for convenience
+export type { XpertChatkitOptions } from '@xpert-ai/chatkit-types';
+
 /**
  * Options for useXpertChatkit hook
  */
@@ -14,14 +19,15 @@ export interface UseXpertChatkitOptions {
   getClientSecret: (currentSecret: string | null) => Promise<string>;
 
   /**
-   * The URL of the Chatkit iframe
+   * The base URL of the Chatkit iframe (without options parameter)
    */
   chatkitUrl: string;
 
   /**
-   * Optional style configuration to pass to the iframe
+   * Chatkit options configuration (theme, composer, startScreen, etc.)
+   * Will be encoded as base64 and appended to the URL
    */
-  styleConfig?: Record<string, unknown>;
+  options?: XpertChatkitOptions;
 
   /**
    * Callback when an error occurs during secret fetching
@@ -59,14 +65,9 @@ export interface ChatkitControl {
   error: Error | null;
 
   /**
-   * The chatkit URL
+   * The full chatkit URL with options encoded
    */
   chatkitUrl: string;
-
-  /**
-   * Style configuration
-   */
-  styleConfig?: Record<string, unknown>;
 
   /**
    * Manually refresh the client secret
@@ -104,7 +105,6 @@ declare global {
         React.HTMLAttributes<HTMLElement> & {
           'chatkit-url'?: string;
           'client-secret'?: string;
-          'style-config'?: string;
         },
         HTMLElement
       >;

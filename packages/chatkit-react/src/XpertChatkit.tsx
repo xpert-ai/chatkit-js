@@ -12,6 +12,9 @@ import '@xpert-ai/chatkit-web-component';
  * const { control } = useXpertChatkit({
  *   chatkitUrl: 'https://chatkit.example.com',
  *   getClientSecret: async () => { ... },
+ *   options: {
+ *     theme: { colorScheme: 'dark' },
+ *   },
  * });
  *
  * return <XpertChatkit control={control} className="h-full" />;
@@ -19,7 +22,7 @@ import '@xpert-ai/chatkit-web-component';
  */
 export const XpertChatkit = React.forwardRef<HTMLElement, XpertChatkitProps>(
   function XpertChatkit({ control, ...htmlProps }, forwardedRef) {
-    const { status, clientSecret, chatkitUrl, styleConfig, error } = control;
+    const { status, clientSecret, chatkitUrl, error } = control;
 
     // Show loading state
     if (status === 'loading' || status === 'idle') {
@@ -58,12 +61,12 @@ export const XpertChatkit = React.forwardRef<HTMLElement, XpertChatkitProps>(
     }
 
     // Render the web component
+    // Options are already encoded in the chatkitUrl
     return (
       <xpert-chatkit
         ref={forwardedRef}
         chatkit-url={chatkitUrl}
         client-secret={clientSecret || undefined}
-        style-config={styleConfig ? JSON.stringify(styleConfig) : undefined}
         {...htmlProps}
       />
     );

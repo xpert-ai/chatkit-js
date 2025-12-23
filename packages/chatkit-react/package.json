@@ -26,6 +26,7 @@
     "react-dom": ">=18"
   },
   "dependencies": {
+    "@xpert-ai/chatkit-types": "workspace:*",
     "@xpert-ai/chatkit-web-component": "workspace:*"
   },
   "devDependencies": {

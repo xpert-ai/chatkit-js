@@ -1,11 +1,15 @@
 import * as React from 'react';
 
 import type { Message } from '@langchain/langgraph-sdk';
-import type { ChatkitMessage } from '@xpert-ai/chatkit-types';
+import type { ChatkitMessage, XpertComposerOption, XpertToolOption, XpertStartScreenOption } from '@xpert-ai/chatkit-types';
 
 import { cn } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
+import { ComposerMenu } from './composer/ComposerMenu';
+import { HistorySidebar, type Conversation } from './history/HistorySidebar';
 import { AssistantMessage } from './thread/messages/ai';
+import { MessageActions } from './thread/MessageActions';
+import { StartScreen } from './thread/StartScreen';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -17,6 +21,8 @@ export type ChatProps = {
   placeholder?: string;
   clientSecret?: string;
   showAvatar?: boolean;
+  composer?: XpertComposerOption;
+  startScreen?: XpertStartScreenOption;
 };
 
 const apiUrl = import.meta.env.VITE_CHATKIT_API_BASE as string | undefined;
@@ -30,7 +36,7 @@ function createMessageId() {
   );
 }
 
-function formatMessageContent(content: Message['content'][number]) {
+function formatMessageContent(content: Message['content'][number]): string {
   if (typeof content === 'string') {
     return content;
   }
@@ -41,16 +47,22 @@ function formatMessageContent(content: Message['content'][number]) {
         if (typeof part === 'string') return part;
         if (part && typeof part === 'object' && 'text' in part) {
           const textValue = (part as { text?: unknown }).text;
-          return typeof textValue === 'string' ? textValue : JSON.stringify(part);
+          return typeof textValue === 'string' ? textValue : '';
         }
-        return JSON.stringify(part);
+        return '';
       })
       .join('');
   }
 
   if (content == null) return '';
 
-  return JSON.stringify(content);
+  // Handle object with text property (e.g., {"type":"text","text":"..."})
+  if (typeof content === 'object' && 'text' in content) {
+    const textValue = (content as { text?: unknown }).text;
+    return typeof textValue === 'string' ? textValue : '';
+  }
+
+  return '';
 }
 
 export function Chat({
@@ -59,12 +71,25 @@ export function Chat({
   placeholder = 'Type a message...',
   clientSecret = '',
   showAvatar = true,
+  composer,
+  startScreen,
 }: ChatProps) {
   const stream = useStreamContext();
 
   const [draft, setDraft] = React.useState('');
+  const [selectedTool, setSelectedTool] = React.useState<XpertToolOption | null>(null);
+  const [attachments, setAttachments] = React.useState<File[]>([]);
+  const [conversations, setConversations] = React.useState<Conversation[]>([
+    { id: '1', title: 'Previous conversation 1' },
+    { id: '2', title: 'Previous conversation 2' },
+  ]);
+  const [currentConversationId, setCurrentConversationId] = React.useState<string | undefined>();
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const viewportRef = React.useRef<HTMLDivElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Use placeholder from composer options or fallback to prop
+  const inputPlaceholder = selectedTool?.placeholderOverride ?? composer?.placeholder ?? placeholder;
 
   const messages = stream.messages ?? [];
   const trimmedDraft = draft.trim();
@@ -104,7 +129,129 @@ export function Chat({
         },
       },
     );
+
+    // Clear selected tool if not persistent
+    if (selectedTool && !selectedTool.persistent) {
+      setSelectedTool(null);
+    }
+    // Clear attachments after submit
+    setAttachments([]);
   };
+
+  const handleAttachmentClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const maxCount = composer?.attachments?.maxCount ?? 10;
+    const maxSize = composer?.attachments?.maxSize ?? 100 * 1024 * 1024; // 100MB default
+
+    const validFiles: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > maxSize) {
+        console.warn(`File ${file.name} exceeds max size of ${maxSize} bytes`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    setAttachments((prev) => {
+      const combined = [...prev, ...validFiles];
+      return combined.slice(0, maxCount);
+    });
+
+    // Reset the input so the same file can be selected again
+    event.target.value = '';
+  };
+
+  const handleRemoveAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleToolSelect = (tool: XpertToolOption) => {
+    setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
+  };
+
+  const handlePromptClick = (prompt: string) => {
+    if (missingConfig || stream.isLoading) return;
+
+    const newMessage: Message = {
+      id: createMessageId(),
+      type: 'human',
+      content: prompt,
+    };
+
+    stream.submit(
+      { input: prompt },
+      {
+        optimisticValues: (prev) => {
+          const prevMessages = prev?.messages ?? [];
+          return { ...prev, messages: [...prevMessages, newMessage] };
+        },
+      },
+    );
+  };
+
+  const handleNewConversation = () => {
+    const newId = createMessageId();
+    setConversations((prev) => [
+      { id: newId, title: 'New conversation' },
+      ...prev,
+    ]);
+    setCurrentConversationId(newId);
+    // Clear messages and reset thread for new conversation
+    stream.reset(null);
+  };
+
+  const handleSelectConversation = (id: string) => {
+    if (id === currentConversationId) return;
+    setCurrentConversationId(id);
+    // Reset messages and switch to the conversation's thread
+    // For now, we just clear messages since we don't persist conversation data
+    stream.reset(id);
+  };
+
+  const handleDeleteConversation = (id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (currentConversationId === id) {
+      setCurrentConversationId(undefined);
+    }
+  };
+
+  const handleRetry = (messageIndex: number) => {
+    // Find the last human message before this AI message to resend
+    const messagesUpToIndex = messages.slice(0, messageIndex);
+    const lastHumanMessage = [...messagesUpToIndex].reverse().find(
+      (m) => String(m.type) === 'human'
+    );
+
+    if (lastHumanMessage && typeof lastHumanMessage.content === 'string') {
+      stream.submit(
+        { input: lastHumanMessage.content },
+        {
+          optimisticValues: (prev) => {
+            // Remove the AI message that we're retrying
+            const prevMessages = prev?.messages ?? [];
+            return {
+              ...prev,
+              messages: prevMessages.slice(0, messageIndex),
+            };
+          },
+        },
+      );
+    }
+  };
+
+  // Build accept string for file input
+  const acceptMimes = composer?.attachments?.accept
+    ? Object.entries(composer.attachments.accept)
+        .map(([mime, exts]) => [mime, ...exts.map((e) => `.${e}`)].join(','))
+        .join(',')
+    : undefined;
 
   const errorMessage =
     stream.error instanceof Error ? stream.error.message : undefined;
@@ -124,22 +271,14 @@ export function Chat({
             <p className="text-xs text-muted-foreground">Online</p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-          </svg>
-        </Button>
+        <HistorySidebar
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onNewConversation={handleNewConversation}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+          disabled={stream.isLoading}
+        />
       </div>
 
       <ScrollArea ref={scrollAreaRef} className="flex-1">
@@ -156,28 +295,10 @@ export function Chat({
             </div>
           )}
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-6 w-6"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
-              <h3 className="mb-1 text-lg font-medium">No messages yet</h3>
-              <p className="text-sm text-muted-foreground">
-                Start a conversation by sending a message below.
-              </p>
-            </div>
+            <StartScreen
+              startScreen={startScreen}
+              onPromptClick={handlePromptClick}
+            />
           ) : (
             <div className="space-y-4">
               {messages.map((message, index) => {
@@ -185,11 +306,18 @@ export function Chat({
                 const isAssistantMessage =
                   messageType === 'assistant' || messageType === 'ai';
 
+                const messageContent =
+                  typeof message.content === 'string'
+                    ? message.content
+                    : Array.isArray(message.content)
+                      ? message.content.map((part) => formatMessageContent(part)).join('')
+                      : formatMessageContent(message.content);
+
                 return (
                   <div
                     key={message.id ?? `${message.type}-${index}`}
                     className={cn(
-                      'flex gap-3',
+                      'group flex gap-3',
                       message.type === 'human'
                         ? 'justify-end'
                         : 'justify-start',
@@ -202,35 +330,47 @@ export function Chat({
                         </AvatarFallback>
                       </Avatar>
                     )}
-                    <div
-                      className={cn(
-                        'max-w-[70%] rounded-2xl px-4 py-2.5',
-                        message.type === 'human'
-                          ? 'bg-primary text-primary-foreground'
-                          : message.type === 'system'
-                            ? 'bg-muted text-muted-foreground text-xs'
-                            : 'bg-muted',
-                      )}
-                    >
-                      {isAssistantMessage ? (
-                        <AssistantMessage
-                          message={{
-                            ...(message as ChatkitMessage),
-                            type: 'assistant',
-                          }}
-                        />
-                      ) : Array.isArray(message.content) ? (
-                        message.content.map((part, partIndex) => (
-                          <p
-                            key={`${part.type}-${partIndex}`}
-                            className="break-words text-sm leading-relaxed"
-                          >
-                            {formatMessageContent(part)}
-                          </p>
-                        ))
-                      ) : (
-                        formatMessageContent(message.content)
-                      )}
+                    <div className="flex flex-col">
+                      <div
+                        className={cn(
+                          'max-w-[70%] rounded-2xl px-4 py-2.5',
+                          message.type === 'human'
+                            ? 'bg-primary text-primary-foreground'
+                            : message.type === 'system'
+                              ? 'bg-muted text-muted-foreground text-xs'
+                              : 'bg-muted',
+                        )}
+                      >
+                        {isAssistantMessage ? (
+                          <AssistantMessage
+                            message={{
+                              ...(message as ChatkitMessage),
+                              type: 'assistant',
+                            }}
+                          />
+                        ) : Array.isArray(message.content) ? (
+                          message.content.map((part, partIndex) => (
+                            <p
+                              key={`${part.type}-${partIndex}`}
+                              className="break-words text-sm leading-relaxed"
+                            >
+                              {formatMessageContent(part)}
+                            </p>
+                          ))
+                        ) : (
+                          formatMessageContent(message.content)
+                        )}
+                      </div>
+                      {/* Message actions */}
+                      <MessageActions
+                        content={messageContent}
+                        isAssistant={isAssistantMessage}
+                        onRetry={
+                          isAssistantMessage && !stream.isLoading
+                            ? () => handleRetry(index)
+                            : undefined
+                        }
+                      />
                     </div>
                   </div>
                 );
@@ -259,12 +399,107 @@ export function Chat({
       </ScrollArea>
 
       <div className="border-t bg-muted/30 p-4">
-        <form className="flex items-end gap-3" onSubmit={handleSubmit}>
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={acceptMimes}
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
+        {/* Attachments preview */}
+        {attachments.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {attachments.map((file, index) => (
+              <div
+                key={`${file.name}-${index}`}
+                className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 text-sm"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-muted-foreground"
+                >
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span className="max-w-[120px] truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(index)}
+                  className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Selected tool indicator */}
+        {selectedTool && (
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+              {selectedTool.shortLabel ?? selectedTool.label}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedTool(null)}
+              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        <form className="flex items-end gap-2" onSubmit={handleSubmit}>
+          {/* Composer Menu (plus button) */}
+          <ComposerMenu
+            composer={composer}
+            onAttachmentClick={handleAttachmentClick}
+            onToolSelect={handleToolSelect}
+            selectedTool={selectedTool}
+            disabled={stream.isLoading || missingConfig}
+          />
+
           <div className="flex-1">
             <Input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder={placeholder}
+              placeholder={inputPlaceholder}
               disabled={stream.isLoading || missingConfig}
               className="min-h-10 resize-none bg-background"
               autoComplete="off"

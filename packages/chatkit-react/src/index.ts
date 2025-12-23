@@ -11,4 +11,5 @@ export type {
   ChatkitControl,
   ChatkitStatus,
   XpertChatkitProps,
+  XpertChatkitOptions,
 } from './types';
