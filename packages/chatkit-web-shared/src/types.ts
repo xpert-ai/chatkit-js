@@ -1,6 +1,6 @@
 import type { EventSourceMessage, FetchEventSourceInit } from "@microsoft/fetch-event-source"
 
-type ChatKitMessage =
+export type ChatKitMessage =
   | {
       type: "command"
       nonce: string
@@ -44,3 +44,34 @@ type ChatKitMessage =
     }
 
 export type AnyFunction = (...args: any[]) => any
+
+export type InnerCommands = any
+export type InnerEvents = any
+export type OuterCommands = any
+export type OuterEvents = any
+
+
+export type Attachment = any
+export type ChatKitFrameParams = any
+export type ChatKitProfile = any
+export type ChatKitInnerOptions = any
+export type ChatKitReq = any
+export type UserMessageContent = any
+export type ToolChoice = any
+
+export type RemoveMethods = any
+export type Capabilities = any
+export class IntegrationError extends Error {}
+
+export enum Capability {
+  Command = "Command"
+}
+
+export function getCapabilities(profile: ChatKitProfile): Capabilities {
+  // Placeholder implementation
+}
+
+export function fromPossibleFrameSafeError(err: any): any {
+  // Placeholder implementation
+  return err.message
+}

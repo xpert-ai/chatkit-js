@@ -1,11 +1,13 @@
 
 // ============================================================================
-// XpertChatkitOptions - Configuration options for Xpert ChatKit
+// ChatKitOptions - Configuration options for ChatKit
 // Based on OpenAI ChatKit options structure
 // ============================================================================
 
+export declare type ChatKitReq = any;
+
 /**
- * Configuration options for initializing Xpert ChatKit.
+ * Configuration options for initializing ChatKit.
  */
 export type ChatKitOptions = {
   /**
@@ -75,6 +77,25 @@ export type ChatKitOptions = {
    * @see {@link XpertDisclaimerOption}
    */
   disclaimer?: XpertDisclaimerOption;
+
+  api: {
+    fetch: typeof fetch;
+    /**
+     * Function to get the client secret for authentication.
+     * This is called when the component mounts and can be called again to refresh.
+     * The current secret (if any) is passed to allow for refresh logic.
+     */
+    getClientSecret: (existing: string | null) => Promise<string>;
+
+    addMetadataToRequest: (request: {
+        op: ChatKitReq["type"]
+        params: Record<string, unknown>
+      }) => Promise<RequestInit>;
+  }
+
+  onClientTool: ({ name, params }: { name: string; params: Record<string, unknown> }) => any;
+
+  entities?: any
 };
 
 /** The color scheme to use for the ChatKit UI. */
@@ -217,6 +238,9 @@ export type XpertHeaderOption = {
      */
     text?: string;
   };
+
+  leftAction?: any
+  rightAction?: any
 };
 
 export type XpertHistoryOption = {
@@ -339,6 +363,8 @@ export type XpertThreadItemActionsOption = {
    * @default false
    */
   retry?: boolean;
+
+  share?: boolean
 };
 
 export type XpertComposerOption = {

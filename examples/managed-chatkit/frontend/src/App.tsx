@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { useXpertChatkit, XpertChatkit, type XpertChatkitOptions } from '@xpert-ai/chatkit-react';
+import { useChatKit, XpertChatKit, type ChatKitOptions } from '@xpert-ai/chatkit-react';
 
 // Example options configuration - try changing these values to see the effect!
-const chatkitOptions: XpertChatkitOptions = {
+const chatkitOptions: ChatKitOptions = {
   theme: {
     // Try: 'light' or 'dark'
     colorScheme: 'light',
@@ -76,32 +76,34 @@ export default function App() {
   const assistantId = (import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined) ?? '';
   const chatkitTarget = (import.meta.env.VITE_CHATKIT_TARGET as string | undefined) ?? '';
 
-  const { control } = useXpertChatkit({
+  const { control } = useChatKit({
     chatkitUrl: chatkitTarget,
     options: chatkitOptions,
-    getClientSecret: async () => {
-      const createSessionUrl = backendOrigin
-        ? `${backendOrigin.replace(/\/$/, '')}/api/create-session`
-        : '/api/create-session';
+    api: {
+      getClientSecret: async () => {
+        const createSessionUrl = backendOrigin
+          ? `${backendOrigin.replace(/\/$/, '')}/api/create-session`
+          : '/api/create-session';
 
-      const response = await fetch(createSessionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(assistantId ? { assistantId } : {}),
-      });
+        const response = await fetch(createSessionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(assistantId ? { assistantId } : {}),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData?.error || `HTTP ${response.status}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData?.error || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.client_secret) {
+          throw new Error('Missing client_secret in response');
+        }
+
+        return data.client_secret;
       }
-
-      const data = await response.json();
-      if (!data.client_secret) {
-        throw new Error('Missing client_secret in response');
-      }
-
-      return data.client_secret;
     },
     onError: (error) => {
       console.error('Failed to create session:', error);
@@ -147,7 +149,7 @@ export default function App() {
         </div>
       </div>
 
-      <XpertChatkit control={control} className="flex-1" />
+      <XpertChatKit control={control} className="flex-1" />
     </div>
   );
 }

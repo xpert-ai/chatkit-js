@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type {
-  UseXpertChatkitOptions,
-  UseXpertChatkitReturn,
-  ChatkitControl,
-  ChatkitStatus,
+  UseChatKitOptions,
+  UseChatKitReturn,
+  ChatKitControl,
+  ChatKitStatus,
 } from './types';
 
 /**
@@ -19,7 +19,7 @@ function encodeOptionsToBase64(options: Record<string, unknown>): string {
 /**
  * Build the full chatkit URL with options encoded
  */
-function buildChatkitUrl(baseUrl: string, options?: Record<string, unknown>): string {
+function buildChatKitUrl(baseUrl: string, options?: Record<string, unknown>): string {
   if (!options || Object.keys(options).length === 0) {
     return baseUrl;
   }
@@ -30,16 +30,18 @@ function buildChatkitUrl(baseUrl: string, options?: Record<string, unknown>): st
 }
 
 /**
- * Hook for managing Xpert Chatkit state and authentication
+ * Hook for managing Xpert ChatKit state and authentication
  *
  * @example
  * ```tsx
- * const { control } = useXpertChatkit({
+ * const { control } = useChatKit({
  *   chatkitUrl: 'https://chatkit.example.com',
- *   getClientSecret: async () => {
- *     const res = await fetch('/api/create-session', { method: 'POST' });
- *     const data = await res.json();
- *     return data.client_secret;
+ *   api: {
+ *     getClientSecret: async () => {
+ *       const res = await fetch('/api/create-session', { method: 'POST' });
+ *       const data = await res.json();
+ *       return data.client_secret;
+ *     }
  *   },
  *   options: {
  *     theme: {
@@ -53,30 +55,30 @@ function buildChatkitUrl(baseUrl: string, options?: Record<string, unknown>): st
  *   onError: (error) => console.error('Failed to get secret:', error),
  * });
  *
- * return <XpertChatkit control={control} className="h-full" />;
+ * return <XpertChatKit control={control} className="h-full" />;
  * ```
  */
-export function useXpertChatkit(hookOptions: UseXpertChatkitOptions): UseXpertChatkitReturn {
-  const { getClientSecret, chatkitUrl: baseChatkitUrl, options, onError, onSecretReady } = hookOptions;
+export function useChatKit(hookOptions: UseChatKitOptions): UseChatKitReturn {
+  const { api, chatkitUrl: baseChatKitUrl, options, onError, onSecretReady } = hookOptions;
 
-  const [status, setStatus] = useState<ChatkitStatus>('idle');
+  const [status, setStatus] = useState<ChatKitStatus>('idle');
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   // Keep refs for callbacks to avoid stale closures
-  const getClientSecretRef = useRef(getClientSecret);
+  const getClientSecretRef = useRef(api.getClientSecret);
   const onErrorRef = useRef(onError);
   const onSecretReadyRef = useRef(onSecretReady);
 
   // Update refs on each render
-  getClientSecretRef.current = getClientSecret;
+  getClientSecretRef.current = api.getClientSecret;
   onErrorRef.current = onError;
   onSecretReadyRef.current = onSecretReady;
 
   // Build full URL with options encoded
   const chatkitUrl = useMemo(() => {
-    return buildChatkitUrl(baseChatkitUrl, options);
-  }, [baseChatkitUrl, options]);
+    return buildChatKitUrl(baseChatKitUrl, options);
+  }, [baseChatKitUrl, options]);
 
   const fetchSecret = useCallback(async () => {
     setStatus('loading');
@@ -98,10 +100,9 @@ export function useXpertChatkit(hookOptions: UseXpertChatkitOptions): UseXpertCh
   // Fetch secret on mount
   useEffect(() => {
     fetchSecret();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const control: ChatkitControl = {
+  const control: ChatKitControl = {
     status,
     clientSecret,
     error,

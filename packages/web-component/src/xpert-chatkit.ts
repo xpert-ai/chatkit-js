@@ -180,3 +180,5 @@ if (!customElements.get('xpert-chatkit')) {
 // Export for potential programmatic use
 export { XpertChatkit };
 export default XpertChatkit;
+
+export { registerChatKitElement } from './ChatKitElement'

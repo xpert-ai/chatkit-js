@@ -1,15 +1,13 @@
 // Components
-export { XpertChatkit } from './XpertChatkit';
-
-// Hooks
-export { useXpertChatkit } from './useXpertChatkit';
+export { XpertChatKit } from './chatkit.js';
 
 // Types
 export type {
-  UseXpertChatkitOptions,
-  UseXpertChatkitReturn,
-  ChatkitControl,
-  ChatkitStatus,
-  XpertChatkitProps,
-  XpertChatkitOptions,
-} from './types';
+  UseChatKitOptions,
+  UseChatKitReturn,
+  ChatKitControl,
+  ChatKitStatus,
+  XpertChatKitProps,
+  ChatKitOptions,
+} from './types.js';
+export { useChatKit } from './useChatKit.js';

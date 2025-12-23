@@ -1,33 +1,35 @@
 /**
- * Type definitions for Xpert Chatkit React
+ * Type definitions for Xpert ChatKit React
  */
 
-import type { XpertChatkitOptions } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
 // Re-export types from chatkit-types for convenience
-export type { XpertChatkitOptions } from '@xpert-ai/chatkit-types';
+export type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
 /**
- * Options for useXpertChatkit hook
+ * Options for useXpertChatKit hook
  */
-export interface UseXpertChatkitOptions {
-  /**
-   * Function to get the client secret for authentication.
-   * This is called when the component mounts and can be called again to refresh.
-   * The current secret (if any) is passed to allow for refresh logic.
-   */
-  getClientSecret: (currentSecret: string | null) => Promise<string>;
+export interface UseChatKitOptions {
+  api: {
+    /**
+     * Function to get the client secret for authentication.
+     * This is called when the component mounts and can be called again to refresh.
+     * The current secret (if any) is passed to allow for refresh logic.
+     */
+    getClientSecret: (existing: string | null) => Promise<string>;
+  }
 
   /**
-   * The base URL of the Chatkit iframe (without options parameter)
+   * The base URL of the ChatKit iframe (without options parameter)
    */
   chatkitUrl: string;
 
   /**
-   * Chatkit options configuration (theme, composer, startScreen, etc.)
+   * ChatKit options configuration (theme, composer, startScreen, etc.)
    * Will be encoded as base64 and appended to the URL
    */
-  options?: XpertChatkitOptions;
+  options?: ChatKitOptions;
 
   /**
    * Callback when an error occurs during secret fetching
@@ -43,16 +45,16 @@ export interface UseXpertChatkitOptions {
 /**
  * State of the chatkit connection
  */
-export type ChatkitStatus = 'idle' | 'loading' | 'ready' | 'error';
+export type ChatKitStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 /**
- * Control object returned by useXpertChatkit
+ * Control object returned by useChatKit
  */
-export interface ChatkitControl {
+export interface ChatKitControl {
   /**
    * Current status of the chatkit connection
    */
-  status: ChatkitStatus;
+  status: ChatKitStatus;
 
   /**
    * Current client secret (null if not yet obtained)
@@ -76,23 +78,23 @@ export interface ChatkitControl {
 }
 
 /**
- * Return type of useXpertChatkit hook
+ * Return type of useChatKit hook
  */
-export interface UseXpertChatkitReturn {
+export interface UseChatKitReturn {
   /**
-   * Control object to pass to XpertChatkit component
+   * Control object to pass to XpertChatKit component
    */
-  control: ChatkitControl;
+  control: ChatKitControl;
 }
 
 /**
- * Props for XpertChatkit component
+ * Props for XpertChatKit component
  */
-export interface XpertChatkitProps extends React.HTMLAttributes<HTMLElement> {
+export interface XpertChatKitProps extends React.HTMLAttributes<HTMLElement> {
   /**
-   * Control object from useXpertChatkit hook
+   * Control object from useXpertChatKit hook
    */
-  control: ChatkitControl;
+  control: ChatKitControl;
 }
 
 /**
@@ -102,6 +104,13 @@ declare global {
   namespace JSX {
     interface IntrinsicElements {
       'xpert-chatkit': React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement> & {
+          'chatkit-url'?: string;
+          'client-secret'?: string;
+        },
+        HTMLElement
+      >;
+      'openai-chatkit': React.DetailedHTMLProps<
         React.HTMLAttributes<HTMLElement> & {
           'chatkit-url'?: string;
           'client-secret'?: string;

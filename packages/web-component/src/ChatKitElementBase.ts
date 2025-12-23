@@ -2,21 +2,20 @@ import { encodeBase64 } from "@xpert-ai/chatkit-web-shared"
 
 import { ChatFrameMessenger } from "./ChatFrameMessenger"
 import { ChatKitOptions } from "@xpert-ai/chatkit-types"
-// import { removeMethods } from "./helpers"
+import { removeMethods } from "./helpers"
 
-// import type {
-//   Attachment,
-//   ChatKitFrameParams,
-//   ChatKitOptions,
-//   ChatKitProfile,
-//   ChatKitInnerOptions,
-//   ChatKitReq,
-//   UserMessageContent,
-//   ToolChoice,
-// } from "@xpert-ai/chatkit-web-shared"
-// import { getCapabilities } from "@xpert-ai/chatkit-web-shared"
-// import type { Capabilities, Capability } from "@xpert-ai/chatkit-web-shared"
-// import { IntegrationError, fromPossibleFrameSafeError } from "@xpert-ai/chatkit-web-shared"
+import type {
+  Attachment,
+  ChatKitFrameParams,
+  ChatKitProfile,
+  ChatKitInnerOptions,
+  ChatKitReq,
+  UserMessageContent,
+  ToolChoice,
+} from "@xpert-ai/chatkit-web-shared"
+import { getCapabilities } from "@xpert-ai/chatkit-web-shared"
+import type { Capabilities, Capability } from "@xpert-ai/chatkit-web-shared"
+import { IntegrationError, fromPossibleFrameSafeError } from "@xpert-ai/chatkit-web-shared"
 
 const CHATKIT_FRAME_URL = import.meta.env.CHATKIT_FRAME_URL
 
