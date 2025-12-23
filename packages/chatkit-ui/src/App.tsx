@@ -25,7 +25,7 @@ export function App({ clientSecret = "", options }: AppProps) {
             placeholder={composer?.placeholder ?? "输入消息..."}
             showAvatar={true}
             clientSecret={clientSecret}
-            options={options}
+            options={options ?? {}}
           />
         </StreamProvider>
       </div>

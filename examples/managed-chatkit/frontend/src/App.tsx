@@ -3,7 +3,7 @@ import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
 import { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
 // Example options configuration - try changing these values to see the effect!
-const chatkitOptions: ChatKitOptions = {
+const chatkitOptions: Partial<ChatKitOptions> = {
   theme: {
     // Try: 'light' or 'dark'
     colorScheme: 'light',
@@ -36,7 +36,7 @@ const chatkitOptions: ChatKitOptions = {
         id: 'create-theme',
         label: 'Create Theme',
         shortLabel: 'Theme',
-        icon: 'settings-slider',
+        icon: 'compass',
         placeholderOverride: 'Describe the theme you want to create...',
       },
       {
@@ -69,11 +69,8 @@ const chatkitOptions: ChatKitOptions = {
       enabled: true,
       text: 'Xpert Assistant',
     },
-  },
-  api: {
-
   }
-} as ChatKitOptions
+}
 
 export default function App() {
   const backendOrigin = (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ?? '';
@@ -81,8 +78,7 @@ export default function App() {
   const chatkitTarget = (import.meta.env.VITE_CHATKIT_TARGET as string | undefined) ?? '';
 
   const { control } = useChatKit({
-    chatkitUrl: chatkitTarget,
-    options: chatkitOptions,
+    ...chatkitOptions,
     api: {
       getClientSecret: async () => {
         const createSessionUrl = backendOrigin
@@ -108,6 +104,12 @@ export default function App() {
 
         return data.client_secret;
       }
+    },
+    onClientTool: async ({ name, params, }) => {
+      console.log(`Client tool invoked: ${name}`, params);
+      return {
+        result: `You invoked the "${name}" tool with parameters: ${JSON.stringify(params)}`,
+      };
     },
     onError: (error) => {
       console.error('Failed to create session:', error);

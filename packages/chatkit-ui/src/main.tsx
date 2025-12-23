@@ -6,22 +6,7 @@ import { decodeBase64 } from '@xpert-ai/chatkit-web-shared';
 
 import App from './App';
 import './index.css';
-
-type ChatKitMessage =
-  | {
-      type: "command";
-      nonce: string;
-      command: string;
-      data: unknown;
-    }
-  | {
-      type: "response";
-      nonce: string;
-      response?: unknown;
-      error?: unknown;
-    };
-
-type ChatKitEnvelope = ChatKitMessage & { __oaiChatKit: true };
+import { useParentMessenger } from './hooks/useParentMessenger';
 
 const getParentOrigin = () => {
   if (typeof document === 'undefined' || !document.referrer) return '*';
@@ -30,13 +15,6 @@ const getParentOrigin = () => {
   } catch {
     return '*';
   }
-};
-
-const createNonce = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `ck_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
 
 /**
@@ -71,8 +49,8 @@ const AppContainer = () => {
   const [clientSecret, setClientSecret] = React.useState(initialClientSecret);
   const [options] = React.useState<ChatKitOptions | null>(initialOptions);
   const initialClientSecretRef = React.useRef(initialClientSecret);
-  const pendingNonceRef = React.useRef<string | null>(null);
   const parentOriginRef = React.useRef<string>('*');
+  const { isParentAvailable, sendCommand } = useParentMessenger();
 
   React.useEffect(() => {
     if (typeof window === 'undefined' || window.parent === window) return;
@@ -85,30 +63,6 @@ const AppContainer = () => {
         typeof event.origin === 'string' &&
         event.origin !== parentOriginRef.current
       ) {
-        return;
-      }
-
-      const basePayload = event.data as {
-        __oaiChatKit?: boolean;
-        type?: string;
-        nonce?: string;
-        response?: unknown;
-        error?: unknown;
-        clientSecret?: string;
-      };
-
-      if (basePayload.__oaiChatKit === true) {
-        const payload = event.data as ChatKitEnvelope;
-        if (payload.type === "response" && payload.nonce === pendingNonceRef.current) {
-          pendingNonceRef.current = null;
-          if (payload.error) {
-            console.warn('[chatkit-ui] Failed to fetch client secret:', payload.error);
-            return;
-          }
-          if (typeof payload.response === "string") {
-            setClientSecret(payload.response);
-          }
-        }
         return;
       }
 
@@ -130,23 +84,30 @@ const AppContainer = () => {
   }, []);
 
   React.useEffect(() => {
-    if (typeof window === 'undefined' || window.parent === window) return;
+    if (!isParentAvailable) return;
 
     parentOriginRef.current = getParentOrigin();
-    const nonce = createNonce();
-    pendingNonceRef.current = nonce;
-    const message: ChatKitEnvelope = {
-      __oaiChatKit: true,
-      type: "command",
-      nonce,
-      command: "onGetClientSecret",
-      data: initialClientSecretRef.current.trim()
-        ? initialClientSecretRef.current
-        : null,
-    };
+    const currentSecret = initialClientSecretRef.current.trim()
+      ? initialClientSecretRef.current
+      : null;
 
-    window.parent.postMessage(message, parentOriginRef.current);
-  }, []);
+    let isActive = true;
+    sendCommand("onGetClientSecret", currentSecret)
+      .then((response) => {
+        if (!isActive) return;
+        if (typeof response === "string") {
+          setClientSecret(response);
+        }
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        console.warn("[chatkit-ui] Failed to fetch client secret:", error);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isParentAvailable, sendCommand]);
 
   return <App clientSecret={clientSecret} options={options} />;
 };

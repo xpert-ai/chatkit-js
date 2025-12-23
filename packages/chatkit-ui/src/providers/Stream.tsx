@@ -16,8 +16,10 @@ import {
   type Message,
   type StreamMode,
 } from '@langchain/langgraph-sdk';
-import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type TMessageContent } from '@xpert-ai/chatkit-types';
+import { type ToolCall } from '@langchain/core/messages/tool';
+import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolRequest, type TMessageContent } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
+import { useParentMessenger } from '../hooks/useParentMessenger';
 
 export type StateType = { messages: Message[] };
 
@@ -85,6 +87,14 @@ function parseEventData(raw: unknown) {
 }
 
 type StreamChunk = { id?: string; event: string; data: unknown };
+
+type ClientToolMessageInput = {
+  content: unknown;
+  name?: string;
+  tool_call_id?: string;
+  status?: 'success' | 'error';
+  artifact?: unknown;
+};
 
 function createMessageId() {
   return (
@@ -275,10 +285,83 @@ function appendMessageComponent(
     })
 }
 
+function normalizeClientToolRequest(value: unknown): ClientToolRequest | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as {
+    clientToolCalls?: unknown;
+    toolCalls?: unknown;
+    tool_calls?: unknown;
+  };
+  const calls =
+    (Array.isArray(raw.clientToolCalls) && raw.clientToolCalls) ||
+    (Array.isArray(raw.toolCalls) && raw.toolCalls) ||
+    (Array.isArray(raw.tool_calls) && raw.tool_calls);
+  if (!calls) return null;
+  return { clientToolCalls: calls as ToolCall[] };
+}
+
+function collectClientToolRequests(payload: unknown): ClientToolRequest[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const raw = payload as { tasks?: unknown };
+  if (!Array.isArray(raw.tasks)) return [];
+
+  const requests: ClientToolRequest[] = [];
+  for (const task of raw.tasks) {
+    if (!task || typeof task !== 'object') continue;
+    const interrupts = (task as { interrupts?: unknown }).interrupts;
+    if (!Array.isArray(interrupts)) continue;
+    for (const interrupt of interrupts) {
+      if (!interrupt || typeof interrupt !== 'object') continue;
+      const request = normalizeClientToolRequest(
+        (interrupt as { value?: unknown }).value,
+      );
+      if (request) requests.push(request);
+    }
+  }
+
+  return requests;
+}
+
+function normalizeToolMessagesResponse(response: unknown): ClientToolMessageInput | null {
+  if (!response) return null;
+  if (typeof response === 'object' && response !== null) {
+    const raw = response as ClientToolMessageInput;
+    return raw
+  }
+  return null
+}
+
+function createToolMessages(toolMessages: ClientToolMessageInput[]): Message[] {
+  return toolMessages.map((toolMessage) => {
+    const message: Message = {
+      id: createMessageId(),
+      type: 'tool',
+      content: toolMessage.content ?? '',
+    };
+    if (toolMessage.name) {
+      (message as Message & { name: string }).name = toolMessage.name;
+    }
+    if (toolMessage.tool_call_id) {
+      (message as Message & { tool_call_id: string }).tool_call_id =
+        toolMessage.tool_call_id;
+    }
+    if (toolMessage.status) {
+      (message as Message & { status: 'success' | 'error' }).status =
+        toolMessage.status;
+    }
+    if (toolMessage.artifact !== undefined) {
+      (message as Message & { artifact: unknown }).artifact =
+        toolMessage.artifact;
+    }
+    return message;
+  });
+}
+
 function applyStreamEvent(
   chunk: StreamChunk,
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   setError: React.Dispatch<React.SetStateAction<unknown>>,
+  onInterrupt?: (data: unknown) => void | Promise<void>,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -386,6 +469,18 @@ function applyStreamEvent(
         });
         break;
       }
+      case ChatMessageEventTypeEnum.ON_INTERRUPT: {
+        if (onInterrupt) {
+          const maybePromise = onInterrupt(payload.data);
+          if (
+            maybePromise &&
+            typeof (maybePromise as Promise<void>).catch === 'function'
+          ) {
+            (maybePromise as Promise<void>).catch(setError);
+          }
+        }
+        break;
+      }
       default:
         break;
     }
@@ -419,6 +514,11 @@ const StreamSession = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const submitRef = useRef<StreamContextType['submit'] | null>(null);
+  const lastStreamOptionsRef = useRef<
+    Pick<StreamSubmitOptions, 'streamMode' | 'streamSubgraphs' | 'streamResumable'>
+  >({});
+  const { isParentAvailable, sendCommand } = useParentMessenger();
 
   const client = useMemo(
     () => new Client<StateType>({ apiUrl, apiKey, defaultHeaders: {
@@ -444,12 +544,56 @@ const StreamSession = ({
     }
   }, [setThreadId]);
 
+  const handleInterrupt = useCallback(
+    async (data: unknown) => {
+      if (!isParentAvailable) return;
+      const requests = collectClientToolRequests(data);
+      if (requests.length === 0) return;
+
+      const toolMessages: ClientToolMessageInput[] = [];
+      for (const request of requests) {
+        const calls = request.clientToolCalls ?? [];
+        for (const call of calls) {
+          let response: unknown;
+          try {
+            response = await sendCommand('onClientToolCall', {
+              name: call.name,
+              params: call.args,
+              id: call.id,
+            });
+          } catch (requestError) {
+            setError(requestError);
+            continue;
+          }
+
+          const toolMessage = normalizeToolMessagesResponse(response);
+          if (!toolMessage) continue;
+
+          toolMessages.push(toolMessage);
+        }
+      }
+
+      if (toolMessages.length > 0) {
+        await submitRef.current?.(
+            { messages: toolMessages },
+            lastStreamOptionsRef.current,
+          );
+      }
+    },
+    [isParentAvailable, sendCommand, setError],
+  );
+
   const submit = useCallback(
     async (
       input?: Record<string, unknown> | null,
       options?: StreamSubmitOptions,
     ) => {
       setError(null);
+      lastStreamOptionsRef.current = {
+        streamMode: options?.streamMode,
+        streamSubgraphs: options?.streamSubgraphs,
+        streamResumable: options?.streamResumable,
+      };
       const optimistic = options?.optimisticValues;
       if (optimistic) {
         setValues((prev) => applyOptimisticValues(prev, optimistic));
@@ -494,7 +638,7 @@ const StreamSession = ({
         });
 
         for await (const chunk of stream) {
-          applyStreamEvent(chunk as StreamChunk, setValues, setError);
+          applyStreamEvent(chunk as StreamChunk, setValues, setError, handleInterrupt);
         }
       } catch (streamError) {
         if (!(streamError instanceof DOMException && streamError.name === 'AbortError')) {
@@ -507,8 +651,10 @@ const StreamSession = ({
         setIsLoading(false);
       }
     },
-    [assistantId, client, setThreadId, threadId],
+    [assistantId, client, handleInterrupt, setThreadId, threadId],
   );
+
+  submitRef.current = submit;
 
   const value: StreamContextType = {
     client,
