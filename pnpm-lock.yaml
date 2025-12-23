@@ -108,6 +108,13 @@ importers:
       '@langchain/langgraph-sdk':
         specifier: ^1.0.0
         version: 1.3.1(@langchain/core@1.1.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+    devDependencies:
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@20.19.27)
+      vite-plugin-dts:
+        specifier: ^3.7.0
+        version: 3.9.1(@types/node@20.19.27)(rollup@4.53.5)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.27))
 
   packages/chatkit-react:
     dependencies:
@@ -249,7 +256,27 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.27)(jiti@1.21.7)
 
+  packages/chatkit-web-shared:
+    dependencies:
+      '@microsoft/fetch-event-source':
+        specifier: ^2.0.1
+        version: 2.0.1
+    devDependencies:
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@20.19.27)
+      vite-plugin-dts:
+        specifier: ^3.7.0
+        version: 3.9.1(@types/node@20.19.27)(rollup@4.53.5)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.27))
+
   packages/web-component:
+    dependencies:
+      '@xpert-ai/chatkit-types':
+        specifier: workspace:*
+        version: link:../chatkit
+      '@xpert-ai/chatkit-web-shared':
+        specifier: workspace:*
+        version: link:../chatkit-web-shared
     devDependencies:
       typescript:
         specifier: ^5.3.3
@@ -989,6 +1016,9 @@ packages:
   '@microsoft/api-extractor@7.43.0':
     resolution: {integrity: sha512-GFhTcJpB+MI6FhvXEI9b2K0snulNLWHqC/BbcJtyNYcKUiw7l3Lgis5ApsYncJ0leALX7/of4XfmXk+maT111w==}
     hasBin: true
+
+  '@microsoft/fetch-event-source@2.0.1':
+    resolution: {integrity: sha512-W6CLUJ2eBMw3Rec70qrsEW0jOm/3twwJv21mrmj2yORiaVmVYGS4sSS5yUwvQc1ZlDLYGPnClVWmUUMagKNsfA==}
 
   '@microsoft/tsdoc-config@0.16.2':
     resolution: {integrity: sha512-OGiIzzoBLgWWR0UdRJX98oYO+XKGf7tiK4Zk6tQ/E4IJqGCe7dvkTvgDZV5cFJUzLGDOjeAXrnZoA6QkVySuxw==}
@@ -4857,6 +4887,8 @@ snapshots:
       typescript: 5.4.2
     transitivePeerDependencies:
       - '@types/node'
+
+  '@microsoft/fetch-event-source@2.0.1': {}
 
   '@microsoft/tsdoc-config@0.16.2':
     dependencies:
