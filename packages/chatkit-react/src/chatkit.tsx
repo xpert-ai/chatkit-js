@@ -1,11 +1,9 @@
 import * as React from 'react';
-import { XpertAIChatKit, ChatKitEvents, ChatKitOptions } from '@xpert-ai/chatkit-types';
+import { XpertAIChatKit, ChatKitEvents } from '@xpert-ai/chatkit-types';
 
 // Import web component side effect
-import { registerChatKitElement } from '@xpert-ai/chatkit-web-component';
+import '@xpert-ai/chatkit-web-component';
 import { ChatKitControl, ToEventHandlerKey } from './useChatKit';
-
-registerChatKitElement()
 
 declare module 'react' {
   namespace JSX {
@@ -37,23 +35,6 @@ const EVENT_HANDLER_MAP: {
 };
 
 const EVENT_NAMES = Object.keys(EVENT_HANDLER_MAP) as (keyof ChatKitEvents)[];
-
-const defaultFetch: typeof fetch = (input, init) => fetch(input, init);
-
-const placeholderOptions: ChatKitOptions = {
-  api: {
-    fetch: defaultFetch,
-    getClientSecret: async () => {
-      console.warn('[XpertChatKit] Missing options.api.getClientSecret; using placeholder.');
-      return '';
-    },
-    addMetadataToRequest: async () => ({} as RequestInit),
-  },
-  onClientTool: async () => {
-    console.warn('[XpertChatKit] Missing options.onClientTool; using placeholder.');
-    return null;
-  },
-};
 
 export const ChatKit = React.forwardRef<XpertAIChatKit, ChatKitProps>(
   function ChatKit({ control, ...htmlProps }, forwardedRef) {

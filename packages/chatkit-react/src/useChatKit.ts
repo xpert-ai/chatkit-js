@@ -1,32 +1,29 @@
 import * as React from 'react';
-import type {
-  ChatKitOptions,
-} from './types';
-import { ChatKitEvents, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
 import { useStableOptions } from './useStableOptions';
 
-/**
- * Encode options to base64 for URL
- */
-function encodeOptionsToBase64(options: Record<string, unknown>): string {
-  const json = JSON.stringify(options);
-  // Use btoa for browser, handle unicode characters
-  const encoded = btoa(unescape(encodeURIComponent(json)));
-  return encoded;
-}
+// /**
+//  * Encode options to base64 for URL
+//  */
+// function encodeOptionsToBase64(options: Record<string, unknown>): string {
+//   const json = JSON.stringify(options);
+//   // Use btoa for browser, handle unicode characters
+//   const encoded = btoa(unescape(encodeURIComponent(json)));
+//   return encoded;
+// }
 
-/**
- * Build the full chatkit URL with options encoded
- */
-function buildChatKitUrl(baseUrl: string, options?: Record<string, unknown>): string {
-  if (!options || Object.keys(options).length === 0) {
-    return baseUrl;
-  }
+// /**
+//  * Build the full chatkit URL with options encoded
+//  */
+// function buildChatKitUrl(baseUrl: string, options?: Record<string, unknown>): string {
+//   if (!options || Object.keys(options).length === 0) {
+//     return baseUrl;
+//   }
 
-  const encoded = encodeOptionsToBase64(options);
-  const separator = baseUrl.includes('?') ? '&' : '?';
-  return `${baseUrl}${separator}options=${encoded}`;
-}
+//   const encoded = encodeOptionsToBase64(options);
+//   const separator = baseUrl.includes('?') ? '&' : '?';
+//   return `${baseUrl}${separator}options=${encoded}`;
+// }
 
 type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
   ? `${Head}${Capitalize<DotToCamelCase<Tail>>}`

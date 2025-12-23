@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { NuqsAdapter } from "nuqs/adapters/react";
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import { decodeBase64 } from '@xpert-ai/chatkit-web-shared';
 
 import App from './App';
 import './index.css';
@@ -39,21 +40,21 @@ const createNonce = () => {
 };
 
 /**
- * Decode base64 options from URL parameter
+ * Decode base64 options from URL hash
  */
 function decodeOptionsFromUrl(): ChatKitOptions | null {
   if (typeof window === 'undefined') return null;
 
-  const params = new URLSearchParams(window.location.search);
-  const encoded = params.get('options');
+  const hash = window.location.hash;
+  const encoded = hash.startsWith('#') ? hash.slice(1) : hash;
 
   if (!encoded) return null;
 
   try {
-    const json = decodeURIComponent(escape(atob(encoded)));
-    return JSON.parse(json) as ChatKitOptions;
+    const params = decodeBase64<{ options: {options?: ChatKitOptions} }>(encoded);
+    return params?.options?.options ?? null;
   } catch (error) {
-    console.warn('[chatkit-ui] Failed to decode options from URL:', error);
+    console.warn('[chatkit-ui] Failed to decode options from URL hash:', error);
     return null;
   }
 }

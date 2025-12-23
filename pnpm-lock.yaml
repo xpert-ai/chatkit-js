@@ -179,6 +179,9 @@ importers:
       '@xpert-ai/chatkit-types':
         specifier: workspace:*
         version: link:../chatkit
+      '@xpert-ai/chatkit-web-shared':
+        specifier: workspace:*
+        version: link:../chatkit-web-shared
       clsx:
         specifier: ^2.1.1
         version: 2.1.1

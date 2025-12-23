@@ -1,9 +1,6 @@
-import { EventEmitter } from "./EventEmitter"
-
-
-import { fetchEventSourceWithRetry } from "./fetchEventSourceWithRetry.js"
-
 import type { EventSourceMessage, FetchEventSourceInit } from "@microsoft/fetch-event-source"
+import { EventEmitter } from "./EventEmitter"
+import { fetchEventSourceWithRetry } from "./fetchEventSourceWithRetry.js"
 import type { AnyFunction } from "./types"
 import { FrameSafeHttpError, HttpError } from "./errors/HttpError"
 import { FrameSafeIntegrationError, IntegrationError } from "./errors/IntegrationError"
