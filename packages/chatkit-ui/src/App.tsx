@@ -5,7 +5,7 @@ import { ThemeProvider } from "./providers/Theme";
 
 export type AppProps = {
   clientSecret?: string;
-  options: ChatKitOptions;
+  options?: ChatKitOptions | null;
 };
 
 export function App({ clientSecret = "", options }: AppProps) {
