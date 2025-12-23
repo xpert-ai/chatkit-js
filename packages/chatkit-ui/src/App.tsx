@@ -5,7 +5,7 @@ import { ThemeProvider } from "./providers/Theme";
 
 export type AppProps = {
   clientSecret?: string;
-  options?: ChatKitOptions | null;
+  options: ChatKitOptions;
 };
 
 export function App({ clientSecret = "", options }: AppProps) {
@@ -14,7 +14,6 @@ export function App({ clientSecret = "", options }: AppProps) {
   // Extract options
   const theme = options?.theme;
   const composer = options?.composer;
-  const startScreen = options?.startScreen;
 
   return (
     <ThemeProvider theme={theme}>
@@ -26,8 +25,7 @@ export function App({ clientSecret = "", options }: AppProps) {
             placeholder={composer?.placeholder ?? "输入消息..."}
             showAvatar={true}
             clientSecret={clientSecret}
-            composer={composer}
-            startScreen={startScreen}
+            options={options}
           />
         </StreamProvider>
       </div>

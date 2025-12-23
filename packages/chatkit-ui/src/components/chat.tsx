@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import type { Message } from '@langchain/langgraph-sdk';
-import type { ChatkitMessage, XpertComposerOption, XpertToolOption, XpertStartScreenOption } from '@xpert-ai/chatkit-types';
+import type { ChatkitMessage, ChatKitOptions, ToolOption } from '@xpert-ai/chatkit-types';
 
 import { cn } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
@@ -21,8 +21,7 @@ export type ChatProps = {
   placeholder?: string;
   clientSecret?: string;
   showAvatar?: boolean;
-  composer?: XpertComposerOption;
-  startScreen?: XpertStartScreenOption;
+  options: ChatKitOptions
 };
 
 const apiUrl = import.meta.env.VITE_CHATKIT_API_BASE as string | undefined;
@@ -67,17 +66,16 @@ function formatMessageContent(content: Message['content'][number]): string {
 
 export function Chat({
   className,
+  options: { composer, startScreen },
   title = 'Chat',
   placeholder = 'Type a message...',
   clientSecret = '',
   showAvatar = true,
-  composer,
-  startScreen,
 }: ChatProps) {
   const stream = useStreamContext();
 
   const [draft, setDraft] = React.useState('');
-  const [selectedTool, setSelectedTool] = React.useState<XpertToolOption | null>(null);
+  const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(null);
   const [attachments, setAttachments] = React.useState<File[]>([]);
   const [conversations, setConversations] = React.useState<Conversation[]>([
     { id: '1', title: 'Previous conversation 1' },
@@ -131,7 +129,7 @@ export function Chat({
     );
 
     // Clear selected tool if not persistent
-    if (selectedTool && !selectedTool.persistent) {
+    if (selectedTool && !selectedTool.pinned) {
       setSelectedTool(null);
     }
     // Clear attachments after submit
@@ -172,7 +170,7 @@ export function Chat({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleToolSelect = (tool: XpertToolOption) => {
+  const handleToolSelect = (tool: ToolOption) => {
     setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
   };
 
