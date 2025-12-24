@@ -1,70 +1,134 @@
-# Managed Chatkit Frontend
+# Managed ChatKit Frontend
 
-这是使用 `@xpert-ai/chatkit-web-component` 的示例应用。
+A React + Vite application demonstrating integration with the `@xpert-ai/chatkit-web-component` package.
 
-## 快速开始
+## Overview
 
-### 1. 确保依赖已安装
+This frontend application showcases:
+
+- **Web Component Integration**: Using the ChatKit web component in a React app
+- **Automatic Session Management**: Web component handles session creation automatically
+- **Type-Safe Configuration**: Full TypeScript support for all ChatKit options
+- **Theme Customization**: Demonstrating various theming and UI configuration options
+- **Development Proxy**: Vite proxy configuration to avoid CORS issues
+
+## Quick Start
+
+### 1. Install Dependencies
+
+From the project root:
 
 ```bash
-# 在项目根目录
 pnpm install
 ```
 
-### 2. 配置环境变量
+### 2. Configure Environment
 
-查看 `.env` 文件，确保配置正确：
+Copy the example environment file:
 
-```env
-VITE_CHATKIT_TARGET=http://localhost:5176  # Chatkit UI 地址
-VITE_CHATKIT_ASSISTANT_ID=your-assistant-id
-VITE_BACKEND_TARGET=http://localhost:8000  # 后端代理地址
-VITE_BACKEND_ORIGIN=                        # 留空使用代理
+```bash
+cp .env.example .env
 ```
 
-### 3. 启动服务
+Edit `.env` to configure your settings:
 
-**终端 1 - 后端:**
+```env
+# ChatKit UI development server (if running separately)
+VITE_CHATKIT_TARGET=http://localhost:5176
+
+# Assistant ID (must match backend configuration)
+VITE_CHATKIT_ASSISTANT_ID=your-assistant-id
+
+# Backend API origin (leave empty to use proxy)
+VITE_BACKEND_ORIGIN=
+
+# Backend proxy target for development
+VITE_BACKEND_TARGET=http://localhost:8000
+```
+
+### 3. Start the Development Server
+
+**Option A: Start all services together** (from repository root):
+
+```bash
+pnpm managed-chatkit:dev
+```
+
+**Option B: Start services individually**:
+
+Terminal 1 - Backend:
 ```bash
 cd ../backend
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**终端 2 - Chatkit UI:**
+Terminal 2 - ChatKit UI (if developing UI package):
 ```bash
 cd ../../../packages/chatkit-ui
-pnpm run dev
+pnpm dev
 ```
 
-**终端 3 - Frontend:**
+Terminal 3 - Frontend:
 ```bash
-pnpm run dev
+pnpm dev
 ```
 
-## 代码说明
+The application will be available at http://localhost:5173
 
-### App.tsx
+## Project Structure
+
+```
+frontend/
+├── src/
+│   ├── App.tsx           # Main ChatKit integration component
+│   ├── main.tsx          # React application entry point
+│   └── index.css         # Global styles (Tailwind)
+├── public/               # Static assets
+├── index.html            # HTML entry point
+├── vite.config.ts        # Vite configuration with proxy
+├── tailwind.config.js    # Tailwind CSS configuration
+├── tsconfig.json         # TypeScript configuration
+└── package.json          # Dependencies and scripts
+```
+
+## Code Walkthrough
+
+### App.tsx - Main Integration
 
 ```tsx
-import '@xpert-ai/chatkit-web-component';
+import { ChatKit, useChatKit } from '@xpert-ai/chatkit-react';
 
 export default function App() {
-  const backendOrigin = import.meta.env.VITE_BACKEND_ORIGIN ?? '';
-  const assistantId = import.meta.env.VITE_CHATKIT_ASSISTANT_ID ?? '';
-  const chatkitTarget = import.meta.env.VITE_CHATKIT_TARGET ?? '';
+  const { control } = useChatKit({
+    api: {
+      async getClientSecret(existing) {
+        // Fetch session from backend
+        const res = await fetch('/api/create-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const { client_secret } = await res.json();
+        return client_secret;
+      },
+    },
+    theme: {
+      colorScheme: 'light',
+      radius: 'round',
+    },
+    composer: {
+      placeholder: 'Ask me anything...',
+    },
+  });
 
   return (
     <div className="flex h-screen">
-      <div className="w-96 p-4 border-r border-gray-300">
-        <h1 className="text-2xl font-bold mb-4">Managed Chatkit Example</h1>
-        {/* 配置信息显示 */}
+      <div className="w-96 p-4 border-r">
+        <h1 className="text-2xl font-bold">Managed ChatKit</h1>
+        {/* Configuration panel */}
       </div>
 
-      {/* Web Component 自动处理所有逻辑 */}
-      <xpert-chatkit
-        backend-url={backendOrigin}
-        chatkit-url={chatkitTarget}
-        assistant-id={assistantId}
+      <ChatKit
+        control={control}
         className="flex-1"
       />
     </div>
@@ -72,17 +136,155 @@ export default function App() {
 }
 ```
 
-### 主要特性
+### Key Features Demonstrated
 
-- ✅ **自动 Session 管理**: Web Component 自动调用后端创建 session
-- ✅ **自动 postMessage**: 自动将 client secret 发送给 iframe
-- ✅ **Loading 状态**: 内置加载状态显示
-- ✅ **错误处理**: 自动显示错误信息
-- ✅ **类型安全**: TypeScript 类型声明
+#### 1. Automatic Session Management
 
-## 调试
+The web component automatically:
+- Calls the backend to create a session
+- Retrieves the client secret
+- Sends configuration to the ChatKit UI via postMessage
+- Handles loading and error states
 
-打开浏览器控制台查看日志：
+#### 2. Type-Safe Configuration
+
+Full TypeScript support for all configuration options:
+
+```tsx
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+
+const options: ChatKitOptions = {
+  theme: {
+    colorScheme: 'light',  // Type-checked
+    radius: 'round',       // Autocomplete available
+  },
+  // ... more options
+};
+```
+
+#### 3. Development Proxy
+
+The `vite.config.ts` includes a proxy to avoid CORS issues:
+
+```ts
+export default defineConfig({
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_BACKEND_TARGET,
+        changeOrigin: true,
+      },
+    },
+  },
+});
+```
+
+## Customization Examples
+
+### Theme Variants
+
+```tsx
+// Light theme
+theme: {
+  colorScheme: 'light',
+  radius: 'round',
+  density: 'normal',
+}
+
+// Dark theme
+theme: {
+  colorScheme: 'dark',
+  radius: 'soft',
+  density: 'compact',
+}
+
+// Custom colors
+theme: {
+  colors: {
+    primary: '#0066FF',
+    background: '#FFFFFF',
+    // ... more colors
+  },
+}
+```
+
+### Composer Configuration
+
+```tsx
+composer: {
+  placeholder: 'Type your message...',
+  attachments: {
+    enabled: true,
+    maxSize: 10 * 1024 * 1024,  // 10MB
+    maxCount: 5,
+    accept: 'image/*,.pdf,.doc,.docx',
+  },
+  tools: [
+    { name: 'web_search', description: 'Search the web' },
+    { name: 'calculator', description: 'Perform calculations' },
+  ],
+}
+```
+
+### Client Tool Handling
+
+```tsx
+useChatKit({
+  onClientTool: async ({ name, params }) => {
+    switch (name) {
+      case 'get_location':
+        return { location: 'San Francisco, CA' };
+
+      case 'get_time':
+        return { time: new Date().toISOString() };
+
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  },
+});
+```
+
+### Thread Management
+
+```tsx
+useChatKit({
+  history: {
+    enabled: true,
+    showDelete: true,
+    showRename: true,
+  },
+  initialThread: null,  // Start with new thread
+  // or
+  initialThread: 'thread-id-123',  // Load specific thread
+});
+```
+
+## Development
+
+### Available Scripts
+
+```bash
+pnpm dev          # Start development server
+pnpm build        # Build for production
+pnpm preview      # Preview production build
+pnpm lint         # Lint code
+```
+
+### Hot Module Replacement
+
+Vite provides instant HMR for:
+- React component changes
+- CSS/Tailwind updates
+- TypeScript changes
+
+Edit files in `src/` and see changes immediately in the browser.
+
+### Debugging
+
+#### Browser Console
+
+The web component and ChatKit UI log useful debugging information:
 
 ```
 🚀 Managed Chatkit Example with Web Component
@@ -90,40 +292,105 @@ export default function App() {
 [chatkit-ui] Received message: chatkit:init {...}
 ```
 
-## 常见问题
+#### Network Tab
 
-### Q: 看不到 Chatkit UI？
+Monitor API requests:
+- `/api/create-session` - Session creation
+- `/api/chat/stream` - Message streaming (if applicable)
 
-**检查:**
-1. Chatkit UI 是否在运行？访问 http://localhost:5176
-2. 浏览器控制台是否有错误？
-3. Network 标签中 `/api/create-session` 是否成功？
+#### React DevTools
 
-### Q: CORS 错误？
+Install React DevTools to inspect:
+- Component hierarchy
+- Props and state
+- Re-render performance
 
-**解决:**
-- 确保 `VITE_BACKEND_ORIGIN` 为空（使用代理）
-- 或者后端正确配置了 CORS
+## Building for Production
 
-### Q: 消息发送失败？
+```bash
+# Build the application
+pnpm build
 
-**检查:**
-1. 后端是否正常运行？
-2. Assistant ID 是否正确？
-3. 控制台是否有错误日志？
+# Preview the production build locally
+pnpm preview
 
-## 与旧版本对比
+# The built files will be in the dist/ directory
+```
 
-| 功能 | 旧版本 (iframe) | 新版本 (Web Component) |
-|------|----------------|----------------------|
-| 代码行数 | ~135 行 | ~43 行 |
-| Session 管理 | 手动 | 自动 |
-| postMessage | 手动 | 自动 |
-| Loading 状态 | 手动实现 | 内置 |
-| 错误处理 | 手动实现 | 内置 |
-| TypeScript | 需要自己写类型 | 自带类型 |
-| 可重用性 | React 专用 | 任何框架 |
+Deploy the `dist/` folder to your hosting service:
+- Vercel
+- Netlify
+- AWS S3 + CloudFront
+- Any static hosting
 
-## 更多信息
+### Environment Variables for Production
 
-查看 [MIGRATION.md](../MIGRATION.md) 了解迁移详情。
+Set these environment variables in your hosting platform:
+
+```env
+VITE_CHATKIT_TARGET=https://your-chatkit-ui.example.com
+VITE_CHATKIT_ASSISTANT_ID=your-production-assistant-id
+VITE_BACKEND_ORIGIN=https://your-backend-api.example.com
+```
+
+## Comparison: Before vs After Web Component
+
+| Feature | Manual Integration | Web Component |
+|---------|-------------------|---------------|
+| Code Lines | ~135 lines | ~43 lines |
+| Session Management | Manual | Automatic |
+| postMessage Setup | Manual | Automatic |
+| Loading States | Manual implementation | Built-in |
+| Error Handling | Manual implementation | Built-in |
+| TypeScript Support | DIY types | Included |
+| Framework Support | React-specific | Any framework |
+| Maintenance | High | Low |
+
+## Troubleshooting
+
+### ChatKit UI Not Visible
+
+**Check**:
+1. Is the ChatKit UI server running? Visit http://localhost:5176
+2. Open browser console - any errors?
+3. Check Network tab - is `/api/create-session` succeeding?
+4. Verify `VITE_CHATKIT_TARGET` in `.env`
+
+### CORS Errors
+
+**Solution**:
+- Use the proxy: Set `VITE_BACKEND_ORIGIN=""` (empty string)
+- Or configure CORS headers in your backend
+- For production, ensure backend allows your frontend domain
+
+### Messages Not Sending
+
+**Check**:
+1. Backend server is running (http://localhost:8000)
+2. Assistant ID matches between frontend and backend
+3. Console shows any error messages
+4. Network tab shows streaming connection
+
+### Styling Issues
+
+**Check**:
+1. Tailwind CSS is configured correctly
+2. `index.css` is imported in `main.tsx`
+3. Purge settings in `tailwind.config.js` don't remove needed classes
+
+## Next Steps
+
+- Review [ChatKit configuration documentation](../../../packages/chatkit/src/options.ts)
+- Learn about [tools and actions](../../../docs/concepts/tools.md)
+- Explore [theming options](../../../docs/guides/theming.md) (if available)
+- Add custom features to your implementation
+
+## Support
+
+- Main documentation: [../../README.md](../../../README.md)
+- Example documentation: [../README.md](../README.md)
+- Issue tracker: https://github.com/xpert-ai/chatkit-js/issues
+
+## License
+
+This example is part of the ChatKit project and is licensed under the [Apache License 2.0](../../../LICENSE).
