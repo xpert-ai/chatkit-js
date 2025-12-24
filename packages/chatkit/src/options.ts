@@ -1,4 +1,5 @@
 
+import type { ClientToolMessageInput } from './interrupt';
 import type * as Widgets from './widgets';
 
 export * from './widgets';
@@ -316,7 +317,7 @@ export type ChatKitOptions = {
   }: {
     name: string;
     params: Record<string, unknown>;
-  }) => Promise<Record<string, unknown>> | Record<string, unknown>;
+  }) => Promise<ClientToolMessageInput> | ClientToolMessageInput;
 
   /**
    * Whether to show the header in ChatKit. A configuration object can be

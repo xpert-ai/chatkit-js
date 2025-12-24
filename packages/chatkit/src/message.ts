@@ -1,3 +1,5 @@
+import type { ToolCall } from "@langchain/core/messages/tool";
+
 export enum ChatMessageTypeEnum {
   // LOG = 'log',
   MESSAGE = 'message',
@@ -196,3 +198,45 @@ export interface ChatkitMessage {
 }
 
 export type TMessageItems = TMessageContentComplex[];
+
+
+export const STATE_VARIABLE_HUMAN = 'human'
+
+/**
+ * Human input message, include parameters and attachments
+ */
+export type TChatRequestHuman = {
+  input?: string
+  files?: Partial<File>[]
+  [key: string]: unknown
+}
+
+/**
+ * Command to resume with streaming after human decision
+ */
+export type TInterruptCommand = {
+  resume?: any
+  update?: any
+  toolCalls?: ToolCall[]
+  agentKey?: string
+}
+
+export type TChatRequest = {
+  /**
+   * The human input, include parameters
+   */
+  input: TChatRequestHuman
+  /**
+   * Custom graph state
+   */
+  state?: {[STATE_VARIABLE_HUMAN]: TChatRequestHuman} & Record<string, any>
+  agentKey?: string
+  projectId?: string
+  conversationId?: string
+  environmentId?: string
+  id?: string
+  executionId?: string
+  confirm?: boolean
+  command?: TInterruptCommand
+  retry?: boolean
+}

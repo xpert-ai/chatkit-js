@@ -17,7 +17,7 @@ import {
   type StreamMode,
 } from '@langchain/langgraph-sdk';
 import { type ToolCall } from '@langchain/core/messages/tool';
-import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolRequest, type TMessageContent } from '@xpert-ai/chatkit-types';
+import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type TMessageContent } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 
@@ -46,7 +46,7 @@ export type StreamContextType = {
   isLoading: boolean;
   error: unknown;
   submit: (
-    values?: Record<string, unknown> | null,
+    values?: TChatRequest | null,
     options?: StreamSubmitOptions,
   ) => Promise<void>;
   stop: () => void;
@@ -87,14 +87,6 @@ function parseEventData(raw: unknown) {
 }
 
 type StreamChunk = { id?: string; event: string; data: unknown };
-
-type ClientToolMessageInput = {
-  content: unknown;
-  name?: string;
-  tool_call_id?: string;
-  status?: 'success' | 'error';
-  artifact?: unknown;
-};
 
 function createMessageId() {
   return (
@@ -323,38 +315,18 @@ function collectClientToolRequests(payload: unknown): ClientToolRequest[] {
 }
 
 function normalizeToolMessagesResponse(response: unknown): ClientToolMessageInput | null {
+  console.log('Tool message response:', response);
   if (!response) return null;
   if (typeof response === 'object' && response !== null) {
     const raw = response as ClientToolMessageInput;
-    return raw
+    return {
+      tool_call_id: raw.tool_call_id,
+      name: raw.name,
+      content: raw.content,
+      status: raw.status,
+    }
   }
   return null
-}
-
-function createToolMessages(toolMessages: ClientToolMessageInput[]): Message[] {
-  return toolMessages.map((toolMessage) => {
-    const message: Message = {
-      id: createMessageId(),
-      type: 'tool',
-      content: toolMessage.content ?? '',
-    };
-    if (toolMessage.name) {
-      (message as Message & { name: string }).name = toolMessage.name;
-    }
-    if (toolMessage.tool_call_id) {
-      (message as Message & { tool_call_id: string }).tool_call_id =
-        toolMessage.tool_call_id;
-    }
-    if (toolMessage.status) {
-      (message as Message & { status: 'success' | 'error' }).status =
-        toolMessage.status;
-    }
-    if (toolMessage.artifact !== undefined) {
-      (message as Message & { artifact: unknown }).artifact =
-        toolMessage.artifact;
-    }
-    return message;
-  });
 }
 
 function applyStreamEvent(
@@ -574,10 +546,16 @@ const StreamSession = ({
       }
 
       if (toolMessages.length > 0) {
-        await submitRef.current?.(
-            { messages: toolMessages },
-            lastStreamOptionsRef.current,
-          );
+        await submitRef.current?.({
+            input: {},
+            command: {
+              resume: {
+                  toolMessages: toolMessages,
+              } as ClientToolResponse
+            }
+          },
+          lastStreamOptionsRef.current,
+        );
       }
     },
     [isParentAvailable, sendCommand, setError],
@@ -585,7 +563,7 @@ const StreamSession = ({
 
   const submit = useCallback(
     async (
-      input?: Record<string, unknown> | null,
+      input?: TChatRequest | null,
       options?: StreamSubmitOptions,
     ) => {
       setError(null);

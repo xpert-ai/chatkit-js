@@ -121,7 +121,7 @@ export function Chat({
     setDraft('');
 
     stream.submit(
-      { input: trimmedDraft },
+      { input: { input: trimmedDraft } },
       {
         optimisticValues: (prev) => {
           const prevMessages = prev?.messages ?? [];
@@ -186,7 +186,7 @@ export function Chat({
     };
 
     stream.submit(
-      { input: prompt },
+      { input: { input: prompt } },
       {
         optimisticValues: (prev) => {
           const prevMessages = prev?.messages ?? [];
@@ -231,7 +231,7 @@ export function Chat({
 
     if (lastHumanMessage && typeof lastHumanMessage.content === 'string') {
       stream.submit(
-        { input: lastHumanMessage.content },
+        { input: {input: lastHumanMessage.content} },
         {
           optimisticValues: (prev) => {
             // Remove the AI message that we're retrying

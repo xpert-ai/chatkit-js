@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
-import { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import { ChatKitOptions, ClientToolMessageInput } from '@xpert-ai/chatkit-types';
 
 // Example options configuration - try changing these values to see the effect!
 const chatkitOptions: Partial<ChatKitOptions> = {
@@ -105,10 +105,13 @@ export default function App() {
         return data.client_secret;
       }
     },
-    onClientTool: async ({ name, params, }) => {
-      console.log(`Client tool invoked: ${name}`, params);
+    onClientTool: async ({ name, params, id, tool_call_id }): Promise<ClientToolMessageInput> => {
+      console.log(`Client tool invoked: ${name}`, params, id, tool_call_id);
       return {
-        result: `You invoked the "${name}" tool with parameters: ${JSON.stringify(params)}`,
+        tool_call_id: tool_call_id || id,
+        name: name,
+        status: 'success',
+        content: `You invoked the "${name}" tool with parameters: ${JSON.stringify(params)}`,
       };
     },
     onError: (error) => {
