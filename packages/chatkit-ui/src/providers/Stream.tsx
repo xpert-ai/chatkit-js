@@ -13,15 +13,17 @@ import {
   type Checkpoint,
   type Command,
   type Config,
-  type Message,
   type StreamMode,
 } from '@langchain/langgraph-sdk';
+import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
 import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type TMessageContent } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 
-export type StateType = { messages: Message[] };
+type ChatKitAIMessage = Message & { executionId?: string };
+
+export type StateType = { messages: ChatKitAIMessage[] };
 
 export type StreamSubmitOptions = {
   optimisticValues?:
@@ -95,7 +97,7 @@ function createMessageId() {
   );
 }
 
-function normalizeMessageType(value: unknown): Message['type'] | undefined {
+function normalizeMessageType(value: unknown): ChatKitAIMessage['type'] | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.toLowerCase();
   switch (normalized) {
@@ -110,11 +112,11 @@ function normalizeMessageType(value: unknown): Message['type'] | undefined {
     case 'tool':
       return 'tool';
     default:
-      return value as Message['type'];
+      return value as ChatKitAIMessage['type'];
   }
 }
 
-function isAssistantMessage(message: Message | undefined) {
+function isAssistantMessage(message: ChatKitAIMessage | undefined) {
   return (
     message?.type === 'ai' ||
     (typeof message?.type === 'string' &&
@@ -124,7 +126,7 @@ function isAssistantMessage(message: Message | undefined) {
 
 function appendMessages(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
-  nextMessages: Message[],
+  nextMessages: ChatKitAIMessage[],
 ) {
   if (nextMessages.length === 0) return;
   setValues((prev) => ({
@@ -151,7 +153,7 @@ function appendStreamText(
       return { ...prev, messages: nextMessages };
     }
 
-    const newMessage: Message = {
+    const newMessage: ChatKitAIMessage = {
       id: createMessageId(),
       type: 'ai',
       content: text,
@@ -168,7 +170,7 @@ function appendStreamTextToLatest(
   setValues((prev) => {
     const messages = prev.messages ?? [];
     if (messages.length === 0) {
-      const newMessage: Message = {
+      const newMessage: ChatKitAIMessage = {
         id: createMessageId(),
         type: 'ai',
         content: text,
@@ -177,7 +179,7 @@ function appendStreamTextToLatest(
     }
 
     const last = messages[messages.length - 1];
-    let nextContent: Message['content'];
+    let nextContent: ChatKitAIMessage['content'];
     if (typeof last.content === 'string') {
       nextContent = last.content + text;
     } else if (Array.isArray(last.content)) {
@@ -194,7 +196,7 @@ function appendStreamTextToLatest(
   });
 }
 
-function createMessageFromData(data: unknown): Message | null {
+function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   if (data == null) return null;
   if (typeof data === 'string') {
     return { id: createMessageId(), type: 'ai', content: data };
@@ -209,8 +211,10 @@ function createMessageFromData(data: unknown): Message | null {
     normalizeMessageType(raw.role) ??
     'ai';
   const id = typeof raw.id === 'string' ? raw.id : createMessageId();
+  const executionId =
+    typeof raw.executionId === 'string' ? raw.executionId : undefined;
 
-  return { id, type, content };
+  return { id, type, content, executionId };
 }
 
 function extractMessageMeta(data: unknown) {
@@ -218,8 +222,8 @@ function extractMessageMeta(data: unknown) {
   const raw = data as Record<string, unknown>;
   const meta: {
     id?: string;
-    type?: Message['type'];
-    content?: Message['content'];
+    type?: ChatKitAIMessage['type'];
+    content?: ChatKitAIMessage['content'];
   } = {};
 
   if (typeof raw.id === 'string') meta.id = raw.id;
@@ -229,6 +233,13 @@ function extractMessageMeta(data: unknown) {
   }
 
   return meta;
+}
+
+function extractExecutionId(data: unknown) {
+  if (!data || typeof data !== 'object') return undefined;
+  const raw = data as Record<string, unknown>;
+  const value = raw.executionId ?? raw.execution_id;
+  return typeof value === 'string' ? value : undefined;
 }
 
 function updateLatestMessage(
@@ -334,6 +345,7 @@ function applyStreamEvent(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   setError: React.Dispatch<React.SetStateAction<unknown>>,
   onInterrupt?: (data: unknown) => void | Promise<void>,
+  onExecutionId?: (executionId: string | undefined) => void,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -395,30 +407,50 @@ function applyStreamEvent(
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
       case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
-        const eventData = payload.data as { messages?: Message[] } | null;
+        const eventData = payload.data as { messages?: ChatKitAIMessage[] } | null;
         if (eventData && Array.isArray(eventData.messages)) {
           setValues((prev) => ({ ...prev, messages: eventData.messages ?? [] }));
         }
         break;
       }
       case ChatMessageEventTypeEnum.ON_MESSAGE_START: {
-        const message: Message = {
+        const executionId = extractExecutionId(payload.data);
+        if (executionId) {
+          onExecutionId?.(executionId);
+        }
+        const message: ChatKitAIMessage = {
           id: meta.id ?? createMessageId(),
           type: meta.type ?? 'ai',
           content: meta.content ?? '',
+          executionId,
         };
         setValues((prev) => {
           const messages = prev.messages ?? [];
           const last = messages[messages.length - 1];
-          if (
-            last &&
-            isAssistantMessage(last) &&
-            typeof last.content === 'string' &&
-            last.content.length === 0
-          ) {
-            const nextMessages = [...messages];
-            nextMessages[messages.length - 1] = message;
-            return { ...prev, messages: nextMessages };
+          if (last && isAssistantMessage(last)) {
+            if (executionId && last.executionId === executionId) {
+              const nextMessages = [...messages];
+              const nextLast: ChatKitAIMessage = { ...last, executionId };
+              if (meta.id) nextLast.id = meta.id;
+              if (meta.type) nextLast.type = meta.type;
+              if (
+                meta.content !== undefined &&
+                (last.content == null ||
+                  (typeof last.content === 'string' && last.content.length === 0))
+              ) {
+                nextLast.content = meta.content;
+              }
+              nextMessages[messages.length - 1] = nextLast;
+              return { ...prev, messages: nextMessages };
+            }
+            if (
+              typeof last.content === 'string' &&
+              last.content.length === 0
+            ) {
+              const nextMessages = [...messages];
+              nextMessages[messages.length - 1] = message;
+              return { ...prev, messages: nextMessages };
+            }
           }
           return { ...prev, messages: [...messages, message] };
         });
@@ -490,6 +522,7 @@ const StreamSession = ({
   const lastStreamOptionsRef = useRef<
     Pick<StreamSubmitOptions, 'streamMode' | 'streamSubgraphs' | 'streamResumable'>
   >({});
+  const lastExecutionIdRef = useRef<string | null>(null);
   const { isParentAvailable, sendCommand } = useParentMessenger();
 
   const client = useMemo(
@@ -511,6 +544,7 @@ const StreamSession = ({
     setIsLoading(false);
     setError(null);
     setValues({ messages: [] });
+    lastExecutionIdRef.current = null;
     if (newThreadId !== undefined) {
       setThreadId(newThreadId);
     }
@@ -552,7 +586,8 @@ const StreamSession = ({
               resume: {
                   toolMessages: toolMessages,
               } as ClientToolResponse
-            }
+            },
+            executionId: lastExecutionIdRef.current ?? undefined
           },
           lastStreamOptionsRef.current,
         );
@@ -616,7 +651,17 @@ const StreamSession = ({
         });
 
         for await (const chunk of stream) {
-          applyStreamEvent(chunk as StreamChunk, setValues, setError, handleInterrupt);
+          applyStreamEvent(
+            chunk as StreamChunk,
+            setValues,
+            setError,
+            handleInterrupt,
+            (executionId) => {
+              if (executionId) {
+                lastExecutionIdRef.current = executionId;
+              }
+            },
+          );
         }
       } catch (streamError) {
         if (!(streamError instanceof DOMException && streamError.name === 'AbortError')) {
