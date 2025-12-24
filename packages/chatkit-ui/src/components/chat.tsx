@@ -310,7 +310,7 @@ export function Chat({
                   typeof message.content === 'string'
                     ? message.content
                     : Array.isArray(message.content)
-                      ? message.content.map((part) => formatMessageContent(part)).join('')
+                      ? message.content.map((part) => formatMessageContent(part as any)).join('')
                       : formatMessageContent(message.content);
 
                 return (
@@ -354,7 +354,7 @@ export function Chat({
                               key={`${part.type}-${partIndex}`}
                               className="break-words text-sm leading-relaxed"
                             >
-                              {formatMessageContent(part)}
+                              {formatMessageContent(part as any)}
                             </p>
                           ))
                         ) : (

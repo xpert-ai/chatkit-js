@@ -59,7 +59,7 @@ export type ChatKitReq = any
 export type UserMessageContent = any
 export type ToolChoice = any
 
-export type RemoveMethods = any
+export type RemoveMethods<T> = T extends AnyFunction ? "[ChatKitMethod]" : T extends object ? { [K in keyof T]: RemoveMethods<T[K]>; } : T;
 export type Capabilities = any
 export class IntegrationError extends Error {}
 

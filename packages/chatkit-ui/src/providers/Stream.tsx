@@ -44,7 +44,7 @@ export type StreamContextType = {
   assistantId: string;
   threadId: string | null;
   values: StateType;
-  messages: Message[];
+  messages: ChatKitAIMessage[];
   isLoading: boolean;
   error: unknown;
   submit: (
