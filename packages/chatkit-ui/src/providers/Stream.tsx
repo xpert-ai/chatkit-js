@@ -19,7 +19,7 @@ import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
 import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type TMessageContent } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
-import { useParentMessenger } from '../hooks/useParentMessenger';
+import { useParentMessenger, type ParentMessenger } from '../hooks/useParentMessenger';
 
 type ChatKitAIMessage = Message & { executionId?: string };
 
@@ -344,6 +344,7 @@ function applyStreamEvent(
   chunk: StreamChunk,
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   setError: React.Dispatch<React.SetStateAction<unknown>>,
+  sendEvent: ParentMessenger['sendEvent'],
   onInterrupt?: (data: unknown) => void | Promise<void>,
   onExecutionId?: (executionId: string | undefined) => void,
 ) {
@@ -485,6 +486,11 @@ function applyStreamEvent(
         }
         break;
       }
+      case ChatMessageEventTypeEnum.ON_CLIENT_EFFECT: {
+        const toolCall = payload.data as ToolCall;
+        sendEvent('public_event', ['effect', {name: toolCall.name, data: toolCall.args}]);
+        break
+      }
       default:
         break;
     }
@@ -523,7 +529,7 @@ const StreamSession = ({
     Pick<StreamSubmitOptions, 'streamMode' | 'streamSubgraphs' | 'streamResumable'>
   >({});
   const lastExecutionIdRef = useRef<string | null>(null);
-  const { isParentAvailable, sendCommand } = useParentMessenger();
+  const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
 
   const client = useMemo(
     () => new Client<StateType>({ apiUrl, apiKey, defaultHeaders: {
@@ -655,6 +661,7 @@ const StreamSession = ({
             chunk as StreamChunk,
             setValues,
             setError,
+            sendEvent,
             handleInterrupt,
             (executionId) => {
               if (executionId) {

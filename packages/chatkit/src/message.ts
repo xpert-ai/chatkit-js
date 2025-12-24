@@ -29,6 +29,8 @@ export enum ChatMessageEventTypeEnum {
   ON_INTERRUPT = 'on_interrupt',
   ON_ERROR = 'on_error',
   ON_CHAT_EVENT = 'on_chat_event',
+
+  ON_CLIENT_EFFECT = 'on_client_effect',
 }
 
 /**

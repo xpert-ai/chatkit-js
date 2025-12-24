@@ -321,7 +321,6 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     } satisfies ChatKitFrameParams)
     this.#messenger.connect()
     this.#frame.src = frameURL.toString()
-    console.log("ChatKit frame URL:", this.#frame.src)
     // Impossible to not exist
     if (this.#wrapper) {
       this.#shadow.append(this.#wrapper)

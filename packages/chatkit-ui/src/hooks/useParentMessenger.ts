@@ -20,9 +20,13 @@ type ParentEventMessage = {
   data: unknown;
 };
 
-type ParentMessage = ParentCommandMessage | ParentResponseMessage | ParentEventMessage;
+type ParentMessage = ParentCommandMessage | ParentResponseMessage | ParentEventMessage | {
+  type: 'public_event'
+  event: string;
+  data: unknown;
+}
 
-type ParentEnvelope = ParentMessage & { __oaiChatKit: true };
+type ParentEnvelope = Partial<ParentMessage> & { __oaiChatKit: true };
 
 const getParentOrigin = () => {
   if (typeof document === "undefined" || !document.referrer) return "*";
@@ -47,7 +51,7 @@ export type ParentMessenger = {
     data?: unknown,
     transfer?: Transferable[],
   ) => Promise<unknown>;
-  sendEvent: (event: string, data?: unknown, transfer?: Transferable[]) => void;
+  sendEvent: (event: string, data?: [string, unknown], transfer?: Transferable[]) => void;
 };
 
 export function useParentMessenger(): ParentMessenger {
@@ -130,13 +134,13 @@ export function useParentMessenger(): ParentMessenger {
   );
 
   const sendEvent = useCallback(
-    (event: string, data?: unknown, transfer?: Transferable[]) => {
+    (event: string, data?: [string, unknown], transfer?: Transferable[]) => {
       if (!isParentAvailable) return;
       const message: ParentEnvelope = {
         __oaiChatKit: true,
-        type: "event",
+        type: 'event',
         event,
-        data: data ?? null,
+        data: data,
       };
       window.parent.postMessage(message, parentOriginRef.current, transfer);
     },

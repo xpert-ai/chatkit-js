@@ -44,32 +44,18 @@ export type ChatKitMessage =
     }
 
 export type AnyFunction = (...args: any[]) => any
-
-export type InnerCommands = any
-export type InnerEvents = any
-export type OuterCommands = any
 export type OuterEvents = any
-
-
+export type InnerEvents = any
+export type InnerCommands = any
 export type Attachment = any
 export type ChatKitFrameParams = any
-export type ChatKitProfile = any
+export type ChatKitProfile = 'chatkit'
 export type ChatKitInnerOptions = any
-export type ChatKitReq = any
 export type UserMessageContent = any
 export type ToolChoice = any
 
 export type RemoveMethods<T> = T extends AnyFunction ? "[ChatKitMethod]" : T extends object ? { [K in keyof T]: RemoveMethods<T[K]>; } : T;
-export type Capabilities = any
 export class IntegrationError extends Error {}
-
-export enum Capability {
-  Command = "Command"
-}
-
-export function getCapabilities(profile: ChatKitProfile): Capabilities {
-  // Placeholder implementation
-}
 
 export function fromPossibleFrameSafeError(err: any): any {
   // Placeholder implementation

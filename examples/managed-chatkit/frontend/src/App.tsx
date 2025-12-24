@@ -117,6 +117,9 @@ export default function App() {
     onError: (error) => {
       console.error('Failed to create session:', error);
     },
+    onEffect: ({name, data}) => {
+      console.log(`Effect triggered: ${name}`, data);
+    }
   });
 
   useEffect(() => {

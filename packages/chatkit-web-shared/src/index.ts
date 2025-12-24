@@ -1,3 +1,5 @@
 export * from './BaseMessenger'
 export * from './frameEncoding'
-export * from './types'
+export * from './types/index'
+export * from './types/capabilities.types'
+export * from './capabilities'
