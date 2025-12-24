@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback } from './ui/avatar';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
+import { useStreamManager } from '../hooks/useStream';
 
 export type ChatProps = {
   className?: string;
@@ -74,7 +75,12 @@ export function Chat({
 }: ChatProps) {
   const composer = options?.composer;
   const startScreen = options?.startScreen;
+  const {setStream} = useStreamManager();
   const stream = useStreamContext();
+
+  React.useEffect(() => {
+    setStream(stream);
+  }, [setStream, stream]);
 
   const [draft, setDraft] = React.useState('');
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(null);

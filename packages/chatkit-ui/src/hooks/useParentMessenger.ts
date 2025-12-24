@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useStreamManager } from "./useStream";
 
 type ParentCommandMessage = {
   type: "command";
@@ -47,7 +48,7 @@ const createNonce = () => {
 export type ParentMessenger = {
   isParentAvailable: boolean;
   sendCommand: (
-    command: 'onClientToolCall',
+    command: 'onClientToolCall' | 'onGetClientSecret',
     data?: unknown,
     transfer?: Transferable[],
   ) => Promise<unknown>;
@@ -55,6 +56,7 @@ export type ParentMessenger = {
 };
 
 export function useParentMessenger(): ParentMessenger {
+  const { streamRef } = useStreamManager();
   const parentOriginRef = useRef<string>("*");
   const pendingRef = useRef(
     new Map<
@@ -86,9 +88,17 @@ export function useParentMessenger(): ParentMessenger {
       }
 
       const payload = event.data as Partial<ParentEnvelope>;
-      if (payload.__xpaiChatKit !== true || payload.type !== "response") return;
-      if (typeof payload.nonce !== "string") return;
+      if (payload.__xpaiChatKit !== true) return;
+      if (payload.type == "command" && payload.command === "onSendUserMessage") {
+        streamRef.current?.submit({
+          input: {
+            input: (payload.data as { text: string }).text as string,
+          }
+        })
+      }
 
+      if (payload.type !== "response") return
+      if (typeof payload.nonce !== "string") return;
       const handler = pendingRef.current.get(payload.nonce);
       if (!handler) return;
 

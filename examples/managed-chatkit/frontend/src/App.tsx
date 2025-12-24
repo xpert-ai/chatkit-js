@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
 import { ChatKitOptions, ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+import { useAppStore } from './store/useAppStore';
 
 // Example options configuration - try changing these values to see the effect!
 const chatkitOptions: Partial<ChatKitOptions> = {
@@ -77,7 +78,9 @@ export default function App() {
   const assistantId = (import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined) ?? '';
   const chatkitTarget = (import.meta.env.VITE_CHATKIT_TARGET as string | undefined) ?? '';
 
-  const { control } = useChatKit({
+   const setChatkit = useAppStore((state) => state.setChatkit);
+
+  const chatkit = useChatKit({
     ...chatkitOptions,
     api: {
       getClientSecret: async () => {
@@ -117,6 +120,9 @@ export default function App() {
     onError: (error) => {
       console.error('Failed to create session:', error);
     },
+    onReady: () => {
+      setChatkit(chatkit);
+    },
     onEffect: ({name, data}) => {
       console.log(`Effect triggered: ${name}`, data);
     }
@@ -154,10 +160,18 @@ export default function App() {
               {JSON.stringify(chatkitOptions.theme, null, 2)}
             </pre>
           </div>
+
+          <div>
+            <button className="mt-2 px-3 py-1 bg-red-500 text-white rounded"
+              onClick={() => chatkit.sendUserMessage({ text: 'Hello world!', newThread: true })}
+            >
+              Trigger Conversation
+            </button>
+          </div>
         </div>
       </div>
 
-      <ChatKit control={control} className="flex-1" />
+      <ChatKit control={chatkit.control} className="flex-1" />
     </div>
   );
 }

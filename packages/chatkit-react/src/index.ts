@@ -1,2 +1,2 @@
-export { useChatKit } from './useChatKit.js';
+export { useChatKit, type UseChatKitReturn } from './useChatKit.js';
 export { ChatKit } from './chatkit.js'
