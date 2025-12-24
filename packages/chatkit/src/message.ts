@@ -242,3 +242,14 @@ export type TChatRequest = {
   command?: TInterruptCommand
   retry?: boolean
 }
+
+/**
+ * Data type for client effect message
+ */
+export type TClientEeffectMessage = {
+  name: string
+  args: Record<string, any>
+  tool_call_id?: string
+  agentKey?: string;
+  created_date?: Date | string
+}
