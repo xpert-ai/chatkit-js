@@ -26,7 +26,7 @@ type ParentMessage = ParentCommandMessage | ParentResponseMessage | ParentEventM
   data: unknown;
 }
 
-type ParentEnvelope = Partial<ParentMessage> & { __oaiChatKit: true };
+type ParentEnvelope = Partial<ParentMessage> & { __xpaiChatKit: true };
 
 const getParentOrigin = () => {
   if (typeof document === "undefined" || !document.referrer) return "*";
@@ -86,7 +86,7 @@ export function useParentMessenger(): ParentMessenger {
       }
 
       const payload = event.data as Partial<ParentEnvelope>;
-      if (payload.__oaiChatKit !== true || payload.type !== "response") return;
+      if (payload.__xpaiChatKit !== true || payload.type !== "response") return;
       if (typeof payload.nonce !== "string") return;
 
       const handler = pendingRef.current.get(payload.nonce);
@@ -118,7 +118,7 @@ export function useParentMessenger(): ParentMessenger {
 
       const nonce = createNonce();
       const message: ParentEnvelope = {
-        __oaiChatKit: true,
+        __xpaiChatKit: true,
         type: "command",
         nonce,
         command,
@@ -137,7 +137,7 @@ export function useParentMessenger(): ParentMessenger {
     (event: string, data?: [string, unknown], transfer?: Transferable[]) => {
       if (!isParentAvailable) return;
       const message: ParentEnvelope = {
-        __oaiChatKit: true,
+        __xpaiChatKit: true,
         type: 'event',
         event,
         data: data,

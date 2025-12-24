@@ -104,7 +104,7 @@ export abstract class BaseMessenger<
 
   private sendMessage(data: ChatKitMessage, transfer?: Transferable[]) {
     const message = {
-      __oaiChatKit: true,
+      __xpaiChatKit: true,
       ...data,
     }
     this.target()?.postMessage(message, this.targetOrigin, transfer)
@@ -241,7 +241,7 @@ export abstract class BaseMessenger<
     console.log("Received message", event.data, event.origin, this.targetOrigin, event.source, this.target())
     if (
       !event.data ||
-      event.data.__oaiChatKit !== true ||
+      event.data.__xpaiChatKit !== true ||
       event.origin !== this.targetOrigin ||
       event.source !== this.target()
     ) {
