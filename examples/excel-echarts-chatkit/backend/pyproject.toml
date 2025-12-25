@@ -1,0 +1,15 @@
+[project]
+name = "excel-echarts-chatkit-backend"
+version = "0.1.0"
+description = "Backend for Excel ECharts ChatKit demo"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.114,<0.116",
+    "httpx[socks]>=0.27,<0.28",
+    "uvicorn[standard]>=0.36,<0.37",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"

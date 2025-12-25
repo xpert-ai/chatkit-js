@@ -100,9 +100,13 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       onClientToolCall: async ({
         name,
         params,
+        id,
+        tool_call_id,
       }: {
         name: string
         params: Record<string, unknown>
+        id?: string
+        tool_call_id?: string
       }) => {
         const onClientTool = this.#opts?.onClientTool
         if (!onClientTool) {
@@ -112,7 +116,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
             ),
           )
         }
-        return onClientTool({ name, params })
+        return onClientTool({ name, params, id, tool_call_id })
       },
       onWidgetAction: async ({ action, widgetItem }) => {
         const onAction = this.#opts?.widgets?.onAction

@@ -1,0 +1,13 @@
+{
+  "name": "excel-echarts-chatkit",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail --names backend,frontend \"npm run backend\" \"npm run frontend\"",
+    "frontend": "pnpm -C frontend install && pnpm -C frontend dev",
+    "frontend:build": "pnpm -C frontend install && pnpm -C frontend build",
+    "backend": "./backend/scripts/run.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
