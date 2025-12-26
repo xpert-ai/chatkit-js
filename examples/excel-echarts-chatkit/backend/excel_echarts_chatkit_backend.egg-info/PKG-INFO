@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: excel-echarts-chatkit-backend
-Version: 0.1.0
-Summary: Backend for Excel ECharts ChatKit demo
-Requires-Python: >=3.11
-Description-Content-Type: text/markdown
-Requires-Dist: fastapi<0.116,>=0.114
-Requires-Dist: httpx[socks]<0.28,>=0.27
-Requires-Dist: uvicorn[standard]<0.37,>=0.36
