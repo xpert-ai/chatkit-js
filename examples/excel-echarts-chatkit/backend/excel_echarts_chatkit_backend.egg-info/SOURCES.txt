@@ -1,8 +1,0 @@
-pyproject.toml
-app/__init__.py
-app/main.py
-excel_echarts_chatkit_backend.egg-info/PKG-INFO
-excel_echarts_chatkit_backend.egg-info/SOURCES.txt
-excel_echarts_chatkit_backend.egg-info/dependency_links.txt
-excel_echarts_chatkit_backend.egg-info/requires.txt
-excel_echarts_chatkit_backend.egg-info/top_level.txt

@@ -281,10 +281,20 @@ function appendMessageComponent(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   content: TMessageContent) {
   updateLatestMessage(setValues, (lastM) => {
-      appendMessageContent(lastM as any, content)
-      return {
-        ...lastM
+      // Deep clone the message to avoid mutation issues with React Strict Mode
+      // React Strict Mode calls state updater twice, and appendMessageContent mutates the content array
+      const lastMessage = lastM as unknown as Record<string, unknown>
+      const clonedMessage = {
+        ...lastMessage,
+        content: Array.isArray(lastMessage.content)
+          ? (lastMessage.content as Record<string, unknown>[]).map((item) => ({ ...item }))
+          : lastMessage.content,
+        reasoning: Array.isArray(lastMessage.reasoning)
+          ? (lastMessage.reasoning as Record<string, unknown>[]).map((r) => ({ ...r }))
+          : lastMessage.reasoning
       }
+      appendMessageContent(clonedMessage as any, content)
+      return clonedMessage as unknown as Message
     })
 }
 
