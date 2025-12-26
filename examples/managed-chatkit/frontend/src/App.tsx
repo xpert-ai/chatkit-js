@@ -137,7 +137,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen">
-      <div className="w-96 p-4 border-r border-gray-300 bg-white">
+      <div className="flex-1 p-4 border-r overflow-hidden border-gray-300 bg-white">
         <h1 className="text-2xl font-bold mb-4">Managed Chatkit Example</h1>
         <p className="text-sm text-gray-600 mb-2">Using React Component with Options</p>
 
@@ -171,7 +171,7 @@ export default function App() {
         </div>
       </div>
 
-      <ChatKit control={chatkit.control} className="flex-1" />
+      <ChatKit control={chatkit.control} className="shrink-0 w-[500px]" />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 {
-  "name": "@xpert-ai/chatkit-ui",
+  "name": "@xpert-ai/chatkit-widgets",
   "version": "0.0.1",
-  "description": "ChatKit UI.",
+  "description": "React widgets for the ChatKit.",
   "type": "module",
   "sideEffects": false,
   "files": [
