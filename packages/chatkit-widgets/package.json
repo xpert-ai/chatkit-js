@@ -1,83 +1,72 @@
 {
-  "name": "@xpert-ai/chatkit-widgets",
-  "version": "0.0.1",
-  "description": "React widgets for the ChatKit.",
-  "type": "module",
-  "sideEffects": false,
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "main": "./dist/index.cjs",
+  "name": "@a2ui/react",
+  "version": "0.8.1",
+  "description": "A2UI React Renderer with ShadCN UI components",
+  "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
       "default": "./dist/index.js"
     }
   },
-  "peerDependencies": {
-    "react": ">=19",
-    "react-dom": ">=19"
-  },
-  "dependencies": {
-    "@langchain/core": "^1.0.2",
-    "@langchain/langgraph-sdk": "^1.0.0",
-    "@radix-ui/react-avatar": "^1.1.11",
-    "@radix-ui/react-dialog": "^1.1.4",
-    "@radix-ui/react-popover": "^1.1.4",
-    "@radix-ui/react-scroll-area": "^1.2.10",
-    "@radix-ui/react-separator": "^1.1.2",
-    "@radix-ui/react-tooltip": "^1.1.20",
-    "@xpert-ai/chatkit-types": "workspace:*",
-    "@xpert-ai/chatkit-web-shared": "workspace:*",
-    "clsx": "^2.1.1",
-    "framer-motion": "^12.4.9",
-    "katex": "^0.16.21",
-    "lodash-es": "^4.17.21",
-    "lucide-react": "^0.476.0",
-    "nuqs": "^2.4.1",
-    "react-markdown": "^10.0.1",
-    "react-syntax-highlighter": "^15.5.0",
-    "rehype-katex": "^7.0.1",
-    "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0",
-    "sonner": "^2.0.1",
-    "tailwind-merge": "^3.3.1",
-    "uuid": "^11.1.0",
-    "zod": "^4.1.12"
-  },
-  "devDependencies": {
-    "@types/lodash-es": "^4.17.12",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.7.0",
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "rimraf": "^5.0.0",
-    "tsup": "^8.0.0",
-    "vite": "^7.3.0",
-    "vitest": "^3.2.4"
-  },
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-    "test": "vitest",
-    "types": "tsc",
-    "lint": "eslint .",
-    "clean": "rimraf dist"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": false
+    "build": "tsc -b --pretty",
+    "dev": "tsc -b --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
   },
   "repository": {
+    "directory": "renderers/react",
     "type": "git",
-    "url": "https://github.com/xpert-ai/chatkit-js"
+    "url": "git+https://github.com/google/A2UI.git"
   },
-  "license": "MIT"
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "a2ui",
+    "react",
+    "shadcn",
+    "ui",
+    "generative-ui"
+  ],
+  "author": "Google",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/google/A2UI/issues"
+  },
+  "homepage": "https://github.com/google/A2UI/tree/main/renderers/react#readme",
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "tailwindcss": "^3.4.0"
+  },
+  "dependencies": {
+    "@a2ui/lit": "^0.8.1",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "lucide-react": "^0.460.0",
+    "markdown-it": "^14.1.0",
+    "tailwind-merge": "^2.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.0.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-darwin-arm64": "^4.53.5"
+  }
 }
