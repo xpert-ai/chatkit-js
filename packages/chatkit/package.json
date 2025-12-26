@@ -35,6 +35,7 @@
   },
   "license": "MIT",
   "peerDependencies": {
+    "@a2ui/lit": "^0.8.1",
     "@langchain/core": "^1.0.2",
     "@langchain/langgraph-sdk": "^1.0.0"
   },

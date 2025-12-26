@@ -2,6 +2,7 @@ import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { Chat } from "./components/chat";
 import { StreamProvider } from "./providers/Stream";
 import { ThemeProvider } from "./providers/Theme";
+import { A2UIProvider, ThemeProvider as A2UIThemeProvider } from "@a2ui/react";
 
 export type AppProps = {
   clientSecret?: string;
@@ -18,16 +19,20 @@ export function App({ clientSecret = "", options }: AppProps) {
   return (
     <ThemeProvider theme={theme}>
       <div className="flex h-screen">
-        <StreamProvider apiKey={apiKey}>
-          <Chat
-            className="flex-1"
-            title="Chat"
-            placeholder={composer?.placeholder ?? "输入消息..."}
-            showAvatar={true}
-            clientSecret={clientSecret}
-            options={options ?? {}}
-          />
-        </StreamProvider>
+        <A2UIProvider onAction={(action) => {
+          console.log("A2UI Action:", action);
+        }}>
+          <StreamProvider apiKey={apiKey}>
+            <Chat
+              className="flex-1"
+              title="Chat"
+              placeholder={composer?.placeholder ?? "输入消息..."}
+              showAvatar={true}
+              clientSecret={clientSecret}
+              options={options ?? {}}
+            />
+          </StreamProvider>
+        </A2UIProvider>
       </div>
     </ThemeProvider>
   );

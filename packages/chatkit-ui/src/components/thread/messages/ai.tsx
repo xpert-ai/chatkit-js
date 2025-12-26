@@ -5,6 +5,7 @@ import type {
   MessageContentImageUrl,
   TMessageContentComplex,
   TMessageContentComponent,
+  TMessageComponentWidgetData,
   TMessageContentMemory,
   TMessageContentReasoning,
   TMessageContentText,
@@ -15,6 +16,7 @@ import { Badge } from '../../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { MarkdownText } from '../markdown-text';
+import { WidgetMessage } from './widget';
 
 export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
@@ -35,6 +37,13 @@ function isImageContent(content: TMessageContentComplex): content is MessageCont
 
 function isComponentContent(content: TMessageContentComplex): content is TMessageContentComponent {
   return content.type === 'component';
+}
+
+function isWidgetComponent(
+  content: TMessageContentComponent,
+): content is TMessageContentComponent<TMessageComponentWidgetData> {
+  const data = content.data as TMessageComponentWidgetData | undefined;
+  return data?.type === 'Widget' && Array.isArray(data.widgets);
 }
 
 function isMemoryContent(content: TMessageContentComplex): content is TMessageContentMemory {
@@ -110,6 +119,9 @@ function MemoryBlock({ content }: { content: TMessageContentMemory }) {
 }
 
 function ComponentBlock({ content }: { content: TMessageContentComponent }) {
+  
+  console.log(content);
+
   const data = (content.data ?? {}) as Record<string, unknown>;
   const title =
     typeof data.title === 'string'
@@ -159,6 +171,7 @@ function UnknownBlock({ content }: { content: TMessageContentComplex }) {
 function renderContentItem(
   content: TMessageContentComplex | string,
   index: number,
+  messageId: string,
 ): React.ReactNode {
   if (typeof content === 'string') {
     return <div key={`text-${index}`}>
@@ -187,6 +200,14 @@ function renderContentItem(
   }
 
   if (isComponentContent(content)) {
+    if (isWidgetComponent(content)) {
+      return (
+        <div key={content.id ?? `widget-${index}`}>
+          <WidgetMessage messageId={messageId} data={content.data} />
+        </div>
+      );
+    }
+
     return (
       <div key={content.id ?? `component-${index}`}>
         <ComponentBlock content={content} />
@@ -209,7 +230,7 @@ function renderContentItem(
   );
 }
 
-function renderContent(content: ChatkitMessage['content']) {
+function renderContent(content: ChatkitMessage['content'], messageId: string) {
   if (typeof content === 'string') {
     if (!content.trim()) return null;
     return <MarkdownText>{content}</MarkdownText>;
@@ -217,7 +238,11 @@ function renderContent(content: ChatkitMessage['content']) {
 
   if (!Array.isArray(content) || content.length === 0) return null;
 
-  return <div className="space-y-3">{content.map(renderContentItem)}</div>;
+  return (
+    <div className="space-y-3">
+      {content.map((item, index) => renderContentItem(item, index, messageId))}
+    </div>
+  );
 }
 
 export function AssistantMessage({ message, className }: AssistantMessageProps) {
@@ -231,7 +256,7 @@ export function AssistantMessage({ message, className }: AssistantMessageProps) 
     Array.isArray(message.reasoning) &&
     message.reasoning.some((item) => item.text?.trim());
 
-  const answerNode = renderContent(message.content);
+  const answerNode = renderContent(message.content, message.id);
   const reasoningNode = hasReasoning ? (
     <ReasoningBlock reasoning={message.reasoning ?? []} />
   ) : null;

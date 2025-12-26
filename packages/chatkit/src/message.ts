@@ -1,4 +1,5 @@
 import type { ToolCall } from "@langchain/core/messages/tool";
+import { Types } from '@a2ui/lit/0.8';
 
 export enum ChatMessageTypeEnum {
   // LOG = 'log',
@@ -110,6 +111,23 @@ export type TMessageComponent<T extends object = object> = T & {
   type?: string
   created_date?: Date | string
 }
+
+export type TMessageComponentWidgetItem = {
+  name: string
+  config: Types.Surface
+  values?: Record<string, unknown>
+}
+
+export type TMessageComponentWidgetData = {
+  type: 'Widget'
+  mode?: string
+  widgets: TMessageComponentWidgetItem[]
+  executionId?: string
+}
+
+export type TMessageComponentWidget = TMessageComponent<TMessageComponentWidgetData>
+
+export type TMessageContentWidget = TMessageContentComponent<TMessageComponentWidgetData>
 
 export type TMessageContentText = {
   id?: string
