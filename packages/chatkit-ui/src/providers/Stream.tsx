@@ -52,7 +52,7 @@ export type StreamContextType = {
     options?: StreamSubmitOptions,
   ) => Promise<void>;
   stop: () => void;
-  reset: (newThreadId?: string | null) => void;
+  reset: (newThreadId?: string | null, initialMessages?: ChatKitAIMessage[]) => void;
   setThreadId: (threadId: string | null) => void;
 };
 
@@ -554,12 +554,12 @@ const StreamSession = ({
     setIsLoading(false);
   }, []);
 
-  const reset = useCallback((newThreadId?: string | null) => {
+  const reset = useCallback((newThreadId?: string | null, initialMessages?: ChatKitAIMessage[]) => {
     abortRef.current?.abort();
     abortRef.current = null;
     setIsLoading(false);
     setError(null);
-    setValues({ messages: [] });
+    setValues({ messages: initialMessages ?? [] });
     lastExecutionIdRef.current = null;
     if (newThreadId !== undefined) {
       setThreadId(newThreadId);

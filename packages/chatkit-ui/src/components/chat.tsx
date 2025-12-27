@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-import type { Message } from '@xpert-ai/xpert-sdk';
+import type { ChatMessage, Message } from '@xpert-ai/xpert-sdk';
 import type { ChatkitMessage, ChatKitOptions, ToolOption } from '@xpert-ai/chatkit-types';
 
 import { cn } from '../lib/utils';
@@ -29,6 +29,7 @@ export type ChatProps = {
 const apiUrl = import.meta.env.VITE_CHATKIT_API_BASE as string | undefined;
 const assistantId = import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined;
 const apiKeyFromEnv = import.meta.env.VITE_CHATKIT_API_KEY as string | undefined;
+const DEFAULT_HISTORY_LIMIT = 200;
 
 function createMessageId() {
   return (
@@ -66,6 +67,36 @@ function formatMessageContent(content: Message['content'][number]): string {
   return '';
 }
 
+function normalizeRoleToMessageType(role?: string): Message['type'] {
+  const normalized = (role ?? '').toLowerCase();
+  if (normalized === 'user' || normalized === 'human') return 'human';
+  if (normalized === 'assistant' || normalized === 'ai') return 'ai';
+  if (normalized === 'system') return 'system';
+  if (normalized === 'tool') return 'tool';
+  return 'ai';
+}
+
+function mapChatMessageToUiMessage(message: ChatMessage): Message {
+  return {
+    id: message.id ?? createMessageId(),
+    type: normalizeRoleToMessageType(message.role),
+    content: message.content ?? '',
+    ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
+    ...(message.executionId ? { executionId: message.executionId } : {}),
+  } as Message;
+}
+
+function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
+  return [...items].sort((a, b) => {
+    const aTime = Date.parse(a.createdAt ?? '');
+    const bTime = Date.parse(b.createdAt ?? '');
+    if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+    if (Number.isNaN(aTime)) return -1;
+    if (Number.isNaN(bTime)) return 1;
+    return aTime - bTime;
+  });
+}
+
 export function Chat({
   className,
   options,
@@ -79,6 +110,10 @@ export function Chat({
   const {setStream} = useStreamManager();
   const stream = useStreamContext();
 
+  const [activeConversationId, setActiveConversationId] = React.useState<string | null>(null);
+  const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
+  const [historyError, setHistoryError] = React.useState<string | null>(null);
+
   React.useEffect(() => {
     setStream(stream);
   }, [setStream, stream]);
@@ -88,8 +123,9 @@ export function Chat({
   const [attachments, setAttachments] = React.useState<File[]>([]);
   const {
     conversations,
-    createThread,
-    deleteThread,
+    createConversation,
+    deleteConversation,
+    refreshConversations,
     isLoading: isThreadsLoading,
   } = useThreads();
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
@@ -114,7 +150,13 @@ export function Chat({
 
   const hasApiKey = Boolean(clientSecret.trim() || apiKeyFromEnv?.trim());
   const missingConfig = !apiUrl || !assistantId || !hasApiKey;
-  const isSendDisabled = !trimmedDraft || stream.isLoading || missingConfig;
+  const isSendDisabled =
+    !trimmedDraft || stream.isLoading || missingConfig || isHistoryLoading;
+
+  React.useEffect(() => {
+    if (missingConfig) return;
+    void refreshConversations();
+  }, [missingConfig, refreshConversations]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -185,7 +227,7 @@ export function Chat({
   };
 
   const handlePromptClick = (prompt: string) => {
-    if (missingConfig || stream.isLoading) return;
+    if (missingConfig || stream.isLoading || isHistoryLoading) return;
 
     const newMessage: Message = {
       id: createMessageId(),
@@ -204,32 +246,103 @@ export function Chat({
     );
   };
 
+  const loadConversationMessages = React.useCallback(
+    async (conversationId: string, threadId?: string | null) => {
+      if (missingConfig) {
+        setHistoryError('Missing ChatKit configuration.');
+        return;
+      }
+      setHistoryError(null);
+      setIsHistoryLoading(true);
+      try {
+        stream.stop();
+      } catch {
+        // ignore stop errors from an already-idle stream
+      }
+      try {
+        const response = await stream.client.conversations.listMessages(conversationId, {
+          limit: DEFAULT_HISTORY_LIMIT,
+          offset: 0,
+        });
+        const sorted = sortMessagesByCreatedAt(response.items ?? []);
+        const mapped = sorted.map(mapChatMessageToUiMessage);
+        stream.reset(threadId ?? null, mapped as Message[]);
+        setActiveConversationId(conversationId);
+      } catch (err) {
+        console.warn('Failed to load conversation messages', err);
+        setHistoryError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to load conversation messages',
+        );
+        stream.reset(threadId ?? null, []);
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    },
+    [missingConfig, stream],
+  );
+
+  React.useEffect(() => {
+    if (!stream.threadId) return;
+    if (isHistoryLoading) return;
+    const matched = conversations.find((item) => item.threadId === stream.threadId);
+    if (!matched) return;
+    if (activeConversationId && activeConversationId === matched.id) return;
+    if (messages.length > 0) {
+      setActiveConversationId(matched.id);
+      return;
+    }
+    void loadConversationMessages(matched.id, matched.threadId ?? null);
+  }, [
+    conversations,
+    stream.threadId,
+    messages.length,
+    activeConversationId,
+    isHistoryLoading,
+    loadConversationMessages,
+  ]);
+
   const handleNewConversation = async () => {
-    if (missingConfig || stream.isLoading) return;
+    if (missingConfig || stream.isLoading || isHistoryLoading) return;
+    setHistoryError(null);
     try {
-      const created = await createThread({ title: 'New conversation' });
-      stream.reset(created.thread_id);
+      const created = await createConversation({ title: 'New conversation' });
+      setActiveConversationId(created.id);
+      stream.reset(created.threadId ?? null, []);
+      await refreshConversations();
     } catch (err) {
-      console.warn('Failed to create thread', err);
+      console.warn('Failed to create conversation', err);
+      setHistoryError(
+        err instanceof Error ? err.message : 'Failed to create conversation',
+      );
     }
   };
 
   const handleSelectConversation = (id: string) => {
-    if (id === stream.threadId) return;
-    // Reset messages and switch to the conversation's thread
-    // For now, we just clear messages since we don't persist conversation data
-    stream.reset(id);
+    if (isHistoryLoading) return;
+    setHistoryError(null);
+    const conversation = conversations.find((item) => item.id === id);
+    const nextThreadId = conversation?.threadId ?? null;
+    if (id === activeConversationId && stream.threadId === nextThreadId) return;
+    void loadConversationMessages(id, nextThreadId);
   };
 
   const handleDeleteConversation = (id: string) => {
-    void deleteThread(id)
+    setHistoryError(null);
+    void deleteConversation(id)
       .then(() => {
-        if (stream.threadId === id) {
-          stream.reset(null);
+        if (activeConversationId === id) {
+          stream.reset(null, []);
+          setActiveConversationId(null);
         }
+        return refreshConversations();
       })
       .catch((err) => {
-        console.warn('Failed to delete thread', err);
+        console.warn('Failed to delete conversation', err);
+        setHistoryError(
+          err instanceof Error ? err.message : 'Failed to delete conversation',
+        );
       });
   };
 
@@ -284,11 +397,11 @@ export function Chat({
         </div>
         <HistorySidebar
           conversations={conversations}
-          currentConversationId={stream.threadId ?? undefined}
+          currentConversationId={activeConversationId ?? undefined}
           onNewConversation={handleNewConversation}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
-          disabled={stream.isLoading || isThreadsLoading}
+          disabled={missingConfig || stream.isLoading || isThreadsLoading || isHistoryLoading}
         />
       </div>
 
@@ -299,10 +412,20 @@ export function Chat({
               {errorMessage}
             </div>
           )}
+          {historyError && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {historyError}
+            </div>
+          )}
           {missingConfig && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               Missing ChatKit configuration. Check `VITE_CHATKIT_API_BASE`,
               `VITE_CHATKIT_ASSISTANT_ID`, and the `clientSecret` prop.
+            </div>
+          )}
+          {isHistoryLoading && (
+            <div className="mb-4 rounded-lg border border-muted px-3 py-2 text-sm text-muted-foreground">
+              Loading conversation...
             </div>
           )}
           {messages.length === 0 ? (
@@ -344,7 +467,7 @@ export function Chat({
                     <div className="flex flex-col">
                       <div
                         className={cn(
-                          'max-w-[70%] rounded-2xl px-4 py-2.5',
+                          'max-w-full rounded-2xl px-4 py-2.5',
                           message.type === 'human'
                             ? 'bg-primary text-primary-foreground'
                             : message.type === 'system'
@@ -395,7 +518,7 @@ export function Chat({
                       </AvatarFallback>
                     </Avatar>
                   )}
-                  <div className="max-w-[70%] rounded-2xl bg-muted px-4 py-2.5">
+                  <div className="max-w-full rounded-2xl bg-muted px-4 py-2.5">
                     <div className="flex gap-1">
                       <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]"></div>
                       <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]"></div>
@@ -503,7 +626,7 @@ export function Chat({
             onAttachmentClick={handleAttachmentClick}
             onToolSelect={handleToolSelect}
             selectedTool={selectedTool}
-            disabled={stream.isLoading || missingConfig}
+            disabled={stream.isLoading || missingConfig || isHistoryLoading}
           />
 
           <div className="flex-1">
@@ -511,7 +634,7 @@ export function Chat({
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={inputPlaceholder}
-              disabled={stream.isLoading || missingConfig}
+              disabled={stream.isLoading || missingConfig || isHistoryLoading}
               className="min-h-10 resize-none bg-background"
               autoComplete="off"
             />

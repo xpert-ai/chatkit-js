@@ -14,6 +14,7 @@ export type Conversation = {
   id: string;
   title: string;
   lastMessageAt?: Date;
+  threadId?: string | null;
 };
 
 export type HistorySidebarProps = {

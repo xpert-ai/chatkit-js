@@ -1,43 +1,45 @@
 import * as React from 'react';
 
-import type { Metadata, Thread } from '@xpert-ai/xpert-sdk';
+import type { ChatConversation } from '@xpert-ai/xpert-sdk';
 
 import type { Conversation } from '../components/history/HistorySidebar';
 import { useStreamContext } from '../providers/Stream';
 
-type CreateThreadInput = {
+type CreateConversationInput = {
+  conversationId?: string;
   threadId?: string;
   title?: string;
-  metadata?: Metadata;
+  options?: Record<string, unknown>;
 };
 
 type UseThreadsResult = {
-  threads: Thread[];
   conversations: Conversation[];
+  rawConversations: ChatConversation[];
   isLoading: boolean;
   error: unknown;
+  refreshConversations: () => Promise<void>;
+  createConversation: (input?: CreateConversationInput) => Promise<ChatConversation>;
+  updateConversation: (
+    conversationId: string,
+    payload: Partial<ChatConversation>,
+  ) => Promise<ChatConversation>;
+  deleteConversation: (conversationId: string) => Promise<void>;
+  // Legacy aliases kept for compatibility
   refreshThreads: () => Promise<void>;
-  createThread: (input?: CreateThreadInput) => Promise<Thread>;
-  updateThreadMetadata: (threadId: string, metadata: Metadata) => Promise<Thread>;
-  deleteThread: (threadId: string) => Promise<void>;
+  createThread: (input?: CreateConversationInput) => Promise<ChatConversation>;
+  updateThreadMetadata: (
+    conversationId: string,
+    payload: Partial<ChatConversation>,
+  ) => Promise<ChatConversation>;
+  deleteThread: (conversationId: string) => Promise<void>;
 };
 
 const DEFAULT_LIMIT = 50;
 
-const getMetadataTitle = (metadata: Metadata | null | undefined): string | null => {
-  if (!metadata || typeof metadata !== 'object') return null;
-  const value = (metadata as Record<string, unknown>).title ??
-    (metadata as Record<string, unknown>).name;
-  if (typeof value === 'string' && value.trim()) {
-    return value.trim();
-  }
-  return null;
-};
-
-const getThreadTitle = (thread: Thread): string => {
-  const title = getMetadataTitle(thread.metadata);
+const getConversationTitle = (conversation: ChatConversation): string => {
+  const title = conversation.title?.trim();
   if (title) return title;
-  const suffix = thread.thread_id.slice(0, 8);
+  const suffix = (conversation.id ?? conversation.threadId ?? '').slice(0, 8);
   return suffix ? `Conversation ${suffix}` : 'Conversation';
 };
 
@@ -48,50 +50,44 @@ const toDate = (value: string | undefined): Date | undefined => {
   return new Date(timestamp);
 };
 
-const toConversation = (thread: Thread): Conversation => ({
-  id: thread.thread_id,
-  title: getThreadTitle(thread),
-  lastMessageAt: toDate(thread.updated_at),
+const toConversation = (conversation: ChatConversation): Conversation => ({
+  id: conversation.id,
+  threadId: conversation.threadId ?? null,
+  title: getConversationTitle(conversation),
+  lastMessageAt: toDate(conversation.updatedAt),
 });
 
-const sortThreads = (threads: Thread[]): Thread[] => {
-  return [...threads].sort((a, b) => {
-    const aTime = Date.parse(a.updated_at);
-    const bTime = Date.parse(b.updated_at);
+const sortConversations = (conversations: ChatConversation[]): ChatConversation[] => {
+  return [...conversations].sort((a, b) => {
+    const aTime = Date.parse(a.updatedAt ?? '');
+    const bTime = Date.parse(b.updatedAt ?? '');
     return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
   });
 };
 
-const mergeMetadata = (base: Metadata | null | undefined, patch: Metadata): Metadata => {
-  return {
-    ...(base ?? {}),
-    ...patch,
-  };
-};
-
 export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
   const { client, threadId } = useStreamContext();
-  const [threads, setThreads] = React.useState<Thread[]>([]);
+  const [conversationsState, setConversationsState] = React.useState<ChatConversation[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<unknown>(null);
 
-  const upsertThread = React.useCallback((thread: Thread) => {
-    setThreads((prev) => {
-      const next = prev.filter((item) => item.thread_id !== thread.thread_id);
-      return sortThreads([thread, ...next]);
+  const upsertConversation = React.useCallback((conversation: ChatConversation) => {
+    setConversationsState((prev) => {
+      const next = prev.filter((item) => item.id !== conversation.id);
+      return sortConversations([conversation, ...next]);
     });
   }, []);
 
-  const refreshThreads = React.useCallback(async () => {
+  const refreshConversations = React.useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const items = await client.threads.search({
+      const { items } = await client.conversations.search({
         limit,
-        sortBy: 'updated_at',
-        sortOrder: 'desc',
+        order: { updatedAt: 'DESC' },
       });
-      setThreads(items);
+      setConversationsState(items ?? []);
+      console.log('Conversations refreshed', items);
     } catch (err) {
       setError(err);
     } finally {
@@ -99,76 +95,77 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     }
   }, [client, limit]);
 
-  const createThread = React.useCallback(
-    async (input?: CreateThreadInput) => {
+  const createConversation = React.useCallback(
+    async (input?: CreateConversationInput) => {
       setError(null);
-      const metadata = input?.metadata ?? {};
-      const nextMetadata =
-        input?.title || Object.keys(metadata).length > 0
-          ? mergeMetadata(metadata, input?.title ? { title: input.title } : {})
-          : undefined;
-      const payload: { threadId?: string; metadata?: Metadata } = {};
+      const payload: Partial<ChatConversation> = {};
+      if (input?.conversationId) payload.id = input.conversationId;
       if (input?.threadId) payload.threadId = input.threadId;
-      if (nextMetadata) payload.metadata = nextMetadata;
-      const created = await client.threads.create(payload);
-      upsertThread(created);
+      if (input?.title) payload.title = input.title;
+      if (input?.options) payload.options = input.options;
+
+      const created = await client.conversations.create(payload);
+      upsertConversation(created);
       return created;
     },
-    [client, upsertThread],
+    [client, upsertConversation],
   );
 
-  const updateThreadMetadata = React.useCallback(
-    async (id: string, metadata: Metadata) => {
+  const updateConversation = React.useCallback(
+    async (id: string, payload: Partial<ChatConversation>) => {
       setError(null);
-      const existing = threads.find((item) => item.thread_id === id)?.metadata ?? {};
-      const updated = await client.threads.update(id, {
-        metadata: mergeMetadata(existing, metadata),
-      });
-      upsertThread(updated);
+      const updated = await client.conversations.update(id, payload);
+      upsertConversation(updated);
       return updated;
     },
-    [client, threads, upsertThread],
+    [client, upsertConversation],
   );
 
-  const deleteThread = React.useCallback(
+  const deleteConversation = React.useCallback(
     async (id: string) => {
       setError(null);
-      await client.threads.delete(id);
-      setThreads((prev) => prev.filter((item) => item.thread_id !== id));
+      await client.conversations.delete(id);
+      setConversationsState((prev) => prev.filter((item) => item.id !== id));
     },
     [client],
   );
 
   React.useEffect(() => {
-    void refreshThreads();
-  }, [refreshThreads]);
+    void refreshConversations();
+  }, [refreshConversations]);
 
   React.useEffect(() => {
     if (!threadId) return;
-    if (threads.some((item) => item.thread_id === threadId)) return;
-    void client.threads
-      .get(threadId)
-      .then((thread) => {
-        upsertThread(thread);
+    if (conversationsState.some((item) => item.threadId === threadId)) return;
+    void client.conversations
+      .search({ where: { threadId }, limit: 1 })
+      .then((result) => {
+        const found = result.items?.[0];
+        if (found) upsertConversation(found);
       })
       .catch((err) => {
         setError(err);
       });
-  }, [client, threadId, threads, upsertThread]);
+  }, [client, threadId, conversationsState, upsertConversation]);
 
   const conversations = React.useMemo(
-    () => threads.map((thread) => toConversation(thread)),
-    [threads],
+    () => conversationsState.map((conversation) => toConversation(conversation)),
+    [conversationsState],
   );
 
   return {
-    threads,
     conversations,
+    rawConversations: conversationsState,
     isLoading,
     error,
-    refreshThreads,
-    createThread,
-    updateThreadMetadata,
-    deleteThread,
+    refreshConversations,
+    createConversation,
+    updateConversation,
+    deleteConversation,
+    // Legacy aliases
+    refreshThreads: refreshConversations,
+    createThread: createConversation,
+    updateThreadMetadata: updateConversation,
+    deleteThread: deleteConversation,
   };
 }
