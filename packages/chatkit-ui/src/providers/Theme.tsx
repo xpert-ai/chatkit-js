@@ -7,14 +7,11 @@ export interface ThemeProviderProps {
 }
 
 /**
- * Convert hex color to HSL values string (without hsl() wrapper)
- * Returns format: "H S% L%" for CSS variable usage
+ * Parse hex color to RGB values
  */
-function hexToHslValues(hex: string): string | null {
-  // Remove # if present
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   hex = hex.replace(/^#/, '');
 
-  // Parse hex
   let r: number, g: number, b: number;
   if (hex.length === 3) {
     r = parseInt(hex[0] + hex[0], 16);
@@ -28,10 +25,34 @@ function hexToHslValues(hex: string): string | null {
     return null;
   }
 
+  return { r, g, b };
+}
+
+/**
+ * Calculate relative luminance of a color (0-1)
+ * Used to determine if a color is "light" or "dark"
+ */
+function getLuminance(hex: string): number {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return 0;
+
+  const { r, g, b } = rgb;
+  // Relative luminance formula
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+/**
+ * Convert hex color to HSL values string (without hsl() wrapper)
+ * Returns format: "H S% L%" for CSS variable usage
+ */
+function hexToHslValues(hex: string): string | null {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+
   // Convert to 0-1 range
-  r /= 255;
-  g /= 255;
-  b /= 255;
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
 
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -170,9 +191,20 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
         }
       }
       if (color.surface?.foreground) {
-        const hslValues = hexToHslValues(color.surface.foreground);
-        if (hslValues) {
-          el.style.setProperty('--foreground', hslValues);
+        const foregroundColor = color.surface.foreground;
+        const luminance = getLuminance(foregroundColor);
+        const isDarkMode = colorScheme === 'dark';
+
+        // In dark mode, only apply foreground if it's a light color (luminance > 0.5)
+        // In light mode, only apply foreground if it's a dark color (luminance <= 0.5)
+        // This prevents dark text on dark background or light text on light background
+        const shouldApply = isDarkMode ? luminance > 0.5 : luminance <= 0.5;
+
+        if (shouldApply) {
+          const hslValues = hexToHslValues(foregroundColor);
+          if (hslValues) {
+            el.style.setProperty('--foreground', hslValues);
+          }
         }
       }
     }

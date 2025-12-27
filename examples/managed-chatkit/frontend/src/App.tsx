@@ -1,37 +1,84 @@
 import { useEffect } from 'react';
 import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
-import { ChatKitOptions, ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+import { ChatKitOptions, ClientToolMessageInput, filterPlaygroundOptions } from '@xpert-ai/chatkit-types';
 import { useAppStore } from './store/useAppStore';
 
-// Example options configuration - try changing these values to see the effect!
-const chatkitOptions: Partial<ChatKitOptions> = {
+// ============================================================================
+// Playground 配置 - 从 https://chatkit.studio/playground 复制过来的配置
+// 只有白名单内的配置项会生效: theme, composer, startScreen, api
+// 其他配置项(如 threadItemActions.feedback)会被自动过滤掉
+// ============================================================================
+const playgroundConfig: Partial<ChatKitOptions> = {
   theme: {
-    // Try: 'light' or 'dark'
-    colorScheme: 'light',
-    // Try: 'pill', 'round', 'soft', 'sharp'
-    radius: 'round',
-    // Try: 'compact', 'normal', 'spacious'
+    colorScheme: 'dark',
+    radius: 'pill',
     density: 'normal',
-    typography: {
-      // Try: 14, 15, 16, 17, 18
-      baseSize: 15,
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    },
     color: {
-      accent: {
-        // Try different hex colors: '#007bff', '#10b981', '#f59e0b', '#ef4444'
-        primary: '#ee5555',
-        level: 1,
+      grayscale: {
+        hue: 207,
+        tint: 7
       },
+      accent: {
+        primary: '#dfe302',
+        level: 1
+      },
+      surface: {
+        background: '#e9c9c9',
+        foreground: '#a8df8b'
+      }
+    },
+    typography: {
+      baseSize: 14,
+      fontFamily: '\'JetBrains Mono\', monospace',
+      fontFamilyMono: '\'JetBrains Mono\', monospace',
+      fontSources: [
+        {
+          family: 'JetBrains Mono',
+          style: 'normal',
+          weight: 300,
+          display: 'swap',
+          src: 'https://fonts.gstatic.com/s/jetbrainsmono/v23/tDbV2o-flEEny0FZhsfKu5WU4xD1OwGtT0rU3BE.woff2',
+          unicodeRange: 'U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF'
+        }
+      // ...and 9 more font sources
+      ]
+    }
+  },
+  composer: {
+    placeholder: '给agent发消息',
+    attachments: {
+      enabled: true,
+      maxCount: 5,
+      maxSize: 10485760
+    },
+  },
+  startScreen: {
+    greeting: '',
+    prompts: [
+      {
+        icon: 'circle-question',
+        label: 'What is ChatKit?',
+        prompt: 'What is ChatKit?'
+      }
+      // ...and 4 more prompts
+    ],
+  },
+};
+
+// 过滤 playground 配置，只保留白名单内的配置项
+const filteredPlaygroundConfig = filterPlaygroundOptions(playgroundConfig);
+
+// 本地配置 - 项目中的固定配置，不会被 playground 配置覆盖
+const localConfig: Partial<ChatKitOptions> = {
+  header: {
+    enabled: true,
+    title: {
+      enabled: true,
+      text: 'Xpert Assistant',
     },
   },
   composer: {
     placeholder: '随便问我点什么吧～～',
-    attachments: {
-      enabled: true,
-      maxCount: 5,
-      maxSize: 10485760, // 10MB
-    },
     tools: [
       {
         id: 'create-theme',
@@ -49,28 +96,17 @@ const chatkitOptions: Partial<ChatKitOptions> = {
       },
     ],
   },
-  startScreen: {
-    greeting: 'Hello! How can I help you today?',
-    prompts: [
-      {
-        icon: 'circle-question',
-        label: 'What can you do?',
-        prompt: 'What can you help me with?',
-      },
-      {
-        icon: 'lightbulb',
-        label: 'Give me ideas',
-        prompt: 'Give me some creative ideas for a project',
-      },
-    ],
+};
+
+// 合并配置: playground 配置覆盖本地配置(仅白名单项)
+const chatkitOptions: Partial<ChatKitOptions> = {
+  ...localConfig,
+  ...filteredPlaygroundConfig,
+  // 深度合并 composer (保留 tools，应用 playground 的 attachments)
+  composer: {
+    ...localConfig.composer,
+    ...filteredPlaygroundConfig.composer,
   },
-  header: {
-    enabled: true,
-    title: {
-      enabled: true,
-      text: 'Xpert Assistant',
-    },
-  }
 }
 
 export default function App() {
