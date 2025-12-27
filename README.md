@@ -16,11 +16,29 @@ Let ChatKit handle the heavy lifting. Get a complete AI chat experience up and r
 
 ## 🚀 Quick Start
 
-### React Integration
+### Backend (FastAPI)
+
+Config environment by copying `.env.example` to `.env` and filling in your values.
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.post("/api/chatkit/session")
+async def create_session():
+  return {"client_secret": "your_session_token"}
+```
+
+Full example: `pnpm managed-chatkit:dev`
+
+### Frontend (React)
 
 ```bash
 npm install @xpert-ai/chatkit-react
 ```
+
+Config environment by copying `.env.example` to `.env` and filling in your values.
 
 ```tsx
 import { ChatKit, useChatKit } from '@xpert-ai/chatkit-react';
@@ -40,46 +58,6 @@ export function MyChat() {
   return <ChatKit control={control} className="h-[600px]" />;
 }
 ```
-
-### Web Component (Any Framework)
-
-```bash
-npm install @xpert-ai/chatkit-web-component
-```
-
-```html
-<script type="module">
-  import '@xpert-ai/chatkit-web-component';
-</script>
-
-<xpertai-chatkit id="chat"></xpertai-chatkit>
-
-<script>
-  document.getElementById('chat').options = {
-    api: {
-      async getClientSecret() {
-        const res = await fetch('/api/chatkit/session', { method: 'POST' });
-        const { client_secret } = await res.json();
-        return client_secret;
-      }
-    }
-  };
-</script>
-```
-
-### Backend Session Creation
-
-```python
-from fastapi import FastAPI
-
-app = FastAPI()
-
-@app.post("/api/chatkit/session")
-async def create_session():
-    return {"client_secret": "your_session_token"}
-```
-
-Full example: `pnpm managed-chatkit:dev`
 
 ## 📦 Key Features
 
