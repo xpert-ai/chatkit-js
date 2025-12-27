@@ -1,9 +1,9 @@
 import * as React from 'react';
-import type { XpertThemeOption, XpertColorScheme } from '@xpert-ai/chatkit-types';
+import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 
 export interface ThemeProviderProps {
   children: React.ReactNode;
-  theme?: XpertColorScheme | XpertThemeOption | null;
+  theme?: ChatKitTheme | null;
 }
 
 /**
@@ -144,7 +144,7 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
     // Typography
     if (typography) {
       if (typography.baseSize) {
-        el.style.setProperty('--font-size-base', `${typography.baseSize}px`);
+        document.documentElement.style.setProperty('font-size', `${typography.baseSize}px`);
       }
       if (typography.fontFamily) {
         el.style.setProperty('--font-family', typography.fontFamily);
@@ -215,7 +215,7 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
       el.removeAttribute('data-radius');
       el.removeAttribute('data-density');
       el.style.removeProperty('--radius');
-      el.style.removeProperty('--font-size-base');
+      document.documentElement.style.removeProperty('font-size');
       el.style.removeProperty('--font-family');
       el.style.removeProperty('--font-family-mono');
       el.style.removeProperty('--primary');
