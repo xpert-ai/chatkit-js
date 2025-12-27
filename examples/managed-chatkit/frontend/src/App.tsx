@@ -9,24 +9,10 @@ import { useAppStore } from './store/useAppStore';
 // 其他配置项(如 threadItemActions.feedback)会被自动过滤掉
 // ============================================================================
 const playgroundConfig: Partial<ChatKitOptions> = {
-  theme: {
+   theme: {
     colorScheme: 'dark',
-    radius: 'pill',
-    density: 'normal',
-    color: {
-      grayscale: {
-        hue: 207,
-        tint: 7
-      },
-      accent: {
-        primary: '#dfe302',
-        level: 1
-      },
-      surface: {
-        background: '#e9c9c9',
-        foreground: '#a8df8b'
-      }
-    },
+    radius: 'sharp',
+    density: 'compact',
     typography: {
       baseSize: 14,
       fontFamily: '\'JetBrains Mono\', monospace',
@@ -45,12 +31,31 @@ const playgroundConfig: Partial<ChatKitOptions> = {
     }
   },
   composer: {
-    placeholder: '给agent发消息',
     attachments: {
       enabled: true,
       maxCount: 5,
       maxSize: 10485760
     },
+    tools: [
+      {
+        id: 'search_docs',
+        label: 'Search docs',
+        shortLabel: 'Docs',
+        placeholderOverride: 'Search documentation',
+        icon: 'book-open',
+        pinned: false
+      }
+      // ...and 1 more tool
+    ],
+    models: [
+      {
+        id: 'gpt-5',
+        label: 'gpt-5',
+        description: 'Balanced intelligence',
+        'default': true
+      }
+      // ...and 3 more models
+    ],
   },
   startScreen: {
     greeting: '',
