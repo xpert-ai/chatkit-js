@@ -512,24 +512,32 @@ export function Chat({
                   </div>
                 );
               })}
-              {stream.isLoading && (
-                <div className="flex justify-start gap-3">
-                  {showAvatar && (
-                    <Avatar className="mt-1 h-8 w-8">
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                        AI
-                      </AvatarFallback>
-                    </Avatar>
-                  )}
-                  <div className="max-w-full rounded-2xl bg-muted px-4 py-2.5">
-                    <div className="flex gap-1">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]"></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]"></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground"></div>
+              {/* Show loading indicator only when loading AND last message is not from AI (i.e., AI hasn't started responding yet) */}
+              {stream.isLoading && (() => {
+                const lastMessage = messages[messages.length - 1];
+                const lastMessageType = lastMessage ? String(lastMessage.type) : '';
+                const isLastMessageFromAI = lastMessageType === 'ai' || lastMessageType === 'assistant';
+                // Don't show loading dots if AI is already streaming a response
+                if (isLastMessageFromAI) return null;
+                return (
+                  <div className="flex justify-start gap-3">
+                    {showAvatar && (
+                      <Avatar className="mt-1 h-8 w-8">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          AI
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                    <div className="max-w-full rounded-2xl bg-muted px-4 py-2.5">
+                      <div className="flex gap-1">
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground"></div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>
