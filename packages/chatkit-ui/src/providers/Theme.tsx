@@ -99,6 +99,54 @@ function getRadiusValue(radius: string): string {
 }
 
 /**
+ * Extract font name from fontFamily string
+ * "'Inter', sans-serif" -> "Inter"
+ * "JetBrains Mono, monospace" -> "JetBrains Mono"
+ */
+function extractFontName(fontFamily: string): string | null {
+  // Remove quotes and get the first font name
+  const match = fontFamily.match(/^['"]?([^'",]+)['"]?/);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Check if a font is a system/generic font that doesn't need loading
+ */
+function isSystemFont(fontName: string): boolean {
+  const systemFonts = [
+    'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
+    'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded',
+    'arial', 'helvetica', 'times', 'times new roman', 'georgia', 'verdana',
+    'courier', 'courier new', 'tahoma', 'trebuchet ms', 'impact',
+    '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue'
+  ];
+  return systemFonts.some(sf => sf.toLowerCase() === fontName.toLowerCase());
+}
+
+/**
+ * Load a font from Google Fonts by dynamically adding a <link> tag
+ */
+function loadGoogleFont(fontName: string): HTMLLinkElement | null {
+  if (isSystemFont(fontName)) return null;
+
+  const linkId = `google-font-${fontName.replace(/\s+/g, '-').toLowerCase()}`;
+
+  // Avoid duplicate loading
+  const existing = document.getElementById(linkId);
+  if (existing) return existing as HTMLLinkElement;
+
+  const link = document.createElement('link');
+  link.id = linkId;
+  link.rel = 'stylesheet';
+  // Load common weights: 300, 400, 500, 600, 700
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;500;600;700&display=swap`;
+  document.head.appendChild(link);
+
+  return link;
+}
+
+/**
  * ThemeProvider applies theme configuration via CSS variables
  */
 export function ThemeProvider({ children, theme }: ThemeProviderProps) {
@@ -142,6 +190,8 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
     }
 
     // Typography
+    const loadedGoogleFontLinks: HTMLLinkElement[] = [];
+
     if (typography) {
       if (typography.baseSize) {
         document.documentElement.style.setProperty('font-size', `${typography.baseSize}px`);
@@ -153,7 +203,7 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
         el.style.setProperty('--font-family-mono', typography.fontFamilyMono);
       }
 
-      // Load custom fonts
+      // Load custom fonts from fontSources (explicit URLs)
       if (typography.fontSources && typography.fontSources.length > 0) {
         typography.fontSources.forEach((font) => {
           const fontFace = new FontFace(font.family, `url(${font.src})`, {
@@ -168,6 +218,22 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
             console.warn(`[ThemeProvider] Failed to load font ${font.family}:`, err);
           });
         });
+      } else {
+        // Auto-load from Google Fonts if no fontSources provided
+        if (typography.fontFamily) {
+          const fontName = extractFontName(typography.fontFamily);
+          if (fontName) {
+            const link = loadGoogleFont(fontName);
+            if (link) loadedGoogleFontLinks.push(link);
+          }
+        }
+        if (typography.fontFamilyMono && typography.fontFamilyMono !== typography.fontFamily) {
+          const monoFontName = extractFontName(typography.fontFamilyMono);
+          if (monoFontName) {
+            const link = loadGoogleFont(monoFontName);
+            if (link) loadedGoogleFontLinks.push(link);
+          }
+        }
       }
     }
 
@@ -222,6 +288,8 @@ export function ThemeProvider({ children, theme }: ThemeProviderProps) {
       el.style.removeProperty('--accent');
       el.style.removeProperty('--background');
       el.style.removeProperty('--foreground');
+      // Note: Google Font <link> tags are intentionally not removed
+      // as fonts are cached by the browser and may be reused
     };
   }, [theme]);
 

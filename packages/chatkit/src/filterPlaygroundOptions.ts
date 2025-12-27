@@ -56,6 +56,16 @@ export function filterPlaygroundOptions<T extends Partial<ChatKitOptions>>(
     }
   }
 
+  // Filter out fontSources from theme.typography
+  // Only keep fontFamily/fontFamilyMono, system will auto-load from Google Fonts
+  if (filtered.theme && typeof filtered.theme === 'object' && filtered.theme.typography) {
+    const { fontSources: _fontSources, ...restTypography } = filtered.theme.typography;
+    filtered.theme = {
+      ...filtered.theme,
+      typography: restTypography,
+    };
+  }
+
   return filtered;
 }
 
