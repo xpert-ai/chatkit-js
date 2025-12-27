@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { toast } from "sonner";
-import type { Checkpoint, Message } from "@langchain/langgraph-sdk";
+import type { Checkpoint, Message } from "@xpert-ai/xpert-sdk";
 import { ensureToolCallsHaveResponses } from "../../lib/ensure-tool-responses";
 import { useStreamContext } from "../../providers/Stream";
 

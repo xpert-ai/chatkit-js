@@ -66,17 +66,18 @@ const AppContainer = () => {
         return;
       }
 
-      const payload = event.data as {
-        type?: string;
-        clientSecret?: string;
-      };
+      // const payload = event.data as {
+      //   type?: string;
+      //   clientSecret?: string;
+      //   assistantId?: string;
+      // };
 
       // Handle client secret from postMessage
-      if (payload.type === 'chatkit:init' || payload.type === 'chatkit:client-secret') {
-        if (typeof payload.clientSecret === 'string') {
-          setClientSecret(payload.clientSecret);
-        }
-      }
+      // if (payload.type === 'chatkit:init' || payload.type === 'chatkit:client-secret') {
+      //   if (typeof payload.clientSecret === 'string') {
+      //     setClientSecret(payload.clientSecret);
+      //   }
+      // }
     };
 
     window.addEventListener('message', handleMessage);

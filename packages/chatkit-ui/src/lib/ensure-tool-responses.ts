@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { Message, ToolMessage } from "@langchain/langgraph-sdk";
+import type { Message, ToolMessage } from "@xpert-ai/xpert-sdk";
 
 export const DO_NOT_RENDER_ID_PREFIX = "do-not-render-";
 

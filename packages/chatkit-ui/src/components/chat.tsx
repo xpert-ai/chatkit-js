@@ -1,12 +1,12 @@
 import * as React from 'react';
 
-import type { Message } from '@langchain/langgraph-sdk';
+import type { Message } from '@xpert-ai/xpert-sdk';
 import type { ChatkitMessage, ChatKitOptions, ToolOption } from '@xpert-ai/chatkit-types';
 
 import { cn } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
-import { HistorySidebar, type Conversation } from './history/HistorySidebar';
+import { HistorySidebar } from './history/HistorySidebar';
 import { AssistantMessage } from './thread/messages/ai';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
@@ -15,6 +15,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { useStreamManager } from '../hooks/useStream';
+import { useThreads } from '../hooks/useThreads';
 
 export type ChatProps = {
   className?: string;
@@ -85,11 +86,12 @@ export function Chat({
   const [draft, setDraft] = React.useState('');
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(null);
   const [attachments, setAttachments] = React.useState<File[]>([]);
-  const [conversations, setConversations] = React.useState<Conversation[]>([
-    { id: '1', title: 'Previous conversation 1' },
-    { id: '2', title: 'Previous conversation 2' },
-  ]);
-  const [currentConversationId, setCurrentConversationId] = React.useState<string | undefined>();
+  const {
+    conversations,
+    createThread,
+    deleteThread,
+    isLoading: isThreadsLoading,
+  } = useThreads();
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -202,30 +204,33 @@ export function Chat({
     );
   };
 
-  const handleNewConversation = () => {
-    const newId = createMessageId();
-    setConversations((prev) => [
-      { id: newId, title: 'New conversation' },
-      ...prev,
-    ]);
-    setCurrentConversationId(newId);
-    // Clear messages and reset thread for new conversation
-    stream.reset(null);
+  const handleNewConversation = async () => {
+    if (missingConfig || stream.isLoading) return;
+    try {
+      const created = await createThread({ title: 'New conversation' });
+      stream.reset(created.thread_id);
+    } catch (err) {
+      console.warn('Failed to create thread', err);
+    }
   };
 
   const handleSelectConversation = (id: string) => {
-    if (id === currentConversationId) return;
-    setCurrentConversationId(id);
+    if (id === stream.threadId) return;
     // Reset messages and switch to the conversation's thread
     // For now, we just clear messages since we don't persist conversation data
     stream.reset(id);
   };
 
   const handleDeleteConversation = (id: string) => {
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (currentConversationId === id) {
-      setCurrentConversationId(undefined);
-    }
+    void deleteThread(id)
+      .then(() => {
+        if (stream.threadId === id) {
+          stream.reset(null);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to delete thread', err);
+      });
   };
 
   const handleRetry = (messageIndex: number) => {
@@ -265,7 +270,7 @@ export function Chat({
   return (
     <div
       className={cn(
-        'flex h-full w-full flex-col overflow-hidden rounded-xl border bg-background shadow-sm',
+        'flex h-full w-full flex-col overflow-hidden bg-background shadow-sm',
         className,
       )}
     >
@@ -279,11 +284,11 @@ export function Chat({
         </div>
         <HistorySidebar
           conversations={conversations}
-          currentConversationId={currentConversationId}
+          currentConversationId={stream.threadId ?? undefined}
           onNewConversation={handleNewConversation}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
-          disabled={stream.isLoading}
+          disabled={stream.isLoading || isThreadsLoading}
         />
       </div>
 
@@ -546,7 +551,7 @@ export function Chat({
           )}
         </form>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          Powered by ChatKit AI
+          Powered by Xpert AI
         </p>
       </div>
     </div>
