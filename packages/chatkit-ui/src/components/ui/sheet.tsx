@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cn } from "../../lib/utils";
+import { useChatkitTranslation } from "../../i18n/useChatkitTranslation";
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root {...props} />;
@@ -43,6 +44,7 @@ function SheetContent({
   children,
   ...props
 }: SheetContentProps) {
+  const { t } = useChatkitTranslation();
   const sideVariants = {
     top: "inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
     bottom: "inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
@@ -76,7 +78,7 @@ function SheetContent({
           >
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t('sheet.close')}</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPortal>

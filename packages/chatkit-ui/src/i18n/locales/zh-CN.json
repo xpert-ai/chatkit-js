@@ -1,0 +1,50 @@
+{
+  "chat": {
+    "title": "聊天",
+    "placeholder": "输入消息...",
+    "statusOnline": "在线",
+    "missingConfigShort": "缺少 ChatKit 配置。",
+    "missingConfigDetail": "缺少 ChatKit 配置。请检查 `VITE_CHATKIT_API_BASE`、`VITE_CHATKIT_ASSISTANT_ID` 和 `clientSecret` 参数。",
+    "loadingConversation": "正在加载对话...",
+    "stop": "停止",
+    "send": "发送消息",
+    "poweredBy": "由 Xpert AI 驱动",
+    "errors": {
+      "loadMessages": "加载对话消息失败",
+      "createConversation": "创建对话失败",
+      "deleteConversation": "删除对话失败"
+    }
+  },
+  "history": {
+    "conversationHistory": "对话历史",
+    "title": "对话",
+    "newChat": "新对话",
+    "empty": "暂无对话",
+    "newConversationTitle": "新对话",
+    "conversationWithId": "对话 {{id}}",
+    "conversationFallback": "对话"
+  },
+  "messageActions": {
+    "copied": "已复制！",
+    "copy": "复制到剪贴板",
+    "regenerate": "重新生成回复"
+  },
+  "startScreen": {
+    "greeting": "今天我能帮你什么？"
+  },
+  "composer": {
+    "openMenu": "打开菜单",
+    "addAttachment": "添加附件"
+  },
+  "sheet": {
+    "close": "关闭"
+  },
+  "markdown": {
+    "copy": "复制"
+  },
+  "thread": {
+    "errorToast": "发生错误，请重试。",
+    "errorLabel": "错误：",
+    "langGraphMessages": "LangGraph 消息..."
+  }
+}

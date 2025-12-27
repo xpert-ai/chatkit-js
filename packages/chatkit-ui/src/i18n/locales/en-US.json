@@ -1,0 +1,50 @@
+{
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Type a message...",
+    "statusOnline": "Online",
+    "missingConfigShort": "Missing ChatKit configuration.",
+    "missingConfigDetail": "Missing ChatKit configuration. Check `VITE_CHATKIT_API_BASE`, `VITE_CHATKIT_ASSISTANT_ID`, and the `clientSecret` prop.",
+    "loadingConversation": "Loading conversation...",
+    "stop": "Stop",
+    "send": "Send message",
+    "poweredBy": "Powered by Xpert AI",
+    "errors": {
+      "loadMessages": "Failed to load conversation messages",
+      "createConversation": "Failed to create conversation",
+      "deleteConversation": "Failed to delete conversation"
+    }
+  },
+  "history": {
+    "conversationHistory": "Conversation history",
+    "title": "Conversations",
+    "newChat": "New Chat",
+    "empty": "No conversations yet",
+    "newConversationTitle": "New conversation",
+    "conversationWithId": "Conversation {{id}}",
+    "conversationFallback": "Conversation"
+  },
+  "messageActions": {
+    "copied": "Copied!",
+    "copy": "Copy to clipboard",
+    "regenerate": "Regenerate response"
+  },
+  "startScreen": {
+    "greeting": "What can I help with today?"
+  },
+  "composer": {
+    "openMenu": "Open menu",
+    "addAttachment": "Add attachment"
+  },
+  "sheet": {
+    "close": "Close"
+  },
+  "markdown": {
+    "copy": "Copy"
+  },
+  "thread": {
+    "errorToast": "An error occurred. Please try again.",
+    "errorLabel": "Error:",
+    "langGraphMessages": "LangGraph Messages..."
+  }
+}

@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
 import { useAppStore } from '../store/useAppStore';
+import { useAppTranslation } from '../i18n/useAppTranslation';
 
 export function EChartsRenderer() {
+  const { t } = useAppTranslation();
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
   const { echartsOption, renderError, isGenerating } = useAppStore();
@@ -85,7 +87,7 @@ export function EChartsRenderer() {
         <div className="flex-1 flex items-center justify-center border-2 border-dashed border-blue-300 rounded-lg bg-blue-50">
           <div className="text-center">
             <div className="animate-spin w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
-            <p className="text-blue-600">Generating chart...</p>
+            <p className="text-blue-600">{t('chart.generating')}</p>
           </div>
         </div>
       )}
@@ -107,7 +109,7 @@ export function EChartsRenderer() {
                 d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <p className="font-medium">Render Error</p>
+            <p className="font-medium">{t('chart.renderErrorTitle')}</p>
             <p className="text-sm mt-1">{renderError}</p>
           </div>
         </div>
@@ -136,7 +138,7 @@ export function EChartsRenderer() {
                 d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"
               />
             </svg>
-            <p>Chart will appear here</p>
+            <p>{t('chart.placeholder')}</p>
           </div>
         </div>
       )}

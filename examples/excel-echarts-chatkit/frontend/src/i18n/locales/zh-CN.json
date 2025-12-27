@@ -1,0 +1,50 @@
+{
+  "ui": {
+    "title": "Excel 转 ECharts",
+    "dataPreview": "数据预览",
+    "tableSummary": "{{columnCount}} 列，{{rowCount}} 行",
+    "generateButton": "使用 ECharts 生成图表",
+    "chartOutput": "图表输出",
+    "languageLabel": "语言",
+    "languageEnglish": "英文",
+    "languageChinese": "中文（简体）"
+  },
+  "alerts": {
+    "uploadFirst": "请先上传 Excel 文件",
+    "excelEmpty": "Excel 文件为空",
+    "excelParseFailed": "解析 Excel 文件失败"
+  },
+  "excel": {
+    "upload": "上传 Excel",
+    "uploadHint": "上传 Excel 文件以预览数据",
+    "showingRows": "仅显示前 100 行，共 {{rowCount}} 行"
+  },
+  "chart": {
+    "generating": "正在生成图表...",
+    "renderErrorTitle": "渲染错误",
+    "placeholder": "图表将显示在此处"
+  },
+  "chatkit": {
+    "composer": {
+      "placeholder": "请让我根据你的数据生成图表..."
+    },
+    "startScreen": {
+      "greeting": "你好！上传 Excel 文件，我将帮助你创建图表。",
+      "promptHowWorksLabel": "如何使用？",
+      "promptHowWorksText": "如何从 Excel 数据创建图表？",
+      "promptChartTypesLabel": "图表类型",
+      "promptChartTypesText": "你能创建哪些类型的图表？"
+    },
+    "header": {
+      "title": "Excel 图表助手"
+    },
+    "tool": {
+      "renderSuccess": "图表渲染成功。图表已显示在左侧面板。",
+      "renderFailed": "渲染图表失败：{{error}}。请检查 ECharts 选项格式后重试。",
+      "defaultSuccess": "工具“{{name}}”已执行"
+    },
+    "message": {
+      "generateChart": "使用 ECharts 创建图表。\n\n以下是我的 Excel 数据：\n- 文件：{{fileName}}\n- 列：{{headers}}\n- 总行数：{{rowCount}}\n\n数据预览（前 10 行）：\n{{sampleRows}}\n\n请分析这些数据，并使用 render_echarts 工具生成合适的图表。"
+    }
+  }
+}

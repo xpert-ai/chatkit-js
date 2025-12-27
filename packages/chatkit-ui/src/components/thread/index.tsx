@@ -7,8 +7,10 @@ import { toast } from "sonner";
 import type { Checkpoint, Message } from "@xpert-ai/xpert-sdk";
 import { ensureToolCallsHaveResponses } from "../../lib/ensure-tool-responses";
 import { useStreamContext } from "../../providers/Stream";
+import { useChatkitTranslation } from "../../i18n/useChatkitTranslation";
 
 export function Thread() {
+  const { t } = useChatkitTranslation();
 
 
   const [threadId, _setThreadId] = useQueryState("threadId");
@@ -53,10 +55,10 @@ export function Thread() {
 
       // Message is defined, and it has not been logged yet. Save it, and send the error
       lastError.current = message;
-      toast.error("An error occurred. Please try again.", {
+      toast.error(t("thread.errorToast"), {
         description: (
           <p>
-            <strong>Error:</strong> <code>{message}</code>
+            <strong>{t("thread.errorLabel")}</strong> <code>{message}</code>
           </p>
         ),
         richColors: true,
@@ -65,7 +67,7 @@ export function Thread() {
     } catch {
       // no-op
     }
-  }, [stream.error]);
+  }, [stream.error, t]);
 
   // TODO: this should be part of the useStream hook
   const prevMessageLength = useRef(0);
@@ -173,7 +175,7 @@ export function Thread() {
             
           </div>
           <div>
-            LangGraph Messages...
+            {t("thread.langGraphMessages")}
           </div>
         </div>
       </div>

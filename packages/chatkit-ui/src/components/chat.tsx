@@ -16,6 +16,7 @@ import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { useStreamManager } from '../hooks/useStream';
 import { useThreads } from '../hooks/useThreads';
+import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 
 export type ChatProps = {
   className?: string;
@@ -100,11 +101,12 @@ function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
 export function Chat({
   className,
   options,
-  title = 'Chat',
-  placeholder = 'Type a message...',
+  title,
+  placeholder,
   clientSecret = '',
   showAvatar = true,
 }: ChatProps) {
+  const { t } = useChatkitTranslation();
   const composer = options?.composer;
   const startScreen = options?.startScreen;
   const {setStream} = useStreamManager();
@@ -132,8 +134,12 @@ export function Chat({
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Use placeholder from composer options or fallback to prop
-  const inputPlaceholder = selectedTool?.placeholderOverride ?? composer?.placeholder ?? placeholder;
+  const resolvedTitle = title ?? t('chat.title');
+  const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
+
+  // Use placeholder from composer options or fallback to prop/i18n
+  const inputPlaceholder =
+    selectedTool?.placeholderOverride ?? composer?.placeholder ?? resolvedPlaceholder;
 
   const messages = stream.messages ?? [];
   const trimmedDraft = draft.trim();
@@ -249,7 +255,7 @@ export function Chat({
   const loadConversationMessages = React.useCallback(
     async (conversationId: string, threadId?: string | null) => {
       if (missingConfig) {
-        setHistoryError('Missing ChatKit configuration.');
+        setHistoryError(t('chat.missingConfigShort'));
         return;
       }
       setHistoryError(null);
@@ -271,16 +277,14 @@ export function Chat({
       } catch (err) {
         console.warn('Failed to load conversation messages', err);
         setHistoryError(
-          err instanceof Error
-            ? err.message
-            : 'Failed to load conversation messages',
+          err instanceof Error ? err.message : t('chat.errors.loadMessages'),
         );
         stream.reset(threadId ?? null, []);
       } finally {
         setIsHistoryLoading(false);
       }
     },
-    [missingConfig, stream],
+    [missingConfig, stream, t],
   );
 
   React.useEffect(() => {
@@ -307,14 +311,14 @@ export function Chat({
     if (missingConfig || stream.isLoading || isHistoryLoading) return;
     setHistoryError(null);
     try {
-      const created = await createConversation({ title: 'New conversation' });
+      const created = await createConversation({ title: t('history.newConversationTitle') });
       setActiveConversationId(created.id);
       stream.reset(created.threadId ?? null, []);
       await refreshConversations();
     } catch (err) {
       console.warn('Failed to create conversation', err);
       setHistoryError(
-        err instanceof Error ? err.message : 'Failed to create conversation',
+        err instanceof Error ? err.message : t('chat.errors.createConversation'),
       );
     }
   };
@@ -341,7 +345,7 @@ export function Chat({
       .catch((err) => {
         console.warn('Failed to delete conversation', err);
         setHistoryError(
-          err instanceof Error ? err.message : 'Failed to delete conversation',
+          err instanceof Error ? err.message : t('chat.errors.deleteConversation'),
         );
       });
   };
@@ -391,8 +395,8 @@ export function Chat({
         <div className="flex items-center gap-3">
           <div className="h-2 w-2 rounded-full bg-green-500"></div>
           <div>
-            <h2 className="text-lg font-semibold">{title}</h2>
-            <p className="text-xs text-muted-foreground">Online</p>
+            <h2 className="text-lg font-semibold">{resolvedTitle}</h2>
+            <p className="text-xs text-muted-foreground">{t('chat.statusOnline')}</p>
           </div>
         </div>
         <HistorySidebar
@@ -419,13 +423,12 @@ export function Chat({
           )}
           {missingConfig && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Missing ChatKit configuration. Check `VITE_CHATKIT_API_BASE`,
-              `VITE_CHATKIT_ASSISTANT_ID`, and the `clientSecret` prop.
+              {t('chat.missingConfigDetail')}
             </div>
           )}
           {isHistoryLoading && (
             <div className="mb-4 rounded-lg border border-muted px-3 py-2 text-sm text-muted-foreground">
-              Loading conversation...
+              {t('chat.loadingConversation')}
             </div>
           )}
           {messages.length === 0 ? (
@@ -646,7 +649,7 @@ export function Chat({
               onClick={() => stream.stop()}
               className="h-10 w-10 shrink-0"
             >
-              <span className="text-xs font-semibold">Stop</span>
+              <span className="text-xs font-semibold">{t('chat.stop')}</span>
             </Button>
           ) : (
             <Button
@@ -669,12 +672,12 @@ export function Chat({
               >
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
               </svg>
-              <span className="sr-only">Send message</span>
+              <span className="sr-only">{t('chat.send')}</span>
             </Button>
           )}
         </form>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          Powered by Xpert AI
+          {t('chat.poweredBy')}
         </p>
       </div>
     </div>

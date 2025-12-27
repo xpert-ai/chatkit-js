@@ -47,10 +47,14 @@ const initialOptions = decodeOptionsFromUrl();
 
 const AppContainer = () => {
   const [clientSecret, setClientSecret] = React.useState(initialClientSecret);
-  const [options] = React.useState<ChatKitOptions | null>(initialOptions);
+  const [options, setOptions] = React.useState<ChatKitOptions | null>(initialOptions);
   const initialClientSecretRef = React.useRef(initialClientSecret);
   const parentOriginRef = React.useRef<string>('*');
-  const { isParentAvailable, sendCommand } = useParentMessenger();
+  const { isParentAvailable, sendCommand } = useParentMessenger({
+    onSetOptions: (nextOptions) => {
+      setOptions(nextOptions);
+    },
+  });
 
   React.useEffect(() => {
     if (typeof window === 'undefined' || window.parent === window) return;

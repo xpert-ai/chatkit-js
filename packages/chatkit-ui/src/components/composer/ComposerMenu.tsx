@@ -3,6 +3,7 @@ import type { XpertComposerOption, XpertToolOption, XpertIcon } from '@xpert-ai/
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
 export type ComposerMenuProps = {
   composer?: XpertComposerOption;
@@ -108,6 +109,7 @@ export function ComposerMenu({
   selectedTool,
   disabled = false,
 }: ComposerMenuProps) {
+  const { t } = useChatkitTranslation();
   const [open, setOpen] = React.useState(false);
 
   const attachmentsEnabled = composer?.attachments?.enabled ?? false;
@@ -142,7 +144,7 @@ export function ComposerMenu({
           )}
         >
           <PlusIcon />
-          <span className="sr-only">Open menu</span>
+          <span className="sr-only">{t('composer.openMenu')}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -162,7 +164,7 @@ export function ComposerMenu({
                 <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
                   <PaperclipIcon />
                 </span>
-                <span>Add attachment</span>
+                <span>{t('composer.addAttachment')}</span>
               </button>
               {tools.length > 0 && (
                 <div className="my-1 h-px bg-border" />

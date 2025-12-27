@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import {
   Sheet,
   SheetContent,
@@ -115,6 +116,7 @@ export function HistorySidebar({
   onDeleteConversation,
   disabled = false,
 }: HistorySidebarProps) {
+  const { t } = useChatkitTranslation();
   const [open, setOpen] = React.useState(false);
 
   const handleNewConversation = () => {
@@ -137,12 +139,12 @@ export function HistorySidebar({
           className="h-8 w-8"
         >
           <HistoryIcon />
-          <span className="sr-only">Conversation history</span>
+          <span className="sr-only">{t('history.conversationHistory')}</span>
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-80 p-0">
         <SheetHeader className="border-b p-4">
-          <SheetTitle>Conversations</SheetTitle>
+          <SheetTitle>{t('history.title')}</SheetTitle>
         </SheetHeader>
 
         <div className="p-4">
@@ -152,7 +154,7 @@ export function HistorySidebar({
             variant="secondary"
           >
             <PlusCircleIcon />
-            New Chat
+            {t('history.newChat')}
           </Button>
         </div>
 
@@ -160,7 +162,7 @@ export function HistorySidebar({
           <div className="px-4 pb-4">
             {conversations.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                No conversations yet
+                {t('history.empty')}
               </div>
             ) : (
               <div className="space-y-1">

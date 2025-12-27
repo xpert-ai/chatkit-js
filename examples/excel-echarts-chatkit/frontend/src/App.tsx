@@ -1,63 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
-import { ChatKitOptions, ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+import { ChatKitOptions, ClientToolMessageInput, SupportedLocale } from '@xpert-ai/chatkit-types';
 import * as echarts from 'echarts';
 import { useAppStore } from './store/useAppStore';
 import { ExcelUploader } from './components/ExcelUploader';
 import { ExcelTable } from './components/ExcelTable';
 import { EChartsRenderer } from './components/EChartsRenderer';
-
-// ChatKit options configuration
-const chatkitOptions: Partial<ChatKitOptions> = {
-  theme: {
-    colorScheme: 'light',
-    radius: 'round',
-    density: 'normal',
-    typography: {
-      baseSize: 15,
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    },
-    color: {
-      accent: {
-        primary: '#3b82f6',
-        level: 1,
-      },
-    },
-  },
-  composer: {
-    placeholder: 'Ask me to create a chart from your data...',
-    attachments: {
-      enabled: false,
-    },
-  },
-  startScreen: {
-    greeting: 'Hello! Upload an Excel file and I will help you create charts.',
-    prompts: [
-      {
-        icon: 'circle-question',
-        label: 'How does this work?',
-        prompt: 'How do I create a chart from my Excel data?',
-      },
-      {
-        icon: 'lightbulb',
-        label: 'Chart types',
-        prompt: 'What types of charts can you create?',
-      },
-    ],
-  },
-  header: {
-    enabled: true,
-    title: {
-      enabled: true,
-      text: 'Excel Chart Assistant',
-    },
-  },
-};
+import { getLanguage, setLanguage } from './i18n';
+import { useAppTranslation } from './i18n/useAppTranslation';
 
 // Client tool name for rendering echarts
 const RENDER_ECHARTS_TOOL = 'render_echarts';
 
 export default function App() {
+  const { t } = useAppTranslation();
+  const [locale, setLocale] = useState<SupportedLocale>(() => getLanguage());
   const backendOrigin = (import.meta.env.VITE_BACKEND_ORIGIN as string | undefined) ?? '';
   const assistantId = (import.meta.env.VITE_CHATKIT_ASSISTANT_ID as string | undefined) ?? '';
 
@@ -68,6 +25,53 @@ export default function App() {
     setChatkit,
     setIsGenerating,
   } = useAppStore();
+
+  const chatkitOptions = useMemo<Partial<ChatKitOptions>>(() => ({
+    locale: locale as SupportedLocale,
+    theme: {
+      colorScheme: 'light',
+      radius: 'round',
+      density: 'normal',
+      typography: {
+        baseSize: 15,
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      },
+      color: {
+        accent: {
+          primary: '#3b82f6',
+          level: 1,
+        },
+      },
+    },
+    composer: {
+      placeholder: t('chatkit.composer.placeholder'),
+      attachments: {
+        enabled: false,
+      },
+    },
+    startScreen: {
+      greeting: t('chatkit.startScreen.greeting'),
+      prompts: [
+        {
+          icon: 'circle-question',
+          label: t('chatkit.startScreen.promptHowWorksLabel'),
+          prompt: t('chatkit.startScreen.promptHowWorksText'),
+        },
+        {
+          icon: 'lightbulb',
+          label: t('chatkit.startScreen.promptChartTypesLabel'),
+          prompt: t('chatkit.startScreen.promptChartTypesText'),
+        },
+      ],
+    },
+    header: {
+      enabled: true,
+      title: {
+        enabled: true,
+        text: t('chatkit.header.title'),
+      },
+    },
+  }), [locale, t]);
 
   const chatkit = useChatKit({
     ...chatkitOptions,
@@ -105,8 +109,8 @@ export default function App() {
                                name.toLowerCase().includes('chart') ||
                                name === RENDER_ECHARTS_TOOL;
 
-      if (isEchartsRender) {
-        setIsGenerating(false);
+        if (isEchartsRender) {
+          setIsGenerating(false);
 
         try {
           console.log('[ECharts Demo] Parsing params:', typeof params, params);
@@ -157,7 +161,7 @@ export default function App() {
             tool_call_id: tool_call_id || id,
             name,
             status: 'success',
-            content: 'Chart rendered successfully. The chart is now displayed on the left panel.',
+            content: t('chatkit.tool.renderSuccess'),
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -171,7 +175,7 @@ export default function App() {
             tool_call_id: tool_call_id || id,
             name,
             status: 'error',
-            content: `Failed to render chart: ${errorMessage}. Please check the ECharts option format and try again.`,
+            content: t('chatkit.tool.renderFailed', { error: errorMessage }),
           };
         }
       }
@@ -181,7 +185,7 @@ export default function App() {
         tool_call_id: tool_call_id || id,
         name,
         status: 'success',
-        content: `Tool "${name}" executed`,
+        content: t('chatkit.tool.defaultSuccess', { name }),
       };
     },
     onError: (error) => {
@@ -202,7 +206,7 @@ export default function App() {
   // Handle "Generate Chart" button click
   const handleGenerateChart = () => {
     if (!excelData) {
-      alert('Please upload an Excel file first');
+      alert(t('alerts.uploadFirst'));
       return;
     }
 
@@ -218,19 +222,20 @@ export default function App() {
     };
 
     // Send message to chat with Excel data
-    const message = `Use ECharts to create a chart.
-
-Here is my Excel data:
-- File: ${excelData.fileName}
-- Columns: ${excelData.headers.join(', ')}
-- Total rows: ${excelData.rows.length}
-
-Data preview (first 10 rows):
-${JSON.stringify(dataSummary.sampleRows, null, 2)}
-
-Please analyze this data and create an appropriate chart using the render_echarts tool.`;
+    const message = t('chatkit.message.generateChart', {
+      fileName: excelData.fileName,
+      headers: excelData.headers.join(', '),
+      rowCount: excelData.rows.length,
+      sampleRows: JSON.stringify(dataSummary.sampleRows, null, 2),
+    });
 
     chatkit.sendUserMessage({ text: message });
+  };
+
+  const handleLocaleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextLocale = event.target.value as SupportedLocale;
+    setLocale(nextLocale);
+    setLanguage(nextLocale);
   };
 
   return (
@@ -239,17 +244,36 @@ Please analyze this data and create an appropriate chart using the render_echart
       <div className="w-1/2 p-4 border-r border-gray-300 bg-white flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-800">Excel to ECharts</h1>
-          <ExcelUploader />
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">{t('ui.title')}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-600" htmlFor="language-select">
+              {t('ui.languageLabel')}
+            </label>
+            <select
+              id="language-select"
+              value={locale}
+              onChange={handleLocaleChange}
+              className="border border-gray-300 rounded-md px-2 py-1 text-sm bg-white"
+            >
+              <option value="en-US">{t('ui.languageEnglish')}</option>
+              <option value="zh-CN">{t('ui.languageChinese')}</option>
+            </select>
+            <ExcelUploader />
+          </div>
         </div>
 
         {/* Excel Table Section */}
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-medium text-gray-600">Data Preview</h2>
+            <h2 className="text-sm font-medium text-gray-600">{t('ui.dataPreview')}</h2>
             {excelData && (
               <span className="text-xs text-gray-500">
-                {excelData.headers.length} columns, {excelData.rows.length} rows
+                {t('ui.tableSummary', {
+                  columnCount: excelData.headers.length,
+                  rowCount: excelData.rows.length,
+                })}
               </span>
             )}
           </div>
@@ -280,13 +304,13 @@ Please analyze this data and create an appropriate chart using the render_echart
                 d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
               />
             </svg>
-            Generate Chart with ECharts
+            {t('ui.generateButton')}
           </button>
         </div>
 
         {/* Chart Section */}
         <div className="flex-1 flex flex-col min-h-0">
-          <h2 className="text-sm font-medium text-gray-600 mb-2">Chart Output</h2>
+          <h2 className="text-sm font-medium text-gray-600 mb-2">{t('ui.chartOutput')}</h2>
           <EChartsRenderer />
         </div>
       </div>

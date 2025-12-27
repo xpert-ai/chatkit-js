@@ -4,6 +4,7 @@ import type { ChatConversation } from '@xpert-ai/xpert-sdk';
 
 import type { Conversation } from '../components/history/HistorySidebar';
 import { useStreamContext } from '../providers/Stream';
+import { i18n, initI18n } from '../i18n';
 
 type CreateConversationInput = {
   conversationId?: string;
@@ -39,8 +40,11 @@ const DEFAULT_LIMIT = 50;
 const getConversationTitle = (conversation: ChatConversation): string => {
   const title = conversation.title?.trim();
   if (title) return title;
+  initI18n();
   const suffix = (conversation.id ?? conversation.threadId ?? '').slice(0, 8);
-  return suffix ? `Conversation ${suffix}` : 'Conversation';
+  return suffix
+    ? i18n.t('history.conversationWithId', { id: suffix })
+    : i18n.t('history.conversationFallback');
 };
 
 const toDate = (value: string | undefined): Date | undefined => {

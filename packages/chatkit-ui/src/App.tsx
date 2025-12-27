@@ -1,8 +1,10 @@
+import * as React from 'react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { Chat } from "./components/chat";
 import { StreamProvider } from "./providers/Stream";
 import { ThemeProvider } from "./providers/Theme";
-import { A2UIProvider, ThemeProvider as A2UIThemeProvider } from "@a2ui/react";
+import { A2UIProvider } from "@a2ui/react";
+import { setLanguage } from "./i18n";
 
 export type AppProps = {
   clientSecret?: string;
@@ -14,7 +16,12 @@ export function App({ clientSecret = "", options }: AppProps) {
 
   // Extract options
   const theme = options?.theme;
-  const composer = options?.composer;
+  const locale = options?.locale;
+
+  React.useEffect(() => {
+    if (!locale) return;
+    setLanguage(locale);
+  }, [locale]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -25,8 +32,6 @@ export function App({ clientSecret = "", options }: AppProps) {
           <StreamProvider apiKey={apiKey}>
             <Chat
               className="flex-1"
-              title="Chat"
-              placeholder={composer?.placeholder ?? "输入消息..."}
               showAvatar={true}
               clientSecret={clientSecret}
               options={options ?? {}}

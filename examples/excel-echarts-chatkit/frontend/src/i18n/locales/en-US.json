@@ -1,0 +1,50 @@
+{
+  "ui": {
+    "title": "Excel to ECharts",
+    "dataPreview": "Data Preview",
+    "tableSummary": "{{columnCount}} columns, {{rowCount}} rows",
+    "generateButton": "Generate Chart with ECharts",
+    "chartOutput": "Chart Output",
+    "languageLabel": "Language",
+    "languageEnglish": "English",
+    "languageChinese": "Chinese (Simplified)"
+  },
+  "alerts": {
+    "uploadFirst": "Please upload an Excel file first",
+    "excelEmpty": "Excel file is empty",
+    "excelParseFailed": "Failed to parse Excel file"
+  },
+  "excel": {
+    "upload": "Upload Excel",
+    "uploadHint": "Upload an Excel file to preview data",
+    "showingRows": "Showing first 100 rows of {{rowCount}} total"
+  },
+  "chart": {
+    "generating": "Generating chart...",
+    "renderErrorTitle": "Render Error",
+    "placeholder": "Chart will appear here"
+  },
+  "chatkit": {
+    "composer": {
+      "placeholder": "Ask me to create a chart from your data..."
+    },
+    "startScreen": {
+      "greeting": "Hello! Upload an Excel file and I will help you create charts.",
+      "promptHowWorksLabel": "How does this work?",
+      "promptHowWorksText": "How do I create a chart from my Excel data?",
+      "promptChartTypesLabel": "Chart types",
+      "promptChartTypesText": "What types of charts can you create?"
+    },
+    "header": {
+      "title": "Excel Chart Assistant"
+    },
+    "tool": {
+      "renderSuccess": "Chart rendered successfully. The chart is now displayed on the left panel.",
+      "renderFailed": "Failed to render chart: {{error}}. Please check the ECharts option format and try again.",
+      "defaultSuccess": "Tool \"{{name}}\" executed"
+    },
+    "message": {
+      "generateChart": "Use ECharts to create a chart.\n\nHere is my Excel data:\n- File: {{fileName}}\n- Columns: {{headers}}\n- Total rows: {{rowCount}}\n\nData preview (first 10 rows):\n{{sampleRows}}\n\nPlease analyze this data and create an appropriate chart using the render_echarts tool."
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import type { ChatKitOptions } from "@xpert-ai/chatkit-types";
 import { useStreamManager } from "./useStream";
 
 type ParentCommandMessage = {
@@ -55,7 +56,13 @@ export type ParentMessenger = {
   sendEvent: (event: string, data?: [string, unknown], transfer?: Transferable[]) => void;
 };
 
-export function useParentMessenger(): ParentMessenger {
+export type ParentMessengerOptions = {
+  onSetOptions?: (options: ChatKitOptions | null) => void;
+};
+
+export function useParentMessenger(
+  { onSetOptions }: ParentMessengerOptions = {},
+): ParentMessenger {
   const { streamRef } = useStreamManager();
   const parentOriginRef = useRef<string>("*");
   const pendingRef = useRef(
@@ -76,6 +83,17 @@ export function useParentMessenger(): ParentMessenger {
   useEffect(() => {
     if (!isParentAvailable) return;
 
+    const sendResponse = (nonce: string, response?: unknown, error?: unknown) => {
+      const message: ParentEnvelope = {
+        __xpaiChatKit: true,
+        type: "response",
+        nonce,
+        response,
+        error,
+      };
+      window.parent.postMessage(message, parentOriginRef.current);
+    };
+
     const handleMessage = (event: MessageEvent) => {
       if (event.source !== window.parent) return;
       if (!event.data || typeof event.data !== "object") return;
@@ -94,7 +112,21 @@ export function useParentMessenger(): ParentMessenger {
           input: {
             input: (payload.data as { text: string }).text as string,
           }
-        })
+        });
+        if (payload.nonce) {
+          sendResponse(payload.nonce, { ok: true });
+        }
+        return;
+      }
+
+      if (payload.type == "command" && payload.command === "onSetOptions") {
+        if (onSetOptions) {
+          onSetOptions(payload.data as ChatKitOptions | null);
+        }
+        if (payload.nonce) {
+          sendResponse(payload.nonce, { ok: true });
+        }
+        return;
       }
 
       if (payload.type !== "response") return

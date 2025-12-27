@@ -1,6 +1,8 @@
 import { useAppStore } from '../store/useAppStore';
+import { useAppTranslation } from '../i18n/useAppTranslation';
 
 export function ExcelTable() {
+  const { t } = useAppTranslation();
   const { excelData } = useAppStore();
 
   if (!excelData) {
@@ -20,7 +22,7 @@ export function ExcelTable() {
               d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
             />
           </svg>
-          <p>Upload an Excel file to preview data</p>
+          <p>{t('excel.uploadHint')}</p>
         </div>
       </div>
     );
@@ -64,7 +66,7 @@ export function ExcelTable() {
       </table>
       {excelData.rows.length > 100 && (
         <div className="text-center py-2 text-sm text-gray-500 bg-gray-50 border-t">
-          Showing first 100 rows of {excelData.rows.length} total
+          {t('excel.showingRows', { rowCount: excelData.rows.length })}
         </div>
       )}
     </div>

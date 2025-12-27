@@ -1,6 +1,7 @@
 import * as React from 'react';
 import type { XpertStartScreenOption, XpertIcon } from '@xpert-ai/chatkit-types';
 import { cn } from '../../lib/utils';
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
 export type StartScreenProps = {
   startScreen?: XpertStartScreenOption;
@@ -72,7 +73,8 @@ function getIconComponent(icon?: XpertIcon): React.ReactNode {
 }
 
 export function StartScreen({ startScreen, onPromptClick, className }: StartScreenProps) {
-  const greeting = startScreen?.greeting ?? 'What can I help with today?';
+  const { t } = useChatkitTranslation();
+  const greeting = startScreen?.greeting ?? t('startScreen.greeting');
   const prompts = startScreen?.prompts ?? [];
 
   return (

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { cn } from '../../lib/utils';
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
 export type MessageActionsProps = {
   content: string;
@@ -75,6 +76,7 @@ export function MessageActions({
   onRetry,
   className,
 }: MessageActionsProps) {
+  const { t } = useChatkitTranslation();
   const [copied, setCopied] = React.useState(false);
 
   const handleCopy = async () => {
@@ -102,7 +104,7 @@ export function MessageActions({
           'p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors',
           copied && 'text-green-500'
         )}
-        title={copied ? 'Copied!' : 'Copy to clipboard'}
+        title={copied ? t('messageActions.copied') : t('messageActions.copy')}
       >
         {copied ? <CheckIcon /> : <CopyIcon />}
       </button>
@@ -113,7 +115,7 @@ export function MessageActions({
           type="button"
           onClick={onRetry}
           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          title="Regenerate response"
+          title={t('messageActions.regenerate')}
         >
           <RetryIcon />
         </button>

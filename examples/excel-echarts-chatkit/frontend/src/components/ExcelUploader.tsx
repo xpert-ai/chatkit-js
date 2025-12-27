@@ -1,8 +1,10 @@
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useAppStore, ExcelData } from '../store/useAppStore';
+import { useAppTranslation } from '../i18n/useAppTranslation';
 
 export function ExcelUploader() {
+  const { t } = useAppTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { excelData, setExcelData, setEchartsOption, setRenderError } = useAppStore();
 
@@ -24,10 +26,10 @@ export function ExcelUploader() {
         defval: ''
       });
 
-      if (jsonData.length === 0) {
-        alert('Excel file is empty');
-        return;
-      }
+    if (jsonData.length === 0) {
+      alert(t('alerts.excelEmpty'));
+      return;
+    }
 
       // First row as headers
       const headers = jsonData[0].map(String);
@@ -43,10 +45,10 @@ export function ExcelUploader() {
       // Reset chart when new file is uploaded
       setEchartsOption(null);
       setRenderError(null);
-    } catch (error) {
-      console.error('Failed to parse Excel file:', error);
-      alert('Failed to parse Excel file');
-    }
+  } catch (error) {
+    console.error('Failed to parse Excel file:', error);
+    alert(t('alerts.excelParseFailed'));
+  }
 
     // Reset input
     if (fileInputRef.current) {
@@ -84,7 +86,7 @@ export function ExcelUploader() {
             d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
           />
         </svg>
-        Upload Excel
+        {t('excel.upload')}
       </button>
       {excelData && (
         <span className="text-sm text-gray-600">
