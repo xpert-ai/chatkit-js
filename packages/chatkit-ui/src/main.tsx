@@ -29,8 +29,8 @@ function decodeOptionsFromUrl(): ChatKitOptions | null {
   if (!encoded) return null;
 
   try {
-    const params = decodeBase64<{ options: {options?: ChatKitOptions} }>(encoded);
-    return params?.options?.options ?? null;
+    const params = decodeBase64<{ options?: ChatKitOptions }>(encoded);
+    return params?.options ?? null;
   } catch (error) {
     console.warn('[chatkit-ui] Failed to decode options from URL hash:', error);
     return null;
