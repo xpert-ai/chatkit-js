@@ -5,6 +5,7 @@ import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 export type MessageActionsProps = {
   content: string;
   isAssistant?: boolean;
+  isStreaming?: boolean;
   onRetry?: () => void;
   className?: string;
 };
@@ -73,6 +74,7 @@ function RetryIcon() {
 export function MessageActions({
   content,
   isAssistant = false,
+  isStreaming = false,
   onRetry,
   className,
 }: MessageActionsProps) {
@@ -88,6 +90,11 @@ export function MessageActions({
       console.error('Failed to copy:', err);
     }
   };
+
+  // Hide actions while streaming
+  if (isStreaming) {
+    return null;
+  }
 
   return (
     <div

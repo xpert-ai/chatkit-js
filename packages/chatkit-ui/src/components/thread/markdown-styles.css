@@ -1,4 +1,89 @@
 /* Base markdown styles */
+
+/* Smooth streaming animation - like Gemini flowing water effect */
+.markdown-content {
+  /* Smooth text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Streaming active state - flowing water reveal effect */
+.streaming-active .markdown-content {
+  /* Gradient mask for flowing reveal effect */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 60px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    black 0%,
+    black calc(100% - 60px),
+    transparent 100%
+  );
+  animation: streamingFlow 0.4s ease-out forwards;
+}
+
+@keyframes streamingFlow {
+  from {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black calc(100% - 80px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black calc(100% - 80px),
+      transparent 100%
+    );
+  }
+  to {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black 100%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      black 0%,
+      black 100%,
+      transparent 100%
+    );
+  }
+}
+
+/* Cursor removed per user request */
+
+/* Smooth transitions for new content appearing */
+.streaming-active .markdown-content p,
+.streaming-active .markdown-content li,
+.streaming-active .markdown-content pre,
+.streaming-active .markdown-content blockquote {
+  animation: contentReveal 0.25s ease-out;
+}
+
+@keyframes contentReveal {
+  from {
+    opacity: 0.6;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* When streaming stops, ensure full visibility */
+.markdown-content {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .markdown-content code:not(pre code) {
   background-color: rgba(0, 0, 0, 0.05);
   padding: 0.2em 0.4em;

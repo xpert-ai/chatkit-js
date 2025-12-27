@@ -10,7 +10,7 @@ import { HistorySidebar } from './history/HistorySidebar';
 import { AssistantMessage } from './thread/messages/ai';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
-import { Avatar, AvatarFallback } from './ui/avatar';
+// Avatar import removed - AI avatar disabled
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
@@ -23,7 +23,6 @@ export type ChatProps = {
   title?: string;
   placeholder?: string;
   clientSecret?: string;
-  showAvatar?: boolean;
   options?: ChatKitOptions | null;
 };
 
@@ -104,7 +103,6 @@ export function Chat({
   title,
   placeholder,
   clientSecret = '',
-  showAvatar = true,
 }: ChatProps) {
   const { t } = useChatkitTranslation();
   const composer = options?.composer;
@@ -116,9 +114,44 @@ export function Chat({
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
 
+  // Minimum loading dots display time (ms)
+  const LOADING_DOTS_MIN_DURATION = 800;
+  const [showLoadingDots, setShowLoadingDots] = React.useState(false);
+  const loadingStartTimeRef = React.useRef<number | null>(null);
+
   React.useEffect(() => {
     setStream(stream);
   }, [setStream, stream]);
+
+  // Handle loading dots with minimum display time
+  React.useEffect(() => {
+    if (stream.isLoading) {
+      // Start showing loading dots
+      if (!loadingStartTimeRef.current) {
+        loadingStartTimeRef.current = Date.now();
+        setShowLoadingDots(true);
+      }
+    } else {
+      // Loading finished - check if we need to keep dots visible
+      if (loadingStartTimeRef.current) {
+        const elapsed = Date.now() - loadingStartTimeRef.current;
+        const remaining = LOADING_DOTS_MIN_DURATION - elapsed;
+
+        if (remaining > 0) {
+          // Keep dots visible for remaining time
+          const timer = setTimeout(() => {
+            setShowLoadingDots(false);
+            loadingStartTimeRef.current = null;
+          }, remaining);
+          return () => clearTimeout(timer);
+        } else {
+          // Minimum time already passed
+          setShowLoadingDots(false);
+          loadingStartTimeRef.current = null;
+        }
+      }
+    }
+  }, [stream.isLoading]);
 
   const [draft, setDraft] = React.useState('');
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(null);
@@ -144,15 +177,31 @@ export function Chat({
   const messages = stream.messages ?? [];
   const trimmedDraft = draft.trim();
 
-  const scrollToBottom = React.useCallback(() => {
-    if (viewportRef.current) {
-      viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
-    }
+  const scrollToBottom = React.useCallback((smooth = false) => {
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      // Find the actual Radix ScrollArea Viewport element
+      const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) {
+        viewport.scrollTo({
+          top: viewport.scrollHeight,
+          behavior: smooth ? 'smooth' : 'instant',
+        });
+      }
+    });
   }, []);
 
+  // Auto-scroll when messages change or during streaming
   React.useEffect(() => {
     scrollToBottom();
   }, [messages.length, scrollToBottom]);
+
+  // Also scroll when streaming content updates (for smooth following)
+  React.useEffect(() => {
+    if (stream.isLoading) {
+      scrollToBottom();
+    }
+  }, [stream.isLoading, messages, scrollToBottom]);
 
   const hasApiKey = Boolean(clientSecret.trim() || apiKeyFromEnv?.trim());
   const missingConfig = !apiUrl || !assistantId || !hasApiKey;
@@ -185,6 +234,9 @@ export function Chat({
         },
       },
     );
+
+    // Immediately scroll to bottom to show the new message
+    scrollToBottom(true);
 
     // Clear selected tool if not persistent
     if (selectedTool && !selectedTool.pinned) {
@@ -250,6 +302,9 @@ export function Chat({
         },
       },
     );
+
+    // Scroll to bottom to show the new message
+    scrollToBottom(true);
   };
 
   const loadConversationMessages = React.useCallback(
@@ -457,25 +512,18 @@ export function Chat({
                       'group flex gap-3',
                       message.type === 'human'
                         ? 'justify-end'
-                        : 'justify-start',
+                        : 'justify-start -ml-1',  // AI messages: slightly closer to left
                     )}
                   >
-                    {message.type !== 'human' && showAvatar && (
-                      <Avatar className="mt-1 h-8 w-8">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                          AI
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
                     <div className="flex flex-col">
                       <div
                         className={cn(
-                          'max-w-full rounded-2xl px-4 py-2.5',
+                          'max-w-full rounded-2xl',
                           message.type === 'human'
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary text-primary-foreground px-4 py-2.5'
                             : message.type === 'system'
-                              ? 'bg-muted text-muted-foreground text-xs'
-                              : 'bg-muted',
+                              ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
+                              : 'py-1',  // AI messages: minimal padding, no background
                         )}
                       >
                         {isAssistantMessage ? (
@@ -484,6 +532,7 @@ export function Chat({
                               ...(message as ChatkitMessage),
                               type: 'assistant',
                             }}
+                            isStreaming={stream.isLoading && index === messages.length - 1}
                           />
                         ) : Array.isArray(message.content) ? (
                           message.content.map((part, partIndex) => (
@@ -498,12 +547,13 @@ export function Chat({
                           formatMessageContent(message.content)
                         )}
                       </div>
-                      {/* Message actions */}
+                      {/* Message actions - hidden during streaming, retry only for last AI message */}
                       <MessageActions
                         content={messageContent}
                         isAssistant={isAssistantMessage}
+                        isStreaming={stream.isLoading && index === messages.length - 1}
                         onRetry={
-                          isAssistantMessage && !stream.isLoading
+                          isAssistantMessage && !stream.isLoading && index === messages.length - 1
                             ? () => handleRetry(index)
                             : undefined
                         }
@@ -512,27 +562,24 @@ export function Chat({
                   </div>
                 );
               })}
-              {/* Show loading indicator only when loading AND last message is not from AI (i.e., AI hasn't started responding yet) */}
-              {stream.isLoading && (() => {
+              {/* Show loading indicator with minimum display time */}
+              {showLoadingDots && (() => {
                 const lastMessage = messages[messages.length - 1];
                 const lastMessageType = lastMessage ? String(lastMessage.type) : '';
                 const isLastMessageFromAI = lastMessageType === 'ai' || lastMessageType === 'assistant';
-                // Don't show loading dots if AI is already streaming a response
-                if (isLastMessageFromAI) return null;
+                // Hide dots once AI has substantial content
+                const lastMsgContent = lastMessage?.content;
+                const hasSubstantialContent = isLastMessageFromAI &&
+                  ((typeof lastMsgContent === 'string' && lastMsgContent.length > 10) ||
+                   (Array.isArray(lastMsgContent) && lastMsgContent.length > 0));
+                if (hasSubstantialContent) return null;
                 return (
-                  <div className="flex justify-start gap-3">
-                    {showAvatar && (
-                      <Avatar className="mt-1 h-8 w-8">
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                          AI
-                        </AvatarFallback>
-                      </Avatar>
-                    )}
-                    <div className="max-w-full rounded-2xl bg-muted px-4 py-2.5">
-                      <div className="flex gap-1">
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]"></div>
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]"></div>
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground"></div>
+                  <div className="flex justify-start gap-3 -ml-2">
+                    <div className="max-w-full rounded-2xl py-2.5">
+                      <div className="flex gap-1.5">
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60"></div>
                       </div>
                     </div>
                   </div>

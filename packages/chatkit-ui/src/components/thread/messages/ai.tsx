@@ -21,6 +21,7 @@ import { WidgetMessage } from './widget';
 export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
   className?: string;
+  isStreaming?: boolean;
 };
 
 function isTextContent(content: TMessageContentComplex): content is TMessageContentText {
@@ -245,7 +246,7 @@ function renderContent(content: ChatkitMessage['content'], messageId: string) {
   );
 }
 
-export function AssistantMessage({ message, className }: AssistantMessageProps) {
+export function AssistantMessage({ message, className, isStreaming = false }: AssistantMessageProps) {
   const hasContent =
     message.content != null &&
     !(
@@ -263,9 +264,12 @@ export function AssistantMessage({ message, className }: AssistantMessageProps) 
 
   if (!hasContent && !hasReasoning) return null;
 
+  // Streaming class for smooth animation effect
+  const streamingClass = isStreaming ? 'streaming-active' : '';
+
   if (hasContent && hasReasoning) {
     return (
-      <div className={cn('space-y-3', className)}>
+      <div className={cn('space-y-3', streamingClass, className)}>
         <Tabs
           defaultValue={message.status === 'reasoning' ? 'reasoning' : 'answer'}
           className="w-full"
@@ -286,7 +290,7 @@ export function AssistantMessage({ message, className }: AssistantMessageProps) 
   }
 
   return (
-    <div className={cn('space-y-3', className)}>
+    <div className={cn('space-y-3', streamingClass, className)}>
       {hasReasoning ? reasoningNode : answerNode}
     </div>
   );
