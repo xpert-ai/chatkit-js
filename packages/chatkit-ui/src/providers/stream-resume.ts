@@ -81,9 +81,17 @@ export async function consumeResumableStream<
   while (true) {
     let sawComplete = false;
     let streamError: unknown = null;
+    let chunkProcessingError: unknown = null;
 
     try {
       for await (const chunk of stream) {
+        try {
+          await onChunk(chunk);
+        } catch (error) {
+          chunkProcessingError = error;
+          throw error;
+        }
+
         if (chunk.id) {
           setLastEventId(String(chunk.id));
         }
@@ -91,12 +99,13 @@ export async function consumeResumableStream<
         if (isCompleteChunk(chunk)) {
           sawComplete = true;
         }
-
-        await onChunk(chunk);
       }
     } catch (error) {
       if (signal?.aborted || isAbortError(error)) {
         return { attempts, status: 'aborted' };
+      }
+      if (chunkProcessingError) {
+        throw chunkProcessingError;
       }
       streamError = error;
     }

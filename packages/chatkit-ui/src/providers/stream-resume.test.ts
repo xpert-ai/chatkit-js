@@ -110,6 +110,31 @@ describe('consumeResumableStream', () => {
 
     expect(result).toEqual({ attempts: 0, status: 'interrupted' });
   });
+
+  it('rethrows chunk processing errors without advancing the resume cursor', async () => {
+    let lastEventId: string | null = null;
+    const openResumeStream = vi.fn();
+    const processingError = new Error('bad chunk');
+
+    await expect(
+      consumeResumableStream({
+        openInitialStream: () =>
+          emitChunks([{ id: 'evt-1', event: 'complete', data: { type: 'complete' } }]),
+        openResumeStream,
+        getLastEventId: () => lastEventId,
+        getRunId: () => 'run-1',
+        onChunk: vi.fn(async () => {
+          throw processingError;
+        }),
+        setLastEventId: (value) => {
+          lastEventId = value;
+        },
+      }),
+    ).rejects.toBe(processingError);
+
+    expect(lastEventId).toBeNull();
+    expect(openResumeStream).not.toHaveBeenCalled();
+  });
 });
 
 describe('isCompleteStreamChunk', () => {
