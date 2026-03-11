@@ -18,7 +18,7 @@ import {
 } from '@xpert-ai/xpert-sdk';
 import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
-import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type TMessageContent, type ChatEventEnvelope, type TMessageContentComplex, type TMessageContentComponent } from '@xpert-ai/chatkit-types';
+import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type ChatEventEnvelope, type TMessageContentComplex, type TMessageContentComponent } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import type { ParentMessenger } from './ParentMessenger';
@@ -29,6 +29,7 @@ import {
   type LangGraphEventState,
 } from './langGraphEventMapper';
 import { createMessageId } from '../lib/utils';
+import { consumeResumableStream } from './stream-resume';
 
 type ChatKitAIMessage = Message & { executionId?: string };
 
@@ -492,9 +493,27 @@ function applyStreamEvent(
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
       case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
-        const eventData = payload.data as { messages?: ChatKitAIMessage[] } | null;
+        const eventData = payload.data as {
+          messages?: ChatKitAIMessage[];
+          status?: string;
+          error?: string | null;
+        } | null;
         if (eventData && Array.isArray(eventData.messages)) {
           setValues((prev) => ({ ...prev, messages: eventData.messages ?? [] }));
+        }
+        if (
+          eventType === ChatMessageEventTypeEnum.ON_CONVERSATION_END &&
+          eventData?.status === 'error'
+        ) {
+          const errorMessage =
+            typeof eventData.error === 'string'
+              ? eventData.error.trim()
+              : '';
+          setError(
+            new Error(
+              errorMessage || '[chatkit-ui] Conversation ended with an error.',
+            ),
+          );
         }
         break;
       }
@@ -839,8 +858,27 @@ const StreamSession = ({
     abortRef.current = abortController;
     setIsLoading(true);
     try {
-      const stream = options?.joinExistingThread ? client.runs.joinStream(nextThreadId, runId) :
-        client.runs.stream(nextThreadId, assistantId, {
+      const interrupts: unknown[] = [];
+      const langGraphEventState = createLangGraphEventState();
+      const eventContext: LangGraphEventContext = {
+        threadId: nextThreadId,
+        input,
+      };
+
+      const openInitialStream = () => {
+        if (options?.joinExistingThread) {
+          const existingRunId = runId?.trim();
+          if (!existingRunId) {
+            throw new Error('[chatkit-ui] Missing run id for joinStream.');
+          }
+          lastExecutionIdRef.current = existingRunId;
+          return client.runs.joinStream(nextThreadId, existingRunId, {
+            signal: abortController.signal,
+            lastEventId: lastEventIdRef.current ?? undefined,
+          });
+        }
+
+        return client.runs.stream(nextThreadId, assistantId, {
           input: input ?? null,
           context: options?.context,
           config: options?.config,
@@ -849,33 +887,55 @@ const StreamSession = ({
           streamSubgraphs: options?.streamSubgraphs,
           streamResumable: options?.streamResumable,
           signal: abortController.signal,
-          onDisconnect: 'continue'
-        });
-
-      const interrupts: unknown[] = [];
-      const langGraphEventState = createLangGraphEventState();
-      const eventContext: LangGraphEventContext = {
-        threadId: nextThreadId,
-        input,
-      };
-      for await (const chunk of stream) {
-        if (chunk?.id) {
-          lastEventIdRef.current = String(chunk.id);
-        }
-        applyStreamEvent(
-          chunk as StreamChunk,
-          setValues,
-          setError,
-          sendEvent,
-          interrupts,
-          langGraphEventState,
-          eventContext,
-          (executionId) => {
-            if (executionId) {
-              lastExecutionIdRef.current = executionId;
-            }
+          onDisconnect: 'continue',
+          onRunCreated: ({ run_id }) => {
+            lastExecutionIdRef.current = run_id;
           },
-        );
+        });
+      };
+
+      const streamResult = await consumeResumableStream({
+        openInitialStream,
+        openResumeStream: ({ lastEventId, runId: activeRunId }) =>
+          client.runs.joinStream(nextThreadId, activeRunId, {
+            signal: abortController.signal,
+            lastEventId,
+          }),
+        canResume: () => interrupts.length === 0,
+        getLastEventId: () => lastEventIdRef.current,
+        getRunId: () => lastExecutionIdRef.current ?? runId?.trim(),
+        onChunk: async (chunk) => {
+          applyStreamEvent(
+            chunk as StreamChunk,
+            setValues,
+            setError,
+            sendEvent,
+            interrupts,
+            langGraphEventState,
+            eventContext,
+            (executionId) => {
+              if (executionId) {
+                lastExecutionIdRef.current = executionId;
+              }
+            },
+          );
+        },
+        onResume: ({ attempt, lastEventId, runId: activeRunId }) => {
+          console.warn('[chatkit-ui] Stream ended before completion. Attempting to resume.', {
+            attempt,
+            lastEventId,
+            runId: activeRunId,
+            threadId: nextThreadId,
+          });
+        },
+        setLastEventId: (eventId) => {
+          lastEventIdRef.current = eventId;
+        },
+        signal: abortController.signal,
+      });
+
+      if (streamResult.status === 'disconnected') {
+        setError(new Error('[chatkit-ui] Stream disconnected before completion.'));
       }
 
       if (interrupts.length > 0) {
