@@ -11,6 +11,8 @@ type ContextUsageIndicatorProps = {
   className?: string;
 };
 
+const CONTEXT_USAGE_POLL_INTERVAL_MS = 3000;
+
 const kNumberFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 1,
@@ -77,6 +79,32 @@ export function ContextUsageIndicator({
   const [maxContextSize, setMaxContextSize] = React.useState<number | null>(null);
   const [usedContextSize, setUsedContextSize] = React.useState<number | null>(null);
   const [assistantAgentKey, setAssistantAgentKey] = React.useState<string | null>(null);
+  const inFlightRef = React.useRef<Promise<void> | null>(null);
+  const pendingRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
+  const latestContextUsageRequestRef = React.useRef<{
+    client: typeof stream.client;
+    threadId: typeof stream.threadId;
+    assistantAgentKey: string | null;
+  }>({
+    client: stream.client,
+    threadId: stream.threadId,
+    assistantAgentKey,
+  });
+  const loadContextUsageRef = React.useRef<() => Promise<void>>(async () => {});
+
+  latestContextUsageRequestRef.current = {
+    client: stream.client,
+    threadId: stream.threadId,
+    assistantAgentKey,
+  };
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (!stream.client || !stream.assistantId) {
@@ -104,36 +132,106 @@ export function ContextUsageIndicator({
     };
   }, [stream.client, stream.assistantId]);
 
-  React.useEffect(() => {
-    if (!stream.client) {
-      setUsedContextSize(null);
-      return;
+  loadContextUsageRef.current = async () => {
+    if (inFlightRef.current) {
+      pendingRef.current = true;
+      return inFlightRef.current;
     }
-    if (!stream.threadId) {
-      setUsedContextSize(0);
-      return;
-    }
-    if (stream.isLoading) return;
 
-    let cancelled = false;
-    stream.client.threads.getContextUsage(
-            stream.threadId,
-            assistantAgentKey ? { agentKey: assistantAgentKey } : undefined,
-          )
-      .then((result) => normalizeContextSize(result?.usage?.context_tokens))
-      .then((result) => {
-        if (cancelled) return;
-        setUsedContextSize(result ?? 0);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn('[Chat] Failed to load thread context usage:', err);
-      });
+    inFlightRef.current = (async () => {
+      do {
+        pendingRef.current = false;
+
+        const {
+          client,
+          threadId,
+          assistantAgentKey: currentAssistantAgentKey,
+        } = latestContextUsageRequestRef.current;
+
+        if (!client) {
+          if (isMountedRef.current) {
+            setUsedContextSize(null);
+          }
+          return;
+        }
+
+        if (!threadId) {
+          if (isMountedRef.current) {
+            setUsedContextSize(0);
+          }
+          return;
+        }
+
+        try {
+          const result = await client.threads.getContextUsage(
+            threadId,
+            currentAssistantAgentKey ? { agentKey: currentAssistantAgentKey } : undefined,
+          );
+          const nextUsedContextSize =
+            normalizeContextSize(result?.usage?.context_tokens) ?? 0;
+
+          if (!isMountedRef.current) {
+            return;
+          }
+
+          if (
+            latestContextUsageRequestRef.current.client !== client ||
+            latestContextUsageRequestRef.current.threadId !== threadId ||
+            latestContextUsageRequestRef.current.assistantAgentKey !==
+              currentAssistantAgentKey
+          ) {
+            pendingRef.current = true;
+            continue;
+          }
+
+          setUsedContextSize(nextUsedContextSize);
+        } catch (err) {
+          if (!isMountedRef.current) {
+            return;
+          }
+
+          if (
+            latestContextUsageRequestRef.current.client !== client ||
+            latestContextUsageRequestRef.current.threadId !== threadId ||
+            latestContextUsageRequestRef.current.assistantAgentKey !==
+              currentAssistantAgentKey
+          ) {
+            pendingRef.current = true;
+            continue;
+          }
+
+          console.warn('[Chat] Failed to load thread context usage:', err);
+        }
+      } while (pendingRef.current);
+    })().finally(() => {
+      inFlightRef.current = null;
+    });
+
+    return inFlightRef.current;
+  };
+
+  React.useEffect(() => {
+    void loadContextUsageRef.current();
+
+    if (!stream.threadId || !stream.isLoading) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadContextUsageRef.current();
+    }, CONTEXT_USAGE_POLL_INTERVAL_MS);
 
     return () => {
-      cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [assistantAgentKey, stream.apiKey, stream.apiUrl, stream.client, stream.threadId, stream.isLoading]);
+  }, [
+    assistantAgentKey,
+    stream.apiKey,
+    stream.apiUrl,
+    stream.client,
+    stream.threadId,
+    stream.isLoading,
+  ]);
 
   if (
     typeof maxContextSize !== 'number' ||
