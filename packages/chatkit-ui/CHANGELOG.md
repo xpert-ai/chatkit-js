@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.0.19
+
+### Patch Changes
+
+- 7d74063: secret and organization id
+- beb9ac4: avatar
+- Updated dependencies [7d74063]
+  - @xpert-ai/chatkit-types@0.0.16
+
 ## 0.0.18
 
 ### Patch Changes

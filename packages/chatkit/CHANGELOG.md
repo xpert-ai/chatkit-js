@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.0.16
+
+### Patch Changes
+
+- 7d74063: secret and organization id
+
 ## 0.0.15
 
 ### Patch Changes
