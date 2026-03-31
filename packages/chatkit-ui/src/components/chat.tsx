@@ -974,17 +974,28 @@ export function Chat({
               selectedTool={selectedTool}
               disabled={stream.isLoading || missingConfig || isHistoryLoading}
             />
-            <input
-              type="text"
+            <textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter without Shift: submit form
+                // Shift+Enter: insert newline (default behavior)
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  if (!isSendDisabled) {
+                    handleSubmit(event as unknown as React.FormEvent<HTMLFormElement>);
+                  }
+                }
+              }}
               placeholder={inputPlaceholder}
               disabled={stream.isLoading || missingConfig || isHistoryLoading}
               className={cn(
                 'flex-1 bg-transparent text-sm text-foreground outline-none pr-2',
                 'placeholder:text-muted-foreground',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
+                'resize-none overflow-y-auto min-h-[24px] max-h-[120px]'
               )}
+              rows={1}
               autoComplete="off"
             />
             <SendButton
