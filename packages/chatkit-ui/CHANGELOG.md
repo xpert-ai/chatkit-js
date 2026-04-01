@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.0.20
+
+### Patch Changes
+
+- 6ac204e: org id and secret
+- Updated dependencies [6ac204e]
+  - @xpert-ai/chatkit-types@0.0.17
+
 ## 0.0.19
 
 ### Patch Changes

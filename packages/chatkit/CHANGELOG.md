@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.0.17
+
+### Patch Changes
+
+- 6ac204e: org id and secret
+
 ## 0.0.16
 
 ### Patch Changes
