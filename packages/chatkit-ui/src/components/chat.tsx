@@ -32,6 +32,7 @@ export type ChatProps = {
 };
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as string | undefined;
+const COMPOSER_INPUT_MAX_HEIGHT = 128;
 
 function formatMessageContent(content: Message['content'][number]): string {
   if (typeof content === 'string') {
@@ -136,6 +137,7 @@ export function Chat({
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const composerInputRef = React.useRef<HTMLTextAreaElement>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const forceFollowRef = React.useRef(false);
   const previousMessageCountRef = React.useRef(0);
@@ -321,6 +323,21 @@ export function Chat({
   const isSendDisabled =
     !trimmedDraft || stream.isLoading || missingConfig || isHistoryLoading || hasUploadingFiles;
 
+  const resizeComposerInput = React.useCallback(() => {
+    const textarea = composerInputRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_INPUT_MAX_HEIGHT);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+  }, []);
+
+  React.useEffect(() => {
+    resizeComposerInput();
+  }, [draft, resizeComposerInput]);
+
   React.useEffect(() => {
     if (missingConfig) return;
     void refreshThreads();
@@ -430,6 +447,25 @@ export function Chat({
 
   const handleAttachmentClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleComposerKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    if (event.shiftKey) {
+      return;
+    }
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    if (isSendDisabled) {
+      return;
+    }
+    event.currentTarget.form?.requestSubmit();
   };
 
   // Upload a single file to the server
@@ -986,11 +1022,11 @@ export function Chat({
           </div>
         )}
 
-        <form className="flex items-center" onSubmit={handleSubmit}>
+        <form className="flex items-end" onSubmit={handleSubmit}>
           {/* Capsule-shaped input container */}
           <div
             className={cn(
-              'flex flex-1 items-center gap-1 rounded-xl',
+              'flex flex-1 items-end gap-1 rounded-xl',
               'bg-background border border-border shadow-sm',
               'pl-1.5 pr-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
@@ -1005,18 +1041,19 @@ export function Chat({
               selectedTool={selectedTool}
               disabled={stream.isLoading || missingConfig || isHistoryLoading}
             />
-            <input
-              type="text"
+            <textarea
+              ref={composerInputRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              rows={1}
               placeholder={inputPlaceholder}
               disabled={stream.isLoading || missingConfig || isHistoryLoading}
               className={cn(
-                'flex-1 bg-transparent text-sm text-foreground outline-none pr-2',
+                'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
                 'placeholder:text-muted-foreground',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}
-              autoComplete="off"
             />
             <SendButton
               disabled={isSendDisabled}
