@@ -10,6 +10,7 @@
     "send": "Send message",
     "scrollToBottom": "Scroll to bottom",
     "retryUpload": "Retry upload",
+    "referencedCodeOnly": "Referenced code",
     "poweredBy": "Powered by Xpert AI",
     "errors": {
       "loadMessages": "Failed to load thread messages",
@@ -41,7 +42,8 @@
   },
   "composer": {
     "openMenu": "Open menu",
-    "addAttachment": "Add attachment"
+    "addAttachment": "Add attachment",
+    "removeReference": "Remove reference"
   },
   "sheet": {
     "close": "Close"

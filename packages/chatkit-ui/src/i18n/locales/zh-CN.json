@@ -10,6 +10,7 @@
     "send": "发送消息",
     "scrollToBottom": "回到底部",
     "retryUpload": "重新上传",
+    "referencedCodeOnly": "已引用代码",
     "poweredBy": "由 Xpert AI 驱动",
     "errors": {
       "loadMessages": "加载线程消息失败",
@@ -41,7 +42,8 @@
   },
   "composer": {
     "openMenu": "打开菜单",
-    "addAttachment": "添加附件"
+    "addAttachment": "添加附件",
+    "removeReference": "移除引用"
   },
   "sheet": {
     "close": "关闭"
