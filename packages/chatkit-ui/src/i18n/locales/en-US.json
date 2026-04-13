@@ -34,6 +34,8 @@
   "messageActions": {
     "copied": "Copied!",
     "copy": "Copy to clipboard",
+    "copyToComposer": "Copy and add to composer",
+    "copiedToComposer": "Added to composer",
     "regenerate": "Regenerate response"
   },
   "startScreen": {
