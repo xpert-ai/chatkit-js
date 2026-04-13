@@ -1,4 +1,5 @@
-import type { ChatKitOptions } from "./options";
+import type { ChatKitCodeReference } from './message';
+import type { ChatKitOptions } from './options';
 
 export type EventHandler<K extends keyof ChatKitEvents> = (
   event: ChatKitEvents[K],
@@ -10,7 +11,7 @@ export type SendUserMessageParams = {
   reply?: string;
   attachments?: Attachment[];
   newThread?: boolean;
-}
+};
 
 /**
  * strategies to host files before attaching them to messages.
@@ -93,9 +94,13 @@ export interface XpertAIChatKit extends HTMLElement {
 
   /** Sets the composer's content without sending a message. */
   setComposerValue(params: {
-    text: string;
+    text?: string;
     reply?: string;
     attachments?: Attachment[];
+    references?: ChatKitCodeReference[];
+    appendReferences?: boolean;
+    selectedToolId?: string | null;
+    selectedModelId?: string | null;
   }): Promise<void>;
 
   /**
