@@ -21,6 +21,7 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
 import { buildInjectedRequestOptions } from '../lib/request-options';
+import { useParentMessenger } from '../hooks/useParentMessenger';
 
 export type ChatProps = {
   className?: string;
@@ -78,6 +79,7 @@ export function Chat({
   const apiUrl = options?.api?.apiUrl || defaultApiUrl;
   const {setStream} = useStreamManager();
   const stream = useStreamContext();
+  const { isParentAvailable, sendEvent } = useParentMessenger();
 
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
@@ -535,6 +537,32 @@ export function Chat({
     setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
   };
 
+  const handleCopyToComposer = React.useCallback((content: string) => {
+    const nextText = content.trim();
+    if (!nextText) {
+      return;
+    }
+
+    if (isParentAvailable) {
+      sendEvent('public_event', [
+        'effect',
+        {
+          name: 'composer.copy_to_composer',
+          data: { content: nextText },
+        },
+      ]);
+      return;
+    }
+
+    setDraft((prev) => {
+      const previous = prev.trim();
+      if (!previous) {
+        return nextText;
+      }
+      return `${prev}\n\n${nextText}`;
+    });
+  }, [isParentAvailable, sendEvent]);
+
   const handlePromptClick = (prompt: string) => {
     if (missingConfig || stream.isLoading || isHistoryLoading) return;
 
@@ -838,6 +866,7 @@ export function Chat({
                       content={messageContent}
                       isAssistant={isAssistantMessage}
                       isStreaming={stream.isLoading && index === messages.length - 1}
+                      onCopyToComposer={handleCopyToComposer}
                       onRetry={
                         isAssistantMessage && !stream.isLoading && index === messages.length - 1
                           ? () => handleRetry(index)
