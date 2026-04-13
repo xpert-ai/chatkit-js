@@ -228,10 +228,12 @@ export function ParentMessengerProvider({
         const submittedInput = buildCodeReferencePrompt(prompt, references);
         const newMessage: Message & {
           references?: ReturnType<typeof normalizeCodeReferences>;
+          submittedInput?: string;
         } = {
           id: createMessageId(),
           type: 'human',
           content: prompt || (references.length > 0 ? 'Referenced code' : ''),
+          submittedInput,
           ...(references.length > 0 ? { references } : {}),
         };
         const requestOptions = buildInjectedRequestOptions({

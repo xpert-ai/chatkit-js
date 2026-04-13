@@ -38,6 +38,7 @@ import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
 import { buildInjectedRequestOptions } from '../lib/request-options';
 import {
+  buildHumanMessageInputPayload,
   buildCodeReferencePrompt,
   getCodeReferenceKey,
   getCodeReferenceLabel,
@@ -69,6 +70,7 @@ type UploadedMessageFile = {
 type HumanMessageWithMeta = Message & {
   attachments?: UploadedMessageFile[];
   references?: ChatKitCodeReference[];
+  submittedInput?: string;
 };
 
 function formatMessageContent(content: Message['content'][number]): string {
@@ -506,6 +508,7 @@ export function Chat({
       id: createMessageId(),
       type: 'human',
       content: displayContent,
+      submittedInput,
       ...(filesToSend ? { attachments: filesToSend } : {}),
       ...(referencesToSend ? { references: referencesToSend } : {}),
     };
@@ -775,11 +778,21 @@ export function Chat({
     const messagesUpToIndex = messages.slice(0, messageIndex);
     const lastHumanMessage = [...messagesUpToIndex]
       .reverse()
-      .find((m) => String(m.type) === 'human');
+      .find((message): message is HumanMessageWithMeta => String(message.type) === 'human');
+    const retryInput = lastHumanMessage
+      ? buildHumanMessageInputPayload({
+          content:
+            typeof lastHumanMessage.content === 'string'
+              ? lastHumanMessage.content
+              : '',
+          submittedInput: lastHumanMessage.submittedInput,
+          references: lastHumanMessage.references,
+        })
+      : null;
 
-    if (lastHumanMessage && typeof lastHumanMessage.content === 'string') {
+    if (retryInput) {
       stream.submit(
-        { input: { input: lastHumanMessage.content } },
+        { input: retryInput },
         {
           optimisticValues: (prev) => {
             // Remove the AI message that we're retrying

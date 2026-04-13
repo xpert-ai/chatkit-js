@@ -157,3 +157,34 @@ export function buildCodeReferencePrompt(
 
   return `${trimmedPrompt}\n\nReferenced code:\n${referenceBody}`;
 }
+
+export type HumanMessageInputPayloadSource = {
+  content?: string | null;
+  submittedInput?: string | null;
+  references?: ChatKitCodeReference[];
+};
+
+export function buildHumanMessageInputPayload(
+  source: HumanMessageInputPayloadSource,
+): { input: string; references?: ChatKitCodeReference[] } | null {
+  const references = normalizeCodeReferences(source.references);
+  const submittedInput =
+    typeof source.submittedInput === 'string' ? source.submittedInput.trim() : '';
+
+  if (submittedInput) {
+    return {
+      input: submittedInput,
+      ...(references.length > 0 ? { references } : {}),
+    };
+  }
+
+  const input = buildCodeReferencePrompt(source.content ?? '', references);
+  if (!input) {
+    return null;
+  }
+
+  return {
+    input,
+    ...(references.length > 0 ? { references } : {}),
+  };
+}

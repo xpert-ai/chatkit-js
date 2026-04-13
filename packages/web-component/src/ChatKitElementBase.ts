@@ -26,6 +26,11 @@ import {
   fromPossibleFrameSafeError,
 } from '@xpert-ai/chatkit-web-shared';
 
+const HTMLElementBase =
+  typeof HTMLElement === 'undefined'
+    ? (class {} as typeof HTMLElement)
+    : HTMLElement;
+
 // Compute inner options by removing methods (to make options serializable)
 function getInnerOptions(options: ChatKitOptions): ChatKitInnerOptions {
   return removeMethods(options) as ChatKitInnerOptions;
@@ -71,7 +76,7 @@ interface ChatKitBaseElementEventMap {
   }>;
 }
 
-export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
+export abstract class ChatKitElementBase<TRawOptions> extends HTMLElementBase {
   protected profile: ChatKitProfile;
   protected capabilities: Capabilities;
   protected abstract sanitizeOptions(options: TRawOptions): ChatKitOptions;

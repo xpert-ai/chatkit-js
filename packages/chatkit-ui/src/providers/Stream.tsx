@@ -57,6 +57,7 @@ import { normalizeCodeReferences } from '../lib/code-references';
 type ChatKitAIMessage = Message & {
   executionId?: string;
   references?: ChatKitCodeReference[];
+  submittedInput?: string;
 };
 
 export type StateType = { messages: ChatKitAIMessage[] };
@@ -258,10 +259,15 @@ function extractCodeReferences(
 
 function mapChatMessageToUiMessage(message: ChatMessage): ChatKitAIMessage {
   const references = extractCodeReferences(message);
+  const content = message.content ?? '';
+  const type = normalizeRoleToMessageType(message.role);
   return {
     id: message.id ?? createMessageId(),
-    type: normalizeRoleToMessageType(message.role),
-    content: message.content ?? '',
+    type,
+    content,
+    ...(type === 'human' && typeof content === 'string'
+      ? { submittedInput: content }
+      : {}),
     ...(references ? { references } : {}),
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
