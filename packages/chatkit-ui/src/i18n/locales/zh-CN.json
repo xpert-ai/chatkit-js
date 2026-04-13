@@ -34,6 +34,8 @@
   "messageActions": {
     "copied": "已复制！",
     "copy": "复制到剪贴板",
+    "copyToComposer": "复制并添加到输入框",
+    "copiedToComposer": "已添加到输入框",
     "regenerate": "重新生成回复"
   },
   "startScreen": {
