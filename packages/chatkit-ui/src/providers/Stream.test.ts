@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
   ChatMessageTypeEnum,
   type TThreadContextUsageEvent,
@@ -7,7 +8,14 @@ import {
 
 import { normalizeClientSecretResult } from '../lib/client-secret';
 import { createLangGraphEventState } from './langGraphEventMapper';
-import { applyStreamEvent, createFetchWithClientSecretRefresh } from './Stream';
+import {
+  applyStreamEvent,
+  buildSteerFollowUpRunInput,
+  createFetchWithClientSecretRefresh,
+  getAutoDrainQueuedFollowUpIds,
+  getNextAutoQueuedFollowUp,
+  getPendingSteerFollowUpIds,
+} from './Stream';
 
 describe('applyStreamEvent', () => {
   it('routes thread context usage chat events to realtime usage state without appending messages', () => {
@@ -60,6 +68,379 @@ describe('applyStreamEvent', () => {
     );
     expect(setValues).not.toHaveBeenCalled();
     expect(setError).not.toHaveBeenCalled();
+  });
+
+  it('routes follow-up consumed chat events to the steer callback without appending messages', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+    const onFollowUpConsumed = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
+            mode: 'steer',
+            messageIds: ['server-message-1'],
+            clientMessageIds: ['client-message-1'],
+            executionId: 'run-1',
+            visibleAt: '2026-03-12T00:00:00.000Z',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      onFollowUpConsumed,
+    );
+
+    expect(onFollowUpConsumed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
+        mode: 'steer',
+        clientMessageIds: ['client-message-1'],
+      }),
+    );
+    expect(setValues).not.toHaveBeenCalled();
+    expect(setError).not.toHaveBeenCalled();
+  });
+
+  it('does not treat tool end as steer consumption', () => {
+    const onFollowUpConsumed = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_TOOL_END,
+          data: { id: 'tool-1' },
+        }),
+      },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      onFollowUpConsumed,
+    );
+
+    expect(onFollowUpConsumed).not.toHaveBeenCalled();
+  });
+
+  it('appends streamed assistant text to the latest assistant message instead of a trailing steer user message', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'run-1',
+          content: 'first chunk',
+        },
+        {
+          id: 'user-steer-1',
+          type: 'human',
+          content: 'follow-up',
+          followUpMode: 'steer' as const,
+          followUpStatus: 'consumed' as const,
+        },
+      ],
+    };
+    const setValues = vi.fn((updater) => {
+      state =
+        typeof updater === 'function'
+          ? updater(state)
+          : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: ' second chunk',
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+    );
+
+    expect(state.messages[0]).toMatchObject({
+      id: 'ai-1',
+      content: 'first chunk second chunk',
+    });
+    expect(state.messages[1]).toMatchObject({
+      id: 'user-steer-1',
+      content: 'follow-up',
+    });
+  });
+
+  it('starts a new assistant message after consumed steer before appending reply text', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'run-1',
+          content: 'first answer',
+        },
+        {
+          id: 'user-steer-1',
+          type: 'human',
+          content: 'follow-up',
+          followUpMode: 'steer' as const,
+          followUpStatus: 'consumed' as const,
+        },
+      ],
+    };
+    const setValues = vi.fn((updater) => {
+      state =
+        typeof updater === 'function'
+          ? updater(state)
+          : updater;
+    });
+    const consumeFreshAssistantSplit = vi
+      .fn<() => boolean>()
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false);
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: 'new answer chunk',
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      consumeFreshAssistantSplit,
+    );
+
+    expect(consumeFreshAssistantSplit).toHaveBeenCalledTimes(1);
+    expect(state.messages).toHaveLength(3);
+    expect(state.messages[0]).toMatchObject({
+      id: 'ai-1',
+      content: 'first answer',
+    });
+    expect(state.messages[1]).toMatchObject({
+      id: 'user-steer-1',
+      content: 'follow-up',
+    });
+    expect(state.messages[2]).toMatchObject({
+      type: 'ai',
+      content: 'new answer chunk',
+    });
+  });
+});
+
+describe('buildSteerFollowUpRunInput', () => {
+  it('builds an explicit follow_up request for xpert steer consumption', () => {
+    const payload = buildSteerFollowUpRunInput({
+      request: {
+        id: 'client-message-1',
+        input: {
+          input: 'Please change direction',
+          files: [{ id: 'file-1' }] as unknown as [],
+        },
+        state: {
+          human: {
+            input: 'Please change direction',
+          },
+        },
+        executionId: 'run-1',
+        followUpMode: 'steer',
+      },
+      conversationId: 'conversation-1',
+      targetExecutionId: 'run-1',
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'run-1',
+          content: 'ongoing answer',
+        },
+      ],
+    });
+
+    expect(payload).toEqual({
+      action: 'follow_up',
+      conversationId: 'conversation-1',
+      mode: 'steer',
+      message: {
+        clientMessageId: 'client-message-1',
+        input: {
+          input: 'Please change direction',
+          files: [{ id: 'file-1' }],
+        },
+      },
+      target: {
+        aiMessageId: 'ai-1',
+        executionId: 'run-1',
+      },
+      state: {
+        human: {
+          input: 'Please change direction',
+        },
+      },
+    });
+  });
+
+  it('returns null when steer follow-up is missing conversation id or text', () => {
+    expect(
+      buildSteerFollowUpRunInput({
+        request: {
+          id: 'client-message-1',
+          input: {
+            input: '   ',
+          },
+          followUpMode: 'steer',
+        },
+        conversationId: 'conversation-1',
+      }),
+    ).toBeNull();
+
+    expect(
+      buildSteerFollowUpRunInput({
+        request: {
+          id: 'client-message-1',
+          input: {
+            input: 'valid text',
+          },
+          followUpMode: 'steer',
+        },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('getNextAutoQueuedFollowUp', () => {
+  it('returns only queue follow-ups that are marked for auto draining', () => {
+    expect(
+      getNextAutoQueuedFollowUp([
+        {
+          id: 'manual-queue',
+          clientMessageId: 'manual-queue',
+          mode: 'queue',
+          request: {
+            id: 'manual-queue',
+            input: { input: 'manual queue' },
+            followUpMode: 'queue',
+          },
+          createdAt: 1,
+        },
+        {
+          id: 'steer',
+          clientMessageId: 'steer',
+          mode: 'steer',
+          request: {
+            id: 'steer',
+            input: { input: 'steer' },
+            followUpMode: 'steer',
+          },
+          createdAt: 2,
+        },
+        {
+          id: 'auto-queue',
+          clientMessageId: 'auto-queue',
+          mode: 'queue',
+          request: {
+            id: 'auto-queue',
+            input: { input: 'auto queue' },
+            followUpMode: 'queue',
+          },
+          createdAt: 3,
+        },
+      ], ['auto-queue']),
+    ).toMatchObject({
+      id: 'auto-queue',
+      mode: 'queue',
+    });
+  });
+});
+
+describe('getAutoDrainQueuedFollowUpIds', () => {
+  it('returns queue follow-up ids so persisted pending items auto drain after load', () => {
+    expect(
+      getAutoDrainQueuedFollowUpIds([
+        {
+          id: 'queue-1',
+          clientMessageId: 'queue-1',
+          mode: 'queue',
+          request: {
+            id: 'queue-1',
+            input: { input: 'queued' },
+            followUpMode: 'queue',
+          },
+          createdAt: 1,
+        },
+        {
+          id: 'steer-1',
+          clientMessageId: 'steer-1',
+          mode: 'steer',
+          request: {
+            id: 'steer-1',
+            input: { input: 'steered' },
+            followUpMode: 'steer',
+          },
+          createdAt: 2,
+        },
+      ]),
+    ).toEqual(['queue-1']);
+  });
+});
+
+describe('getPendingSteerFollowUpIds', () => {
+  it('returns stale steer ids so the stream can auto-queue them when a run finishes', () => {
+    expect(
+      getPendingSteerFollowUpIds([
+        {
+          id: 'queue-1',
+          clientMessageId: 'queue-1',
+          mode: 'queue',
+          request: {
+            id: 'queue-1',
+            input: { input: 'queued' },
+            followUpMode: 'queue',
+          },
+          createdAt: 1,
+        },
+        {
+          id: 'steer-1',
+          clientMessageId: 'steer-1',
+          mode: 'steer',
+          request: {
+            id: 'steer-1',
+            input: { input: 'steered' },
+            followUpMode: 'steer',
+          },
+          createdAt: 2,
+        },
+      ]),
+    ).toEqual(['steer-1']);
   });
 });
 

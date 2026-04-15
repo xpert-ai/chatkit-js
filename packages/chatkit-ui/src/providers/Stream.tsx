@@ -18,7 +18,20 @@ import {
 } from '@xpert-ai/xpert-sdk';
 import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
-import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type TMessageContent, type ChatEventEnvelope, type TMessageContentComplex, type TMessageContentComponent, type TThreadContextUsageEvent } from '@xpert-ai/chatkit-types';
+import {
+  ChatMessageEventTypeEnum,
+  ChatMessageTypeEnum,
+  type ClientToolMessageInput,
+  type ClientToolRequest,
+  type ClientToolResponse,
+  type FollowUpBehavior,
+  type TChatRequest,
+  type TMessageContent,
+  type ChatEventEnvelope,
+  type TMessageContentComplex,
+  type TMessageContentComponent,
+  type TThreadContextUsageEvent,
+} from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import {
   normalizeClientSecretResult,
@@ -39,8 +52,45 @@ import {
   parseThreadContextUsageEvent,
   type ThreadContextUsageByAgentKey,
 } from '../lib/thread-context-usage';
+import {
+  parseFollowUpConsumedEvent,
+  resolveFollowUpConsumedIds,
+} from '../lib/follow-up-consumed';
+import {
+  getAutoDrainQueuedFollowUpIds,
+  getPendingSteerFollowUpIds,
+  buildSteerFollowUpRunInput,
+  createPendingFollowUp,
+  extractRequestHumanInput,
+  getNextAutoQueuedFollowUp,
+  isHiddenPendingFollowUpMessage,
+  mapPersistedPendingFollowUp,
+  normalizeFollowUpBehavior,
+  pendingFollowUpToUiMessage,
+  readPersistedFollowUpBehavior,
+  toQueuedSendRequest,
+  type FollowUpStatus,
+  type PendingFollowUp,
+  writePersistedFollowUpBehavior,
+} from '../lib/follow-ups';
 
-type ChatKitAIMessage = Message & { executionId?: string };
+export {
+  getAutoDrainQueuedFollowUpIds,
+  buildSteerFollowUpRunInput,
+  getPendingSteerFollowUpIds,
+  getNextAutoQueuedFollowUp,
+} from '../lib/follow-ups';
+
+type ChatKitAIMessage = Message & {
+  executionId?: string;
+  followUpMode?: FollowUpBehavior;
+  followUpStatus?: FollowUpStatus;
+  targetExecutionId?: string | null;
+  visibleAt?: string | null;
+};
+
+type ChatKitMessageContentPart =
+  NonNullable<Exclude<ChatKitAIMessage['content'], string>>[number];
 
 export type StateType = { messages: ChatKitAIMessage[] };
 
@@ -57,6 +107,7 @@ export type StreamSubmitOptions = {
   threadId?: string;
   newThread?: boolean;
   joinExistingThread?: boolean;
+  followUpMode?: FollowUpBehavior;
 };
 
 export type StreamContextType = {
@@ -69,6 +120,8 @@ export type StreamContextType = {
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
   values: StateType;
   messages: ChatKitAIMessage[];
+  pendingFollowUps: PendingFollowUp[];
+  followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
   isReady: boolean;
   error: unknown;
@@ -84,6 +137,11 @@ export type StreamContextType = {
     initialMessages?: ChatKitAIMessage[],
     options?: { suppressThreadChange?: boolean },
   ) => void;
+  setFollowUpBehavior: (behavior: FollowUpBehavior) => void;
+  removePendingFollowUp: (id: string) => void;
+  canSendPendingFollowUpNow: (id: string) => boolean;
+  sendPendingFollowUpNow: (id: string) => Promise<void>;
+  promotePendingFollowUpToSteer: (id: string) => Promise<void>;
   setThreadId: (threadId: string | null) => void;
 };
 
@@ -186,14 +244,27 @@ function normalizeRoleToMessageType(role?: string): Message['type'] {
   return 'ai';
 }
 
+type PersistedChatMessage = ChatMessage & {
+  followUpMode?: FollowUpBehavior;
+  followUpStatus?: FollowUpStatus;
+  targetExecutionId?: string | null;
+  visibleAt?: string | null;
+  thirdPartyMessage?: unknown;
+};
 
-function mapChatMessageToUiMessage(message: ChatMessage): ChatKitAIMessage {
+function mapChatMessageToUiMessage(message: PersistedChatMessage): ChatKitAIMessage {
   return {
     id: message.id ?? createMessageId(),
     type: normalizeRoleToMessageType(message.role),
     content: message.content ?? '',
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
+    ...(message.followUpMode ? { followUpMode: message.followUpMode } : {}),
+    ...(message.followUpStatus ? { followUpStatus: message.followUpStatus } : {}),
+    ...(message.targetExecutionId !== undefined
+      ? { targetExecutionId: message.targetExecutionId }
+      : {}),
+    ...(message.visibleAt !== undefined ? { visibleAt: message.visibleAt } : {}),
   } as ChatKitAIMessage;
 }
 
@@ -235,6 +306,16 @@ function isAssistantMessage(message: ChatKitAIMessage | undefined) {
   );
 }
 
+function findLatestAssistantMessageIndex(messages: ChatKitAIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isAssistantMessage(messages[index])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function appendMessages(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   nextMessages: ChatKitAIMessage[],
@@ -242,9 +323,74 @@ function appendMessages(
   if (nextMessages.length === 0) return;
   setValues((prev) => ({
     ...prev,
-    messages: [...(prev.messages ?? []), ...nextMessages],
+    messages: upsertMessages(prev.messages ?? [], nextMessages),
   }));
 }
+
+function upsertMessages(
+  existingMessages: ChatKitAIMessage[],
+  nextMessages: ChatKitAIMessage[],
+) {
+  const messages = [...existingMessages];
+  const indexes = new Map<string, number>();
+
+  messages.forEach((message, index) => {
+    if (message.id) {
+      indexes.set(String(message.id), index);
+    }
+  });
+
+  for (const message of nextMessages) {
+    const id = message.id ? String(message.id) : null;
+    if (id && indexes.has(id)) {
+      messages[indexes.get(id)!] = {
+        ...messages[indexes.get(id)!],
+        ...message,
+      };
+      continue;
+    }
+    if (id) {
+      indexes.set(id, messages.length);
+    }
+    messages.push(message);
+  }
+
+  return messages;
+}
+
+function startFreshAssistantMessageIfNeeded(
+  setValues: React.Dispatch<React.SetStateAction<StateType>>,
+  shouldStartFreshAssistant: boolean,
+) {
+  if (!shouldStartFreshAssistant) {
+    return;
+  }
+
+  setValues((prev) => {
+    const messages = prev.messages ?? [];
+    const lastMessage = messages[messages.length - 1];
+    if (
+      isAssistantMessage(lastMessage) &&
+      ((typeof lastMessage.content === 'string' && lastMessage.content.length === 0) ||
+        lastMessage.content == null)
+    ) {
+      return prev;
+    }
+
+    return {
+      ...prev,
+      messages: [
+        ...messages,
+        {
+          id: createMessageId(),
+          type: 'ai',
+          content: '',
+        },
+      ],
+    };
+  });
+}
+
 
 function appendStreamText(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
@@ -253,11 +399,12 @@ function appendStreamText(
   if (!text) return;
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    const last = messages[messages.length - 1];
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    const last = lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
 
     if (last && isAssistantMessage(last) && typeof last.content === 'string') {
       const nextMessages = [...messages];
-      nextMessages[messages.length - 1] = {
+      nextMessages[lastAssistantIndex] = {
         ...last,
         content: last.content + text,
       };
@@ -280,7 +427,8 @@ function appendStreamTextToLatest(
   if (!text) return;
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    if (messages.length === 0) {
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    if (lastAssistantIndex < 0) {
       const newMessage: ChatKitAIMessage = {
         id: createMessageId(),
         type: 'ai',
@@ -289,12 +437,12 @@ function appendStreamTextToLatest(
       return { ...prev, messages: [newMessage] };
     }
 
-    const last = messages[messages.length - 1];
+    const last = messages[lastAssistantIndex];
     let nextContent: ChatKitAIMessage['content'];
     if (typeof last.content === 'string') {
       nextContent = last.content + text;
     } else if (Array.isArray(last.content)) {
-      nextContent = [...last.content, text];
+      nextContent = [...last.content, { type: 'text', text } as ChatKitMessageContentPart];
     } else if (last.content == null) {
       nextContent = text;
     } else {
@@ -302,7 +450,7 @@ function appendStreamTextToLatest(
     }
 
     const nextMessages = [...messages];
-    nextMessages[messages.length - 1] = { ...last, content: nextContent };
+    nextMessages[lastAssistantIndex] = { ...last, content: nextContent };
     return { ...prev, messages: nextMessages };
   });
 }
@@ -315,8 +463,19 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   if (Array.isArray(data) || typeof data !== 'object') return null;
 
   const raw = data as Record<string, unknown>;
-  const content =
-    'text' in raw ? (raw as { text?: Message['content'] }).text : data;
+  const content: ChatKitAIMessage['content'] = (() => {
+    if ('text' in raw) {
+      const textContent = (raw as { text?: Message['content'] }).text;
+      if (typeof textContent === 'string' || Array.isArray(textContent)) {
+        return textContent;
+      }
+      if (textContent == null) {
+        return '';
+      }
+    }
+
+    return [raw as unknown as ChatKitMessageContentPart];
+  })();
   const type =
     normalizeMessageType(raw.type) ??
     normalizeMessageType(raw.role) ??
@@ -359,9 +518,10 @@ function updateLatestMessage(
 ) {
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    if (messages.length === 0) return prev;
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    if (lastAssistantIndex < 0) return prev;
     const nextMessages = [...messages];
-    nextMessages[messages.length - 1] = updater(nextMessages[messages.length - 1]);
+    nextMessages[lastAssistantIndex] = updater(nextMessages[lastAssistantIndex]);
     return { ...prev, messages: nextMessages };
   });
 }
@@ -476,6 +636,8 @@ export function applyStreamEvent(
   eventContext?: LangGraphEventContext,
   onExecutionId?: (executionId: string | undefined) => void,
   onThreadContextUsage?: (event: TThreadContextUsageEvent) => void,
+  onFollowUpConsumed?: (event: ReturnType<typeof parseFollowUpConsumedEvent>) => void,
+  consumeFreshAssistantSplit?: () => boolean,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -496,7 +658,9 @@ export function applyStreamEvent(
   }
 
   if (typeof parsed === 'string') {
-    appendStreamText(setValues, parsed);
+    const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
+    appendStreamTextToLatest(setValues, parsed);
     return;
   }
 
@@ -516,6 +680,8 @@ export function applyStreamEvent(
 
   if (payloadType === ChatMessageTypeEnum.MESSAGE) {
     if (typeof payload.data === 'string') {
+      const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+      startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
       appendStreamTextToLatest(setValues, payload.data);
       return;
     }
@@ -524,6 +690,8 @@ export function applyStreamEvent(
     if (message.type === 'component') {
       sendEvent('public_event', ['log', {...message, name: 'component'}]);
     }
+    const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
     appendMessageComponent(setValues, message);
     return;
   }
@@ -566,21 +734,26 @@ export function applyStreamEvent(
         };
         setValues((prev) => {
           const messages = prev.messages ?? [];
-          const last = messages[messages.length - 1];
-          if (last && isAssistantMessage(last)) {
+          const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+          const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+          const last = lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
+          if (!shouldStartFreshAssistant && last && isAssistantMessage(last)) {
             if (executionId && last.executionId === executionId) {
               const nextMessages = [...messages];
-              const nextLast: ChatKitAIMessage = { ...last, executionId };
-              if (meta.id) nextLast.id = meta.id;
-              if (meta.type) nextLast.type = meta.type;
+              const nextLast: ChatKitAIMessage = {
+                ...last,
+                executionId,
+                ...(meta.id ? { id: meta.id } : {}),
+                ...(meta.type ? { type: meta.type } : {}),
+              };
               if (
                 meta.content !== undefined &&
                 (last.content == null ||
-                  (typeof last.content === 'string' && last.content.length === 0))
+                (typeof last.content === 'string' && last.content.length === 0))
               ) {
                 nextLast.content = meta.content;
               }
-              nextMessages[messages.length - 1] = nextLast;
+              nextMessages[lastAssistantIndex] = nextLast;
               return { ...prev, messages: nextMessages };
             }
             if (
@@ -588,7 +761,7 @@ export function applyStreamEvent(
               last.content.length === 0
             ) {
               const nextMessages = [...messages];
-              nextMessages[messages.length - 1] = message;
+              nextMessages[lastAssistantIndex] = message;
               return { ...prev, messages: nextMessages };
             }
           }
@@ -626,6 +799,12 @@ export function applyStreamEvent(
         const contextUsageEvent = parseThreadContextUsageEvent(payload.data);
         if (contextUsageEvent) {
           onThreadContextUsage?.(contextUsageEvent);
+          break;
+        }
+
+        const followUpConsumedEvent = parseFollowUpConsumedEvent(payload.data);
+        if (followUpConsumedEvent) {
+          onFollowUpConsumed?.(followUpConsumedEvent);
         }
         break;
       }
@@ -636,6 +815,8 @@ export function applyStreamEvent(
   }
 
   if ('data' in payload) {
+    const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
     applyMessageData(setValues, payload.data);
     return;
   }
@@ -663,6 +844,12 @@ const StreamSession = ({
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>([]);
+  const [autoQueuedFollowUpIds, setAutoQueuedFollowUpIds] = useState<string[]>([]);
+  const [followUpBehavior, setFollowUpBehaviorState] = useState<FollowUpBehavior>(() =>
+    readPersistedFollowUpBehavior(assistantId, organizationId) ??
+    'queue',
+  );
   const [contextUsageByAgentKey, setContextUsageByAgentKey] =
     useState<ThreadContextUsageByAgentKey>({});
   const [runtimeClientSecret, setRuntimeClientSecret] = useState(apiKey);
@@ -670,7 +857,12 @@ const StreamSession = ({
     string | undefined
   >(organizationId);
   const abortRef = useRef<AbortController | null>(null);
+  const isLoadingRef = useRef(false);
+  const valuesRef = useRef<StateType>(values);
   const submitRef = useRef<StreamContextType['submit'] | null>(null);
+  const pendingFollowUpsRef = useRef<PendingFollowUp[]>([]);
+  const autoQueuedFollowUpIdsRef = useRef<Set<string>>(new Set());
+  const queueDrainPromiseRef = useRef<Promise<void> | null>(null);
   const runtimeClientSecretRef = useRef(apiKey);
   const runtimeOrganizationIdRef = useRef<string | undefined>(organizationId);
   const refreshClientSecretPromiseRef = useRef<
@@ -681,6 +873,8 @@ const StreamSession = ({
   >({});
   const lastExecutionIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  const shouldStartFreshAssistantMessageAfterSteerRef = useRef(false);
   // Track the previous threadId so we only reset SSE state on actual thread changes.
   const lastThreadIdRef = useRef<string | null>(threadId ?? null);
   const suppressThreadChangeRef = useRef(false);
@@ -693,6 +887,29 @@ const StreamSession = ({
     setRuntimeClientSecret(apiKey);
     setRuntimeOrganizationId(nextOrganizationId || undefined);
   }, [apiKey, organizationId]);
+
+  useEffect(() => {
+    pendingFollowUpsRef.current = pendingFollowUps;
+  }, [pendingFollowUps]);
+
+  useEffect(() => {
+    autoQueuedFollowUpIdsRef.current = new Set(autoQueuedFollowUpIds);
+  }, [autoQueuedFollowUpIds]);
+
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+
+  useEffect(() => {
+    setFollowUpBehaviorState(
+      readPersistedFollowUpBehavior(assistantId, organizationId) ??
+        'queue',
+    );
+  }, [assistantId, organizationId]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   // Notify the host page when the active thread changes. The host maps
   // `public_event` -> `chatkit.<event>` so sending ['thread.change', {...}]
@@ -814,6 +1031,108 @@ const StreamSession = ({
     }
   }, [client, threadId]);
 
+  const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setAutoQueuedFollowUpIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (id) {
+          next.add(id);
+        }
+      }
+      return [...next];
+    });
+  }, []);
+
+  const removeAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setAutoQueuedFollowUpIds((prev) => prev.filter((id) => !idSet.has(id)));
+  }, []);
+
+  const removePendingFollowUps = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setPendingFollowUps((prev) => prev.filter((item) => !idSet.has(item.id)));
+    removeAutoQueuedFollowUpIds(ids);
+  }, [removeAutoQueuedFollowUpIds]);
+
+  const removePendingFollowUp = useCallback((id: string) => {
+    if (!id) return;
+    const targetItem = pendingFollowUpsRef.current.find((item) => item.id === id);
+    if (!targetItem || targetItem.mode !== 'queue') {
+      return;
+    }
+    removePendingFollowUps([id]);
+  }, [removePendingFollowUps]);
+
+  const setFollowUpBehavior = useCallback((behavior: FollowUpBehavior) => {
+    if (followUpBehavior === behavior) {
+      return;
+    }
+
+    setFollowUpBehaviorState(behavior);
+    writePersistedFollowUpBehavior(behavior, assistantId, organizationId);
+  }, [assistantId, followUpBehavior, organizationId]);
+
+  const markPendingFollowUpsAsQueued = useCallback((
+    ids: string[],
+    options?: { autoDrain?: boolean },
+  ) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setPendingFollowUps((prev) =>
+      prev.map((item) =>
+        idSet.has(item.id)
+          ? {
+              ...item,
+              mode: 'queue' as const,
+              request: {
+                ...item.request,
+                followUpMode: 'queue',
+              },
+            }
+          : item,
+      ),
+    );
+    if (options?.autoDrain === true) {
+      addAutoQueuedFollowUpIds(ids);
+    } else if (options?.autoDrain === false) {
+      removeAutoQueuedFollowUpIds(ids);
+    }
+  }, [addAutoQueuedFollowUpIds, removeAutoQueuedFollowUpIds]);
+
+  const insertPendingFollowUpsIntoTranscript = useCallback((
+    items: PendingFollowUp[],
+    visibleAt?: string | null,
+  ) => {
+    const nextMessages = items
+      .map((item) => pendingFollowUpToUiMessage(item, visibleAt))
+      .filter((item): item is NonNullable<ReturnType<typeof pendingFollowUpToUiMessage>> => Boolean(item));
+    appendMessages(setValues, nextMessages as ChatKitAIMessage[]);
+  }, []);
+
+  const flushSteerFollowUps = useCallback((ids: string[], visibleAt?: string | null) => {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const idSet = new Set(ids);
+    const steerItems = pendingFollowUpsRef.current
+      .filter(
+        (item) =>
+          item.mode === 'steer' &&
+          (idSet.has(item.id) || idSet.has(item.clientMessageId)),
+      )
+      .sort((a, b) => a.createdAt - b.createdAt);
+    if (steerItems.length === 0) {
+      return;
+    }
+
+    insertPendingFollowUpsIntoTranscript(steerItems, visibleAt);
+    removePendingFollowUps(steerItems.map((item) => item.id));
+  }, [insertPendingFollowUpsIntoTranscript, removePendingFollowUps]);
+
   const loadConversationMessages = useCallback(
     async (recordId: string) => {
       if (!apiUrl || !runtimeClientSecret.trim()) {
@@ -824,11 +1143,21 @@ const StreamSession = ({
       } catch {
         // ignore stop errors from an already-idle stream
       }
+      conversationIdRef.current = recordId;
       const response = await client.conversations.listMessages(recordId, {
         limit: DEFAULT_HISTORY_LIMIT,
         offset: 0,
       });
-      const sorted = sortMessagesByCreatedAt(response.items ?? []);
+      const persistedMessages = (response.items as PersistedChatMessage[] | undefined) ?? [];
+      const persistedPendingFollowUps = persistedMessages
+        .filter((message) => isHiddenPendingFollowUpMessage(message))
+        .map((message) => mapPersistedPendingFollowUp(message))
+        .filter((item): item is PendingFollowUp => Boolean(item));
+      setAutoQueuedFollowUpIds(getAutoDrainQueuedFollowUpIds(persistedPendingFollowUps));
+      setPendingFollowUps(persistedPendingFollowUps);
+      const sorted = sortMessagesByCreatedAt(
+        persistedMessages.filter((message) => !isHiddenPendingFollowUpMessage(message)),
+      );
       const mapped = sorted.map(mapChatMessageToUiMessage);
       setValues({ messages: mapped ?? [] });
       return mapped as ChatKitAIMessage[];
@@ -845,8 +1174,12 @@ const StreamSession = ({
     abortRef.current = null;
     setIsLoading(false);
     setError(null);
+    setPendingFollowUps([]);
+    setAutoQueuedFollowUpIds([]);
     setContextUsageByAgentKey({});
     setValues({ messages: initialMessages ?? [] });
+    conversationIdRef.current = null;
+    shouldStartFreshAssistantMessageAfterSteerRef.current = false;
     lastExecutionIdRef.current = null;
     lastEventIdRef.current = null;
     if (newThreadId !== undefined) {
@@ -902,6 +1235,195 @@ const StreamSession = ({
     },
     [isParentAvailable, sendCommand, setError],
   );
+
+  const resolveConversationId = useCallback(
+    async (nextThreadId: string) => {
+      if (!nextThreadId) {
+        return null;
+      }
+
+      const cachedConversationId = conversationIdRef.current?.trim();
+      if (cachedConversationId) {
+        return cachedConversationId;
+      }
+
+      const conversationResult = await client.conversations.search({
+        where: { threadId: nextThreadId },
+        limit: 1,
+      });
+      const conversationId = conversationResult.items?.[0]?.id?.trim() ?? null;
+      conversationIdRef.current = conversationId;
+      return conversationId;
+    },
+    [client],
+  );
+
+  const sendSteerFollowUp = useCallback(
+    async (
+      nextThreadId: string,
+      input: TChatRequest,
+      options?: StreamSubmitOptions,
+    ) => {
+      const normalizedRequest = normalizeRequestContextAndConfig({
+        context: options?.context,
+        config: options?.config,
+      });
+      const conversationId = await resolveConversationId(nextThreadId);
+      const explicitFollowUpInput = buildSteerFollowUpRunInput({
+        request: input,
+        conversationId,
+        targetExecutionId:
+          (typeof input.executionId === 'string' && input.executionId.trim()) ||
+          lastExecutionIdRef.current,
+        messages: valuesRef.current.messages ?? [],
+      });
+
+      if (!explicitFollowUpInput) {
+        throw new Error('Missing conversation context for steer follow-up');
+      }
+
+      await client.runs.create(nextThreadId, assistantId, {
+        input: explicitFollowUpInput,
+        context: normalizedRequest.context,
+        config: normalizedRequest.config as Config | undefined,
+      });
+    },
+    [assistantId, client, resolveConversationId],
+  );
+
+  const promotePendingFollowUpToSteer = useCallback(async (id: string) => {
+    if (!id || !isLoadingRef.current) {
+      return;
+    }
+
+    const activeThreadId = threadId ?? null;
+    if (!activeThreadId) {
+      return;
+    }
+
+    const currentItem = pendingFollowUpsRef.current.find(
+      (item) => item.id === id && item.mode === 'queue',
+    );
+    if (!currentItem) {
+      return;
+    }
+    removeAutoQueuedFollowUpIds([id]);
+
+    const targetExecutionId =
+      lastExecutionIdRef.current ??
+      currentItem.request.executionId ??
+      currentItem.targetExecutionId ??
+      undefined;
+
+    const nextRequest: TChatRequest = {
+      ...currentItem.request,
+      ...(targetExecutionId ? { executionId: targetExecutionId } : {}),
+      followUpMode: 'steer',
+    };
+
+    setPendingFollowUps((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              mode: 'steer',
+              request: nextRequest,
+              targetExecutionId: targetExecutionId ?? null,
+            }
+          : item,
+      ),
+    );
+
+    try {
+      await sendSteerFollowUp(activeThreadId, nextRequest, {
+        ...(currentItem.context ? { context: currentItem.context } : {}),
+        ...(currentItem.config ? { config: currentItem.config } : {}),
+      });
+    } catch (followUpError) {
+      setError(followUpError);
+      markPendingFollowUpsAsQueued([id], { autoDrain: true });
+      setPendingFollowUps((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                targetExecutionId: targetExecutionId ?? null,
+              }
+            : item,
+        ),
+      );
+    }
+  }, [markPendingFollowUpsAsQueued, removeAutoQueuedFollowUpIds, sendSteerFollowUp, threadId]);
+
+  const autoQueuedFollowUpIdSet = useMemo(
+    () => new Set(autoQueuedFollowUpIds),
+    [autoQueuedFollowUpIds],
+  );
+
+  const canSendPendingFollowUpNow = useCallback((id: string) => {
+    if (!id || isLoadingRef.current || autoQueuedFollowUpIdSet.has(id)) {
+      return false;
+    }
+
+    return pendingFollowUpsRef.current.some(
+      (item) => item.id === id && item.mode === 'queue',
+    );
+  }, [autoQueuedFollowUpIdSet]);
+
+  const sendPendingFollowUpNow = useCallback(async (id: string) => {
+    if (!id || isLoadingRef.current) {
+      return;
+    }
+
+    const nextItem = pendingFollowUpsRef.current.find(
+      (item) => item.id === id && item.mode === 'queue',
+    );
+    if (!nextItem) {
+      return;
+    }
+
+    removePendingFollowUps([nextItem.id]);
+    insertPendingFollowUpsIntoTranscript([nextItem]);
+    await submitRef.current?.(toQueuedSendRequest(nextItem.request), {
+      ...(nextItem.context ? { context: nextItem.context } : {}),
+      ...(nextItem.config ? { config: nextItem.config } : {}),
+      threadId: threadId ?? undefined,
+    });
+  }, [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId]);
+
+  const drainQueuedFollowUps = useCallback(async () => {
+    if (queueDrainPromiseRef.current || isLoadingRef.current) {
+      return queueDrainPromiseRef.current ?? Promise.resolve();
+    }
+
+    const drainPromise = (async () => {
+      while (!isLoadingRef.current) {
+        const nextItem = getNextAutoQueuedFollowUp(
+          pendingFollowUpsRef.current,
+          autoQueuedFollowUpIdsRef.current,
+        );
+
+        if (!nextItem) {
+          break;
+        }
+
+        removePendingFollowUps([nextItem.id]);
+        insertPendingFollowUpsIntoTranscript([nextItem]);
+        await submitRef.current?.(toQueuedSendRequest(nextItem.request), {
+          ...(nextItem.context ? { context: nextItem.context } : {}),
+          ...(nextItem.config ? { config: nextItem.config } : {}),
+          threadId: threadId ?? undefined,
+        });
+      }
+    })().finally(() => {
+      if (queueDrainPromiseRef.current === drainPromise) {
+        queueDrainPromiseRef.current = null;
+      }
+    });
+
+    queueDrainPromiseRef.current = drainPromise;
+    return drainPromise;
+  }, [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId]);
   
   const runStream = useCallback(async (
     nextThreadId: string,
@@ -959,6 +1481,19 @@ const StreamSession = ({
               applyThreadContextUsageEvent(prev, event, nextThreadId),
             );
           },
+          (event) => {
+            flushSteerFollowUps(
+              resolveFollowUpConsumedIds(event),
+              event?.visibleAt ?? null,
+            );
+            shouldStartFreshAssistantMessageAfterSteerRef.current = true;
+          },
+          () => {
+            const shouldStartFreshAssistant =
+              shouldStartFreshAssistantMessageAfterSteerRef.current;
+            shouldStartFreshAssistantMessageAfterSteerRef.current = false;
+            return shouldStartFreshAssistant;
+          },
         );
       }
 
@@ -976,12 +1511,34 @@ const StreamSession = ({
         abortRef.current = null;
       }
       setIsLoading(false);
+      shouldStartFreshAssistantMessageAfterSteerRef.current = false;
+      const staleSteerIds = getPendingSteerFollowUpIds(pendingFollowUpsRef.current);
+      if (staleSteerIds.length > 0) {
+        markPendingFollowUpsAsQueued(staleSteerIds, { autoDrain: true });
+      }
     }
-  }, [assistantId, client, sendEvent, handleInterrupt]);
+  }, [
+    assistantId,
+    client,
+    sendEvent,
+    handleInterrupt,
+    flushSteerFollowUps,
+    markPendingFollowUpsAsQueued,
+  ]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+    void drainQueuedFollowUps();
+  }, [drainQueuedFollowUps, isLoading]);
 
   const loadThread = useCallback(
     async (threadId: string) => {
       if (!threadId) return;
+      if (threadId === (lastThreadIdRef.current ?? null) && isLoadingRef.current) {
+        return;
+      }
       setError(null);
 
       try {
@@ -1000,10 +1557,13 @@ const StreamSession = ({
 
       const conversation = conversationResult.items?.[0];
       if (!conversation?.id) {
+        conversationIdRef.current = null;
+        setPendingFollowUps([]);
         setValues({ messages: [] });
         return;
       }
 
+      conversationIdRef.current = conversation.id;
       await loadConversationMessages(conversation.id);
 
       const status = String(conversation.status ?? '').toLowerCase();
@@ -1032,10 +1592,44 @@ const StreamSession = ({
       input?: TChatRequest | null,
       options?: StreamSubmitOptions,
     ) => {
-      // if (isLoading) {
-      //   return;
-      // }
       setError(null);
+      const followUpMode = isLoadingRef.current ? options?.followUpMode : undefined;
+      if (input && followUpMode) {
+        const pending = createPendingFollowUp(
+          {
+            ...input,
+            id: input.id ?? createMessageId(),
+            executionId: input.executionId ?? lastExecutionIdRef.current ?? undefined,
+            followUpMode,
+          },
+          followUpMode,
+          options,
+        );
+
+        if (!pending) {
+          return;
+        }
+
+        setPendingFollowUps((prev) => {
+          const remaining = prev.filter((item) => item.id !== pending.id);
+          return [...remaining, pending];
+        });
+        if (followUpMode === 'queue') {
+          addAutoQueuedFollowUpIds([pending.id]);
+        }
+
+        const activeThreadId = threadId ?? null;
+        if (followUpMode === 'steer' && activeThreadId) {
+          try {
+            await sendSteerFollowUp(activeThreadId, pending.request, options);
+          } catch (followUpError) {
+            setError(followUpError);
+            markPendingFollowUpsAsQueued([pending.id], { autoDrain: true });
+          }
+        }
+        return;
+      }
+
       const previousThreadId = threadId ?? null;
       lastStreamOptionsRef.current = {
         streamMode: options?.streamMode,
@@ -1082,7 +1676,15 @@ const StreamSession = ({
 
       await runStream(nextThreadId, input, options);
     },
-    [client, runStream, setThreadId, threadId],
+    [
+      client,
+      addAutoQueuedFollowUpIds,
+      markPendingFollowUpsAsQueued,
+      runStream,
+      sendSteerFollowUp,
+      setThreadId,
+      threadId,
+    ],
   );
 
   submitRef.current = submit;
@@ -1100,6 +1702,8 @@ const StreamSession = ({
     contextUsageByAgentKey,
     values,
     messages: values.messages ?? [],
+    pendingFollowUps,
+    followUpBehavior,
     isLoading,
     isReady,
     error,
@@ -1107,8 +1711,13 @@ const StreamSession = ({
     loadConversationMessages,
     submit,
     stop,
-    reset,
-    setThreadId,
+      reset,
+      setFollowUpBehavior,
+      removePendingFollowUp,
+      canSendPendingFollowUpNow,
+      sendPendingFollowUpNow,
+      promotePendingFollowUpToSteer,
+      setThreadId,
   };
 
   return (

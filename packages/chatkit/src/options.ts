@@ -202,6 +202,8 @@ export type ModelOption = {
   default?: boolean;
 };
 
+export type FollowUpBehavior = 'queue' | 'steer';
+
 export type ChatKitTheme = {
   /**
    * The color scheme to use for the ChatKit UI.

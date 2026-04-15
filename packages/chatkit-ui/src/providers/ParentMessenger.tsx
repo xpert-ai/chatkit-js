@@ -150,12 +150,19 @@ export function ParentMessengerProvider({
         }
 
         const params = payload.data as SendUserMessageParams
+        const stream = streamRef.current;
         const prompt = (params.text ?? params.state?.[STATE_VARIABLE_HUMAN]?.input ?? '').trim();
         const newMessage: Message = {
             id: createMessageId(),
             type: 'human',
             content: prompt,
           };
+        const activeFollowUpMode =
+          stream?.isLoading
+            ? params.followUpMode && params.followUpMode !== 'default'
+              ? params.followUpMode
+              : (stream?.followUpBehavior ?? 'queue')
+            : undefined;
         const requestOptions = buildInjectedRequestOptions({
           defaults: latestOptionsRef.current?.request,
           state: params.state,
@@ -164,7 +171,7 @@ export function ParentMessengerProvider({
           },
         });
 
-        streamRef.current?.submit({
+        stream?.submit({
             input: {
               input: prompt,
             },
@@ -172,12 +179,17 @@ export function ParentMessengerProvider({
           }
           ,{
             newThread: params.newThread,
+            ...(activeFollowUpMode ? { followUpMode: activeFollowUpMode } : {}),
             ...(requestOptions.context ? { context: requestOptions.context } : {}),
             ...(requestOptions.config ? { config: requestOptions.config } : {}),
-            optimisticValues: (prev) => {
-              const prevMessages = prev?.messages ?? [];
-              return { ...prev, messages: [...prevMessages, newMessage] };
-            },
+            ...(!activeFollowUpMode
+              ? {
+                  optimisticValues: (prev) => {
+                    const prevMessages = prev?.messages ?? [];
+                    return { ...prev, messages: [...prevMessages, newMessage] };
+                  },
+                }
+              : {}),
           }
         );
         if (payload.nonce) {
@@ -208,11 +220,20 @@ export function ParentMessengerProvider({
           | undefined;
         const nextThreadId = data?.threadId ?? null;
         const stream = streamRef.current;
+        if (stream?.threadId === nextThreadId) {
+          if (payload.nonce) {
+            sendResponse(payload.nonce, { ok: true });
+          }
+          return;
+        }
         stream?.reset(nextThreadId, undefined, { suppressThreadChange: true });
         if (stream && nextThreadId) {
           stream.loadThread(nextThreadId).catch((err) => {
               console.warn('Failed to load thread messages', err);
             });
+        }
+        if (payload.nonce) {
+          sendResponse(payload.nonce, { ok: true });
         }
         return;
       }

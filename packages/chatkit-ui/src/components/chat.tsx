@@ -2,15 +2,21 @@ import * as React from 'react';
 import { ArrowDown, FileText, Loader2, Pencil, RefreshCw, X } from 'lucide-react';
 
 import type { Message } from '@xpert-ai/xpert-sdk';
-import type { ChatkitMessage, ChatKitOptions, ToolOption } from '@xpert-ai/chatkit-types';
+import type {
+  ChatkitMessage,
+  ChatKitOptions,
+  FollowUpBehavior,
+  ToolOption,
+} from '@xpert-ai/chatkit-types';
 
-import { cn, createMessageId } from '../lib/utils';
+import { cn, createMessageId, getRoundedClass } from '../lib/utils';
 import { isNearBottom } from '../lib/scroll';
 import { type StorageFile, type UploadingFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
+import { PendingFollowUps } from './composer/pending-follow-ups';
 import { AssistantMessage } from './thread/messages/ai';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
@@ -21,6 +27,7 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
 import { buildInjectedRequestOptions } from '../lib/request-options';
+import { useTheme } from '../providers/Theme';
 
 export type ChatProps = {
   className?: string;
@@ -79,6 +86,7 @@ export function Chat({
   const apiUrl = options?.api?.apiUrl || defaultApiUrl;
   const {setStream} = useStreamManager();
   const stream = useStreamContext();
+  const { theme } = useTheme();
 
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
@@ -155,6 +163,10 @@ export function Chat({
 
   const messages = React.useMemo(() => stream.messages ?? [], [stream.messages]);
   const trimmedDraft = draft.trim();
+  const pendingFollowUps = React.useMemo(
+    () => [...(stream.pendingFollowUps ?? [])].sort((a, b) => a.createdAt - b.createdAt),
+    [stream.pendingFollowUps],
+  );
 
   const cancelPendingAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -321,7 +333,7 @@ export function Chat({
   // Check if any files are still uploading (moved up for use in isSendDisabled)
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
   const isSendDisabled =
-    !trimmedDraft || stream.isLoading || missingConfig || isHistoryLoading || hasUploadingFiles;
+    !trimmedDraft || missingConfig || isHistoryLoading || hasUploadingFiles;
 
   const resizeComposerInput = React.useCallback(() => {
     const textarea = composerInputRef.current;
@@ -389,61 +401,100 @@ export function Chat({
       size: a.storageFile?.size ?? a.file.size,
     }));
 
+  const submitDraft = React.useCallback(
+    (followUpOverride?: FollowUpBehavior) => {
+      if (isSendDisabled) return;
+
+      const filesToSend = uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
+      const nextFollowUpMode =
+        stream.isLoading
+          ? (followUpOverride ?? stream.followUpBehavior)
+          : undefined;
+      const newMessage: Message & { attachments?: typeof uploadedFiles } = {
+        id: createMessageId(),
+        type: 'human',
+        content: trimmedDraft,
+        ...(filesToSend ? { attachments: filesToSend } : {}),
+      };
+
+      setDraft('');
+
+      const inputPayload: { input: string; files?: typeof uploadedFiles } = {
+        input: trimmedDraft,
+      };
+      if (filesToSend) {
+        inputPayload.files = filesToSend;
+      }
+
+      const requestOptions = buildInjectedRequestOptions({
+        defaults: options?.request,
+        humanInput: inputPayload,
+      });
+
+      stream.submit(
+        {
+          input: inputPayload,
+          ...(requestOptions.state ? { state: requestOptions.state } : {}),
+        },
+        {
+          ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+          ...(requestOptions.context ? { context: requestOptions.context } : {}),
+          ...(requestOptions.config ? { config: requestOptions.config } : {}),
+          ...(!nextFollowUpMode
+            ? {
+                optimisticValues: (prev) => {
+                  const prevMessages = prev?.messages ?? [];
+                  return { ...prev, messages: [...prevMessages, newMessage] };
+                },
+              }
+            : {}),
+        },
+      );
+
+      scrollToBottom(true, true);
+
+      if (selectedTool && !selectedTool.pinned) {
+        setSelectedTool(null);
+      }
+      setAttachments([]);
+    },
+    [
+      isSendDisabled,
+      options?.request,
+      scrollToBottom,
+      selectedTool,
+      stream,
+      trimmedDraft,
+      uploadedFiles,
+    ],
+  );
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // isSendDisabled already includes hasUploadingFiles check
-    if (isSendDisabled) return;
-
-    // Store files for display in the message
-    const filesToSend = uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
-
-    const newMessage: Message & { attachments?: typeof uploadedFiles } = {
-      id: createMessageId(),
-      type: 'human',
-      content: trimmedDraft,
-      ...(filesToSend ? { attachments: filesToSend } : {}),
-    };
-
-    setDraft('');
-
-    // Include files in the submit request
-    const inputPayload: { input: string; files?: typeof uploadedFiles } = {
-      input: trimmedDraft,
-    };
-    if (filesToSend) {
-      inputPayload.files = filesToSend;
-    }
-
-    const requestOptions = buildInjectedRequestOptions({
-      defaults: options?.request,
-      humanInput: inputPayload,
-    });
-
-    stream.submit(
-      {
-        input: inputPayload,
-        ...(requestOptions.state ? { state: requestOptions.state } : {}),
-      },
-      {
-        ...(requestOptions.context ? { context: requestOptions.context } : {}),
-        ...(requestOptions.config ? { config: requestOptions.config } : {}),
-        optimisticValues: (prev) => {
-          const prevMessages = prev?.messages ?? [];
-          return { ...prev, messages: [...prevMessages, newMessage] };
-        },
-      },
-    );
-
-    // Immediately scroll to bottom to show the new message
-    scrollToBottom(true, true);
-
-    // Clear selected tool if not persistent
-    if (selectedTool && !selectedTool.pinned) {
-      setSelectedTool(null);
-    }
-    // Clear attachments after submit
-    setAttachments([]);
+    submitDraft();
   };
+
+  const handleEditPendingFollowUp = React.useCallback((id: string) => {
+    const item = pendingFollowUps.find((entry) => entry.id === id && entry.mode === 'queue');
+    if (!item) {
+      return;
+    }
+
+    const text = item.request?.input?.input?.trim() ?? '';
+    stream.removePendingFollowUp(id);
+    setDraft(text);
+
+    requestAnimationFrame(() => {
+      const input = composerInputRef.current;
+      if (!input) {
+        return;
+      }
+
+      input.focus();
+      const position = text.length;
+      input.setSelectionRange(position, position);
+    });
+  }, [pendingFollowUps, stream]);
 
   const handleAttachmentClick = () => {
     fileInputRef.current?.click();
@@ -453,6 +504,17 @@ export function Chat({
     event: React.KeyboardEvent<HTMLTextAreaElement>,
   ) => {
     if (event.key !== 'Enter') {
+      return;
+    }
+    if (event.shiftKey && (event.metaKey || event.ctrlKey)) {
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      if (isSendDisabled) {
+        return;
+      }
+      submitDraft(stream.followUpBehavior === 'queue' ? 'steer' : 'queue');
       return;
     }
     if (event.shiftKey) {
@@ -465,7 +527,7 @@ export function Chat({
     if (isSendDisabled) {
       return;
     }
-    event.currentTarget.form?.requestSubmit();
+    submitDraft();
   };
 
   // Upload a single file to the server
@@ -572,7 +634,7 @@ export function Chat({
   };
 
   const handlePromptClick = (prompt: string) => {
-    if (missingConfig || stream.isLoading || isHistoryLoading) return;
+    if (missingConfig || isHistoryLoading) return;
 
     const newMessage: Message = {
       id: createMessageId(),
@@ -580,13 +642,21 @@ export function Chat({
       content: prompt,
     };
 
+    const nextFollowUpMode =
+      stream.isLoading ? stream.followUpBehavior : undefined;
+
     stream.submit(
       { input: { input: prompt } },
       {
-        optimisticValues: (prev) => {
-          const prevMessages = prev?.messages ?? [];
-          return { ...prev, messages: [...prevMessages, newMessage] };
-        },
+        ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+        ...(!nextFollowUpMode
+          ? {
+              optimisticValues: (prev) => {
+                const prevMessages = prev?.messages ?? [];
+                return { ...prev, messages: [...prevMessages, newMessage] };
+              },
+            }
+          : {}),
       },
     );
 
@@ -932,7 +1002,7 @@ export function Chat({
 
       <div className="p-2 sticky bottom-0 z-10 bg-background">
         {threadErrorMessage && (
-          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
             {threadErrorMessage}
           </div>
         )}
@@ -1022,6 +1092,18 @@ export function Chat({
           </div>
         )}
 
+        <PendingFollowUps
+          items={pendingFollowUps}
+          isLoading={stream.isLoading}
+          followUpBehavior={stream.followUpBehavior}
+          onBehaviorChange={stream.setFollowUpBehavior}
+          onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
+          canSendNow={stream.canSendPendingFollowUpNow}
+          onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
+          onEdit={handleEditPendingFollowUp}
+          onRemove={stream.removePendingFollowUp}
+        />
+
         <form className="flex items-end" onSubmit={handleSubmit}>
           {/* Capsule-shaped input container */}
           <div
@@ -1030,7 +1112,8 @@ export function Chat({
               'bg-background border border-border shadow-sm',
               'pl-1.5 pr-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-shadow duration-200'
+              'transition-shadow duration-200',
+              getRoundedClass(theme.radius)
             )}
           >
             {/* Plus button inside input - left side */}
@@ -1039,7 +1122,7 @@ export function Chat({
               onAttachmentClick={handleAttachmentClick}
               onToolSelect={handleToolSelect}
               selectedTool={selectedTool}
-              disabled={stream.isLoading || missingConfig || isHistoryLoading}
+              disabled={missingConfig || isHistoryLoading}
             />
             <textarea
               ref={composerInputRef}
@@ -1048,7 +1131,7 @@ export function Chat({
               onKeyDown={handleComposerKeyDown}
               rows={1}
               placeholder={inputPlaceholder}
-              disabled={stream.isLoading || missingConfig || isHistoryLoading}
+              disabled={missingConfig || isHistoryLoading}
               className={cn(
                 'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
                 'placeholder:text-muted-foreground',
@@ -1058,6 +1141,7 @@ export function Chat({
             <SendButton
               disabled={isSendDisabled}
               isLoading={stream.isLoading}
+              showStop={stream.isLoading && !trimmedDraft}
               onStop={() => stream.stop()}
               stopLabel={t('chat.stop')}
               sendLabel={t('chat.send')}

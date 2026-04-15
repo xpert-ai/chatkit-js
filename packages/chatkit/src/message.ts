@@ -1,5 +1,6 @@
 import type { ToolCall } from "@langchain/core/messages/tool";
 import { Types } from '@a2ui/lit/0.8';
+import type { FollowUpBehavior } from './options';
 
 export enum ChatMessageTypeEnum {
   // LOG = 'log',
@@ -225,6 +226,10 @@ export interface ChatkitMessage {
   reasoning?: TMessageContentReasoning[]
   type: 'user' | 'assistant' | 'system' | 'tool' | 'event'
   id: string
+  followUpMode?: FollowUpBehavior
+  followUpStatus?: 'pending' | 'consumed' | 'canceled'
+  targetExecutionId?: string | null
+  visibleAt?: string | Date | null
 }
 
 export type TMessageItems = TMessageContentComplex[];
@@ -269,6 +274,7 @@ export type TChatRequest = {
   confirm?: boolean
   command?: TInterruptCommand
   retry?: boolean
+  followUpMode?: FollowUpBehavior
   /**
    * PRO: Sandbox Environment Id
    * PRO: @description Sandbox environment ID to force using the specified container.
@@ -305,4 +311,15 @@ export type TThreadContextUsageEvent = {
   agentKey: string
   updatedAt: string
   usage: TThreadContextUsageMetrics
+}
+
+export const CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED = 'follow_up_consumed' as const
+
+export type TFollowUpConsumedEvent = TChatEventMessage & {
+  type: typeof CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED
+  mode: 'steer'
+  messageIds: string[]
+  clientMessageIds?: string[]
+  executionId?: string | null
+  visibleAt?: string | null
 }

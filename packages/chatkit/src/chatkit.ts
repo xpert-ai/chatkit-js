@@ -1,4 +1,4 @@
-import type { ChatKitOptions } from "./options";
+import type { ChatKitOptions, FollowUpBehavior } from "./options";
 
 export type EventHandler<K extends keyof ChatKitEvents> = (
   event: ChatKitEvents[K],
@@ -10,6 +10,7 @@ export type SendUserMessageParams = {
   reply?: string;
   attachments?: Attachment[];
   newThread?: boolean;
+  followUpMode?: 'default' | FollowUpBehavior;
 }
 
 /**
