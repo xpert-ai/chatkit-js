@@ -15,6 +15,7 @@ import {
   getAutoDrainQueuedFollowUpIds,
   getNextAutoQueuedFollowUp,
   getPendingSteerFollowUpIds,
+  shouldBroadcastThreadChange,
 } from './Stream';
 
 describe('applyStreamEvent', () => {
@@ -441,6 +442,44 @@ describe('getPendingSteerFollowUpIds', () => {
         },
       ]),
     ).toEqual(['steer-1']);
+  });
+});
+
+describe('shouldBroadcastThreadChange', () => {
+  it('skips the initial empty thread notification during mount', () => {
+    expect(
+      shouldBroadcastThreadChange({
+        threadId: null,
+        hasObservedThreadSelection: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('treats blank strings as an empty thread during the initial mount', () => {
+    expect(
+      shouldBroadcastThreadChange({
+        threadId: '   ',
+        hasObservedThreadSelection: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('broadcasts the first real thread selection', () => {
+    expect(
+      shouldBroadcastThreadChange({
+        threadId: 'thread-1',
+        hasObservedThreadSelection: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('still broadcasts a later reset back to no thread after a real thread existed', () => {
+    expect(
+      shouldBroadcastThreadChange({
+        threadId: null,
+        hasObservedThreadSelection: true,
+      }),
+    ).toBe(true);
   });
 });
 

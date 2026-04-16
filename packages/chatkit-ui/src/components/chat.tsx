@@ -27,6 +27,7 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
 import { buildInjectedRequestOptions } from '../lib/request-options';
+import { getMissingApiConfigurationKind } from '../lib/api-config';
 import { useTheme } from '../providers/Theme';
 
 export type ChatProps = {
@@ -327,8 +328,35 @@ export function Chat({
   }, [stream.isLoading, messages, scrollToBottom]);
 
   const effectiveClientSecret = stream.apiKey?.trim() ? stream.apiKey : clientSecret;
-  const hasApiKey = Boolean(effectiveClientSecret.trim());
-  const missingConfig = !apiUrl || !hasApiKey;
+  const missingConfigKind = getMissingApiConfigurationKind({
+    apiUrl,
+    clientSecret: effectiveClientSecret,
+  });
+  const missingConfig = Boolean(missingConfigKind);
+  const missingConfigShortMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlShort');
+      case 'clientSecret':
+        return t('chat.missingClientSecretShort');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretShort');
+      default:
+        return t('chat.missingConfigShort');
+    }
+  }, [missingConfigKind, t]);
+  const missingConfigDetailMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlDetail');
+      case 'clientSecret':
+        return t('chat.missingClientSecretDetail');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretDetail');
+      default:
+        return t('chat.missingConfigDetail');
+    }
+  }, [missingConfigKind, t]);
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
   // Check if any files are still uploading (moved up for use in isSendDisabled)
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
@@ -667,7 +695,7 @@ export function Chat({
   const loadConversationMessages = React.useCallback(
     async (recordId: string) => {
       if (missingConfig) {
-        setHistoryError(t('chat.missingConfigShort'));
+        setHistoryError(missingConfigShortMessage);
         return;
       }
       setHistoryError(null);
@@ -684,7 +712,7 @@ export function Chat({
         setIsHistoryLoading(false);
       }
     },
-    [missingConfig, stream, t],
+    [missingConfig, missingConfigShortMessage, stream, t],
   );
 
   const handleNewThread = async () => {
@@ -850,7 +878,7 @@ export function Chat({
         )}
         {showMissingConfig && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {t('chat.missingConfigDetail')}
+            {missingConfigDetailMessage}
           </div>
         )}
         {isHistoryLoading && (

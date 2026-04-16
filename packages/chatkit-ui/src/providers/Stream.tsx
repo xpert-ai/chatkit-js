@@ -26,7 +26,6 @@ import {
   type ClientToolResponse,
   type FollowUpBehavior,
   type TChatRequest,
-  type TMessageContent,
   type ChatEventEnvelope,
   type TMessageContentComplex,
   type TMessageContentComponent,
@@ -37,6 +36,7 @@ import {
   normalizeClientSecretResult,
   type ResolvedClientSecret,
 } from '../lib/client-secret';
+import { createMissingApiConfigurationError } from '../lib/api-config';
 import { normalizeRequestContextAndConfig } from '../lib/request-options';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import type { ParentMessenger } from './ParentMessenger';
@@ -61,11 +61,9 @@ import {
   getPendingSteerFollowUpIds,
   buildSteerFollowUpRunInput,
   createPendingFollowUp,
-  extractRequestHumanInput,
   getNextAutoQueuedFollowUp,
   isHiddenPendingFollowUpMessage,
   mapPersistedPendingFollowUp,
-  normalizeFollowUpBehavior,
   pendingFollowUpToUiMessage,
   readPersistedFollowUpBehavior,
   toQueuedSendRequest,
@@ -252,6 +250,22 @@ type PersistedChatMessage = ChatMessage & {
   thirdPartyMessage?: unknown;
 };
 
+function normalizeThreadIdentifier(threadId?: string | null): string | null {
+  const normalized = typeof threadId === 'string' ? threadId.trim() : '';
+  return normalized ? normalized : null;
+}
+
+export function shouldBroadcastThreadChange({
+  threadId,
+  hasObservedThreadSelection,
+}: {
+  threadId?: string | null;
+  hasObservedThreadSelection: boolean;
+}): boolean {
+  const currentThreadId = normalizeThreadIdentifier(threadId);
+  return hasObservedThreadSelection || currentThreadId !== null;
+}
+
 function mapChatMessageToUiMessage(message: PersistedChatMessage): ChatKitAIMessage {
   return {
     id: message.id ?? createMessageId(),
@@ -343,8 +357,9 @@ function upsertMessages(
   for (const message of nextMessages) {
     const id = message.id ? String(message.id) : null;
     if (id && indexes.has(id)) {
-      messages[indexes.get(id)!] = {
-        ...messages[indexes.get(id)!],
+      const index = indexes.get(id) as number;
+      messages[index] = {
+        ...messages[index],
         ...message,
       };
       continue;
@@ -833,12 +848,14 @@ const StreamSession = ({
   organizationId,
   apiUrl,
   assistantId,
+  initialThread,
 }: {
   children: ReactNode;
   apiKey: string;
   organizationId?: string;
   apiUrl: string;
   assistantId: string;
+  initialThread?: string | null;
 }) => {
   const [threadId, setThreadId] = useQueryState('threadId');
   const [values, setValues] = useState<StateType>({ messages: [] });
@@ -868,6 +885,14 @@ const StreamSession = ({
   const refreshClientSecretPromiseRef = useRef<
     Promise<ResolvedClientSecret> | null
   >(null);
+  const consumedInitialThreadRef = useRef<string | null>(null);
+  const initialThreadLoadRef = useRef<{
+    threadId: string | null;
+    promise: Promise<void> | null;
+  }>({
+    threadId: null,
+    promise: null,
+  });
   const lastStreamOptionsRef = useRef<
     Pick<StreamSubmitOptions, 'streamMode' | 'streamSubgraphs' | 'streamResumable'>
   >({});
@@ -877,6 +902,9 @@ const StreamSession = ({
   const shouldStartFreshAssistantMessageAfterSteerRef = useRef(false);
   // Track the previous threadId so we only reset SSE state on actual thread changes.
   const lastThreadIdRef = useRef<string | null>(threadId ?? null);
+  const hasObservedThreadSelectionRef = useRef(
+    normalizeThreadIdentifier(threadId) !== null,
+  );
   const suppressThreadChangeRef = useRef(false);
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
 
@@ -915,12 +943,24 @@ const StreamSession = ({
   // `public_event` -> `chatkit.<event>` so sending ['thread.change', {...}]
   // will become a `chatkit.thread.change` CustomEvent on the host element.
   useEffect(() => {
+    const currentThreadId = normalizeThreadIdentifier(threadId);
+    if (currentThreadId !== null) {
+      hasObservedThreadSelectionRef.current = true;
+    }
     if (!isParentAvailable) return;
     if (suppressThreadChangeRef.current) {
       suppressThreadChangeRef.current = false;
       return;
     }
-    sendEvent('public_event', ['thread.change', { threadId: threadId ?? null }]);
+    if (
+      !shouldBroadcastThreadChange({
+        threadId: currentThreadId,
+        hasObservedThreadSelection: hasObservedThreadSelectionRef.current,
+      })
+    ) {
+      return;
+    }
+    sendEvent('public_event', ['thread.change', { threadId: currentThreadId }]);
   }, [threadId, isParentAvailable, sendEvent]);
 
   useEffect(() => {
@@ -1135,8 +1175,12 @@ const StreamSession = ({
 
   const loadConversationMessages = useCallback(
     async (recordId: string) => {
-      if (!apiUrl || !runtimeClientSecret.trim()) {
-        throw new Error('Missing API configuration');
+      const configError = createMissingApiConfigurationError({
+        apiUrl,
+        clientSecret: runtimeClientSecret,
+      });
+      if (configError) {
+        throw configError;
       }
       try {
         stop();
@@ -1587,6 +1631,59 @@ const StreamSession = ({
     [client, runStream, stop, loadConversationMessages, setThreadId],
   );
 
+  useEffect(() => {
+    const requestedInitialThread = normalizeThreadIdentifier(initialThread);
+    const activeThreadId = normalizeThreadIdentifier(threadId);
+
+    if (!requestedInitialThread) {
+      consumedInitialThreadRef.current = null;
+      return;
+    }
+
+    if (requestedInitialThread === activeThreadId) {
+      consumedInitialThreadRef.current = requestedInitialThread;
+      return;
+    }
+
+    if (consumedInitialThreadRef.current === requestedInitialThread) {
+      return;
+    }
+
+    const configError = createMissingApiConfigurationError({
+      apiUrl,
+      clientSecret: runtimeClientSecret,
+    });
+    if (configError) {
+      return;
+    }
+
+    const inFlightThread = initialThreadLoadRef.current.threadId;
+    if (
+      inFlightThread === requestedInitialThread &&
+      initialThreadLoadRef.current.promise
+    ) {
+      return;
+    }
+
+    consumedInitialThreadRef.current = requestedInitialThread;
+    const promise = loadThread(requestedInitialThread).catch((error) => {
+      setError(error);
+      console.warn('[chatkit-ui] Failed to load initial thread', error);
+    });
+    initialThreadLoadRef.current = {
+      threadId: requestedInitialThread,
+      promise,
+    };
+    void promise.finally(() => {
+      if (initialThreadLoadRef.current.promise === promise) {
+        initialThreadLoadRef.current = {
+          threadId: null,
+          promise: null,
+        };
+      }
+    });
+  }, [apiUrl, initialThread, loadThread, runtimeClientSecret, setError, threadId]);
+
   const submit = useCallback(
     async (
       input?: TChatRequest | null,
@@ -1731,13 +1828,15 @@ export const StreamProvider: React.FC<{
   organizationId?: string;
   apiUrl?: string;
   xpertId?: string;
-}> = ({ children, apiKey, organizationId, apiUrl, xpertId }) => {
+  initialThread?: string | null;
+}> = ({ children, apiKey, organizationId, apiUrl, xpertId, initialThread }) => {
   return (
     <StreamSession
       apiKey={apiKey ?? ''}
       organizationId={organizationId}
       apiUrl={apiUrl ?? defaultApiUrl}
       assistantId={xpertId ?? 'your-xpert-id'}
+      initialThread={initialThread}
     >
       {children}
     </StreamSession>
