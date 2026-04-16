@@ -14,6 +14,13 @@ import type {
 import { ChevronDown, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
+import {
+  type AssistantStreamingStatus,
+  getAssistantStreamingStatus,
+  hasRenderableAssistantMessage,
+  hasRenderableMessageContent,
+  hasRenderableReasoning,
+} from '../../../lib/message';
 import { isNearBottom } from '../../../lib/scroll';
 import { cn } from '../../../lib/utils';
 import { Badge } from '../../ui/badge';
@@ -26,6 +33,7 @@ export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
   className?: string;
   isStreaming?: boolean;
+  streamingStatus?: AssistantStreamingStatus | null;
 };
 
 function isTextContent(content: TMessageContentComplex): content is TMessageContentText {
@@ -340,27 +348,73 @@ function renderContent(content: ChatkitMessage['content'] | any, messageId: stri
   );
 }
 
-export function AssistantMessage({ message, className, isStreaming = false }: AssistantMessageProps) {
+export function AssistantStreamingIndicator({
+  status,
+  className,
+}: {
+  status: AssistantStreamingStatus;
+  className?: string;
+}) {
   const { t } = useChatkitTranslation();
-  const content = message.content as any;
-  const hasContent = content != null &&
-    !(
-      (typeof content === 'string' && content.trim() === '') ||
-      (Array.isArray(message.content) && message.content.length === 0)
-    );
-  const hasReasoning =
-    Array.isArray(message.reasoning) &&
-    message.reasoning.some((item) => item.text?.trim());
+  const labelMap: Record<AssistantStreamingStatus, string> = {
+    loading: t('message.loading'),
+    thinking: t('message.thinking'),
+    answering: t('message.answering'),
+  };
+
+  return (
+    <div className={cn('flex items-center gap-2 text-xs text-muted-foreground', className)}>
+      {status === 'loading' && (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      )}
+      {status === 'thinking' && (
+        <div className="flex items-end gap-1" aria-hidden="true">
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" />
+        </div>
+      )}
+      {status === 'answering' && (
+        <div className="flex items-end gap-1" aria-hidden="true">
+          <span className="h-2 w-0.5 rounded-full bg-current animate-pulse [animation-delay:-0.25s]" />
+          <span className="h-3 w-0.5 rounded-full bg-current animate-pulse [animation-delay:-0.1s]" />
+          <span className="h-2.5 w-0.5 rounded-full bg-current animate-pulse" />
+        </div>
+      )}
+      <span>{labelMap[status]}</span>
+    </div>
+  );
+}
+
+export function AssistantMessage({
+  message,
+  className,
+  isStreaming = false,
+  streamingStatus,
+}: AssistantMessageProps) {
+  const { t } = useChatkitTranslation();
+  const hasContent = hasRenderableMessageContent(message.content);
+  const hasReasoning = hasRenderableReasoning(message.reasoning);
+  const resolvedStreamingStatus =
+    streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
 
   const answerNode = renderContent(message.content, message.id);
   const reasoningNode = hasReasoning ? (
     <ReasoningBlock reasoning={message.reasoning ?? []} />
   ) : null;
 
-  if (!hasContent && !hasReasoning) return null;
+  if (!hasRenderableAssistantMessage(message) && !resolvedStreamingStatus) return null;
 
   // Streaming class for smooth animation effect
   const streamingClass = isStreaming ? 'streaming-active' : '';
+
+  if (!hasRenderableAssistantMessage(message) && resolvedStreamingStatus) {
+    return (
+      <div className={cn('space-y-3', streamingClass, className)}>
+        <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+      </div>
+    );
+  }
 
   if (hasContent && hasReasoning) {
     return (
@@ -380,6 +434,9 @@ export function AssistantMessage({ message, className, isStreaming = false }: As
             {reasoningNode}
           </TabsContent>
         </Tabs>
+        {resolvedStreamingStatus ? (
+          <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+        ) : null}
       </div>
     );
   }
@@ -387,6 +444,9 @@ export function AssistantMessage({ message, className, isStreaming = false }: As
   return (
     <div className={cn('space-y-3', streamingClass, className)}>
       {hasReasoning ? reasoningNode : answerNode}
+      {resolvedStreamingStatus ? (
+        <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+      ) : null}
     </div>
   );
 }

@@ -31,7 +31,9 @@ import {
   type TMessageContentComponent,
   type TThreadContextUsageEvent,
 } from '@xpert-ai/chatkit-types';
-import { appendMessageContent } from '../lib/message';
+import {
+  appendMessageContent,
+} from '../lib/message';
 import {
   normalizeClientSecretResult,
   type ResolvedClientSecret,

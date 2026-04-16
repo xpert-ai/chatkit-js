@@ -81,6 +81,9 @@
   },
   "message": {
     "answer": "回答",
-    "reasoning": "推理"
+    "reasoning": "推理",
+    "loading": "正在加载",
+    "thinking": "正在思考",
+    "answering": "正在生成"
   }
 }

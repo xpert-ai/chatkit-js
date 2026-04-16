@@ -81,6 +81,9 @@
   },
   "message": {
     "answer": "Answer",
-    "reasoning": "Reasoning"
+    "reasoning": "Reasoning",
+    "loading": "Loading",
+    "thinking": "Thinking",
+    "answering": "Answering"
   }
 }

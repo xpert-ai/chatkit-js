@@ -10,6 +10,10 @@ import type {
 } from '@xpert-ai/chatkit-types';
 
 import { cn, createMessageId, getRoundedClass } from '../lib/utils';
+import {
+  getAssistantStreamingStatus,
+  hasRenderableAssistantMessage,
+} from '../lib/message';
 import { isNearBottom } from '../lib/scroll';
 import { type StorageFile, type UploadingFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
@@ -17,7 +21,10 @@ import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
-import { AssistantMessage } from './thread/messages/ai';
+import {
+  AssistantMessage,
+  AssistantStreamingIndicator,
+} from './thread/messages/ai';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
 import { ChatkitAvatar, type ChatkitAvatarData, extractAssistantAvatar } from './ui/chatkit-avatar';
@@ -96,8 +103,11 @@ export function Chat({
 
   // Minimum loading dots display time (ms)
   const LOADING_DOTS_MIN_DURATION = 800;
+  const STREAMING_STATUS_REFRESH_MS = 250;
   const [showLoadingDots, setShowLoadingDots] = React.useState(false);
+  const [streamingNow, setStreamingNow] = React.useState(() => Date.now());
   const loadingStartTimeRef = React.useRef<number | null>(null);
+  const lastStreamOutputAtRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     setStream(stream);
@@ -131,6 +141,30 @@ export function Chat({
         }
       }
     }
+  }, [stream.isLoading]);
+
+  React.useEffect(() => {
+    if (!stream.isLoading) {
+      lastStreamOutputAtRef.current = null;
+      setStreamingNow(Date.now());
+      return;
+    }
+
+    const now = Date.now();
+    lastStreamOutputAtRef.current = now;
+    setStreamingNow(now);
+  }, [stream.messages, stream.isLoading]);
+
+  React.useEffect(() => {
+    if (!stream.isLoading) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setStreamingNow(Date.now());
+    }, STREAMING_STATUS_REFRESH_MS);
+
+    return () => window.clearInterval(timer);
   }, [stream.isLoading]);
 
   const [draft, setDraft] = React.useState('');
@@ -897,6 +931,25 @@ export function Chat({
               const messageType = String(message.type);
               const isAssistantMessage =
                 messageType === 'assistant' || messageType === 'ai';
+              const isStreamingMessage = stream.isLoading && index === messages.length - 1;
+              const streamingStatus = isAssistantMessage
+                ? getAssistantStreamingStatus(
+                    {
+                      ...(message as ChatkitMessage),
+                      lastStreamOutputAt: lastStreamOutputAtRef.current,
+                    },
+                    isStreamingMessage,
+                    { now: streamingNow },
+                  )
+                : null;
+
+              if (
+                isAssistantMessage &&
+                !hasRenderableAssistantMessage(message as ChatkitMessage) &&
+                !streamingStatus
+              ) {
+                return null;
+              }
 
               const messageContent =
                 typeof message.content === 'string'
@@ -904,6 +957,15 @@ export function Chat({
                   : Array.isArray(message.content)
                     ? message.content.map((part) => formatMessageContent(part as any)).join('')
                     : formatMessageContent(message.content);
+              const hasPlainRenderableContent = messageContent.trim().length > 0;
+              const hasHumanAttachments =
+                message.type === 'human' &&
+                Array.isArray((message as any).attachments) &&
+                (message as any).attachments.length > 0;
+
+              if (!isAssistantMessage && !hasPlainRenderableContent && !hasHumanAttachments) {
+                return null;
+              }
 
               return (
                 <div
@@ -932,7 +994,8 @@ export function Chat({
                             ...(message as ChatkitMessage),
                             type: 'assistant',
                           }}
-                          isStreaming={stream.isLoading && index === messages.length - 1}
+                          isStreaming={isStreamingMessage}
+                          streamingStatus={streamingStatus}
                         />
                       ) : (
                         <>
@@ -971,7 +1034,7 @@ export function Chat({
                     <MessageActions
                       content={messageContent}
                       isAssistant={isAssistantMessage}
-                      isStreaming={stream.isLoading && index === messages.length - 1}
+                      isStreaming={isStreamingMessage}
                       onRetry={
                         isAssistantMessage && !stream.isLoading && index === messages.length - 1
                           ? () => handleRetry(index)
@@ -987,20 +1050,30 @@ export function Chat({
               const lastMessage = messages[messages.length - 1];
               const lastMessageType = lastMessage ? String(lastMessage.type) : '';
               const isLastMessageFromAI = lastMessageType === 'ai' || lastMessageType === 'assistant';
-              // Hide dots once AI has substantial content
-              const lastMsgContent = lastMessage?.content;
-              const hasSubstantialContent = isLastMessageFromAI &&
-                ((typeof lastMsgContent === 'string' && lastMsgContent.length > 10) ||
-                  (Array.isArray(lastMsgContent) && lastMsgContent.length > 0));
-              if (hasSubstantialContent) return null;
+              const lastAssistantStatus = isLastMessageFromAI
+                ? getAssistantStreamingStatus(
+                    {
+                      ...(lastMessage as ChatkitMessage),
+                      lastStreamOutputAt: lastStreamOutputAtRef.current,
+                    },
+                    stream.isLoading,
+                    { now: streamingNow },
+                  )
+                : null;
+              if (lastAssistantStatus) return null;
+              const fallbackStreamingStatus = getAssistantStreamingStatus(
+                {
+                  status: undefined,
+                  reasoning: undefined,
+                  lastStreamOutputAt: lastStreamOutputAtRef.current,
+                },
+                stream.isLoading,
+                { now: streamingNow },
+              );
               return (
                 <div className="flex justify-start gap-3 -ml-2">
                   <div className="max-w-full rounded-2xl py-2.5">
-                    <div className="flex gap-1.5">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]"></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]"></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60"></div>
-                    </div>
+                    <AssistantStreamingIndicator status={fallbackStreamingStatus ?? 'loading'} />
                   </div>
                 </div>
               );
