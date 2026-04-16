@@ -8,6 +8,8 @@
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",
+    "referencedContentOnly": "Referenced content",
+    "youLabel": "You",
     "scrollToBottom": "Scroll to bottom",
     "retryUpload": "Retry upload",
     "poweredBy": "Powered by Xpert AI",
@@ -41,7 +43,9 @@
   },
   "composer": {
     "openMenu": "Open menu",
-    "addAttachment": "Add attachment"
+    "addAttachment": "Add attachment",
+    "removeReference": "Remove reference",
+    "quoteSelection": "Quote selection"
   },
   "sheet": {
     "close": "Close"

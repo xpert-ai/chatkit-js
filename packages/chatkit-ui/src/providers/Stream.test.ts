@@ -10,6 +10,129 @@ import { createLangGraphEventState } from './langGraphEventMapper';
 import { applyStreamEvent, createFetchWithClientSecretRefresh } from './Stream';
 
 describe('applyStreamEvent', () => {
+  it('normalizes replayed conversation messages with references and submitted input', () => {
+    let state = { messages: [] as any[] };
+    const setValues = vi.fn((next) => {
+      state = typeof next === 'function' ? next(state) : next;
+    });
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CONVERSATION_END,
+          data: {
+            messages: [
+              {
+                id: 'human-1',
+                role: 'human',
+                content: 'Referenced content',
+                state: {
+                  human: {
+                    input: 'Explain this file',
+                    referenceComposition: 'compose',
+                    references: [
+                      {
+                        path: 'src/app.ts',
+                        startLine: 4,
+                        endLine: 8,
+                        text: 'console.log("hello");',
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages).toEqual([
+      expect.objectContaining({
+        id: 'human-1',
+        type: 'human',
+        content: 'Referenced content',
+        submittedInput: 'Explain this file',
+        referenceComposition: 'compose',
+        references: [
+          expect.objectContaining({
+            type: 'code',
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 8,
+          }),
+        ],
+      }),
+    ]);
+    expect(setError).not.toHaveBeenCalled();
+  });
+
+  it('keeps message metadata when replaying top-level messages arrays', () => {
+    let state = { messages: [] as any[] };
+    const setValues = vi.fn((next) => {
+      state = typeof next === 'function' ? next(state) : next;
+    });
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'values',
+        data: JSON.stringify({
+          messages: [
+            {
+              id: 'human-2',
+              role: 'human',
+              content: 'Quoted content',
+              metadata: {
+                referenceComposition: 'compose',
+                references: [
+                  {
+                    type: 'quote',
+                    source: 'Assistant response',
+                    text: 'Look at the prior answer.',
+                  },
+                ],
+              },
+              input: {
+                input: 'Respond to the quoted content',
+              },
+            },
+          ],
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages).toEqual([
+      expect.objectContaining({
+        id: 'human-2',
+        type: 'human',
+        submittedInput: 'Respond to the quoted content',
+        referenceComposition: 'compose',
+        references: [
+          expect.objectContaining({
+            type: 'quote',
+            source: 'Assistant response',
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('routes thread context usage chat events to realtime usage state without appending messages', () => {
     const setValues = vi.fn();
     const setError = vi.fn();

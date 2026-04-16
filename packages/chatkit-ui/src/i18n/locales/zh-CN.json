@@ -8,6 +8,8 @@
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
+    "referencedContentOnly": "已引用内容",
+    "youLabel": "你",
     "scrollToBottom": "回到底部",
     "retryUpload": "重新上传",
     "poweredBy": "由 Xpert AI 驱动",
@@ -41,7 +43,9 @@
   },
   "composer": {
     "openMenu": "打开菜单",
-    "addAttachment": "添加附件"
+    "addAttachment": "添加附件",
+    "removeReference": "移除引用",
+    "quoteSelection": "引用选中内容"
   },
   "sheet": {
     "close": "关闭"
