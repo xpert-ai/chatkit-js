@@ -5,6 +5,7 @@ import { useTheme } from '../../providers/Theme';
 export type SendButtonProps = {
   disabled?: boolean;
   isLoading?: boolean;
+  showStop?: boolean;
   onStop?: () => void;
   stopLabel?: string;
   sendLabel?: string;
@@ -13,6 +14,7 @@ export type SendButtonProps = {
 export function SendButton({
   disabled = false,
   isLoading = false,
+  showStop = isLoading,
   onStop,
   stopLabel = 'Stop',
   sendLabel = 'Send',
@@ -21,7 +23,7 @@ export function SendButton({
 
   const roundedClass = getRoundedClass(theme.radius);
 
-  if (isLoading) {
+  if (showStop) {
     return (
       <button
         type="button"

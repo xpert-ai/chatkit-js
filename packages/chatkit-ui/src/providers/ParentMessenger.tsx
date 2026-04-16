@@ -10,6 +10,7 @@ import {
   STATE_VARIABLE_HUMAN,
   type ChatKitOptions,
   type ChatKitReferenceCompositionMode,
+  type FollowUpBehavior,
   type SendUserMessageParams,
 } from '@xpert-ai/chatkit-types';
 import type { Capability } from '@xpert-ai/chatkit-web-shared';
@@ -250,6 +251,7 @@ export function ParentMessengerProvider({
           references?: typeof references;
           submittedInput?: string;
           referenceComposition?: ChatKitReferenceCompositionMode;
+          followUpMode?: FollowUpBehavior;
         } = {
           id: createMessageId(),
           type: 'human',
@@ -260,27 +262,38 @@ export function ParentMessengerProvider({
             : {}),
           ...(references.length > 0 ? { references } : {}),
         };
+        const stream = streamRef.current;
+        const activeFollowUpMode = stream?.isLoading
+          ? params.followUpMode && params.followUpMode !== 'default'
+            ? params.followUpMode
+            : (stream.followUpBehavior ?? 'queue')
+          : undefined;
         const requestOptions = buildInjectedRequestOptions({
           defaults: latestOptionsRef.current?.request,
           state: params.state,
           humanInput,
         });
 
-        streamRef.current?.submit(
+        stream?.submit(
           {
             input: humanInput,
             ...(requestOptions.state ? { state: requestOptions.state } : {}),
           },
           {
             newThread: params.newThread,
+            ...(activeFollowUpMode ? { followUpMode: activeFollowUpMode } : {}),
             ...(requestOptions.context
               ? { context: requestOptions.context }
               : {}),
             ...(requestOptions.config ? { config: requestOptions.config } : {}),
-            optimisticValues: (prev) => {
-              const prevMessages = prev?.messages ?? [];
-              return { ...prev, messages: [...prevMessages, newMessage] };
-            },
+            ...(!activeFollowUpMode
+              ? {
+                  optimisticValues: (prev) => {
+                    const prevMessages = prev?.messages ?? [];
+                    return { ...prev, messages: [...prevMessages, newMessage] };
+                  },
+                }
+              : {}),
           },
         );
         if (payload.nonce) {
@@ -361,11 +374,20 @@ export function ParentMessengerProvider({
           | undefined;
         const nextThreadId = data?.threadId ?? null;
         const stream = streamRef.current;
+        if (stream?.threadId === nextThreadId) {
+          if (payload.nonce) {
+            sendResponse(payload.nonce, { ok: true });
+          }
+          return;
+        }
         stream?.reset(nextThreadId, undefined, { suppressThreadChange: true });
         if (stream && nextThreadId) {
           stream.loadThread(nextThreadId).catch((err) => {
             console.warn('Failed to load thread messages', err);
           });
+        }
+        if (payload.nonce) {
+          sendResponse(payload.nonce, { ok: true });
         }
         return;
       }

@@ -15,17 +15,26 @@ import type {
   ChatKitOptions,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
+  FollowUpBehavior,
   ToolOption,
 } from '@xpert-ai/chatkit-types';
 
-import { cn, createMessageId } from '../lib/utils';
+import { cn, createMessageId, getRoundedClass } from '../lib/utils';
+import {
+  getAssistantStreamingStatus,
+  hasRenderableAssistantMessage,
+} from '../lib/message';
 import { isNearBottom } from '../lib/scroll';
 import { type StorageFile, type UploadingFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
-import { AssistantMessage } from './thread/messages/ai';
+import { PendingFollowUps } from './composer/pending-follow-ups';
+import {
+  AssistantMessage,
+  AssistantStreamingIndicator,
+} from './thread/messages/ai';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
 import {
@@ -49,6 +58,8 @@ import {
   normalizeReferences,
   type ComposerValuePayload,
 } from '../lib/references';
+import { getMissingApiConfigurationKind } from '../lib/api-config';
+import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 
 export type ChatProps = {
@@ -63,6 +74,7 @@ export type ChatProps = {
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | string
   | undefined;
+const COMPOSER_INPUT_MAX_HEIGHT = 128;
 
 type UploadedMessageFile = {
   originalName: string;
@@ -81,21 +93,6 @@ type QuoteSelectionState = {
   top: number;
   left: number;
 };
-
-function getClosestQuoteContainer(node: Node | null): HTMLElement | null {
-  if (!node) {
-    return null;
-  }
-
-  const element =
-    node instanceof HTMLElement
-      ? node
-      : node instanceof Text
-        ? node.parentElement
-        : null;
-
-  return element?.closest('[data-quote-message-id]') ?? null;
-}
 
 function formatMessageContent(content: Message['content'][number]): string {
   if (typeof content === 'string') {
@@ -124,6 +121,21 @@ function formatMessageContent(content: Message['content'][number]): string {
   }
 
   return '';
+}
+
+function getClosestQuoteContainer(node: Node | null): HTMLElement | null {
+  if (!node) {
+    return null;
+  }
+
+  const element =
+    node instanceof HTMLElement
+      ? node
+      : node instanceof Text
+        ? node.parentElement
+        : null;
+
+  return element?.closest('[data-quote-message-id]') ?? null;
 }
 
 function ReferenceChip({
@@ -214,6 +226,7 @@ export function Chat({
   const apiUrl = options?.api?.apiUrl || defaultApiUrl;
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
+  const { theme } = useTheme();
 
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
@@ -223,8 +236,11 @@ export function Chat({
 
   // Minimum loading dots display time (ms)
   const LOADING_DOTS_MIN_DURATION = 800;
+  const STREAMING_STATUS_REFRESH_MS = 250;
   const [showLoadingDots, setShowLoadingDots] = React.useState(false);
+  const [streamingNow, setStreamingNow] = React.useState(() => Date.now());
   const loadingStartTimeRef = React.useRef<number | null>(null);
+  const lastStreamOutputAtRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     setStream(stream);
@@ -260,6 +276,30 @@ export function Chat({
     }
   }, [stream.isLoading]);
 
+  React.useEffect(() => {
+    if (!stream.isLoading) {
+      lastStreamOutputAtRef.current = null;
+      setStreamingNow(Date.now());
+      return;
+    }
+
+    const now = Date.now();
+    lastStreamOutputAtRef.current = now;
+    setStreamingNow(now);
+  }, [stream.messages, stream.isLoading]);
+
+  React.useEffect(() => {
+    if (!stream.isLoading) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setStreamingNow(Date.now());
+    }, STREAMING_STATUS_REFRESH_MS);
+
+    return () => window.clearInterval(timer);
+  }, [stream.isLoading]);
+
   const [draft, setDraft] = React.useState('');
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
     null,
@@ -278,7 +318,7 @@ export function Chat({
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const composerInputRef = React.useRef<HTMLInputElement>(null);
+  const composerInputRef = React.useRef<HTMLTextAreaElement>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const forceFollowRef = React.useRef(false);
   const previousMessageCountRef = React.useRef(0);
@@ -302,6 +342,13 @@ export function Chat({
   );
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
+  const pendingFollowUps = React.useMemo(
+    () =>
+      [...(stream.pendingFollowUps ?? [])].sort(
+        (a, b) => a.createdAt - b.createdAt,
+      ),
+    [stream.pendingFollowUps],
+  );
 
   const clearQuoteSelection = React.useCallback(() => {
     setQuoteSelection(null);
@@ -404,54 +451,6 @@ export function Chat({
       left,
     });
   }, [clearQuoteSelection]);
-
-  React.useEffect(() => {
-    document.addEventListener('selectionchange', syncQuoteSelection);
-
-    return () => {
-      document.removeEventListener('selectionchange', syncQuoteSelection);
-    };
-  }, [syncQuoteSelection]);
-
-  React.useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) {
-      return;
-    }
-
-    const handleViewportScroll = () => {
-      clearQuoteSelection();
-    };
-
-    viewport.addEventListener('scroll', handleViewportScroll, {
-      passive: true,
-    });
-    window.addEventListener('resize', handleViewportScroll, { passive: true });
-
-    return () => {
-      viewport.removeEventListener('scroll', handleViewportScroll);
-      window.removeEventListener('resize', handleViewportScroll);
-    };
-  }, [clearQuoteSelection]);
-
-  React.useEffect(() => {
-    clearQuoteSelection();
-  }, [messages.length, stream.threadId, clearQuoteSelection]);
-
-  const handleQuoteSelection = React.useCallback(() => {
-    if (!quoteSelection) {
-      return;
-    }
-
-    setReferences((previous) =>
-      mergeReferences(previous, [quoteSelection.reference]),
-    );
-    clearQuoteSelection();
-    if (typeof window !== 'undefined') {
-      window.getSelection()?.removeAllRanges();
-    }
-    composerInputRef.current?.focus();
-  }, [clearQuoteSelection, quoteSelection]);
 
   const cancelPendingAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -628,17 +627,95 @@ export function Chat({
   const effectiveClientSecret = stream.apiKey?.trim()
     ? stream.apiKey
     : clientSecret;
-  const hasApiKey = Boolean(effectiveClientSecret.trim());
-  const missingConfig = !apiUrl || !hasApiKey;
+  const missingConfigKind = getMissingApiConfigurationKind({
+    apiUrl,
+    clientSecret: effectiveClientSecret,
+  });
+  const missingConfig = Boolean(missingConfigKind);
+  const missingConfigShortMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlShort');
+      case 'clientSecret':
+        return t('chat.missingClientSecretShort');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretShort');
+      default:
+        return t('chat.missingConfigShort');
+    }
+  }, [missingConfigKind, t]);
+  const missingConfigDetailMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlDetail');
+      case 'clientSecret':
+        return t('chat.missingClientSecretDetail');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretDetail');
+      default:
+        return t('chat.missingConfigDetail');
+    }
+  }, [missingConfigKind, t]);
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
   // Check if any files are still uploading (moved up for use in isSendDisabled)
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
   const isSendDisabled =
     (!trimmedDraft && !hasReferences) ||
-    stream.isLoading ||
     missingConfig ||
     isHistoryLoading ||
     hasUploadingFiles;
+
+  const resizeComposerInput = React.useCallback(() => {
+    const textarea = composerInputRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(
+      textarea.scrollHeight,
+      COMPOSER_INPUT_MAX_HEIGHT,
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+  }, []);
+
+  React.useEffect(() => {
+    resizeComposerInput();
+  }, [draft, resizeComposerInput]);
+
+  React.useEffect(() => {
+    document.addEventListener('selectionchange', syncQuoteSelection);
+
+    return () => {
+      document.removeEventListener('selectionchange', syncQuoteSelection);
+    };
+  }, [syncQuoteSelection]);
+
+  React.useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const handleViewportScroll = () => {
+      clearQuoteSelection();
+    };
+
+    viewport.addEventListener('scroll', handleViewportScroll, {
+      passive: true,
+    });
+    window.addEventListener('resize', handleViewportScroll, { passive: true });
+
+    return () => {
+      viewport.removeEventListener('scroll', handleViewportScroll);
+      window.removeEventListener('resize', handleViewportScroll);
+    };
+  }, [clearQuoteSelection]);
+
+  React.useEffect(() => {
+    clearQuoteSelection();
+  }, [messages.length, stream.threadId, clearQuoteSelection]);
 
   React.useEffect(() => {
     if (missingConfig) return;
@@ -692,87 +769,186 @@ export function Chat({
       size: a.storageFile?.size ?? a.file.size,
     }));
 
+  const submitDraft = React.useCallback(
+    (followUpOverride?: FollowUpBehavior) => {
+      if (isSendDisabled) return;
+
+      const filesToSend =
+        uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
+      const referencesToSend =
+        references.length > 0 ? [...references] : undefined;
+      const nextFollowUpMode = stream.isLoading
+        ? (followUpOverride ?? stream.followUpBehavior)
+        : undefined;
+      const humanInput = buildHumanMessageInputPayload({
+        content: trimmedDraft,
+        references: referencesToSend,
+      });
+
+      if (!humanInput) {
+        return;
+      }
+
+      const displayContent =
+        trimmedDraft ||
+        (referencesToSend ? t('chat.referencedContentOnly') : '');
+      const newMessage: HumanMessageWithMeta = {
+        id: createMessageId(),
+        type: 'human',
+        content: displayContent,
+        submittedInput: humanInput.input,
+        ...(humanInput.referenceComposition
+          ? { referenceComposition: humanInput.referenceComposition }
+          : {}),
+        ...(filesToSend ? { attachments: filesToSend } : {}),
+        ...(referencesToSend ? { references: referencesToSend } : {}),
+      };
+
+      setDraft('');
+
+      const inputPayload: {
+        input: string;
+        files?: typeof uploadedFiles;
+        references?: ChatKitReference[];
+        referenceComposition?: ChatKitReferenceCompositionMode;
+      } = {
+        ...humanInput,
+      };
+      if (filesToSend) {
+        inputPayload.files = filesToSend;
+      }
+
+      const requestOptions = buildInjectedRequestOptions({
+        defaults: options?.request,
+        humanInput: inputPayload,
+      });
+
+      stream.submit(
+        {
+          input: inputPayload,
+          ...(requestOptions.state ? { state: requestOptions.state } : {}),
+        },
+        {
+          ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+          ...(requestOptions.context
+            ? { context: requestOptions.context }
+            : {}),
+          ...(requestOptions.config ? { config: requestOptions.config } : {}),
+          ...(!nextFollowUpMode
+            ? {
+                optimisticValues: (prev) => {
+                  const prevMessages = prev?.messages ?? [];
+                  return { ...prev, messages: [...prevMessages, newMessage] };
+                },
+              }
+            : {}),
+        },
+      );
+
+      scrollToBottom(true, true);
+
+      if (selectedTool && !selectedTool.pinned) {
+        setSelectedTool(null);
+      }
+      setAttachments([]);
+      setReferences([]);
+    },
+    [
+      isSendDisabled,
+      options?.request,
+      references,
+      scrollToBottom,
+      selectedTool,
+      stream,
+      trimmedDraft,
+      uploadedFiles,
+      t,
+    ],
+  );
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // isSendDisabled already includes hasUploadingFiles check
-    if (isSendDisabled) return;
+    submitDraft();
+  };
 
-    // Store files for display in the message
-    const filesToSend =
-      uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
-    const referencesToSend =
-      references.length > 0 ? [...references] : undefined;
-    const humanInput = buildHumanMessageInputPayload({
-      content: trimmedDraft,
-      references: referencesToSend,
-    });
+  const handleEditPendingFollowUp = React.useCallback(
+    (id: string) => {
+      const item = pendingFollowUps.find(
+        (entry) => entry.id === id && entry.mode === 'queue',
+      );
+      if (!item) {
+        return;
+      }
 
-    if (!humanInput) {
+      const text = item.request?.input?.input?.trim() ?? '';
+      const nextReferences = normalizeReferences(
+        item.request?.input?.references,
+      );
+      stream.removePendingFollowUp(id);
+      setDraft(text);
+      setReferences(nextReferences);
+
+      requestAnimationFrame(() => {
+        const input = composerInputRef.current;
+        if (!input) {
+          return;
+        }
+
+        input.focus();
+        const position = text.length;
+        input.setSelectionRange(position, position);
+      });
+    },
+    [pendingFollowUps, stream],
+  );
+
+  const handleQuoteSelection = React.useCallback(() => {
+    if (!quoteSelection) {
       return;
     }
 
-    const displayContent =
-      trimmedDraft || (referencesToSend ? t('chat.referencedContentOnly') : '');
-    const newMessage: HumanMessageWithMeta = {
-      id: createMessageId(),
-      type: 'human',
-      content: displayContent,
-      submittedInput: humanInput.input,
-      ...(humanInput.referenceComposition
-        ? { referenceComposition: humanInput.referenceComposition }
-        : {}),
-      ...(filesToSend ? { attachments: filesToSend } : {}),
-      ...(referencesToSend ? { references: referencesToSend } : {}),
-    };
-
-    setDraft('');
-
-    const inputPayload: {
-      input: string;
-      files?: typeof uploadedFiles;
-      references?: ChatKitReference[];
-      referenceComposition?: ChatKitReferenceCompositionMode;
-    } = {
-      ...humanInput,
-    };
-    if (filesToSend) {
-      inputPayload.files = filesToSend;
-    }
-
-    const requestOptions = buildInjectedRequestOptions({
-      defaults: options?.request,
-      humanInput: inputPayload,
-    });
-
-    stream.submit(
-      {
-        input: inputPayload,
-        ...(requestOptions.state ? { state: requestOptions.state } : {}),
-      },
-      {
-        ...(requestOptions.context ? { context: requestOptions.context } : {}),
-        ...(requestOptions.config ? { config: requestOptions.config } : {}),
-        optimisticValues: (prev) => {
-          const prevMessages = prev?.messages ?? [];
-          return { ...prev, messages: [...prevMessages, newMessage] };
-        },
-      },
+    setReferences((previous) =>
+      mergeReferences(previous, [quoteSelection.reference]),
     );
-
-    // Immediately scroll to bottom to show the new message
-    scrollToBottom(true, true);
-
-    // Clear selected tool if not persistent
-    if (selectedTool && !selectedTool.pinned) {
-      setSelectedTool(null);
+    clearQuoteSelection();
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges();
     }
-    // Clear attachments after submit
-    setAttachments([]);
-    setReferences([]);
-  };
+    composerInputRef.current?.focus();
+  }, [clearQuoteSelection, quoteSelection]);
 
   const handleAttachmentClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleComposerKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+    if (event.shiftKey && (event.metaKey || event.ctrlKey)) {
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      if (isSendDisabled) {
+        return;
+      }
+      submitDraft(stream.followUpBehavior === 'queue' ? 'steer' : 'queue');
+      return;
+    }
+    if (event.shiftKey) {
+      return;
+    }
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    if (isSendDisabled) {
+      return;
+    }
+    submitDraft();
   };
 
   // Upload a single file to the server
@@ -890,7 +1066,7 @@ export function Chat({
   };
 
   const handlePromptClick = (prompt: string) => {
-    if (missingConfig || stream.isLoading || isHistoryLoading) return;
+    if (missingConfig || isHistoryLoading) return;
 
     const newMessage: Message = {
       id: createMessageId(),
@@ -898,13 +1074,22 @@ export function Chat({
       content: prompt,
     };
 
+    const nextFollowUpMode = stream.isLoading
+      ? stream.followUpBehavior
+      : undefined;
+
     stream.submit(
       { input: { input: prompt } },
       {
-        optimisticValues: (prev) => {
-          const prevMessages = prev?.messages ?? [];
-          return { ...prev, messages: [...prevMessages, newMessage] };
-        },
+        ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+        ...(!nextFollowUpMode
+          ? {
+              optimisticValues: (prev) => {
+                const prevMessages = prev?.messages ?? [];
+                return { ...prev, messages: [...prevMessages, newMessage] };
+              },
+            }
+          : {}),
       },
     );
 
@@ -915,7 +1100,7 @@ export function Chat({
   const loadConversationMessages = React.useCallback(
     async (recordId: string) => {
       if (missingConfig) {
-        setHistoryError(t('chat.missingConfigShort'));
+        setHistoryError(missingConfigShortMessage);
         return;
       }
       setHistoryError(null);
@@ -932,7 +1117,7 @@ export function Chat({
         setIsHistoryLoading(false);
       }
     },
-    [missingConfig, stream, t],
+    [missingConfig, missingConfigShortMessage, stream, t],
   );
 
   const handleNewThread = async () => {
@@ -1001,24 +1186,22 @@ export function Chat({
       referenceComposition: lastHumanMessage?.referenceComposition,
     });
 
-    if (!humanInput) {
-      return;
-    }
-
-    stream.submit(
-      { input: humanInput },
-      {
-        optimisticValues: (prev) => {
-          // Remove the AI message that we're retrying
-          const prevMessages = prev?.messages ?? [];
-          return {
-            ...prev,
-            messages: prevMessages.slice(0, messageIndex),
-          };
+    if (humanInput) {
+      stream.submit(
+        { input: humanInput },
+        {
+          optimisticValues: (prev) => {
+            // Remove the AI message that we're retrying
+            const prevMessages = prev?.messages ?? [];
+            return {
+              ...prev,
+              messages: prevMessages.slice(0, messageIndex),
+            };
+          },
         },
-      },
-    );
-    scrollToBottom(true, true);
+      );
+      scrollToBottom(true, true);
+    }
   };
 
   // Build accept string for file input
@@ -1118,7 +1301,7 @@ export function Chat({
         )}
         {showMissingConfig && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {t('chat.missingConfigDetail')}
+            {missingConfigDetailMessage}
           </div>
         )}
         {isHistoryLoading && (
@@ -1137,6 +1320,26 @@ export function Chat({
               const messageType = String(message.type);
               const isAssistantMessage =
                 messageType === 'assistant' || messageType === 'ai';
+              const isStreamingMessage =
+                stream.isLoading && index === messages.length - 1;
+              const streamingStatus = isAssistantMessage
+                ? getAssistantStreamingStatus(
+                    {
+                      ...(message as ChatkitMessage),
+                      lastStreamOutputAt: lastStreamOutputAtRef.current,
+                    },
+                    isStreamingMessage,
+                    { now: streamingNow },
+                  )
+                : null;
+
+              if (
+                isAssistantMessage &&
+                !hasRenderableAssistantMessage(message as ChatkitMessage) &&
+                !streamingStatus
+              ) {
+                return null;
+              }
 
               const messageContent =
                 typeof message.content === 'string'
@@ -1146,13 +1349,26 @@ export function Chat({
                         .map((part) => formatMessageContent(part as any))
                         .join('')
                     : formatMessageContent(message.content);
+              const hasPlainRenderableContent =
+                messageContent.trim().length > 0;
               const humanMessage = message as HumanMessageWithMeta;
               const humanReferences = humanMessage.references ?? [];
               const humanAttachments = humanMessage.attachments ?? [];
+              const hasHumanAttachments =
+                message.type === 'human' && humanAttachments.length > 0;
               const canQuoteMessage =
                 message.type === 'human' || isAssistantMessage;
               const quoteSource =
                 message.type === 'human' ? t('chat.youLabel') : assistantTitle;
+
+              if (
+                !isAssistantMessage &&
+                !hasPlainRenderableContent &&
+                !hasHumanAttachments &&
+                humanReferences.length === 0
+              ) {
+                return null;
+              }
 
               return (
                 <div
@@ -1187,9 +1403,8 @@ export function Chat({
                             ...(message as ChatkitMessage),
                             type: 'assistant',
                           }}
-                          isStreaming={
-                            stream.isLoading && index === messages.length - 1
-                          }
+                          isStreaming={isStreamingMessage}
+                          streamingStatus={streamingStatus}
                         />
                       ) : (
                         <>
@@ -1243,9 +1458,7 @@ export function Chat({
                     <MessageActions
                       content={messageContent}
                       isAssistant={isAssistantMessage}
-                      isStreaming={
-                        stream.isLoading && index === messages.length - 1
-                      }
+                      isStreaming={isStreamingMessage}
                       onRetry={
                         isAssistantMessage &&
                         !stream.isLoading &&
@@ -1267,23 +1480,32 @@ export function Chat({
                   : '';
                 const isLastMessageFromAI =
                   lastMessageType === 'ai' || lastMessageType === 'assistant';
-                // Hide dots once AI has substantial content
-                const lastMsgContent = lastMessage?.content;
-                const hasSubstantialContent =
-                  isLastMessageFromAI &&
-                  ((typeof lastMsgContent === 'string' &&
-                    lastMsgContent.length > 10) ||
-                    (Array.isArray(lastMsgContent) &&
-                      lastMsgContent.length > 0));
-                if (hasSubstantialContent) return null;
+                const lastAssistantStatus = isLastMessageFromAI
+                  ? getAssistantStreamingStatus(
+                      {
+                        ...(lastMessage as ChatkitMessage),
+                        lastStreamOutputAt: lastStreamOutputAtRef.current,
+                      },
+                      stream.isLoading,
+                      { now: streamingNow },
+                    )
+                  : null;
+                if (lastAssistantStatus) return null;
+                const fallbackStreamingStatus = getAssistantStreamingStatus(
+                  {
+                    status: undefined,
+                    reasoning: undefined,
+                    lastStreamOutputAt: lastStreamOutputAtRef.current,
+                  },
+                  stream.isLoading,
+                  { now: streamingNow },
+                );
                 return (
                   <div className="flex justify-start gap-3 -ml-2">
                     <div className="max-w-full rounded-2xl py-2.5">
-                      <div className="flex gap-1.5">
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]"></div>
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]"></div>
-                        <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60"></div>
-                      </div>
+                      <AssistantStreamingIndicator
+                        status={fallbackStreamingStatus ?? 'loading'}
+                      />
                     </div>
                   </div>
                 );
@@ -1338,7 +1560,7 @@ export function Chat({
 
       <div className="p-2 sticky bottom-0 z-10 bg-background">
         {threadErrorMessage && (
-          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
             {threadErrorMessage}
           </div>
         )}
@@ -1456,15 +1678,28 @@ export function Chat({
           </div>
         )}
 
-        <form className="flex items-center" onSubmit={handleSubmit}>
+        <PendingFollowUps
+          items={pendingFollowUps}
+          isLoading={stream.isLoading}
+          followUpBehavior={stream.followUpBehavior}
+          onBehaviorChange={stream.setFollowUpBehavior}
+          onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
+          canSendNow={stream.canSendPendingFollowUpNow}
+          onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
+          onEdit={handleEditPendingFollowUp}
+          onRemove={stream.removePendingFollowUp}
+        />
+
+        <form className="flex items-end" onSubmit={handleSubmit}>
           {/* Capsule-shaped input container */}
           <div
             className={cn(
-              'flex flex-1 items-center gap-1 rounded-xl',
+              'flex flex-1 items-end gap-1 rounded-xl',
               'bg-background border border-border shadow-sm',
               'pl-1.5 pr-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
               'transition-shadow duration-200',
+              getRoundedClass(theme.radius),
             )}
           >
             {/* Plus button inside input - left side */}
@@ -1473,25 +1708,26 @@ export function Chat({
               onAttachmentClick={handleAttachmentClick}
               onToolSelect={handleToolSelect}
               selectedTool={selectedTool}
-              disabled={stream.isLoading || missingConfig || isHistoryLoading}
+              disabled={missingConfig || isHistoryLoading}
             />
-            <input
+            <textarea
               ref={composerInputRef}
-              type="text"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              rows={1}
               placeholder={inputPlaceholder}
-              disabled={stream.isLoading || missingConfig || isHistoryLoading}
+              disabled={missingConfig || isHistoryLoading}
               className={cn(
-                'flex-1 bg-transparent text-sm text-foreground outline-none pr-2',
+                'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
                 'placeholder:text-muted-foreground',
                 'disabled:cursor-not-allowed disabled:opacity-50',
               )}
-              autoComplete="off"
             />
             <SendButton
               disabled={isSendDisabled}
               isLoading={stream.isLoading}
+              showStop={stream.isLoading && !trimmedDraft}
               onStop={() => stream.stop()}
               stopLabel={t('chat.stop')}
               sendLabel={t('chat.send')}

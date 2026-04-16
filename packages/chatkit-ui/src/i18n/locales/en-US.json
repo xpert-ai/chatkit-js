@@ -5,6 +5,12 @@
     "statusOnline": "Online",
     "missingConfigShort": "Missing ChatKit configuration.",
     "missingConfigDetail": "Missing ChatKit configuration. Check `VITE_XPERTAI_API_URL`, and the `clientSecret` prop.",
+    "missingApiUrlShort": "Missing ChatKit API URL.",
+    "missingApiUrlDetail": "Missing ChatKit API URL. Check `VITE_XPERTAI_API_URL` or `options.api.apiUrl`.",
+    "missingClientSecretShort": "Missing ChatKit client secret.",
+    "missingClientSecretDetail": "Missing ChatKit client secret. Check the `clientSecret` prop or `api.getClientSecret` integration.",
+    "missingApiUrlAndClientSecretShort": "Missing ChatKit API URL and client secret.",
+    "missingApiUrlAndClientSecretDetail": "Missing ChatKit API URL and client secret. Check `VITE_XPERTAI_API_URL`, `options.api.apiUrl`, and your client secret integration.",
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",
@@ -13,6 +19,25 @@
     "scrollToBottom": "Scroll to bottom",
     "retryUpload": "Retry upload",
     "poweredBy": "Powered by Xpert AI",
+    "followUps": {
+      "label": "Follow-up behavior",
+      "settings": "Settings",
+      "idleHint": "Used when you send while a run is active.",
+      "activeHint": "This message will use the selected busy-run behavior.",
+      "pending": "Pending follow-ups",
+      "queue": "Queue",
+      "steer": "Steer",
+      "steerAction": "Steer",
+      "promoteToSteer": "Steer now",
+      "sendNow": "Send now",
+      "remove": "Remove pending follow-up",
+      "more": "More actions",
+      "edit": "Edit message",
+      "turnOffQueueing": "Turn off queueing",
+      "queueHint": "Starts after the current run finishes",
+      "manualQueueHint": "Ready to send as a new run",
+      "steerHint": "Injects after the current tool call"
+    },
     "errors": {
       "loadMessages": "Failed to load thread messages",
       "createThread": "Failed to create thread",
@@ -60,6 +85,9 @@
   },
   "message": {
     "answer": "Answer",
-    "reasoning": "Reasoning"
+    "reasoning": "Reasoning",
+    "loading": "Loading",
+    "thinking": "Thinking",
+    "answering": "Answering"
   }
 }

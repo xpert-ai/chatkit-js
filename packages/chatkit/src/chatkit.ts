@@ -2,7 +2,7 @@ import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
 } from './message';
-import type { ChatKitOptions } from './options';
+import type { ChatKitOptions, FollowUpBehavior } from './options';
 
 export type EventHandler<K extends keyof ChatKitEvents> = (
   event: ChatKitEvents[K],
@@ -16,6 +16,7 @@ export type SendUserMessageParams = {
   newThread?: boolean;
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
+  followUpMode?: 'default' | FollowUpBehavior;
 };
 
 /**
