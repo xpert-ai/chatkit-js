@@ -357,7 +357,7 @@ export const CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED = 'follow_up_consumed' as const;
 
 export type TFollowUpConsumedEvent = TChatEventMessage & {
   type: typeof CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED;
-  mode: 'steer';
+  mode: 'queue' | 'steer';
   messageIds: string[];
   clientMessageIds?: string[];
   executionId?: string | null;

@@ -65,8 +65,11 @@ import {
   buildSteerFollowUpRunInput,
   createPendingFollowUp,
   getNextAutoQueuedFollowUp,
+  getQueuedFollowUpGroup,
   isHiddenPendingFollowUpMessage,
   mapPersistedPendingFollowUp,
+  mergeFollowUpHumanInputs,
+  mergeQueuedFollowUpGroup,
   pendingFollowUpToUiMessage,
   readPersistedFollowUpBehavior,
   toQueuedSendRequest,
@@ -80,6 +83,9 @@ export {
   buildSteerFollowUpRunInput,
   getPendingSteerFollowUpIds,
   getNextAutoQueuedFollowUp,
+  getQueuedFollowUpGroup,
+  mergeFollowUpHumanInputs,
+  mergeQueuedFollowUpGroup,
 } from '../lib/follow-ups';
 
 type ChatKitAIMessage = Message & {
@@ -1723,11 +1729,22 @@ const StreamSession = ({
         return;
       }
 
-      removePendingFollowUps([nextItem.id]);
-      insertPendingFollowUpsIntoTranscript([nextItem]);
-      await submitRef.current?.(toQueuedSendRequest(nextItem.request), {
-        ...(nextItem.context ? { context: nextItem.context } : {}),
-        ...(nextItem.config ? { config: nextItem.config } : {}),
+      const groupedItems = getQueuedFollowUpGroup(
+        pendingFollowUpsRef.current,
+        nextItem,
+      );
+      const mergedGroup = mergeQueuedFollowUpGroup(groupedItems, {
+        leadItemId: id,
+      });
+      if (!mergedGroup) {
+        return;
+      }
+
+      removePendingFollowUps(mergedGroup.items.map((item) => item.id));
+      insertPendingFollowUpsIntoTranscript(mergedGroup.items);
+      await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
+        ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
+        ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
         threadId: threadId ?? undefined,
       });
     },
@@ -1750,11 +1767,22 @@ const StreamSession = ({
           break;
         }
 
-        removePendingFollowUps([nextItem.id]);
-        insertPendingFollowUpsIntoTranscript([nextItem]);
-        await submitRef.current?.(toQueuedSendRequest(nextItem.request), {
-          ...(nextItem.context ? { context: nextItem.context } : {}),
-          ...(nextItem.config ? { config: nextItem.config } : {}),
+        const groupedItems = getQueuedFollowUpGroup(
+          pendingFollowUpsRef.current,
+          nextItem,
+        );
+        const mergedGroup = mergeQueuedFollowUpGroup(groupedItems, {
+          leadItemId: nextItem.id,
+        });
+        if (!mergedGroup) {
+          break;
+        }
+
+        removePendingFollowUps(mergedGroup.items.map((item) => item.id));
+        insertPendingFollowUpsIntoTranscript(mergedGroup.items);
+        await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
+          ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
+          ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
           threadId: threadId ?? undefined,
         });
       }
@@ -1828,11 +1856,14 @@ const StreamSession = ({
               );
             },
             (event) => {
-              flushSteerFollowUps(
-                resolveFollowUpConsumedIds(event),
-                event?.visibleAt ?? null,
-              );
-              shouldStartFreshAssistantMessageAfterSteerRef.current = true;
+              const consumedIds = resolveFollowUpConsumedIds(event);
+              if (event?.mode === 'steer') {
+                flushSteerFollowUps(consumedIds, event?.visibleAt ?? null);
+                shouldStartFreshAssistantMessageAfterSteerRef.current = true;
+                return;
+              }
+
+              removePendingFollowUps(consumedIds);
             },
             () => {
               const shouldStartFreshAssistant =
@@ -1878,6 +1909,7 @@ const StreamSession = ({
       handleInterrupt,
       flushSteerFollowUps,
       markPendingFollowUpsAsQueued,
+      removePendingFollowUps,
     ],
   );
 

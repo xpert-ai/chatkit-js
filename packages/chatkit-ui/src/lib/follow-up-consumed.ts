@@ -26,7 +26,8 @@ export function parseFollowUpConsumedEvent(
     return null;
   }
 
-  const mode = raw.mode === 'steer' ? 'steer' : null;
+  const mode =
+    raw.mode === 'queue' || raw.mode === 'steer' ? raw.mode : null;
   if (!mode) {
     return null;
   }

@@ -14,7 +14,10 @@ import {
   createFetchWithClientSecretRefresh,
   getAutoDrainQueuedFollowUpIds,
   getNextAutoQueuedFollowUp,
+  getQueuedFollowUpGroup,
   getPendingSteerFollowUpIds,
+  mergeFollowUpHumanInputs,
+  mergeQueuedFollowUpGroup,
   shouldBroadcastThreadChange,
 } from './Stream';
 
@@ -232,6 +235,48 @@ describe('applyStreamEvent', () => {
         type: CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
         mode: 'steer',
         clientMessageIds: ['client-message-1'],
+      }),
+    );
+    expect(setValues).not.toHaveBeenCalled();
+    expect(setError).not.toHaveBeenCalled();
+  });
+
+  it('routes queue follow-up consumed chat events to the callback without appending messages', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+    const onFollowUpConsumed = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
+            mode: 'queue',
+            messageIds: ['server-message-2'],
+            clientMessageIds: ['client-message-2'],
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      onFollowUpConsumed,
+    );
+
+    expect(onFollowUpConsumed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
+        mode: 'queue',
+        clientMessageIds: ['client-message-2'],
       }),
     );
     expect(setValues).not.toHaveBeenCalled();
@@ -502,6 +547,196 @@ describe('getNextAutoQueuedFollowUp', () => {
     ).toMatchObject({
       id: 'auto-queue',
       mode: 'queue',
+    });
+  });
+});
+
+describe('mergeFollowUpHumanInputs', () => {
+  it('merges text, files, references, and later human fields in order', () => {
+    expect(
+      mergeFollowUpHumanInputs([
+        {
+          input: 'first',
+          files: [{ id: 'file-1' }] as unknown as [],
+          references: [{ type: 'quote', text: 'A' }] as unknown as [],
+          referenceComposition: 'compose',
+          custom: 'early',
+        },
+        {
+          input: 'second',
+          files: [{ id: 'file-2' }] as unknown as [],
+          references: [{ type: 'quote', text: 'B' }] as unknown as [],
+          custom: 'late',
+        },
+      ]),
+    ).toEqual({
+      input: 'first\n\nsecond',
+      files: [{ id: 'file-1' }, { id: 'file-2' }],
+      references: [
+        { type: 'quote', text: 'A' },
+        { type: 'quote', text: 'B' },
+      ],
+      referenceComposition: 'compose',
+      custom: 'late',
+    });
+  });
+});
+
+describe('getQueuedFollowUpGroup', () => {
+  it('returns queued follow-ups for the same target execution in created order', () => {
+    const items = [
+      {
+        id: 'queue-2',
+        clientMessageId: 'queue-2',
+        mode: 'queue' as const,
+        targetExecutionId: 'run-1',
+        request: {
+          id: 'queue-2',
+          input: { input: 'second' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 2,
+      },
+      {
+        id: 'queue-3',
+        clientMessageId: 'queue-3',
+        mode: 'queue' as const,
+        targetExecutionId: 'run-2',
+        request: {
+          id: 'queue-3',
+          input: { input: 'other run' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 3,
+      },
+      {
+        id: 'queue-1',
+        clientMessageId: 'queue-1',
+        mode: 'queue' as const,
+        targetExecutionId: 'run-1',
+        request: {
+          id: 'queue-1',
+          input: { input: 'first' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 1,
+      },
+    ];
+
+    expect(
+      getQueuedFollowUpGroup(items, items[0]).map((item) => item.id),
+    ).toEqual(['queue-1', 'queue-2']);
+  });
+
+  it('does not merge queued follow-ups without a target execution id', () => {
+    const items = [
+      {
+        id: 'queue-1',
+        clientMessageId: 'queue-1',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-1',
+          input: { input: 'first' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 1,
+      },
+      {
+        id: 'queue-2',
+        clientMessageId: 'queue-2',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-2',
+          input: { input: 'second' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 2,
+      },
+    ];
+
+    expect(
+      getQueuedFollowUpGroup(items, items[0]).map((item) => item.id),
+    ).toEqual(['queue-1']);
+  });
+});
+
+describe('mergeQueuedFollowUpGroup', () => {
+  it('creates one merged queued send request while preserving grouped items', () => {
+    const result = mergeQueuedFollowUpGroup(
+      [
+        {
+          id: 'queue-1',
+          clientMessageId: 'queue-1',
+          mode: 'queue',
+          targetExecutionId: 'run-1',
+          request: {
+            id: 'queue-1',
+            input: {
+              input: 'first',
+              files: [{ id: 'file-1' }] as unknown as [],
+            },
+            state: {
+              human: {
+                input: 'first',
+              },
+            },
+            followUpMode: 'queue',
+          },
+          context: {
+            source: 'first',
+          },
+          createdAt: 1,
+        },
+        {
+          id: 'queue-2',
+          clientMessageId: 'queue-2',
+          mode: 'queue',
+          targetExecutionId: 'run-1',
+          request: {
+            id: 'queue-2',
+            input: {
+              input: 'second',
+              references: [{ type: 'quote', text: 'ref' }] as unknown as [],
+            },
+            state: {
+              human: {
+                input: 'second',
+              },
+            },
+            projectId: 'project-1',
+            followUpMode: 'queue',
+          },
+          config: {
+            checkpoint: 'latest',
+          },
+          createdAt: 2,
+        },
+      ],
+      { leadItemId: 'queue-1' },
+    );
+
+    expect(result).toMatchObject({
+      items: [
+        expect.objectContaining({ id: 'queue-1' }),
+        expect.objectContaining({ id: 'queue-2' }),
+      ],
+      request: {
+        id: 'queue-1',
+        input: {
+          input: 'first\n\nsecond',
+          files: [{ id: 'file-1' }],
+          references: [{ type: 'quote', text: 'ref' }],
+        },
+        projectId: 'project-1',
+        followUpMode: 'queue',
+      },
+      context: {
+        source: 'first',
+      },
+      config: {
+        checkpoint: 'latest',
+      },
+      targetExecutionId: 'run-1',
     });
   });
 });

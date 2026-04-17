@@ -86,6 +86,14 @@ type ReferenceStateContainer = {
   human?: unknown;
 };
 
+export type MergedQueuedFollowUpGroup = {
+  items: PendingFollowUp[];
+  request: TChatRequest;
+  context?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  targetExecutionId?: string | null;
+};
+
 export function normalizeFollowUpBehavior(
   value: unknown,
 ): FollowUpBehavior | null {
@@ -281,6 +289,79 @@ function hasSubmittableHumanInput(humanInput?: TChatRequestHuman | null) {
   return Boolean(text) || references.length > 0;
 }
 
+function mergeInputText(
+  previousInput: unknown,
+  nextInput: unknown,
+): string | undefined {
+  const segments = [previousInput, nextInput].filter(
+    (value): value is string =>
+      typeof value === 'string' && value.trim().length > 0,
+  );
+
+  return segments.length ? segments.join('\n\n') : undefined;
+}
+
+function mergeArrayValues<T>(
+  previousValue: unknown,
+  nextValue: unknown,
+): T[] | undefined {
+  const merged = [
+    ...(Array.isArray(previousValue) ? (previousValue as T[]) : []),
+    ...(Array.isArray(nextValue) ? (nextValue as T[]) : []),
+  ];
+
+  return merged.length ? merged : undefined;
+}
+
+function normalizeTargetExecutionId(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function sortPendingFollowUps(items: PendingFollowUp[]) {
+  return [...items].sort((left, right) => left.createdAt - right.createdAt);
+}
+
+export function mergeFollowUpHumanInputs(
+  inputs: Array<TChatRequestHuman | null | undefined>,
+): TChatRequestHuman {
+  return inputs.reduce<TChatRequestHuman>((acc, item) => {
+    const nextInput = item ?? {};
+    const { input, files, references, ...rest } = nextInput;
+    const next: TChatRequestHuman = {
+      ...acc,
+      ...rest,
+    };
+    const mergedInput = mergeInputText(acc.input, input);
+    const mergedFiles = mergeArrayValues(acc.files, files);
+    const mergedReferences = mergeArrayValues(acc.references, references);
+
+    if (mergedInput) {
+      next.input = mergedInput;
+    } else {
+      delete next.input;
+    }
+
+    if (mergedFiles?.length) {
+      next.files = mergedFiles;
+    } else {
+      delete next.files;
+    }
+
+    if (mergedReferences?.length) {
+      next.references = mergedReferences;
+    } else {
+      delete next.references;
+    }
+
+    return next;
+  }, {});
+}
+
 export function createPendingFollowUp(
   request: TChatRequest,
   mode: FollowUpBehavior,
@@ -309,6 +390,94 @@ export function createPendingFollowUp(
     ...(options?.config ? { config: options.config } : {}),
     targetExecutionId: request.executionId ?? null,
     createdAt: Date.now(),
+  };
+}
+
+export function resolvePendingFollowUpTargetExecutionId(
+  item: PendingFollowUp | null | undefined,
+) {
+  if (!item) {
+    return null;
+  }
+
+  return normalizeTargetExecutionId(
+    item.targetExecutionId ?? item.request.executionId,
+  );
+}
+
+export function getQueuedFollowUpGroup(
+  items: PendingFollowUp[],
+  targetItem: PendingFollowUp | null | undefined,
+) {
+  if (!targetItem || targetItem.mode !== 'queue') {
+    return [];
+  }
+
+  const sortedQueueItems = sortPendingFollowUps(
+    items.filter((item) => item.mode === 'queue'),
+  );
+  const targetExecutionId = resolvePendingFollowUpTargetExecutionId(targetItem);
+
+  if (!targetExecutionId) {
+    return sortedQueueItems.filter((item) => item.id === targetItem.id);
+  }
+
+  return sortedQueueItems.filter(
+    (item) =>
+      resolvePendingFollowUpTargetExecutionId(item) === targetExecutionId,
+  );
+}
+
+export function mergeQueuedFollowUpGroup(
+  items: PendingFollowUp[],
+  options?: {
+    leadItemId?: string | null;
+  },
+): MergedQueuedFollowUpGroup | null {
+  const groupedItems = sortPendingFollowUps(items);
+  if (groupedItems.length === 0) {
+    return null;
+  }
+
+  const leadItem =
+    groupedItems.find((item) => item.id === options?.leadItemId) ??
+    groupedItems[0];
+  const latestRequest = groupedItems.reduce<TChatRequest>(
+    (acc, item) => ({
+      ...acc,
+      ...item.request,
+    }),
+    leadItem.request,
+  );
+  const mergedHumanInput = mergeFollowUpHumanInputs(
+    groupedItems.map((item) => extractRequestHumanInput(item.request)),
+  );
+
+  let context: Record<string, unknown> | undefined;
+  let config: Record<string, unknown> | undefined;
+  for (const item of groupedItems) {
+    if (item.context) {
+      context = item.context;
+    }
+    if (item.config) {
+      config = item.config;
+    }
+  }
+
+  return {
+    items: groupedItems,
+    request: {
+      ...latestRequest,
+      id: leadItem.request.id ?? leadItem.id,
+      input: mergedHumanInput,
+      followUpMode: 'queue',
+      ...(resolvePendingFollowUpTargetExecutionId(leadItem)
+        ? { executionId: resolvePendingFollowUpTargetExecutionId(leadItem) }
+        : {}),
+    },
+    ...(context ? { context } : {}),
+    ...(config ? { config } : {}),
+    targetExecutionId: resolvePendingFollowUpTargetExecutionId(leadItem),
   };
 }
 
