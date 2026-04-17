@@ -21,9 +21,9 @@
     "prepublishOnly": "npm run build"
   },
   "repository": {
-    "directory": "renderers/react",
+    "directory": "packages/chatkit-widgets",
     "type": "git",
-    "url": "git+https://github.com/google/A2UI.git"
+    "url": "https://github.com/xpert-ai/chatkit-js"
   },
   "files": [
     "dist"
@@ -35,12 +35,15 @@
     "ui",
     "generative-ui"
   ],
-  "author": "Google",
+  "author": "Xpert AI",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/google/A2UI/issues"
+    "url": "https://github.com/xpert-ai/chatkit-js/issues"
   },
-  "homepage": "https://github.com/google/A2UI/tree/main/renderers/react#readme",
+  "homepage": "https://github.com/xpert-ai/chatkit-js/tree/main/packages/chatkit-widgets#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
