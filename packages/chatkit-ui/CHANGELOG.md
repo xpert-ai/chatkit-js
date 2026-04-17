@@ -1,5 +1,18 @@
 # @xpert-ai/chatkit-ui
 
+## 0.1.0
+
+### Minor Changes
+
+- 10c8af9: Minor release v0.1
+
+### Patch Changes
+
+- Updated dependencies [10c8af9]
+  - @xpert-ai/chatkit-web-shared@0.1.0
+  - @xpert-ai/chatkit-types@0.1.0
+  - @xpert-ai/a2ui-react@0.1.0
+
 ## 0.0.20
 
 ### Patch Changes
