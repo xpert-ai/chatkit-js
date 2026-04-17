@@ -1,26 +1,66 @@
 import * as React from 'react';
-import { ArrowDown, FileText, Loader2, Pencil, RefreshCw, X } from 'lucide-react';
+import {
+  ArrowDown,
+  FileText,
+  Loader2,
+  Pencil,
+  Quote,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 
 import type { Message } from '@xpert-ai/xpert-sdk';
-import type { ChatkitMessage, ChatKitOptions, ToolOption } from '@xpert-ai/chatkit-types';
+import type {
+  ChatkitMessage,
+  ChatKitOptions,
+  ChatKitReference,
+  ChatKitReferenceCompositionMode,
+  FollowUpBehavior,
+  ToolOption,
+} from '@xpert-ai/chatkit-types';
 
-import { cn, createMessageId } from '../lib/utils';
+import { cn, createMessageId, getRoundedClass } from '../lib/utils';
+import {
+  getAssistantStreamingStatus,
+  hasRenderableAssistantMessage,
+} from '../lib/message';
 import { isNearBottom } from '../lib/scroll';
 import { type StorageFile, type UploadingFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
-import { AssistantMessage } from './thread/messages/ai';
+import { PendingFollowUps } from './composer/pending-follow-ups';
+import {
+  AssistantMessage,
+  AssistantStreamingIndicator,
+} from './thread/messages/ai';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
-import { ChatkitAvatar, type ChatkitAvatarData, extractAssistantAvatar } from './ui/chatkit-avatar';
+import {
+  ChatkitAvatar,
+  type ChatkitAvatarData,
+  extractAssistantAvatar,
+} from './ui/chatkit-avatar';
 import { useStreamManager } from '../hooks/useStream';
 import { useThreads } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
 import { buildInjectedRequestOptions } from '../lib/request-options';
+import {
+  buildHumanMessageInputPayload,
+  getReferenceKey,
+  getReferenceLabel,
+  getReferenceMetaLine,
+  getReferenceTitle,
+  mergeReferences,
+  normalizeReferences,
+  type ComposerValuePayload,
+} from '../lib/references';
+import { getMissingApiConfigurationKind } from '../lib/api-config';
+import { useTheme } from '../providers/Theme';
+import { useParentMessenger } from '../hooks/useParentMessenger';
 
 export type ChatProps = {
   className?: string;
@@ -31,7 +71,28 @@ export type ChatProps = {
   isClientSecretInitializing?: boolean;
 };
 
-const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as string | undefined;
+const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
+  | string
+  | undefined;
+const COMPOSER_INPUT_MAX_HEIGHT = 128;
+
+type UploadedMessageFile = {
+  originalName: string;
+  mimetype: string;
+};
+
+type HumanMessageWithMeta = Message & {
+  attachments?: UploadedMessageFile[];
+  references?: ChatKitReference[];
+  submittedInput?: string;
+  referenceComposition?: ChatKitReferenceCompositionMode;
+};
+
+type QuoteSelectionState = {
+  reference: ChatKitReference;
+  top: number;
+  left: number;
+};
 
 function formatMessageContent(content: Message['content'][number]): string {
   if (typeof content === 'string') {
@@ -62,6 +123,93 @@ function formatMessageContent(content: Message['content'][number]): string {
   return '';
 }
 
+function getClosestQuoteContainer(node: Node | null): HTMLElement | null {
+  if (!node) {
+    return null;
+  }
+
+  const element =
+    node instanceof HTMLElement
+      ? node
+      : node instanceof Text
+        ? node.parentElement
+        : null;
+
+  return element?.closest('[data-quote-message-id]') ?? null;
+}
+
+function ReferenceChip({
+  reference,
+  variant,
+  onRemove,
+  removeLabel,
+}: {
+  reference: ChatKitReference;
+  variant: 'composer' | 'message';
+  onRemove?: () => void;
+  removeLabel?: string;
+}) {
+  const metaLine = getReferenceMetaLine(reference);
+  const isComposer = variant === 'composer';
+  const Icon = reference.type === 'quote' ? Quote : FileText;
+
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2 rounded-md px-2 py-1',
+        isComposer ? 'bg-muted text-foreground' : 'bg-primary-foreground/20',
+      )}
+      title={getReferenceTitle(reference)}
+    >
+      <Icon
+        size={isComposer ? 14 : 12}
+        className={cn(
+          'mt-0.5 shrink-0',
+          isComposer ? 'text-muted-foreground' : 'text-primary-foreground/80',
+        )}
+      />
+      <div className="min-w-0 flex-1">
+        <div
+          className={cn(
+            'truncate',
+            isComposer ? 'text-sm' : 'text-xs font-medium',
+          )}
+        >
+          {getReferenceLabel(reference)}
+        </div>
+        {metaLine && (
+          <div
+            className={cn(
+              'truncate',
+              isComposer
+                ? 'text-xs text-muted-foreground'
+                : 'text-[10px] text-primary-foreground/75',
+            )}
+          >
+            {metaLine}
+          </div>
+        )}
+      </div>
+      {onRemove && removeLabel && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className={cn(
+            'ml-1 rounded-full p-0.5',
+            isComposer
+              ? 'hover:bg-muted-foreground/20'
+              : 'hover:bg-primary-foreground/20',
+          )}
+          title={removeLabel}
+          aria-label={removeLabel}
+        >
+          <X size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Chat({
   className,
   options,
@@ -76,18 +224,23 @@ export function Chat({
   const history = options?.history;
   const disclaimer = options?.disclaimer;
   const apiUrl = options?.api?.apiUrl || defaultApiUrl;
-  const {setStream} = useStreamManager();
+  const { setStream } = useStreamManager();
   const stream = useStreamContext();
+  const { theme } = useTheme();
 
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
   const [assistantName, setAssistantName] = React.useState<string | null>(null);
-  const [assistantAvatar, setAssistantAvatar] = React.useState<ChatkitAvatarData | null>(null);
+  const [assistantAvatar, setAssistantAvatar] =
+    React.useState<ChatkitAvatarData | null>(null);
 
   // Minimum loading dots display time (ms)
   const LOADING_DOTS_MIN_DURATION = 800;
+  const STREAMING_STATUS_REFRESH_MS = 250;
   const [showLoadingDots, setShowLoadingDots] = React.useState(false);
+  const [streamingNow, setStreamingNow] = React.useState(() => Date.now());
   const loadingStartTimeRef = React.useRef<number | null>(null);
+  const lastStreamOutputAtRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     setStream(stream);
@@ -123,9 +276,38 @@ export function Chat({
     }
   }, [stream.isLoading]);
 
+  React.useEffect(() => {
+    if (!stream.isLoading) {
+      lastStreamOutputAtRef.current = null;
+      setStreamingNow(Date.now());
+      return;
+    }
+
+    const now = Date.now();
+    lastStreamOutputAtRef.current = now;
+    setStreamingNow(now);
+  }, [stream.messages, stream.isLoading]);
+
+  React.useEffect(() => {
+    if (!stream.isLoading) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setStreamingNow(Date.now());
+    }, STREAMING_STATUS_REFRESH_MS);
+
+    return () => window.clearInterval(timer);
+  }, [stream.isLoading]);
+
   const [draft, setDraft] = React.useState('');
-  const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(null);
+  const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
+    null,
+  );
   const [attachments, setAttachments] = React.useState<UploadingFile[]>([]);
+  const [references, setReferences] = React.useState<ChatKitReference[]>([]);
+  const [quoteSelection, setQuoteSelection] =
+    React.useState<QuoteSelectionState | null>(null);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
   const [hasUpdatesBelow, setHasUpdatesBelow] = React.useState(false);
   const {
@@ -136,6 +318,7 @@ export function Chat({
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const composerInputRef = React.useRef<HTMLTextAreaElement>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const forceFollowRef = React.useRef(false);
   const previousMessageCountRef = React.useRef(0);
@@ -149,10 +332,125 @@ export function Chat({
 
   // Use placeholder from composer options or fallback to prop/i18n
   const inputPlaceholder =
-    selectedTool?.placeholderOverride ?? composer?.placeholder ?? resolvedPlaceholder;
+    selectedTool?.placeholderOverride ??
+    composer?.placeholder ??
+    resolvedPlaceholder;
 
-  const messages = React.useMemo(() => stream.messages ?? [], [stream.messages]);
+  const messages = React.useMemo(
+    () => stream.messages ?? [],
+    [stream.messages],
+  );
   const trimmedDraft = draft.trim();
+  const hasReferences = references.length > 0;
+  const pendingFollowUps = React.useMemo(
+    () =>
+      [...(stream.pendingFollowUps ?? [])].sort(
+        (a, b) => a.createdAt - b.createdAt,
+      ),
+    [stream.pendingFollowUps],
+  );
+
+  const clearQuoteSelection = React.useCallback(() => {
+    setQuoteSelection(null);
+  }, []);
+
+  useParentMessenger({
+    onSetComposerValue: React.useCallback(
+      (payload: ComposerValuePayload | null) => {
+        if (!payload) {
+          return;
+        }
+
+        if (typeof payload.text === 'string') {
+          setDraft(payload.text);
+        }
+
+        if (Array.isArray(payload.references)) {
+          const nextReferences = normalizeReferences(payload.references);
+          setReferences((previous) =>
+            payload.appendReferences
+              ? mergeReferences(previous, nextReferences)
+              : nextReferences,
+          );
+        }
+
+        if (payload.selectedToolId !== undefined) {
+          const nextTool =
+            payload.selectedToolId === null
+              ? null
+              : ((composer?.tools ?? []).find(
+                  (tool) => tool.id === payload.selectedToolId,
+                ) ?? null);
+          setSelectedTool(nextTool);
+        }
+      },
+      [composer?.tools],
+    ),
+    onFocusComposer: React.useCallback(() => {
+      composerInputRef.current?.focus();
+    }, []),
+  });
+
+  const syncQuoteSelection = React.useCallback(() => {
+    if (typeof window === 'undefined') {
+      clearQuoteSelection();
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      clearQuoteSelection();
+      return;
+    }
+
+    const text = selection.toString().trim();
+    if (!text) {
+      clearQuoteSelection();
+      return;
+    }
+
+    const anchorContainer = getClosestQuoteContainer(selection.anchorNode);
+    const focusContainer = getClosestQuoteContainer(selection.focusNode);
+    if (
+      !anchorContainer ||
+      !focusContainer ||
+      anchorContainer !== focusContainer ||
+      !viewportRef.current?.contains(anchorContainer)
+    ) {
+      clearQuoteSelection();
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      clearQuoteSelection();
+      return;
+    }
+
+    const top =
+      rect.bottom + 8 > window.innerHeight - 48
+        ? Math.max(12, rect.top - 44)
+        : rect.bottom + 8;
+    const left = Math.min(
+      Math.max(24, rect.left + rect.width / 2),
+      window.innerWidth - 24,
+    );
+    const source = anchorContainer.dataset.quoteSource?.trim() || undefined;
+    const messageId =
+      anchorContainer.dataset.quoteMessageId?.trim() || undefined;
+
+    setQuoteSelection({
+      reference: {
+        type: 'quote',
+        text,
+        ...(messageId ? { messageId } : {}),
+        ...(source ? { source, label: source } : {}),
+      },
+      top,
+      left,
+    });
+  }, [clearQuoteSelection]);
 
   const cancelPendingAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -173,30 +471,33 @@ export function Chat({
     setHasUpdatesBelow(false);
   }, []);
 
-  const scrollToBottom = React.useCallback((smooth = false, force = false) => {
-    if (force) {
-      enableAutoFollow();
-    }
-
-    cancelPendingAutoScroll();
-
-    // Use requestAnimationFrame to ensure DOM has updated
-    autoScrollFrameRef.current = requestAnimationFrame(() => {
-      autoScrollFrameRef.current = null;
-
-      const viewport = viewportRef.current;
-      if (viewport) {
-        if (!force && !shouldAutoScrollRef.current) {
-          return;
-        }
-
-        viewport.scrollTo({
-          top: viewport.scrollHeight,
-          behavior: smooth ? 'smooth' : 'instant',
-        });
+  const scrollToBottom = React.useCallback(
+    (smooth = false, force = false) => {
+      if (force) {
+        enableAutoFollow();
       }
-    });
-  }, [cancelPendingAutoScroll, enableAutoFollow]);
+
+      cancelPendingAutoScroll();
+
+      // Use requestAnimationFrame to ensure DOM has updated
+      autoScrollFrameRef.current = requestAnimationFrame(() => {
+        autoScrollFrameRef.current = null;
+
+        const viewport = viewportRef.current;
+        if (viewport) {
+          if (!force && !shouldAutoScrollRef.current) {
+            return;
+          }
+
+          viewport.scrollTo({
+            top: viewport.scrollHeight,
+            behavior: smooth ? 'smooth' : 'instant',
+          });
+        }
+      });
+    },
+    [cancelPendingAutoScroll, enableAutoFollow],
+  );
 
   React.useEffect(() => {
     const viewport = viewportRef.current;
@@ -267,13 +568,23 @@ export function Chat({
 
     updateAutoScrollState();
     viewport.addEventListener('wheel', handleWheel, { passive: true });
-    viewport.addEventListener('pointerdown', handlePointerDown, { passive: true });
-    viewport.addEventListener('scroll', updateAutoScrollState, { passive: true });
-    viewport.addEventListener('touchstart', handleTouchStart, { passive: true });
+    viewport.addEventListener('pointerdown', handlePointerDown, {
+      passive: true,
+    });
+    viewport.addEventListener('scroll', updateAutoScrollState, {
+      passive: true,
+    });
+    viewport.addEventListener('touchstart', handleTouchStart, {
+      passive: true,
+    });
     viewport.addEventListener('touchmove', handleTouchMove, { passive: true });
     viewport.addEventListener('touchend', handleTouchEnd, { passive: true });
-    window.addEventListener('pointerup', stopPointerTracking, { passive: true });
-    window.addEventListener('pointercancel', stopPointerTracking, { passive: true });
+    window.addEventListener('pointerup', stopPointerTracking, {
+      passive: true,
+    });
+    window.addEventListener('pointercancel', stopPointerTracking, {
+      passive: true,
+    });
 
     return () => {
       cancelPendingAutoScroll();
@@ -297,7 +608,8 @@ export function Chat({
   }, [stream.threadId]);
 
   React.useEffect(() => {
-    const messageCountChanged = messages.length !== previousMessageCountRef.current;
+    const messageCountChanged =
+      messages.length !== previousMessageCountRef.current;
     previousMessageCountRef.current = messages.length;
 
     if (!shouldAutoScrollRef.current) {
@@ -312,14 +624,98 @@ export function Chat({
     }
   }, [stream.isLoading, messages, scrollToBottom]);
 
-  const effectiveClientSecret = stream.apiKey?.trim() ? stream.apiKey : clientSecret;
-  const hasApiKey = Boolean(effectiveClientSecret.trim());
-  const missingConfig = !apiUrl || !hasApiKey;
+  const effectiveClientSecret = stream.apiKey?.trim()
+    ? stream.apiKey
+    : clientSecret;
+  const missingConfigKind = getMissingApiConfigurationKind({
+    apiUrl,
+    clientSecret: effectiveClientSecret,
+  });
+  const missingConfig = Boolean(missingConfigKind);
+  const missingConfigShortMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlShort');
+      case 'clientSecret':
+        return t('chat.missingClientSecretShort');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretShort');
+      default:
+        return t('chat.missingConfigShort');
+    }
+  }, [missingConfigKind, t]);
+  const missingConfigDetailMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlDetail');
+      case 'clientSecret':
+        return t('chat.missingClientSecretDetail');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretDetail');
+      default:
+        return t('chat.missingConfigDetail');
+    }
+  }, [missingConfigKind, t]);
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
   // Check if any files are still uploading (moved up for use in isSendDisabled)
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
   const isSendDisabled =
-    !trimmedDraft || stream.isLoading || missingConfig || isHistoryLoading || hasUploadingFiles;
+    (!trimmedDraft && !hasReferences) ||
+    missingConfig ||
+    isHistoryLoading ||
+    hasUploadingFiles;
+
+  const resizeComposerInput = React.useCallback(() => {
+    const textarea = composerInputRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(
+      textarea.scrollHeight,
+      COMPOSER_INPUT_MAX_HEIGHT,
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+  }, []);
+
+  React.useEffect(() => {
+    resizeComposerInput();
+  }, [draft, resizeComposerInput]);
+
+  React.useEffect(() => {
+    document.addEventListener('selectionchange', syncQuoteSelection);
+
+    return () => {
+      document.removeEventListener('selectionchange', syncQuoteSelection);
+    };
+  }, [syncQuoteSelection]);
+
+  React.useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const handleViewportScroll = () => {
+      clearQuoteSelection();
+    };
+
+    viewport.addEventListener('scroll', handleViewportScroll, {
+      passive: true,
+    });
+    window.addEventListener('resize', handleViewportScroll, { passive: true });
+
+    return () => {
+      viewport.removeEventListener('scroll', handleViewportScroll);
+      window.removeEventListener('resize', handleViewportScroll);
+    };
+  }, [clearQuoteSelection]);
+
+  React.useEffect(() => {
+    clearQuoteSelection();
+  }, [messages.length, stream.threadId, clearQuoteSelection]);
 
   React.useEffect(() => {
     if (missingConfig) return;
@@ -343,7 +739,8 @@ export function Chat({
       .then((assistant) => {
         if (cancelled || !assistant) return;
         const assistantTitle =
-          typeof assistant.metadata?.title === 'string' && assistant.metadata.title.trim()
+          typeof assistant.metadata?.title === 'string' &&
+          assistant.metadata.title.trim()
             ? assistant.metadata.title
             : assistant.name;
         setAssistantName(assistantTitle);
@@ -372,106 +769,236 @@ export function Chat({
       size: a.storageFile?.size ?? a.file.size,
     }));
 
+  const submitDraft = React.useCallback(
+    (followUpOverride?: FollowUpBehavior) => {
+      if (isSendDisabled) return;
+
+      const filesToSend =
+        uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
+      const referencesToSend =
+        references.length > 0 ? [...references] : undefined;
+      const nextFollowUpMode = stream.isLoading
+        ? (followUpOverride ?? stream.followUpBehavior)
+        : undefined;
+      const humanInput = buildHumanMessageInputPayload({
+        content: trimmedDraft,
+        references: referencesToSend,
+      });
+
+      if (!humanInput) {
+        return;
+      }
+
+      const displayContent =
+        trimmedDraft ||
+        (referencesToSend ? t('chat.referencedContentOnly') : '');
+      const newMessage: HumanMessageWithMeta = {
+        id: createMessageId(),
+        type: 'human',
+        content: displayContent,
+        submittedInput: humanInput.input,
+        ...(humanInput.referenceComposition
+          ? { referenceComposition: humanInput.referenceComposition }
+          : {}),
+        ...(filesToSend ? { attachments: filesToSend } : {}),
+        ...(referencesToSend ? { references: referencesToSend } : {}),
+      };
+
+      setDraft('');
+
+      const inputPayload: {
+        input: string;
+        files?: typeof uploadedFiles;
+        references?: ChatKitReference[];
+        referenceComposition?: ChatKitReferenceCompositionMode;
+      } = {
+        ...humanInput,
+      };
+      if (filesToSend) {
+        inputPayload.files = filesToSend;
+      }
+
+      const requestOptions = buildInjectedRequestOptions({
+        defaults: options?.request,
+        humanInput: inputPayload,
+      });
+
+      stream.submit(
+        {
+          input: inputPayload,
+          ...(requestOptions.state ? { state: requestOptions.state } : {}),
+        },
+        {
+          ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+          ...(requestOptions.context
+            ? { context: requestOptions.context }
+            : {}),
+          ...(requestOptions.config ? { config: requestOptions.config } : {}),
+          ...(!nextFollowUpMode
+            ? {
+                optimisticValues: (prev) => {
+                  const prevMessages = prev?.messages ?? [];
+                  return { ...prev, messages: [...prevMessages, newMessage] };
+                },
+              }
+            : {}),
+        },
+      );
+
+      scrollToBottom(true, true);
+
+      if (selectedTool && !selectedTool.pinned) {
+        setSelectedTool(null);
+      }
+      setAttachments([]);
+      setReferences([]);
+    },
+    [
+      isSendDisabled,
+      options?.request,
+      references,
+      scrollToBottom,
+      selectedTool,
+      stream,
+      trimmedDraft,
+      uploadedFiles,
+      t,
+    ],
+  );
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // isSendDisabled already includes hasUploadingFiles check
-    if (isSendDisabled) return;
-
-    // Store files for display in the message
-    const filesToSend = uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
-
-    const newMessage: Message & { attachments?: typeof uploadedFiles } = {
-      id: createMessageId(),
-      type: 'human',
-      content: trimmedDraft,
-      ...(filesToSend ? { attachments: filesToSend } : {}),
-    };
-
-    setDraft('');
-
-    // Include files in the submit request
-    const inputPayload: { input: string; files?: typeof uploadedFiles } = {
-      input: trimmedDraft,
-    };
-    if (filesToSend) {
-      inputPayload.files = filesToSend;
-    }
-
-    const requestOptions = buildInjectedRequestOptions({
-      defaults: options?.request,
-      humanInput: inputPayload,
-    });
-
-    stream.submit(
-      {
-        input: inputPayload,
-        ...(requestOptions.state ? { state: requestOptions.state } : {}),
-      },
-      {
-        ...(requestOptions.context ? { context: requestOptions.context } : {}),
-        ...(requestOptions.config ? { config: requestOptions.config } : {}),
-        optimisticValues: (prev) => {
-          const prevMessages = prev?.messages ?? [];
-          return { ...prev, messages: [...prevMessages, newMessage] };
-        },
-      },
-    );
-
-    // Immediately scroll to bottom to show the new message
-    scrollToBottom(true, true);
-
-    // Clear selected tool if not persistent
-    if (selectedTool && !selectedTool.pinned) {
-      setSelectedTool(null);
-    }
-    // Clear attachments after submit
-    setAttachments([]);
+    submitDraft();
   };
+
+  const handleEditPendingFollowUp = React.useCallback(
+    (id: string) => {
+      const item = pendingFollowUps.find(
+        (entry) => entry.id === id && entry.mode === 'queue',
+      );
+      if (!item) {
+        return;
+      }
+
+      const text = item.request?.input?.input?.trim() ?? '';
+      const nextReferences = normalizeReferences(
+        item.request?.input?.references,
+      );
+      stream.removePendingFollowUp(id);
+      setDraft(text);
+      setReferences(nextReferences);
+
+      requestAnimationFrame(() => {
+        const input = composerInputRef.current;
+        if (!input) {
+          return;
+        }
+
+        input.focus();
+        const position = text.length;
+        input.setSelectionRange(position, position);
+      });
+    },
+    [pendingFollowUps, stream],
+  );
+
+  const handleQuoteSelection = React.useCallback(() => {
+    if (!quoteSelection) {
+      return;
+    }
+
+    setReferences((previous) =>
+      mergeReferences(previous, [quoteSelection.reference]),
+    );
+    clearQuoteSelection();
+    if (typeof window !== 'undefined') {
+      window.getSelection()?.removeAllRanges();
+    }
+    composerInputRef.current?.focus();
+  }, [clearQuoteSelection, quoteSelection]);
 
   const handleAttachmentClick = () => {
     fileInputRef.current?.click();
   };
 
-  // Upload a single file to the server
-  const uploadFile = React.useCallback(async (localId: string, file: File) => {
-    try {
-      const result = await stream.client.contexts.uploadFile<StorageFile>(file);
-      setAttachments((prev) =>
-        prev.map((item) =>
-          item.localId === localId
-            ? { ...item, status: 'success' as const, storageFile: result }
-            : item
-        )
-      );
-    } catch (error) {
-      setAttachments((prev) =>
-        prev.map((item) =>
-          item.localId === localId
-            ? {
-                ...item,
-                status: 'error' as const,
-                error: error instanceof Error ? error.message : 'Upload failed',
-              }
-            : item
-        )
-      );
+  const handleComposerKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.key !== 'Enter') {
+      return;
     }
-  }, [stream.client]);
+    if (event.shiftKey && (event.metaKey || event.ctrlKey)) {
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      if (isSendDisabled) {
+        return;
+      }
+      submitDraft(stream.followUpBehavior === 'queue' ? 'steer' : 'queue');
+      return;
+    }
+    if (event.shiftKey) {
+      return;
+    }
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    if (isSendDisabled) {
+      return;
+    }
+    submitDraft();
+  };
+
+  // Upload a single file to the server
+  const uploadFile = React.useCallback(
+    async (localId: string, file: File) => {
+      try {
+        const result =
+          await stream.client.contexts.uploadFile<StorageFile>(file);
+        setAttachments((prev) =>
+          prev.map((item) =>
+            item.localId === localId
+              ? { ...item, status: 'success' as const, storageFile: result }
+              : item,
+          ),
+        );
+      } catch (error) {
+        setAttachments((prev) =>
+          prev.map((item) =>
+            item.localId === localId
+              ? {
+                  ...item,
+                  status: 'error' as const,
+                  error:
+                    error instanceof Error ? error.message : 'Upload failed',
+                }
+              : item,
+          ),
+        );
+      }
+    },
+    [stream.client],
+  );
 
   // Retry uploading a failed file
-  const handleRetryUpload = React.useCallback((localId: string) => {
-    const attachment = attachments.find((a) => a.localId === localId);
-    if (!attachment || attachment.status !== 'error') return;
+  const handleRetryUpload = React.useCallback(
+    (localId: string) => {
+      const attachment = attachments.find((a) => a.localId === localId);
+      if (!attachment || attachment.status !== 'error') return;
 
-    setAttachments((prev) =>
-      prev.map((item) =>
-        item.localId === localId
-          ? { ...item, status: 'uploading' as const, error: undefined }
-          : item
-      )
-    );
-    void uploadFile(localId, attachment.file);
-  }, [attachments, uploadFile]);
+      setAttachments((prev) =>
+        prev.map((item) =>
+          item.localId === localId
+            ? { ...item, status: 'uploading' as const, error: undefined }
+            : item,
+        ),
+      );
+      void uploadFile(localId, attachment.file);
+    },
+    [attachments, uploadFile],
+  );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -517,12 +1044,15 @@ export function Chat({
     // If file was uploaded successfully, delete from server
     if (attachment.status === 'success' && attachment.storageFile?.id) {
       try {
-        await fetch(`${stream.apiUrl}/contexts/file/${attachment.storageFile.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${effectiveClientSecret}`,
+        await fetch(
+          `${stream.apiUrl}/contexts/file/${attachment.storageFile.id}`,
+          {
+            method: 'DELETE',
+            headers: {
+              Authorization: `Bearer ${effectiveClientSecret}`,
+            },
           },
-        });
+        );
       } catch {
         // Still remove from local state even if server delete fails
       }
@@ -536,7 +1066,7 @@ export function Chat({
   };
 
   const handlePromptClick = (prompt: string) => {
-    if (missingConfig || stream.isLoading || isHistoryLoading) return;
+    if (missingConfig || isHistoryLoading) return;
 
     const newMessage: Message = {
       id: createMessageId(),
@@ -544,13 +1074,22 @@ export function Chat({
       content: prompt,
     };
 
+    const nextFollowUpMode = stream.isLoading
+      ? stream.followUpBehavior
+      : undefined;
+
     stream.submit(
       { input: { input: prompt } },
       {
-        optimisticValues: (prev) => {
-          const prevMessages = prev?.messages ?? [];
-          return { ...prev, messages: [...prevMessages, newMessage] };
-        },
+        ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+        ...(!nextFollowUpMode
+          ? {
+              optimisticValues: (prev) => {
+                const prevMessages = prev?.messages ?? [];
+                return { ...prev, messages: [...prevMessages, newMessage] };
+              },
+            }
+          : {}),
       },
     );
 
@@ -561,7 +1100,7 @@ export function Chat({
   const loadConversationMessages = React.useCallback(
     async (recordId: string) => {
       if (missingConfig) {
-        setHistoryError(t('chat.missingConfigShort'));
+        setHistoryError(missingConfigShortMessage);
         return;
       }
       setHistoryError(null);
@@ -578,7 +1117,7 @@ export function Chat({
         setIsHistoryLoading(false);
       }
     },
-    [missingConfig, stream, t],
+    [missingConfig, missingConfigShortMessage, stream, t],
   );
 
   const handleNewThread = async () => {
@@ -631,13 +1170,25 @@ export function Chat({
   const handleRetry = (messageIndex: number) => {
     // Find the last human message before this AI message to resend
     const messagesUpToIndex = messages.slice(0, messageIndex);
-    const lastHumanMessage = [...messagesUpToIndex].reverse().find(
-      (m) => String(m.type) === 'human'
-    );
+    const lastHumanMessage = [...messagesUpToIndex]
+      .reverse()
+      .find((m) => String(m.type) === 'human') as
+      | HumanMessageWithMeta
+      | undefined;
 
-    if (lastHumanMessage && typeof lastHumanMessage.content === 'string') {
+    const humanInput = buildHumanMessageInputPayload({
+      content:
+        lastHumanMessage && typeof lastHumanMessage.content === 'string'
+          ? lastHumanMessage.content
+          : '',
+      submittedInput: lastHumanMessage?.submittedInput,
+      references: lastHumanMessage?.references,
+      referenceComposition: lastHumanMessage?.referenceComposition,
+    });
+
+    if (humanInput) {
       stream.submit(
-        { input: {input: lastHumanMessage.content} },
+        { input: humanInput },
         {
           optimisticValues: (prev) => {
             // Remove the AI message that we're retrying
@@ -677,7 +1228,8 @@ export function Chat({
   const assistantTitle = assistantName || resolvedTitle;
 
   return (
-    <div ref={viewportRef}
+    <div
+      ref={viewportRef}
       className={cn(
         'relative flex h-full w-full flex-col flex-1 overflow-y-auto bg-background shadow-sm',
         className,
@@ -693,15 +1245,20 @@ export function Chat({
             />
             <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
           </div>
-          <div className='truncate'>
-            <h2 className="text-lg font-semibold truncate" title={assistantTitle}>
+          <div className="truncate">
+            <h2
+              className="text-lg font-semibold truncate"
+              title={assistantTitle}
+            >
               {assistantTitle}
             </h2>
-            <p className="text-xs text-muted-foreground">{t('chat.statusOnline')}</p>
+            <p className="text-xs text-muted-foreground">
+              {t('chat.statusOnline')}
+            </p>
           </div>
         </div>
         {/* History controls - only shown when history.enabled is true (default) */}
-        {(history?.enabled !== false) && (
+        {history?.enabled !== false && (
           <div className="flex items-center gap-1">
             {/* New thread button */}
             <button
@@ -712,7 +1269,7 @@ export function Chat({
                 'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
                 'text-muted-foreground hover:text-foreground hover:bg-muted',
                 'transition-colors duration-150',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
               title={t('history.newThread')}
             >
@@ -744,7 +1301,7 @@ export function Chat({
         )}
         {showMissingConfig && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {t('chat.missingConfigDetail')}
+            {missingConfigDetailMessage}
           </div>
         )}
         {isHistoryLoading && (
@@ -763,13 +1320,55 @@ export function Chat({
               const messageType = String(message.type);
               const isAssistantMessage =
                 messageType === 'assistant' || messageType === 'ai';
+              const isStreamingMessage =
+                stream.isLoading && index === messages.length - 1;
+              const streamingStatus = isAssistantMessage
+                ? getAssistantStreamingStatus(
+                    {
+                      ...(message as ChatkitMessage),
+                      lastStreamOutputAt: lastStreamOutputAtRef.current,
+                    },
+                    isStreamingMessage,
+                    { now: streamingNow },
+                  )
+                : null;
+
+              if (
+                isAssistantMessage &&
+                !hasRenderableAssistantMessage(message as ChatkitMessage) &&
+                !streamingStatus
+              ) {
+                return null;
+              }
 
               const messageContent =
                 typeof message.content === 'string'
                   ? message.content
                   : Array.isArray(message.content)
-                    ? message.content.map((part) => formatMessageContent(part as any)).join('')
+                    ? message.content
+                        .map((part) => formatMessageContent(part as any))
+                        .join('')
                     : formatMessageContent(message.content);
+              const hasPlainRenderableContent =
+                messageContent.trim().length > 0;
+              const humanMessage = message as HumanMessageWithMeta;
+              const humanReferences = humanMessage.references ?? [];
+              const humanAttachments = humanMessage.attachments ?? [];
+              const hasHumanAttachments =
+                message.type === 'human' && humanAttachments.length > 0;
+              const canQuoteMessage =
+                message.type === 'human' || isAssistantMessage;
+              const quoteSource =
+                message.type === 'human' ? t('chat.youLabel') : assistantTitle;
+
+              if (
+                !isAssistantMessage &&
+                !hasPlainRenderableContent &&
+                !hasHumanAttachments &&
+                humanReferences.length === 0
+              ) {
+                return null;
+              }
 
               return (
                 <div
@@ -778,18 +1377,24 @@ export function Chat({
                     'group flex gap-3',
                     message.type === 'human'
                       ? 'justify-end'
-                      : 'justify-start -ml-1',  // AI messages: slightly closer to left
+                      : 'justify-start -ml-1', // AI messages: slightly closer to left
                   )}
                 >
                   <div className="flex flex-col px-3 overflow-hidden">
                     <div
+                      {...(canQuoteMessage
+                        ? {
+                            'data-quote-message-id': message.id,
+                            'data-quote-source': quoteSource,
+                          }
+                        : {})}
                       className={cn(
                         'max-w-full rounded-2xl',
                         message.type === 'human'
                           ? 'bg-primary text-primary-foreground px-4 py-2.5'
                           : message.type === 'system'
                             ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
-                            : 'py-1 text-chat-foreground',  // AI messages: use chat-specific foreground color
+                            : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
                       )}
                     >
                       {isAssistantMessage ? (
@@ -798,24 +1403,40 @@ export function Chat({
                             ...(message as ChatkitMessage),
                             type: 'assistant',
                           }}
-                          isStreaming={stream.isLoading && index === messages.length - 1}
+                          isStreaming={isStreamingMessage}
+                          streamingStatus={streamingStatus}
                         />
                       ) : (
                         <>
+                          {message.type === 'human' &&
+                            humanReferences.length > 0 && (
+                              <div className="mb-2 flex flex-wrap gap-1.5">
+                                {humanReferences.map((reference) => (
+                                  <ReferenceChip
+                                    key={getReferenceKey(reference)}
+                                    reference={reference}
+                                    variant="message"
+                                  />
+                                ))}
+                              </div>
+                            )}
                           {/* Show attachments for human messages */}
-                          {message.type === 'human' && (message as any).attachments?.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-2">
-                              {((message as any).attachments as Array<{ originalName: string; mimetype: string }>).map((file, fileIndex) => (
-                                <div
-                                  key={fileIndex}
-                                  className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
-                                >
-                                  <FileText size={12} />
-                                  <span className="max-w-[100px] truncate">{file.originalName}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          {message.type === 'human' &&
+                            humanAttachments.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {humanAttachments.map((file, fileIndex) => (
+                                  <div
+                                    key={fileIndex}
+                                    className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
+                                  >
+                                    <FileText size={12} />
+                                    <span className="max-w-[100px] truncate">
+                                      {file.originalName}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           {Array.isArray(message.content) ? (
                             message.content.map((part, partIndex) => (
                               <p
@@ -837,9 +1458,11 @@ export function Chat({
                     <MessageActions
                       content={messageContent}
                       isAssistant={isAssistantMessage}
-                      isStreaming={stream.isLoading && index === messages.length - 1}
+                      isStreaming={isStreamingMessage}
                       onRetry={
-                        isAssistantMessage && !stream.isLoading && index === messages.length - 1
+                        isAssistantMessage &&
+                        !stream.isLoading &&
+                        index === messages.length - 1
                           ? () => handleRetry(index)
                           : undefined
                       }
@@ -849,28 +1472,44 @@ export function Chat({
               );
             })}
             {/* Show loading indicator with minimum display time */}
-            {showLoadingDots && (() => {
-              const lastMessage = messages[messages.length - 1];
-              const lastMessageType = lastMessage ? String(lastMessage.type) : '';
-              const isLastMessageFromAI = lastMessageType === 'ai' || lastMessageType === 'assistant';
-              // Hide dots once AI has substantial content
-              const lastMsgContent = lastMessage?.content;
-              const hasSubstantialContent = isLastMessageFromAI &&
-                ((typeof lastMsgContent === 'string' && lastMsgContent.length > 10) ||
-                  (Array.isArray(lastMsgContent) && lastMsgContent.length > 0));
-              if (hasSubstantialContent) return null;
-              return (
-                <div className="flex justify-start gap-3 -ml-2">
-                  <div className="max-w-full rounded-2xl py-2.5">
-                    <div className="flex gap-1.5">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]"></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]"></div>
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground/60"></div>
+            {showLoadingDots &&
+              (() => {
+                const lastMessage = messages[messages.length - 1];
+                const lastMessageType = lastMessage
+                  ? String(lastMessage.type)
+                  : '';
+                const isLastMessageFromAI =
+                  lastMessageType === 'ai' || lastMessageType === 'assistant';
+                const lastAssistantStatus = isLastMessageFromAI
+                  ? getAssistantStreamingStatus(
+                      {
+                        ...(lastMessage as ChatkitMessage),
+                        lastStreamOutputAt: lastStreamOutputAtRef.current,
+                      },
+                      stream.isLoading,
+                      { now: streamingNow },
+                    )
+                  : null;
+                if (lastAssistantStatus) return null;
+                const fallbackStreamingStatus = getAssistantStreamingStatus(
+                  {
+                    status: undefined,
+                    reasoning: undefined,
+                    lastStreamOutputAt: lastStreamOutputAtRef.current,
+                  },
+                  stream.isLoading,
+                  { now: streamingNow },
+                );
+                return (
+                  <div className="flex justify-start gap-3 -ml-2">
+                    <div className="max-w-full rounded-2xl py-2.5">
+                      <AssistantStreamingIndicator
+                        status={fallbackStreamingStatus ?? 'loading'}
+                      />
                     </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
           </div>
         )}
       </div>
@@ -883,7 +1522,7 @@ export function Chat({
             variant={hasUpdatesBelow ? 'default' : 'outline'}
             className={cn(
               'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
-              hasUpdatesBelow && 'animate-bounce'
+              hasUpdatesBelow && 'animate-bounce',
             )}
             onClick={() => scrollToBottom(true, true)}
             aria-label={t('chat.scrollToBottom')}
@@ -894,9 +1533,34 @@ export function Chat({
         </div>
       )}
 
+      {quoteSelection && (
+        <div
+          className="pointer-events-none fixed z-50"
+          style={{
+            top: `${quoteSelection.top}px`,
+            left: `${quoteSelection.left}px`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="pointer-events-auto shadow-lg"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={handleQuoteSelection}
+            aria-label={t('composer.quoteSelection')}
+            title={t('composer.quoteSelection')}
+          >
+            <Quote size={14} />
+            {t('composer.quoteSelection')}
+          </Button>
+        </div>
+      )}
+
       <div className="p-2 sticky bottom-0 z-10 bg-background">
         {threadErrorMessage && (
-          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
             {threadErrorMessage}
           </div>
         )}
@@ -917,13 +1581,18 @@ export function Chat({
               <div
                 key={item.localId}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1 text-sm",
-                  item.status === 'error' ? 'bg-destructive/10 border border-destructive/30' : 'bg-muted'
+                  'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                  item.status === 'error'
+                    ? 'bg-destructive/10 border border-destructive/30'
+                    : 'bg-muted',
                 )}
               >
                 {/* Status icon */}
                 {item.status === 'uploading' && (
-                  <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                  <Loader2
+                    size={14}
+                    className="animate-spin text-muted-foreground"
+                  />
                 )}
                 {item.status === 'success' && (
                   <FileText size={14} className="text-muted-foreground" />
@@ -933,10 +1602,12 @@ export function Chat({
                 )}
 
                 {/* File name */}
-                <span className={cn(
-                  "max-w-30 truncate",
-                  item.status === 'error' && 'text-destructive'
-                )}>
+                <span
+                  className={cn(
+                    'max-w-30 truncate',
+                    item.status === 'error' && 'text-destructive',
+                  )}
+                >
                   {item.file.name}
                 </span>
 
@@ -957,15 +1628,36 @@ export function Chat({
                   type="button"
                   onClick={() => handleRemoveAttachment(item.localId)}
                   className={cn(
-                    "ml-1 rounded-full p-0.5",
+                    'ml-1 rounded-full p-0.5',
                     item.status === 'error'
                       ? 'text-destructive hover:bg-destructive/20'
-                      : 'hover:bg-muted-foreground/20'
+                      : 'hover:bg-muted-foreground/20',
                   )}
                 >
                   <X size={12} />
                 </button>
               </div>
+            ))}
+          </div>
+        )}
+
+        {references.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {references.map((reference) => (
+              <ReferenceChip
+                key={getReferenceKey(reference)}
+                reference={reference}
+                variant="composer"
+                onRemove={() =>
+                  setReferences((previous) =>
+                    previous.filter(
+                      (item) =>
+                        getReferenceKey(item) !== getReferenceKey(reference),
+                    ),
+                  )
+                }
+                removeLabel={t('composer.removeReference')}
+              />
             ))}
           </div>
         )}
@@ -986,15 +1678,28 @@ export function Chat({
           </div>
         )}
 
-        <form className="flex items-center" onSubmit={handleSubmit}>
+        <PendingFollowUps
+          items={pendingFollowUps}
+          isLoading={stream.isLoading}
+          followUpBehavior={stream.followUpBehavior}
+          onBehaviorChange={stream.setFollowUpBehavior}
+          onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
+          canSendNow={stream.canSendPendingFollowUpNow}
+          onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
+          onEdit={handleEditPendingFollowUp}
+          onRemove={stream.removePendingFollowUp}
+        />
+
+        <form className="flex items-end" onSubmit={handleSubmit}>
           {/* Capsule-shaped input container */}
           <div
             className={cn(
-              'flex flex-1 items-center gap-1 rounded-xl',
+              'flex flex-1 items-end gap-1 rounded-xl',
               'bg-background border border-border shadow-sm',
               'pl-1.5 pr-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-shadow duration-200'
+              'transition-shadow duration-200',
+              getRoundedClass(theme.radius),
             )}
           >
             {/* Plus button inside input - left side */}
@@ -1003,24 +1708,26 @@ export function Chat({
               onAttachmentClick={handleAttachmentClick}
               onToolSelect={handleToolSelect}
               selectedTool={selectedTool}
-              disabled={stream.isLoading || missingConfig || isHistoryLoading}
+              disabled={missingConfig || isHistoryLoading}
             />
-            <input
-              type="text"
+            <textarea
+              ref={composerInputRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              rows={1}
               placeholder={inputPlaceholder}
-              disabled={stream.isLoading || missingConfig || isHistoryLoading}
+              disabled={missingConfig || isHistoryLoading}
               className={cn(
-                'flex-1 bg-transparent text-sm text-foreground outline-none pr-2',
+                'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
                 'placeholder:text-muted-foreground',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
-              autoComplete="off"
             />
             <SendButton
               disabled={isSendDisabled}
               isLoading={stream.isLoading}
+              showStop={stream.isLoading && !trimmedDraft}
               onStop={() => stream.stop()}
               stopLabel={t('chat.stop')}
               sendLabel={t('chat.send')}
@@ -1033,7 +1740,9 @@ export function Chat({
           <p
             className={cn(
               'mt-2 text-center text-xs',
-              disclaimer.highContrast ? 'text-foreground' : 'text-muted-foreground'
+              disclaimer.highContrast
+                ? 'text-foreground'
+                : 'text-muted-foreground',
             )}
           >
             {disclaimer.text}

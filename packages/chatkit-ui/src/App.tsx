@@ -45,6 +45,7 @@ export function App({
             organizationId={organizationId}
             apiUrl={options?.api.apiUrl || apiUrl}
             xpertId={options?.api.xpertId || xpertId}
+            initialThread={options?.initialThread ?? null}
           >
             <Chat
               className="flex-1"

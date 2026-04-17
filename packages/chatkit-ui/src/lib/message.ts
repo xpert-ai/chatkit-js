@@ -1,6 +1,103 @@
 import type { ChatkitMessage, TMessageContentComplex, TMessageContentComponent, TMessageContentReasoning, TMessageContentText } from "@xpert-ai/chatkit-types"
 import { isNil, omitBy } from "lodash-es"
 
+export type AssistantStreamingStatus = 'loading' | 'thinking' | 'answering'
+export const ASSISTANT_STREAM_IDLE_TO_THINKING_MS = 2000
+
+export function hasRenderableReasoning(
+  reasoning: ChatkitMessage['reasoning'] | undefined,
+): boolean {
+  return Array.isArray(reasoning) && reasoning.some((item) => item.text?.trim())
+}
+
+export function hasRenderableMessageContent(
+  content: ChatkitMessage['content'] | undefined,
+): boolean {
+  if (typeof content === 'string') {
+    return content.trim().length > 0
+  }
+
+  if (!Array.isArray(content) || content.length === 0) {
+    return false
+  }
+
+  const items = content as Array<TMessageContentComplex | string>
+
+  return items.some((item) => {
+    if (typeof item === 'string') {
+      return item.trim().length > 0
+    }
+
+    if (!item || typeof item !== 'object') {
+      return false
+    }
+
+    if (item.type === 'text') {
+      return Boolean((item as TMessageContentText).text?.trim())
+    }
+
+    if (item.type === 'reasoning') {
+      return Boolean((item as TMessageContentReasoning).text?.trim())
+    }
+
+    return true
+  })
+}
+
+export function hasRenderableAssistantMessage(
+  message: Pick<ChatkitMessage, 'content' | 'reasoning'>,
+): boolean {
+  return (
+    hasRenderableMessageContent(message.content) ||
+    hasRenderableReasoning(message.reasoning)
+  )
+}
+
+export function getAssistantStreamingStatus(
+  message: Pick<ChatkitMessage, 'status' | 'reasoning'> & {
+    lastStreamOutputAt?: number | null
+  },
+  isStreaming: boolean,
+  options?: {
+    now?: number
+  },
+): AssistantStreamingStatus | null {
+  if (!isStreaming) {
+    return null
+  }
+
+  const now = options?.now ?? Date.now()
+  const lastStreamOutputAt =
+    typeof message.lastStreamOutputAt === 'number'
+      ? message.lastStreamOutputAt
+      : null
+  const isIdle =
+    lastStreamOutputAt !== null &&
+    now - lastStreamOutputAt >= ASSISTANT_STREAM_IDLE_TO_THINKING_MS
+
+  if (message.status === 'reasoning') {
+    return 'thinking'
+  }
+
+  if (message.status === 'answering') {
+    if (isIdle) {
+      return 'thinking'
+    }
+
+    return 'answering'
+  }
+
+  if (hasRenderableReasoning(message.reasoning)) {
+    return 'thinking'
+  }
+
+  if (isIdle) {
+    return 'thinking'
+  }
+
+  return 'loading'
+}
+
 /**
  * Append content into AI Message
  *

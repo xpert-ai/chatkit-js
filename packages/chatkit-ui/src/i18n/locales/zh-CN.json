@@ -5,12 +5,39 @@
     "statusOnline": "在线",
     "missingConfigShort": "缺少 ChatKit 配置。",
     "missingConfigDetail": "缺少 ChatKit 配置。请检查 `VITE_XPERTAI_API_URL` 和 `clientSecret` 参数。",
+    "missingApiUrlShort": "缺少 ChatKit API URL。",
+    "missingApiUrlDetail": "缺少 ChatKit API URL。请检查 `VITE_XPERTAI_API_URL` 或 `options.api.apiUrl`。",
+    "missingClientSecretShort": "缺少 ChatKit client secret。",
+    "missingClientSecretDetail": "缺少 ChatKit client secret。请检查 `clientSecret` 参数或 `api.getClientSecret` 集成。",
+    "missingApiUrlAndClientSecretShort": "缺少 ChatKit API URL 和 client secret。",
+    "missingApiUrlAndClientSecretDetail": "缺少 ChatKit API URL 和 client secret。请检查 `VITE_XPERTAI_API_URL`、`options.api.apiUrl` 以及 client secret 集成。",
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
+    "referencedContentOnly": "已引用内容",
+    "youLabel": "你",
     "scrollToBottom": "回到底部",
     "retryUpload": "重新上传",
     "poweredBy": "由 Xpert AI 驱动",
+    "followUps": {
+      "label": "Follow-up 模式",
+      "settings": "设置",
+      "idleHint": "仅在运行中发送消息时生效。",
+      "activeHint": "当前消息会按所选的运行中行为处理。",
+      "pending": "待处理 Follow-up",
+      "queue": "排队",
+      "steer": "引导",
+      "steerAction": "Steer",
+      "promoteToSteer": "转为引导",
+      "sendNow": "立即发送",
+      "remove": "移除此待处理 Follow-up",
+      "more": "更多操作",
+      "edit": "编辑消息",
+      "turnOffQueueing": "关闭排队",
+      "queueHint": "当前运行结束后开启下一轮",
+      "manualQueueHint": "保留为待发送，可手动开启新一轮",
+      "steerHint": "当前工具调用完成后注入"
+    },
     "errors": {
       "loadMessages": "加载线程消息失败",
       "createThread": "创建线程失败",
@@ -41,7 +68,9 @@
   },
   "composer": {
     "openMenu": "打开菜单",
-    "addAttachment": "添加附件"
+    "addAttachment": "添加附件",
+    "removeReference": "移除引用",
+    "quoteSelection": "引用选中内容"
   },
   "sheet": {
     "close": "关闭"
@@ -56,6 +85,9 @@
   },
   "message": {
     "answer": "回答",
-    "reasoning": "推理"
+    "reasoning": "推理",
+    "loading": "正在加载",
+    "thinking": "正在思考",
+    "answering": "正在生成"
   }
 }

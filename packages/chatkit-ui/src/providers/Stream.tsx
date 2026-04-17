@@ -18,12 +18,27 @@ import {
 } from '@xpert-ai/xpert-sdk';
 import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
-import { ChatMessageEventTypeEnum, ChatMessageTypeEnum, type ClientToolMessageInput, type ClientToolRequest, type ClientToolResponse, type TChatRequest, type TMessageContent, type ChatEventEnvelope, type TMessageContentComplex, type TMessageContentComponent, type TThreadContextUsageEvent } from '@xpert-ai/chatkit-types';
+import {
+  ChatMessageEventTypeEnum,
+  ChatMessageTypeEnum,
+  type ChatKitReference,
+  type ChatKitReferenceCompositionMode,
+  type ClientToolMessageInput,
+  type ClientToolRequest,
+  type ClientToolResponse,
+  type FollowUpBehavior,
+  type TChatRequest,
+  type ChatEventEnvelope,
+  type TMessageContentComplex,
+  type TMessageContentComponent,
+  type TThreadContextUsageEvent,
+} from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import {
   normalizeClientSecretResult,
   type ResolvedClientSecret,
 } from '../lib/client-secret';
+import { createMissingApiConfigurationError } from '../lib/api-config';
 import { normalizeRequestContextAndConfig } from '../lib/request-options';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import type { ParentMessenger } from './ParentMessenger';
@@ -39,8 +54,54 @@ import {
   parseThreadContextUsageEvent,
   type ThreadContextUsageByAgentKey,
 } from '../lib/thread-context-usage';
+import { normalizeReferences } from '../lib/references';
+import {
+  parseFollowUpConsumedEvent,
+  resolveFollowUpConsumedIds,
+} from '../lib/follow-up-consumed';
+import {
+  getAutoDrainQueuedFollowUpIds,
+  getPendingSteerFollowUpIds,
+  buildSteerFollowUpRunInput,
+  createPendingFollowUp,
+  getNextAutoQueuedFollowUp,
+  getQueuedFollowUpGroup,
+  isHiddenPendingFollowUpMessage,
+  mapPersistedPendingFollowUp,
+  mergeFollowUpHumanInputs,
+  mergeQueuedFollowUpGroup,
+  pendingFollowUpToUiMessage,
+  readPersistedFollowUpBehavior,
+  toQueuedSendRequest,
+  type FollowUpStatus,
+  type PendingFollowUp,
+  writePersistedFollowUpBehavior,
+} from '../lib/follow-ups';
 
-type ChatKitAIMessage = Message & { executionId?: string };
+export {
+  getAutoDrainQueuedFollowUpIds,
+  buildSteerFollowUpRunInput,
+  getPendingSteerFollowUpIds,
+  getNextAutoQueuedFollowUp,
+  getQueuedFollowUpGroup,
+  mergeFollowUpHumanInputs,
+  mergeQueuedFollowUpGroup,
+} from '../lib/follow-ups';
+
+type ChatKitAIMessage = Message & {
+  executionId?: string;
+  references?: ChatKitReference[];
+  submittedInput?: string;
+  referenceComposition?: ChatKitReferenceCompositionMode;
+  followUpMode?: FollowUpBehavior;
+  followUpStatus?: FollowUpStatus;
+  targetExecutionId?: string | null;
+  visibleAt?: string | null;
+};
+
+type ChatKitMessageContentPart = NonNullable<
+  Exclude<ChatKitAIMessage['content'], string>
+>[number];
 
 export type StateType = { messages: ChatKitAIMessage[] };
 
@@ -57,6 +118,7 @@ export type StreamSubmitOptions = {
   threadId?: string;
   newThread?: boolean;
   joinExistingThread?: boolean;
+  followUpMode?: FollowUpBehavior;
 };
 
 export type StreamContextType = {
@@ -69,6 +131,8 @@ export type StreamContextType = {
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
   values: StateType;
   messages: ChatKitAIMessage[];
+  pendingFollowUps: PendingFollowUp[];
+  followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
   isReady: boolean;
   error: unknown;
@@ -84,6 +148,11 @@ export type StreamContextType = {
     initialMessages?: ChatKitAIMessage[],
     options?: { suppressThreadChange?: boolean },
   ) => void;
+  setFollowUpBehavior: (behavior: FollowUpBehavior) => void;
+  removePendingFollowUp: (id: string) => void;
+  canSendPendingFollowUpNow: (id: string) => boolean;
+  sendPendingFollowUpNow: (id: string) => Promise<void>;
+  promotePendingFollowUpToSteer: (id: string) => Promise<void>;
   setThreadId: (threadId: string | null) => void;
 };
 
@@ -155,11 +224,10 @@ export function createFetchWithClientSecretRefresh({
 
 function applyOptimisticValues(
   prev: StateType,
-  optimistic:
-    | Partial<StateType>
-    | ((prev: StateType) => Partial<StateType>),
+  optimistic: Partial<StateType> | ((prev: StateType) => Partial<StateType>),
 ): StateType {
-  const update = typeof optimistic === 'function' ? optimistic(prev) : optimistic;
+  const update =
+    typeof optimistic === 'function' ? optimistic(prev) : optimistic;
   return { ...prev, ...update };
 }
 
@@ -186,14 +254,192 @@ function normalizeRoleToMessageType(role?: string): Message['type'] {
   return 'ai';
 }
 
+type PersistedChatMessage = ChatMessage & {
+  references?: unknown;
+  input?: unknown;
+  metadata?: unknown;
+  state?: unknown;
+  submittedInput?: unknown;
+  referenceComposition?: unknown;
+  followUpMode?: FollowUpBehavior;
+  followUpStatus?: FollowUpStatus;
+  targetExecutionId?: string | null;
+  visibleAt?: string | null;
+  thirdPartyMessage?: unknown;
+};
 
-function mapChatMessageToUiMessage(message: ChatMessage): ChatKitAIMessage {
+function normalizeThreadIdentifier(threadId?: string | null): string | null {
+  const normalized = typeof threadId === 'string' ? threadId.trim() : '';
+  return normalized ? normalized : null;
+}
+
+type ReferencePayloadContainer = {
+  references?: unknown;
+  input?: unknown;
+  metadata?: unknown;
+  state?: unknown;
+  submittedInput?: unknown;
+  referenceComposition?: unknown;
+};
+
+type ReferenceStateContainer = {
+  human?: unknown;
+};
+
+function isReferencePayloadContainer(
+  value: unknown,
+): value is ReferencePayloadContainer {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getNestedReferenceCandidate(value: unknown): unknown {
+  return isReferencePayloadContainer(value) ? value.references : undefined;
+}
+
+function getNestedInputCandidate(value: unknown): unknown {
+  return isReferencePayloadContainer(value) ? value.input : undefined;
+}
+
+function extractReferences(value: unknown): ChatKitReference[] | undefined {
+  const direct = normalizeReferences(value);
+  if (direct.length > 0) {
+    return direct;
+  }
+
+  if (!isReferencePayloadContainer(value)) {
+    return undefined;
+  }
+
+  const state = isReferencePayloadContainer(value.state)
+    ? (value.state as ReferenceStateContainer)
+    : null;
+
+  const candidates = [
+    value.references,
+    getNestedReferenceCandidate(value.input),
+    getNestedReferenceCandidate(value.metadata),
+    getNestedReferenceCandidate(state?.human),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeReferences(candidate);
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
+
+function extractSubmittedInput(value: unknown): string | undefined {
+  if (!isReferencePayloadContainer(value)) {
+    return undefined;
+  }
+
+  if (typeof value.submittedInput === 'string') {
+    return value.submittedInput;
+  }
+
+  const state = isReferencePayloadContainer(value.state)
+    ? (value.state as ReferenceStateContainer)
+    : null;
+
+  const candidates = [
+    value.input,
+    getNestedInputCandidate(value.input),
+    getNestedInputCandidate(value.metadata),
+    isReferencePayloadContainer(state?.human) ? state.human.input : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function extractReferenceComposition(
+  value: unknown,
+): ChatKitReferenceCompositionMode | undefined {
+  if (!isReferencePayloadContainer(value)) {
+    return undefined;
+  }
+
+  if (
+    value.referenceComposition === 'compose' ||
+    value.referenceComposition === 'preserve'
+  ) {
+    return value.referenceComposition;
+  }
+
+  const state = isReferencePayloadContainer(value.state)
+    ? (value.state as ReferenceStateContainer)
+    : null;
+
+  const candidates = [
+    isReferencePayloadContainer(value.input)
+      ? value.input.referenceComposition
+      : undefined,
+    isReferencePayloadContainer(value.metadata)
+      ? value.metadata.referenceComposition
+      : undefined,
+    isReferencePayloadContainer(state?.human)
+      ? state.human.referenceComposition
+      : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === 'compose' || candidate === 'preserve') {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+export function shouldBroadcastThreadChange({
+  threadId,
+  hasObservedThreadSelection,
+}: {
+  threadId?: string | null;
+  hasObservedThreadSelection: boolean;
+}): boolean {
+  const currentThreadId = normalizeThreadIdentifier(threadId);
+  return hasObservedThreadSelection || currentThreadId !== null;
+}
+
+function mapChatMessageToUiMessage(
+  message: PersistedChatMessage,
+): ChatKitAIMessage {
+  const references = extractReferences(message);
+  const content = message.content ?? '';
+  const type = normalizeRoleToMessageType(message.role);
+  const submittedInput =
+    extractSubmittedInput(message) ??
+    (type === 'human' && typeof content === 'string' ? content : undefined);
+  const referenceComposition = extractReferenceComposition(message);
+
   return {
     id: message.id ?? createMessageId(),
-    type: normalizeRoleToMessageType(message.role),
-    content: message.content ?? '',
+    type,
+    content,
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
+    ...(references ? { references } : {}),
+    ...(submittedInput !== undefined ? { submittedInput } : {}),
+    ...(referenceComposition ? { referenceComposition } : {}),
+    ...(message.followUpMode ? { followUpMode: message.followUpMode } : {}),
+    ...(message.followUpStatus
+      ? { followUpStatus: message.followUpStatus }
+      : {}),
+    ...(message.targetExecutionId !== undefined
+      ? { targetExecutionId: message.targetExecutionId }
+      : {}),
+    ...(message.visibleAt !== undefined
+      ? { visibleAt: message.visibleAt }
+      : {}),
   } as ChatKitAIMessage;
 }
 
@@ -208,7 +454,9 @@ function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
   });
 }
 
-function normalizeMessageType(value: unknown): ChatKitAIMessage['type'] | undefined {
+function normalizeMessageType(
+  value: unknown,
+): ChatKitAIMessage['type'] | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.toLowerCase();
   switch (normalized) {
@@ -235,6 +483,16 @@ function isAssistantMessage(message: ChatKitAIMessage | undefined) {
   );
 }
 
+function findLatestAssistantMessageIndex(messages: ChatKitAIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isAssistantMessage(messages[index])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function appendMessages(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   nextMessages: ChatKitAIMessage[],
@@ -242,8 +500,74 @@ function appendMessages(
   if (nextMessages.length === 0) return;
   setValues((prev) => ({
     ...prev,
-    messages: [...(prev.messages ?? []), ...nextMessages],
+    messages: upsertMessages(prev.messages ?? [], nextMessages),
   }));
+}
+
+function upsertMessages(
+  existingMessages: ChatKitAIMessage[],
+  nextMessages: ChatKitAIMessage[],
+) {
+  const messages = [...existingMessages];
+  const indexes = new Map<string, number>();
+
+  messages.forEach((message, index) => {
+    if (message.id) {
+      indexes.set(String(message.id), index);
+    }
+  });
+
+  for (const message of nextMessages) {
+    const id = message.id ? String(message.id) : null;
+    if (id && indexes.has(id)) {
+      const index = indexes.get(id) as number;
+      messages[index] = {
+        ...messages[index],
+        ...message,
+      };
+      continue;
+    }
+    if (id) {
+      indexes.set(id, messages.length);
+    }
+    messages.push(message);
+  }
+
+  return messages;
+}
+
+function startFreshAssistantMessageIfNeeded(
+  setValues: React.Dispatch<React.SetStateAction<StateType>>,
+  shouldStartFreshAssistant: boolean,
+) {
+  if (!shouldStartFreshAssistant) {
+    return;
+  }
+
+  setValues((prev) => {
+    const messages = prev.messages ?? [];
+    const lastMessage = messages[messages.length - 1];
+    if (
+      isAssistantMessage(lastMessage) &&
+      ((typeof lastMessage.content === 'string' &&
+        lastMessage.content.length === 0) ||
+        lastMessage.content == null)
+    ) {
+      return prev;
+    }
+
+    return {
+      ...prev,
+      messages: [
+        ...messages,
+        {
+          id: createMessageId(),
+          type: 'ai',
+          content: '',
+        },
+      ],
+    };
+  });
 }
 
 function appendStreamText(
@@ -253,11 +577,13 @@ function appendStreamText(
   if (!text) return;
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    const last = messages[messages.length - 1];
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    const last =
+      lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
 
     if (last && isAssistantMessage(last) && typeof last.content === 'string') {
       const nextMessages = [...messages];
-      nextMessages[messages.length - 1] = {
+      nextMessages[lastAssistantIndex] = {
         ...last,
         content: last.content + text,
       };
@@ -280,7 +606,8 @@ function appendStreamTextToLatest(
   if (!text) return;
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    if (messages.length === 0) {
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    if (lastAssistantIndex < 0) {
       const newMessage: ChatKitAIMessage = {
         id: createMessageId(),
         type: 'ai',
@@ -289,12 +616,15 @@ function appendStreamTextToLatest(
       return { ...prev, messages: [newMessage] };
     }
 
-    const last = messages[messages.length - 1];
+    const last = messages[lastAssistantIndex];
     let nextContent: ChatKitAIMessage['content'];
     if (typeof last.content === 'string') {
       nextContent = last.content + text;
     } else if (Array.isArray(last.content)) {
-      nextContent = [...last.content, text];
+      nextContent = [
+        ...last.content,
+        { type: 'text', text } as ChatKitMessageContentPart,
+      ];
     } else if (last.content == null) {
       nextContent = text;
     } else {
@@ -302,7 +632,7 @@ function appendStreamTextToLatest(
     }
 
     const nextMessages = [...messages];
-    nextMessages[messages.length - 1] = { ...last, content: nextContent };
+    nextMessages[lastAssistantIndex] = { ...last, content: nextContent };
     return { ...prev, messages: nextMessages };
   });
 }
@@ -315,17 +645,49 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   if (Array.isArray(data) || typeof data !== 'object') return null;
 
   const raw = data as Record<string, unknown>;
-  const content =
-    'text' in raw ? (raw as { text?: Message['content'] }).text : data;
+  const content: ChatKitAIMessage['content'] = (() => {
+    if ('content' in raw) {
+      const rawContent = (raw as { content?: Message['content'] }).content;
+      if (typeof rawContent === 'string' || Array.isArray(rawContent)) {
+        return rawContent;
+      }
+      if (rawContent == null) {
+        return '';
+      }
+    }
+
+    if ('text' in raw) {
+      const textContent = (raw as { text?: Message['content'] }).text;
+      if (typeof textContent === 'string' || Array.isArray(textContent)) {
+        return textContent;
+      }
+      if (textContent == null) {
+        return '';
+      }
+    }
+
+    return [raw as unknown as ChatKitMessageContentPart];
+  })();
   const type =
-    normalizeMessageType(raw.type) ??
-    normalizeMessageType(raw.role) ??
-    'ai';
+    normalizeMessageType(raw.type) ?? normalizeMessageType(raw.role) ?? 'ai';
   const id = typeof raw.id === 'string' ? raw.id : createMessageId();
   const executionId =
     typeof raw.executionId === 'string' ? raw.executionId : undefined;
+  const references = extractReferences(raw);
+  const submittedInput =
+    extractSubmittedInput(raw) ??
+    (type === 'human' && typeof content === 'string' ? content : undefined);
+  const referenceComposition = extractReferenceComposition(raw);
 
-  return { id, type, content, executionId };
+  return {
+    id,
+    type,
+    content,
+    executionId,
+    ...(references ? { references } : {}),
+    ...(submittedInput !== undefined ? { submittedInput } : {}),
+    ...(referenceComposition ? { referenceComposition } : {}),
+  };
 }
 
 function extractMessageMeta(data: unknown) {
@@ -335,12 +697,27 @@ function extractMessageMeta(data: unknown) {
     id?: string;
     type?: ChatKitAIMessage['type'];
     content?: ChatKitAIMessage['content'];
+    references?: ChatKitReference[];
+    submittedInput?: string;
+    referenceComposition?: ChatKitReferenceCompositionMode;
   } = {};
 
   if (typeof raw.id === 'string') meta.id = raw.id;
   meta.type = normalizeMessageType(raw.type ?? raw.role);
   if ('content' in raw) {
     meta.content = (raw as { content?: Message['content'] }).content;
+  }
+  const references = extractReferences(raw);
+  const submittedInput = extractSubmittedInput(raw);
+  const referenceComposition = extractReferenceComposition(raw);
+  if (references) {
+    meta.references = references;
+  }
+  if (submittedInput !== undefined) {
+    meta.submittedInput = submittedInput;
+  }
+  if (referenceComposition) {
+    meta.referenceComposition = referenceComposition;
   }
 
   return meta;
@@ -359,9 +736,12 @@ function updateLatestMessage(
 ) {
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    if (messages.length === 0) return prev;
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    if (lastAssistantIndex < 0) return prev;
     const nextMessages = [...messages];
-    nextMessages[messages.length - 1] = updater(nextMessages[messages.length - 1]);
+    nextMessages[lastAssistantIndex] = updater(
+      nextMessages[lastAssistantIndex],
+    );
     return { ...prev, messages: nextMessages };
   });
 }
@@ -393,23 +773,28 @@ function applyMessageData(
  */
 function appendMessageComponent(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
-  content: TMessageContentComplex) {
+  content: TMessageContentComplex,
+) {
   updateLatestMessage(setValues, (lastM) => {
-      // Deep clone the message to avoid mutation issues with React Strict Mode
-      // React Strict Mode calls state updater twice, and appendMessageContent mutates the content array
-      const lastMessage = lastM as unknown as Record<string, unknown>
-      const clonedMessage = {
-        ...lastMessage,
-        content: Array.isArray(lastMessage.content)
-          ? (lastMessage.content as Record<string, unknown>[]).map((item) => ({ ...item }))
-          : lastMessage.content,
-        reasoning: Array.isArray(lastMessage.reasoning)
-          ? (lastMessage.reasoning as Record<string, unknown>[]).map((r) => ({ ...r }))
-          : lastMessage.reasoning
-      }
-      appendMessageContent(clonedMessage as any, content)
-      return clonedMessage as unknown as Message
-    })
+    // Deep clone the message to avoid mutation issues with React Strict Mode
+    // React Strict Mode calls state updater twice, and appendMessageContent mutates the content array
+    const lastMessage = lastM as unknown as Record<string, unknown>;
+    const clonedMessage = {
+      ...lastMessage,
+      content: Array.isArray(lastMessage.content)
+        ? (lastMessage.content as Record<string, unknown>[]).map((item) => ({
+            ...item,
+          }))
+        : lastMessage.content,
+      reasoning: Array.isArray(lastMessage.reasoning)
+        ? (lastMessage.reasoning as Record<string, unknown>[]).map((r) => ({
+            ...r,
+          }))
+        : lastMessage.reasoning,
+    };
+    appendMessageContent(clonedMessage as any, content);
+    return clonedMessage as unknown as Message;
+  });
 }
 
 function normalizeClientToolRequest(value: unknown): ClientToolRequest | null {
@@ -449,7 +834,9 @@ function collectClientToolRequests(payload: unknown): ClientToolRequest[] {
   return requests;
 }
 
-function normalizeToolMessagesResponse(response: unknown): ClientToolMessageInput | null {
+function normalizeToolMessagesResponse(
+  response: unknown,
+): ClientToolMessageInput | null {
   if (!response) return null;
   if (typeof response === 'object' && response !== null) {
     const raw = response as ClientToolMessageInput;
@@ -458,9 +845,9 @@ function normalizeToolMessagesResponse(response: unknown): ClientToolMessageInpu
       name: raw.name,
       content: raw.content,
       status: raw.status,
-    }
+    };
   }
-  return null
+  return null;
 }
 
 /**
@@ -476,6 +863,10 @@ export function applyStreamEvent(
   eventContext?: LangGraphEventContext,
   onExecutionId?: (executionId: string | undefined) => void,
   onThreadContextUsage?: (event: TThreadContextUsageEvent) => void,
+  onFollowUpConsumed?: (
+    event: ReturnType<typeof parseFollowUpConsumedEvent>,
+  ) => void,
+  consumeFreshAssistantSplit?: () => boolean,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -488,15 +879,20 @@ export function applyStreamEvent(
   }
 
   if (typeof parsed === 'object' && parsed !== null && 'messages' in parsed) {
-    const nextMessages = (parsed as { messages?: Message[] }).messages;
+    const nextMessages = (parsed as { messages?: unknown[] }).messages;
     if (Array.isArray(nextMessages)) {
-      setValues((prev) => ({ ...prev, messages: nextMessages }));
+      const normalizedMessages = nextMessages
+        .map((item) => createMessageFromData(item))
+        .filter((item): item is ChatKitAIMessage => Boolean(item));
+      setValues((prev) => ({ ...prev, messages: normalizedMessages }));
     }
     return;
   }
 
   if (typeof parsed === 'string') {
-    appendStreamText(setValues, parsed);
+    const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
+    appendStreamTextToLatest(setValues, parsed);
     return;
   }
 
@@ -510,27 +906,32 @@ export function applyStreamEvent(
 
   if (typeof parsed !== 'object' || parsed == null) return;
 
-  const payload = parsed as ChatEventEnvelope<TMessageContentComponent<any>>
+  const payload = parsed as ChatEventEnvelope<TMessageContentComponent<any>>;
 
-  const payloadType: ChatMessageTypeEnum = payload.type
+  const payloadType: ChatMessageTypeEnum = payload.type;
 
   if (payloadType === ChatMessageTypeEnum.MESSAGE) {
     if (typeof payload.data === 'string') {
+      const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+      startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
       appendStreamTextToLatest(setValues, payload.data);
       return;
     }
 
-    const message = payload.data
+    const message = payload.data;
     if (message.type === 'component') {
-      sendEvent('public_event', ['log', {...message, name: 'component'}]);
+      sendEvent('public_event', ['log', { ...message, name: 'component' }]);
     }
+    const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
     appendMessageComponent(setValues, message);
     return;
   }
 
   if (payloadType === ChatMessageTypeEnum.EVENT) {
-    const eventType =
-      (typeof payload.event === 'string' ? payload.event.toLowerCase() : '') as ChatMessageEventTypeEnum;
+    const eventType = (
+      typeof payload.event === 'string' ? payload.event.toLowerCase() : ''
+    ) as ChatMessageEventTypeEnum;
     const meta = extractMessageMeta(payload.data);
     const executionId = extractExecutionId(payload.data);
 
@@ -548,9 +949,15 @@ export function applyStreamEvent(
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
       case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
-        const eventData = payload.data as { messages?: ChatKitAIMessage[] } | null;
+        const eventData = payload.data as { messages?: unknown[] } | null;
         if (eventData && Array.isArray(eventData.messages)) {
-          setValues((prev) => ({ ...prev, messages: eventData.messages ?? [] }));
+          const normalizedMessages = eventData.messages
+            .map((item) => createMessageFromData(item))
+            .filter((item): item is ChatKitAIMessage => Boolean(item));
+          setValues((prev) => ({
+            ...prev,
+            messages: normalizedMessages,
+          }));
         }
         break;
       }
@@ -563,32 +970,51 @@ export function applyStreamEvent(
           type: meta.type ?? 'ai',
           content: meta.content ?? '',
           executionId,
+          ...(meta.references ? { references: meta.references } : {}),
+          ...(meta.submittedInput !== undefined
+            ? { submittedInput: meta.submittedInput }
+            : {}),
+          ...(meta.referenceComposition
+            ? { referenceComposition: meta.referenceComposition }
+            : {}),
         };
         setValues((prev) => {
           const messages = prev.messages ?? [];
-          const last = messages[messages.length - 1];
-          if (last && isAssistantMessage(last)) {
+          const shouldStartFreshAssistant =
+            consumeFreshAssistantSplit?.() ?? false;
+          const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+          const last =
+            lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
+          if (!shouldStartFreshAssistant && last && isAssistantMessage(last)) {
             if (executionId && last.executionId === executionId) {
               const nextMessages = [...messages];
-              const nextLast: ChatKitAIMessage = { ...last, executionId };
-              if (meta.id) nextLast.id = meta.id;
-              if (meta.type) nextLast.type = meta.type;
+              const nextLast: ChatKitAIMessage = {
+                ...last,
+                executionId,
+                ...(meta.id ? { id: meta.id } : {}),
+                ...(meta.type ? { type: meta.type } : {}),
+                ...(meta.references ? { references: meta.references } : {}),
+                ...(meta.submittedInput !== undefined
+                  ? { submittedInput: meta.submittedInput }
+                  : {}),
+                ...(meta.referenceComposition
+                  ? { referenceComposition: meta.referenceComposition }
+                  : {}),
+              };
               if (
                 meta.content !== undefined &&
                 (last.content == null ||
-                  (typeof last.content === 'string' && last.content.length === 0))
+                  (typeof last.content === 'string' &&
+                    last.content.length === 0))
               ) {
                 nextLast.content = meta.content;
               }
-              nextMessages[messages.length - 1] = nextLast;
+              nextMessages[lastAssistantIndex] = nextLast;
               return { ...prev, messages: nextMessages };
             }
-            if (
-              typeof last.content === 'string' &&
-              last.content.length === 0
-            ) {
+            if (typeof last.content === 'string' && last.content.length === 0) {
               const nextMessages = [...messages];
-              nextMessages[messages.length - 1] = message;
+              nextMessages[lastAssistantIndex] = message;
               return { ...prev, messages: nextMessages };
             }
           }
@@ -605,11 +1031,19 @@ export function applyStreamEvent(
           break;
         }
         updateLatestMessage(setValues, (message) => {
-          const next = { ...message };
-          if (meta.id) next.id = meta.id;
-          if (meta.type) next.type = meta.type;
-          if (meta.content !== undefined) next.content = meta.content;
-          return next;
+          return {
+            ...(message as ChatKitAIMessage),
+            ...(meta.id ? { id: meta.id } : {}),
+            ...(meta.type ? { type: meta.type } : {}),
+            ...(meta.content !== undefined ? { content: meta.content } : {}),
+            ...(meta.references ? { references: meta.references } : {}),
+            ...(meta.submittedInput !== undefined
+              ? { submittedInput: meta.submittedInput }
+              : {}),
+            ...(meta.referenceComposition
+              ? { referenceComposition: meta.referenceComposition }
+              : {}),
+          };
         });
         break;
       }
@@ -619,13 +1053,22 @@ export function applyStreamEvent(
       }
       case ChatMessageEventTypeEnum.ON_CLIENT_EFFECT: {
         const toolCall = payload.data as unknown as ToolCall;
-        sendEvent('public_event', ['effect', {name: toolCall.name, data: toolCall.args}]);
-        break
+        sendEvent('public_event', [
+          'effect',
+          { name: toolCall.name, data: toolCall.args },
+        ]);
+        break;
       }
       case ChatMessageEventTypeEnum.ON_CHAT_EVENT: {
         const contextUsageEvent = parseThreadContextUsageEvent(payload.data);
         if (contextUsageEvent) {
           onThreadContextUsage?.(contextUsageEvent);
+          break;
+        }
+
+        const followUpConsumedEvent = parseFollowUpConsumedEvent(payload.data);
+        if (followUpConsumedEvent) {
+          onFollowUpConsumed?.(followUpConsumedEvent);
         }
         break;
       }
@@ -636,6 +1079,8 @@ export function applyStreamEvent(
   }
 
   if ('data' in payload) {
+    const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
     applyMessageData(setValues, payload.data);
     return;
   }
@@ -652,17 +1097,30 @@ const StreamSession = ({
   organizationId,
   apiUrl,
   assistantId,
+  initialThread,
 }: {
   children: ReactNode;
   apiKey: string;
   organizationId?: string;
   apiUrl: string;
   assistantId: string;
+  initialThread?: string | null;
 }) => {
   const [threadId, setThreadId] = useQueryState('threadId');
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
+    [],
+  );
+  const [autoQueuedFollowUpIds, setAutoQueuedFollowUpIds] = useState<string[]>(
+    [],
+  );
+  const [followUpBehavior, setFollowUpBehaviorState] =
+    useState<FollowUpBehavior>(
+      () =>
+        readPersistedFollowUpBehavior(assistantId, organizationId) ?? 'queue',
+    );
   const [contextUsageByAgentKey, setContextUsageByAgentKey] =
     useState<ThreadContextUsageByAgentKey>({});
   const [runtimeClientSecret, setRuntimeClientSecret] = useState(apiKey);
@@ -670,19 +1128,39 @@ const StreamSession = ({
     string | undefined
   >(organizationId);
   const abortRef = useRef<AbortController | null>(null);
+  const isLoadingRef = useRef(false);
+  const valuesRef = useRef<StateType>(values);
   const submitRef = useRef<StreamContextType['submit'] | null>(null);
+  const pendingFollowUpsRef = useRef<PendingFollowUp[]>([]);
+  const autoQueuedFollowUpIdsRef = useRef<Set<string>>(new Set());
+  const queueDrainPromiseRef = useRef<Promise<void> | null>(null);
   const runtimeClientSecretRef = useRef(apiKey);
   const runtimeOrganizationIdRef = useRef<string | undefined>(organizationId);
-  const refreshClientSecretPromiseRef = useRef<
-    Promise<ResolvedClientSecret> | null
-  >(null);
+  const refreshClientSecretPromiseRef =
+    useRef<Promise<ResolvedClientSecret> | null>(null);
+  const consumedInitialThreadRef = useRef<string | null>(null);
+  const initialThreadLoadRef = useRef<{
+    threadId: string | null;
+    promise: Promise<void> | null;
+  }>({
+    threadId: null,
+    promise: null,
+  });
   const lastStreamOptionsRef = useRef<
-    Pick<StreamSubmitOptions, 'streamMode' | 'streamSubgraphs' | 'streamResumable'>
+    Pick<
+      StreamSubmitOptions,
+      'streamMode' | 'streamSubgraphs' | 'streamResumable'
+    >
   >({});
   const lastExecutionIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  const shouldStartFreshAssistantMessageAfterSteerRef = useRef(false);
   // Track the previous threadId so we only reset SSE state on actual thread changes.
   const lastThreadIdRef = useRef<string | null>(threadId ?? null);
+  const hasObservedThreadSelectionRef = useRef(
+    normalizeThreadIdentifier(threadId) !== null,
+  );
   const suppressThreadChangeRef = useRef(false);
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
 
@@ -694,16 +1172,50 @@ const StreamSession = ({
     setRuntimeOrganizationId(nextOrganizationId || undefined);
   }, [apiKey, organizationId]);
 
+  useEffect(() => {
+    pendingFollowUpsRef.current = pendingFollowUps;
+  }, [pendingFollowUps]);
+
+  useEffect(() => {
+    autoQueuedFollowUpIdsRef.current = new Set(autoQueuedFollowUpIds);
+  }, [autoQueuedFollowUpIds]);
+
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
+
+  useEffect(() => {
+    setFollowUpBehaviorState(
+      readPersistedFollowUpBehavior(assistantId, organizationId) ?? 'queue',
+    );
+  }, [assistantId, organizationId]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
   // Notify the host page when the active thread changes. The host maps
   // `public_event` -> `chatkit.<event>` so sending ['thread.change', {...}]
   // will become a `chatkit.thread.change` CustomEvent on the host element.
   useEffect(() => {
+    const currentThreadId = normalizeThreadIdentifier(threadId);
+    if (currentThreadId !== null) {
+      hasObservedThreadSelectionRef.current = true;
+    }
     if (!isParentAvailable) return;
     if (suppressThreadChangeRef.current) {
       suppressThreadChangeRef.current = false;
       return;
     }
-    sendEvent('public_event', ['thread.change', { threadId: threadId ?? null }]);
+    if (
+      !shouldBroadcastThreadChange({
+        threadId: currentThreadId,
+        hasObservedThreadSelection: hasObservedThreadSelectionRef.current,
+      })
+    ) {
+      return;
+    }
+    sendEvent('public_event', ['thread.change', { threadId: currentThreadId }]);
   }, [threadId, isParentAvailable, sendEvent]);
 
   useEffect(() => {
@@ -715,10 +1227,12 @@ const StreamSession = ({
     }
   }, [threadId]);
 
-  const refreshClientSecret = useCallback(
-    async (): Promise<ResolvedClientSecret> => {
+  const refreshClientSecret =
+    useCallback(async (): Promise<ResolvedClientSecret> => {
       if (!isParentAvailable) {
-        throw new Error('[chatkit-ui] Parent window is not available for client secret refresh.');
+        throw new Error(
+          '[chatkit-ui] Parent window is not available for client secret refresh.',
+        );
       }
       if (refreshClientSecretPromiseRef.current) {
         return refreshClientSecretPromiseRef.current;
@@ -726,7 +1240,10 @@ const StreamSession = ({
 
       const refreshPromise = (async () => {
         const currentSecret = runtimeClientSecretRef.current.trim();
-        const response = await sendCommand('onGetClientSecret', currentSecret || null);
+        const response = await sendCommand(
+          'onGetClientSecret',
+          currentSecret || null,
+        );
         const nextClientSecret = normalizeClientSecretResult(
           response,
           runtimeOrganizationIdRef.current,
@@ -747,16 +1264,15 @@ const StreamSession = ({
           refreshClientSecretPromiseRef.current = null;
         }
       }
-    },
-    [isParentAvailable, sendCommand],
-  );
+    }, [isParentAvailable, sendCommand]);
 
   const fetchWithClientSecretRefresh = useMemo(
     () =>
       createFetchWithClientSecretRefresh({
         getCurrentClientSecret: () => {
           const currentSecret = runtimeClientSecretRef.current.trim();
-          const currentOrganizationId = runtimeOrganizationIdRef.current?.trim();
+          const currentOrganizationId =
+            runtimeOrganizationIdRef.current?.trim();
 
           return currentOrganizationId
             ? { secret: currentSecret, organizationId: currentOrganizationId }
@@ -764,7 +1280,10 @@ const StreamSession = ({
         },
         refreshClientSecret,
         onRefreshError: (refreshError) => {
-          console.warn('[chatkit-ui] Failed to refresh client secret:', refreshError);
+          console.warn(
+            '[chatkit-ui] Failed to refresh client secret:',
+            refreshError,
+          );
         },
       }),
     [refreshClientSecret],
@@ -814,21 +1333,162 @@ const StreamSession = ({
     }
   }, [client, threadId]);
 
+  const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setAutoQueuedFollowUpIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (id) {
+          next.add(id);
+        }
+      }
+      return [...next];
+    });
+  }, []);
+
+  const removeAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setAutoQueuedFollowUpIds((prev) => prev.filter((id) => !idSet.has(id)));
+  }, []);
+
+  const removePendingFollowUps = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      setPendingFollowUps((prev) => prev.filter((item) => !idSet.has(item.id)));
+      removeAutoQueuedFollowUpIds(ids);
+    },
+    [removeAutoQueuedFollowUpIds],
+  );
+
+  const removePendingFollowUp = useCallback(
+    (id: string) => {
+      if (!id) return;
+      const targetItem = pendingFollowUpsRef.current.find(
+        (item) => item.id === id,
+      );
+      if (!targetItem || targetItem.mode !== 'queue') {
+        return;
+      }
+      removePendingFollowUps([id]);
+    },
+    [removePendingFollowUps],
+  );
+
+  const setFollowUpBehavior = useCallback(
+    (behavior: FollowUpBehavior) => {
+      if (followUpBehavior === behavior) {
+        return;
+      }
+
+      setFollowUpBehaviorState(behavior);
+      writePersistedFollowUpBehavior(behavior, assistantId, organizationId);
+    },
+    [assistantId, followUpBehavior, organizationId],
+  );
+
+  const markPendingFollowUpsAsQueued = useCallback(
+    (ids: string[], options?: { autoDrain?: boolean }) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      setPendingFollowUps((prev) =>
+        prev.map((item) =>
+          idSet.has(item.id)
+            ? {
+                ...item,
+                mode: 'queue' as const,
+                request: {
+                  ...item.request,
+                  followUpMode: 'queue',
+                },
+              }
+            : item,
+        ),
+      );
+      if (options?.autoDrain === true) {
+        addAutoQueuedFollowUpIds(ids);
+      } else if (options?.autoDrain === false) {
+        removeAutoQueuedFollowUpIds(ids);
+      }
+    },
+    [addAutoQueuedFollowUpIds, removeAutoQueuedFollowUpIds],
+  );
+
+  const insertPendingFollowUpsIntoTranscript = useCallback(
+    (items: PendingFollowUp[], visibleAt?: string | null) => {
+      const nextMessages = items
+        .map((item) => pendingFollowUpToUiMessage(item, visibleAt))
+        .filter(
+          (
+            item,
+          ): item is NonNullable<
+            ReturnType<typeof pendingFollowUpToUiMessage>
+          > => Boolean(item),
+        );
+      appendMessages(setValues, nextMessages as ChatKitAIMessage[]);
+    },
+    [],
+  );
+
+  const flushSteerFollowUps = useCallback(
+    (ids: string[], visibleAt?: string | null) => {
+      if (ids.length === 0) {
+        return;
+      }
+
+      const idSet = new Set(ids);
+      const steerItems = pendingFollowUpsRef.current
+        .filter(
+          (item) =>
+            item.mode === 'steer' &&
+            (idSet.has(item.id) || idSet.has(item.clientMessageId)),
+        )
+        .sort((a, b) => a.createdAt - b.createdAt);
+      if (steerItems.length === 0) {
+        return;
+      }
+
+      insertPendingFollowUpsIntoTranscript(steerItems, visibleAt);
+      removePendingFollowUps(steerItems.map((item) => item.id));
+    },
+    [insertPendingFollowUpsIntoTranscript, removePendingFollowUps],
+  );
+
   const loadConversationMessages = useCallback(
     async (recordId: string) => {
-      if (!apiUrl || !runtimeClientSecret.trim()) {
-        throw new Error('Missing API configuration');
+      const configError = createMissingApiConfigurationError({
+        apiUrl,
+        clientSecret: runtimeClientSecret,
+      });
+      if (configError) {
+        throw configError;
       }
       try {
         stop();
       } catch {
         // ignore stop errors from an already-idle stream
       }
+      conversationIdRef.current = recordId;
       const response = await client.conversations.listMessages(recordId, {
         limit: DEFAULT_HISTORY_LIMIT,
         offset: 0,
       });
-      const sorted = sortMessagesByCreatedAt(response.items ?? []);
+      const persistedMessages =
+        (response.items as PersistedChatMessage[] | undefined) ?? [];
+      const persistedPendingFollowUps = persistedMessages
+        .filter((message) => isHiddenPendingFollowUpMessage(message))
+        .map((message) => mapPersistedPendingFollowUp(message))
+        .filter((item): item is PendingFollowUp => Boolean(item));
+      setAutoQueuedFollowUpIds(
+        getAutoDrainQueuedFollowUpIds(persistedPendingFollowUps),
+      );
+      setPendingFollowUps(persistedPendingFollowUps);
+      const sorted = sortMessagesByCreatedAt(
+        persistedMessages.filter(
+          (message) => !isHiddenPendingFollowUpMessage(message),
+        ),
+      );
       const mapped = sorted.map(mapChatMessageToUiMessage);
       setValues({ messages: mapped ?? [] });
       return mapped as ChatKitAIMessage[];
@@ -836,26 +1496,33 @@ const StreamSession = ({
     [apiUrl, client, runtimeClientSecret, stop],
   );
 
-  const reset = useCallback((
-    newThreadId?: string | null,
-    initialMessages?: ChatKitAIMessage[],
-    options?: { suppressThreadChange?: boolean },
-  ) => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setIsLoading(false);
-    setError(null);
-    setContextUsageByAgentKey({});
-    setValues({ messages: initialMessages ?? [] });
-    lastExecutionIdRef.current = null;
-    lastEventIdRef.current = null;
-    if (newThreadId !== undefined) {
-      if (options?.suppressThreadChange && newThreadId !== threadId) {
-        suppressThreadChangeRef.current = true;
+  const reset = useCallback(
+    (
+      newThreadId?: string | null,
+      initialMessages?: ChatKitAIMessage[],
+      options?: { suppressThreadChange?: boolean },
+    ) => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setIsLoading(false);
+      setError(null);
+      setPendingFollowUps([]);
+      setAutoQueuedFollowUpIds([]);
+      setContextUsageByAgentKey({});
+      setValues({ messages: initialMessages ?? [] });
+      conversationIdRef.current = null;
+      shouldStartFreshAssistantMessageAfterSteerRef.current = false;
+      lastExecutionIdRef.current = null;
+      lastEventIdRef.current = null;
+      if (newThreadId !== undefined) {
+        if (options?.suppressThreadChange && newThreadId !== threadId) {
+          suppressThreadChangeRef.current = true;
+        }
+        setThreadId(newThreadId);
       }
-      setThreadId(newThreadId);
-    }
-  }, [setThreadId, threadId]);
+    },
+    [setThreadId, threadId],
+  );
 
   const handleInterrupt = useCallback(
     async (data: unknown) => {
@@ -887,14 +1554,15 @@ const StreamSession = ({
       }
 
       if (toolMessages.length > 0) {
-        await submitRef.current?.({
+        await submitRef.current?.(
+          {
             input: {},
             command: {
               resume: {
-                  toolMessages: toolMessages,
-              } as ClientToolResponse
+                toolMessages: toolMessages,
+              } as ClientToolResponse,
             },
-            executionId: lastExecutionIdRef.current ?? undefined
+            executionId: lastExecutionIdRef.current ?? undefined,
           },
           lastStreamOptionsRef.current,
         );
@@ -902,86 +1570,365 @@ const StreamSession = ({
     },
     [isParentAvailable, sendCommand, setError],
   );
-  
-  const runStream = useCallback(async (
-    nextThreadId: string,
-    input?: TChatRequest | null,
-    options?: StreamSubmitOptions,
-    runId?: string,
-  ) => {
-    const abortController = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = abortController;
-    setIsLoading(true);
-    try {
+
+  const resolveConversationId = useCallback(
+    async (nextThreadId: string) => {
+      if (!nextThreadId) {
+        return null;
+      }
+
+      const cachedConversationId = conversationIdRef.current?.trim();
+      if (cachedConversationId) {
+        return cachedConversationId;
+      }
+
+      const conversationResult = await client.conversations.search({
+        where: { threadId: nextThreadId },
+        limit: 1,
+      });
+      const conversationId = conversationResult.items?.[0]?.id?.trim() ?? null;
+      conversationIdRef.current = conversationId;
+      return conversationId;
+    },
+    [client],
+  );
+
+  const sendSteerFollowUp = useCallback(
+    async (
+      nextThreadId: string,
+      input: TChatRequest,
+      options?: StreamSubmitOptions,
+    ) => {
       const normalizedRequest = normalizeRequestContextAndConfig({
         context: options?.context,
         config: options?.config,
       });
-      const stream = options?.joinExistingThread && runId ? client.runs.joinStream(nextThreadId, runId) :
-        client.runs.stream(nextThreadId, assistantId, {
-          input: input ?? null,
-          context: normalizedRequest.context,
-          config: normalizedRequest.config as Config | undefined,
-          checkpoint: options?.checkpoint ?? undefined,
-          streamMode: options?.streamMode,
-          streamSubgraphs: options?.streamSubgraphs,
-          streamResumable: options?.streamResumable,
-          signal: abortController.signal,
-          onDisconnect: 'continue'
-        });
+      const conversationId = await resolveConversationId(nextThreadId);
+      const explicitFollowUpInput = buildSteerFollowUpRunInput({
+        request: input,
+        conversationId,
+        targetExecutionId:
+          (typeof input.executionId === 'string' && input.executionId.trim()) ||
+          lastExecutionIdRef.current,
+        messages: valuesRef.current.messages ?? [],
+      });
 
-      const interrupts: unknown[] = [];
-      const langGraphEventState = createLangGraphEventState();
-      const eventContext: LangGraphEventContext = {
-        threadId: nextThreadId,
-        input,
+      if (!explicitFollowUpInput) {
+        throw new Error('Missing conversation context for steer follow-up');
+      }
+
+      await client.runs.create(nextThreadId, assistantId, {
+        input: explicitFollowUpInput,
+        context: normalizedRequest.context,
+        config: normalizedRequest.config as Config | undefined,
+      });
+    },
+    [assistantId, client, resolveConversationId],
+  );
+
+  const promotePendingFollowUpToSteer = useCallback(
+    async (id: string) => {
+      if (!id || !isLoadingRef.current) {
+        return;
+      }
+
+      const activeThreadId = threadId ?? null;
+      if (!activeThreadId) {
+        return;
+      }
+
+      const currentItem = pendingFollowUpsRef.current.find(
+        (item) => item.id === id && item.mode === 'queue',
+      );
+      if (!currentItem) {
+        return;
+      }
+      removeAutoQueuedFollowUpIds([id]);
+
+      const targetExecutionId =
+        lastExecutionIdRef.current ??
+        currentItem.request.executionId ??
+        currentItem.targetExecutionId ??
+        undefined;
+
+      const nextRequest: TChatRequest = {
+        ...currentItem.request,
+        ...(targetExecutionId ? { executionId: targetExecutionId } : {}),
+        followUpMode: 'steer',
       };
-      for await (const chunk of stream) {
-        if (chunk?.id) {
-          lastEventIdRef.current = String(chunk.id);
-        }
-        applyStreamEvent(
-          chunk as StreamChunk,
-          setValues,
-          setError,
-          sendEvent,
-          interrupts,
-          langGraphEventState,
-          eventContext,
-          (executionId) => {
-            if (executionId) {
-              lastExecutionIdRef.current = executionId;
-            }
-          },
-          (event) => {
-            setContextUsageByAgentKey((prev) =>
-              applyThreadContextUsageEvent(prev, event, nextThreadId),
-            );
-          },
+
+      setPendingFollowUps((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                mode: 'steer',
+                request: nextRequest,
+                targetExecutionId: targetExecutionId ?? null,
+              }
+            : item,
+        ),
+      );
+
+      try {
+        await sendSteerFollowUp(activeThreadId, nextRequest, {
+          ...(currentItem.context ? { context: currentItem.context } : {}),
+          ...(currentItem.config ? { config: currentItem.config } : {}),
+        });
+      } catch (followUpError) {
+        setError(followUpError);
+        markPendingFollowUpsAsQueued([id], { autoDrain: true });
+        setPendingFollowUps((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  targetExecutionId: targetExecutionId ?? null,
+                }
+              : item,
+          ),
         );
       }
+    },
+    [
+      markPendingFollowUpsAsQueued,
+      removeAutoQueuedFollowUpIds,
+      sendSteerFollowUp,
+      threadId,
+    ],
+  );
 
-      if (interrupts.length > 0) {
-        for await (const interruptData of interrupts) {
-          await handleInterrupt(interruptData);
+  const autoQueuedFollowUpIdSet = useMemo(
+    () => new Set(autoQueuedFollowUpIds),
+    [autoQueuedFollowUpIds],
+  );
+
+  const canSendPendingFollowUpNow = useCallback(
+    (id: string) => {
+      if (!id || isLoadingRef.current || autoQueuedFollowUpIdSet.has(id)) {
+        return false;
+      }
+
+      return pendingFollowUpsRef.current.some(
+        (item) => item.id === id && item.mode === 'queue',
+      );
+    },
+    [autoQueuedFollowUpIdSet],
+  );
+
+  const sendPendingFollowUpNow = useCallback(
+    async (id: string) => {
+      if (!id || isLoadingRef.current) {
+        return;
+      }
+
+      const nextItem = pendingFollowUpsRef.current.find(
+        (item) => item.id === id && item.mode === 'queue',
+      );
+      if (!nextItem) {
+        return;
+      }
+
+      const groupedItems = getQueuedFollowUpGroup(
+        pendingFollowUpsRef.current,
+        nextItem,
+      );
+      const mergedGroup = mergeQueuedFollowUpGroup(groupedItems, {
+        leadItemId: id,
+      });
+      if (!mergedGroup) {
+        return;
+      }
+
+      removePendingFollowUps(mergedGroup.items.map((item) => item.id));
+      insertPendingFollowUpsIntoTranscript(mergedGroup.items);
+      await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
+        ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
+        ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
+        threadId: threadId ?? undefined,
+      });
+    },
+    [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId],
+  );
+
+  const drainQueuedFollowUps = useCallback(async () => {
+    if (queueDrainPromiseRef.current || isLoadingRef.current) {
+      return queueDrainPromiseRef.current ?? Promise.resolve();
+    }
+
+    const drainPromise = (async () => {
+      while (!isLoadingRef.current) {
+        const nextItem = getNextAutoQueuedFollowUp(
+          pendingFollowUpsRef.current,
+          autoQueuedFollowUpIdsRef.current,
+        );
+
+        if (!nextItem) {
+          break;
+        }
+
+        const groupedItems = getQueuedFollowUpGroup(
+          pendingFollowUpsRef.current,
+          nextItem,
+        );
+        const mergedGroup = mergeQueuedFollowUpGroup(groupedItems, {
+          leadItemId: nextItem.id,
+        });
+        if (!mergedGroup) {
+          break;
+        }
+
+        removePendingFollowUps(mergedGroup.items.map((item) => item.id));
+        insertPendingFollowUpsIntoTranscript(mergedGroup.items);
+        await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
+          ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
+          ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
+          threadId: threadId ?? undefined,
+        });
+      }
+    })().finally(() => {
+      if (queueDrainPromiseRef.current === drainPromise) {
+        queueDrainPromiseRef.current = null;
+      }
+    });
+
+    queueDrainPromiseRef.current = drainPromise;
+    return drainPromise;
+  }, [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId]);
+
+  const runStream = useCallback(
+    async (
+      nextThreadId: string,
+      input?: TChatRequest | null,
+      options?: StreamSubmitOptions,
+      runId?: string,
+    ) => {
+      const abortController = new AbortController();
+      abortRef.current?.abort();
+      abortRef.current = abortController;
+      setIsLoading(true);
+      try {
+        const normalizedRequest = normalizeRequestContextAndConfig({
+          context: options?.context,
+          config: options?.config,
+        });
+        const stream =
+          options?.joinExistingThread && runId
+            ? client.runs.joinStream(nextThreadId, runId)
+            : client.runs.stream(nextThreadId, assistantId, {
+                input: input ?? null,
+                context: normalizedRequest.context,
+                config: normalizedRequest.config as Config | undefined,
+                checkpoint: options?.checkpoint ?? undefined,
+                streamMode: options?.streamMode,
+                streamSubgraphs: options?.streamSubgraphs,
+                streamResumable: options?.streamResumable,
+                signal: abortController.signal,
+                onDisconnect: 'continue',
+              });
+
+        const interrupts: unknown[] = [];
+        const langGraphEventState = createLangGraphEventState();
+        const eventContext: LangGraphEventContext = {
+          threadId: nextThreadId,
+          input,
+        };
+        for await (const chunk of stream) {
+          if (chunk?.id) {
+            lastEventIdRef.current = String(chunk.id);
+          }
+          applyStreamEvent(
+            chunk as StreamChunk,
+            setValues,
+            setError,
+            sendEvent,
+            interrupts,
+            langGraphEventState,
+            eventContext,
+            (executionId) => {
+              if (executionId) {
+                lastExecutionIdRef.current = executionId;
+              }
+            },
+            (event) => {
+              setContextUsageByAgentKey((prev) =>
+                applyThreadContextUsageEvent(prev, event, nextThreadId),
+              );
+            },
+            (event) => {
+              const consumedIds = resolveFollowUpConsumedIds(event);
+              if (event?.mode === 'steer') {
+                flushSteerFollowUps(consumedIds, event?.visibleAt ?? null);
+                shouldStartFreshAssistantMessageAfterSteerRef.current = true;
+                return;
+              }
+
+              removePendingFollowUps(consumedIds);
+            },
+            () => {
+              const shouldStartFreshAssistant =
+                shouldStartFreshAssistantMessageAfterSteerRef.current;
+              shouldStartFreshAssistantMessageAfterSteerRef.current = false;
+              return shouldStartFreshAssistant;
+            },
+          );
+        }
+
+        if (interrupts.length > 0) {
+          for await (const interruptData of interrupts) {
+            await handleInterrupt(interruptData);
+          }
+        }
+      } catch (streamError) {
+        if (
+          !(
+            streamError instanceof DOMException &&
+            streamError.name === 'AbortError'
+          )
+        ) {
+          setError(streamError);
+        }
+      } finally {
+        if (abortRef.current === abortController) {
+          abortRef.current = null;
+        }
+        setIsLoading(false);
+        shouldStartFreshAssistantMessageAfterSteerRef.current = false;
+        const staleSteerIds = getPendingSteerFollowUpIds(
+          pendingFollowUpsRef.current,
+        );
+        if (staleSteerIds.length > 0) {
+          markPendingFollowUpsAsQueued(staleSteerIds, { autoDrain: true });
         }
       }
-    } catch (streamError) {
-      if (!(streamError instanceof DOMException && streamError.name === 'AbortError')) {
-        setError(streamError);
-      }
-    } finally {
-      if (abortRef.current === abortController) {
-        abortRef.current = null;
-      }
-      setIsLoading(false);
+    },
+    [
+      assistantId,
+      client,
+      sendEvent,
+      handleInterrupt,
+      flushSteerFollowUps,
+      markPendingFollowUpsAsQueued,
+      removePendingFollowUps,
+    ],
+  );
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
     }
-  }, [assistantId, client, sendEvent, handleInterrupt]);
+    void drainQueuedFollowUps();
+  }, [drainQueuedFollowUps, isLoading]);
 
   const loadThread = useCallback(
     async (threadId: string) => {
       if (!threadId) return;
+      if (
+        threadId === (lastThreadIdRef.current ?? null) &&
+        isLoadingRef.current
+      ) {
+        return;
+      }
       setError(null);
 
       try {
@@ -1000,14 +1947,18 @@ const StreamSession = ({
 
       const conversation = conversationResult.items?.[0];
       if (!conversation?.id) {
+        conversationIdRef.current = null;
+        setPendingFollowUps([]);
         setValues({ messages: [] });
         return;
       }
 
+      conversationIdRef.current = conversation.id;
       await loadConversationMessages(conversation.id);
 
       const status = String(conversation.status ?? '').toLowerCase();
-      const shouldJoinStream = !status || status === 'running' || status === 'busy';
+      const shouldJoinStream =
+        !status || status === 'running' || status === 'busy';
       if (!shouldJoinStream) return;
 
       const lastAiMessageResult = await client.conversations.searchMessages(
@@ -1022,20 +1973,114 @@ const StreamSession = ({
       if (!runId) return;
       lastExecutionIdRef.current = runId;
 
-      await runStream(threadId, null, {joinExistingThread: true}, runId);
+      await runStream(threadId, null, { joinExistingThread: true }, runId);
     },
     [client, runStream, stop, loadConversationMessages, setThreadId],
   );
 
+  useEffect(() => {
+    const requestedInitialThread = normalizeThreadIdentifier(initialThread);
+    const activeThreadId = normalizeThreadIdentifier(threadId);
+
+    if (!requestedInitialThread) {
+      consumedInitialThreadRef.current = null;
+      return;
+    }
+
+    if (requestedInitialThread === activeThreadId) {
+      consumedInitialThreadRef.current = requestedInitialThread;
+      return;
+    }
+
+    if (consumedInitialThreadRef.current === requestedInitialThread) {
+      return;
+    }
+
+    const configError = createMissingApiConfigurationError({
+      apiUrl,
+      clientSecret: runtimeClientSecret,
+    });
+    if (configError) {
+      return;
+    }
+
+    const inFlightThread = initialThreadLoadRef.current.threadId;
+    if (
+      inFlightThread === requestedInitialThread &&
+      initialThreadLoadRef.current.promise
+    ) {
+      return;
+    }
+
+    consumedInitialThreadRef.current = requestedInitialThread;
+    const promise = loadThread(requestedInitialThread).catch((error) => {
+      setError(error);
+      console.warn('[chatkit-ui] Failed to load initial thread', error);
+    });
+    initialThreadLoadRef.current = {
+      threadId: requestedInitialThread,
+      promise,
+    };
+    void promise.finally(() => {
+      if (initialThreadLoadRef.current.promise === promise) {
+        initialThreadLoadRef.current = {
+          threadId: null,
+          promise: null,
+        };
+      }
+    });
+  }, [
+    apiUrl,
+    initialThread,
+    loadThread,
+    runtimeClientSecret,
+    setError,
+    threadId,
+  ]);
+
   const submit = useCallback(
-    async (
-      input?: TChatRequest | null,
-      options?: StreamSubmitOptions,
-    ) => {
-      // if (isLoading) {
-      //   return;
-      // }
+    async (input?: TChatRequest | null, options?: StreamSubmitOptions) => {
       setError(null);
+      const followUpMode = isLoadingRef.current
+        ? options?.followUpMode
+        : undefined;
+      if (input && followUpMode) {
+        const pending = createPendingFollowUp(
+          {
+            ...input,
+            id: input.id ?? createMessageId(),
+            executionId:
+              input.executionId ?? lastExecutionIdRef.current ?? undefined,
+            followUpMode,
+          },
+          followUpMode,
+          options,
+        );
+
+        if (!pending) {
+          return;
+        }
+
+        setPendingFollowUps((prev) => {
+          const remaining = prev.filter((item) => item.id !== pending.id);
+          return [...remaining, pending];
+        });
+        if (followUpMode === 'queue') {
+          addAutoQueuedFollowUpIds([pending.id]);
+        }
+
+        const activeThreadId = threadId ?? null;
+        if (followUpMode === 'steer' && activeThreadId) {
+          try {
+            await sendSteerFollowUp(activeThreadId, pending.request, options);
+          } catch (followUpError) {
+            setError(followUpError);
+            markPendingFollowUpsAsQueued([pending.id], { autoDrain: true });
+          }
+        }
+        return;
+      }
+
       const previousThreadId = threadId ?? null;
       lastStreamOptionsRef.current = {
         streamMode: options?.streamMode,
@@ -1082,13 +2127,23 @@ const StreamSession = ({
 
       await runStream(nextThreadId, input, options);
     },
-    [client, runStream, setThreadId, threadId],
+    [
+      client,
+      addAutoQueuedFollowUpIds,
+      markPendingFollowUpsAsQueued,
+      runStream,
+      sendSteerFollowUp,
+      setThreadId,
+      threadId,
+    ],
   );
 
   submitRef.current = submit;
 
   // isReady is true when we have a valid client secret (starts with 'cs-x-')
-  const isReady = Boolean(runtimeClientSecret && runtimeClientSecret.startsWith('cs-x-'));
+  const isReady = Boolean(
+    runtimeClientSecret && runtimeClientSecret.startsWith('cs-x-'),
+  );
 
   const value: StreamContextType = {
     client,
@@ -1100,6 +2155,8 @@ const StreamSession = ({
     contextUsageByAgentKey,
     values,
     messages: values.messages ?? [],
+    pendingFollowUps,
+    followUpBehavior,
     isLoading,
     isReady,
     error,
@@ -1108,6 +2165,11 @@ const StreamSession = ({
     submit,
     stop,
     reset,
+    setFollowUpBehavior,
+    removePendingFollowUp,
+    canSendPendingFollowUpNow,
+    sendPendingFollowUpNow,
+    promotePendingFollowUpToSteer,
     setThreadId,
   };
 
@@ -1122,13 +2184,15 @@ export const StreamProvider: React.FC<{
   organizationId?: string;
   apiUrl?: string;
   xpertId?: string;
-}> = ({ children, apiKey, organizationId, apiUrl, xpertId }) => {
+  initialThread?: string | null;
+}> = ({ children, apiKey, organizationId, apiUrl, xpertId, initialThread }) => {
   return (
     <StreamSession
       apiKey={apiKey ?? ''}
       organizationId={organizationId}
       apiUrl={apiUrl ?? defaultApiUrl}
       assistantId={xpertId ?? 'your-xpert-id'}
+      initialThread={initialThread}
     >
       {children}
     </StreamSession>
