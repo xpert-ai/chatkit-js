@@ -39,5 +39,13 @@
     "vue",
     "xpert",
     "uniapp"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/chatkit-vue",
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  }
 }
