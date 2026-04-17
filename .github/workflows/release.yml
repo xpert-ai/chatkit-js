@@ -41,13 +41,18 @@ jobs:
             touch .npmrc
           fi
 
-      - name: Create Release PR or Publish
+      - name: Create Release PR or Prepare Publish
+        id: changesets
         uses: changesets/action@v1
         with:
           createGithubReleases: false
           version: pnpm changeset version
-          publish: pnpm release:publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish packages
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: pnpm release:publish
+        env:
           NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
           NPM_CONFIG_PROVENANCE: "true"
