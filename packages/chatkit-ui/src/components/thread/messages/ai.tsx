@@ -423,7 +423,7 @@ export function AssistantMessage({
           defaultValue={message.status === 'reasoning' ? 'reasoning' : 'answer'}
           className="w-full"
         >
-          <TabsList className="h-9">
+          <TabsList className="">
             <TabsTrigger value="answer">{t('message.answer')}</TabsTrigger>
             <TabsTrigger value="reasoning">{t('message.reasoning')}</TabsTrigger>
           </TabsList>

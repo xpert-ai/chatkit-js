@@ -171,7 +171,7 @@ function ReferenceChip({
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            'truncate',
+            'truncate whitespace-pre-wrap',
             isComposer ? 'text-sm' : 'text-xs font-medium',
           )}
         >
@@ -180,7 +180,7 @@ function ReferenceChip({
         {metaLine && (
           <div
             className={cn(
-              'truncate',
+              'truncate whitespace-pre-wrap',
               isComposer
                 ? 'text-xs text-muted-foreground'
                 : 'text-[10px] text-primary-foreground/75',
