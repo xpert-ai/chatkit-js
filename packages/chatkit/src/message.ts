@@ -217,7 +217,7 @@ export type TMessageComponentStep<T = unknown> = {
   error?: string;
   data?: T;
   input?: any;
-  output?: string;
+  output?: unknown;
   artifact?: any;
 };
 
