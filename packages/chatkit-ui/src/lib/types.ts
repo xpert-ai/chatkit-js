@@ -6,6 +6,8 @@ export interface StorageFile {
   id: string;
   file: string;
   url?: string;
+  fileUrl?: string;
+  thumbUrl?: string;
   originalName?: string;
   size?: number;
   mimetype?: string;
