@@ -1,6 +1,12 @@
 import { ArrowUp, Square } from 'lucide-react';
 import { cn, getRoundedClass } from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+
+export type SendButtonShortcut = {
+  label: string;
+  keys: string;
+};
 
 export type SendButtonProps = {
   disabled?: boolean;
@@ -9,6 +15,7 @@ export type SendButtonProps = {
   onStop?: () => void;
   stopLabel?: string;
   sendLabel?: string;
+  shortcuts?: SendButtonShortcut[];
 };
 
 export function SendButton({
@@ -18,6 +25,7 @@ export function SendButton({
   onStop,
   stopLabel = 'Stop',
   sendLabel = 'Send',
+  shortcuts,
 }: SendButtonProps) {
   const { theme } = useTheme();
 
@@ -42,7 +50,7 @@ export function SendButton({
     );
   }
 
-  return (
+  const button = (
     <button
       type="submit"
       disabled={disabled}
@@ -58,6 +66,39 @@ export function SendButton({
     >
       <ArrowUp size={18} strokeWidth={2.5} />
     </button>
+  );
+
+  if (!shortcuts?.length || disabled) {
+    return button;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent
+        side="top"
+        sideOffset={10}
+        hideArrow
+        className={cn(
+          'min-w-36 border border-border/70 bg-background px-3 py-2 text-foreground shadow-lg',
+          roundedClass,
+        )}
+      >
+        <div className="space-y-1">
+          {shortcuts.map((shortcut) => (
+            <div
+              key={`${shortcut.label}-${shortcut.keys}`}
+              className="flex items-center justify-between gap-4 text-sm"
+            >
+              <span className="font-medium">{shortcut.label}</span>
+              <kbd className="inline-flex min-w-16 items-center justify-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {shortcut.keys}
+              </kbd>
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

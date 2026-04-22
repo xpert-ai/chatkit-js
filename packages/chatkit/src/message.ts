@@ -217,7 +217,7 @@ export type TMessageComponentStep<T = unknown> = {
   error?: string;
   data?: T;
   input?: any;
-  output?: string;
+  output?: unknown;
   artifact?: any;
 };
 
@@ -269,7 +269,21 @@ export type ChatKitQuoteReference = ChatKitReferenceBase & {
   source?: string;
 };
 
-export type ChatKitReference = ChatKitCodeReference | ChatKitQuoteReference;
+export type ChatKitImageReference = ChatKitReferenceBase & {
+  type: 'image';
+  fileId?: string;
+  url?: string;
+  mimeType?: string;
+  name?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+};
+
+export type ChatKitReference =
+  | ChatKitCodeReference
+  | ChatKitQuoteReference
+  | ChatKitImageReference;
 
 export type ChatKitReferenceCompositionMode = 'compose' | 'preserve';
 

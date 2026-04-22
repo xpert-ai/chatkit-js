@@ -9,6 +9,7 @@ node_modules/
 .DS_Store
 *.tsbuildinfo
 pnpm-debug.log*
+pnpm-publish-summary.json
 
 # Python
 *.egg-info/

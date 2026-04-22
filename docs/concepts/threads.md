@@ -95,6 +95,7 @@ Assistant messages support:
 - Stable list rendering during streaming (Safari-safe, no reflow)
 - Optional single-newline line breaks
 - Syntax-highlighted, copyable code blocks
+- Mermaid diagrams rendered from fenced `mermaid` code blocks
 - LaTeX math (inline and block)
 - Tables with automatic sizing and horizontal scrolling
 - Inline annotations that create interactive affordances in the UI

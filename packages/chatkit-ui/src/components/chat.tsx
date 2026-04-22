@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   ArrowDown,
   FileText,
+  ImageIcon,
   Loader2,
   Pencil,
   Quote,
@@ -12,6 +13,7 @@ import {
 import type { Message } from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
+  ChatKitImageReference,
   ChatKitOptions,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
@@ -59,6 +61,10 @@ import {
   type ComposerValuePayload,
 } from '../lib/references';
 import { getMissingApiConfigurationKind } from '../lib/api-config';
+import {
+  getBusyComposerShortcutFollowUpMode,
+  getComposerFollowUpShortcutLabels,
+} from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 
@@ -75,6 +81,7 @@ const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | string
   | undefined;
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
+const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 
 type UploadedMessageFile = {
   originalName: string;
@@ -93,6 +100,73 @@ type QuoteSelectionState = {
   top: number;
   left: number;
 };
+
+async function readImageDimensions(file: File): Promise<{
+  width?: number;
+  height?: number;
+}> {
+  if (typeof window === 'undefined' || typeof URL === 'undefined') {
+    return {};
+  }
+
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+
+    const cleanup = () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+
+    image.onload = () => {
+      resolve({
+        width: image.naturalWidth || undefined,
+        height: image.naturalHeight || undefined,
+      });
+      cleanup();
+    };
+    image.onerror = () => {
+      resolve({});
+      cleanup();
+    };
+    image.src = objectUrl;
+  });
+}
+
+function getStorageFileUrl(file: StorageFile): string | undefined {
+  return file.url ?? file.fileUrl ?? file.thumbUrl;
+}
+
+function buildPastedImageReference(
+  file: File,
+  storageFile: StorageFile,
+  dimensions?: { width?: number; height?: number },
+): ChatKitImageReference {
+  const name =
+    storageFile.originalName?.trim() || file.name.trim() || 'Pasted image';
+  const mimeType =
+    storageFile.mimetype?.trim() || file.type.trim() || 'image/*';
+  const size = storageFile.size ?? file.size;
+  const width = dimensions?.width;
+  const height = dimensions?.height;
+  const metaParts = [
+    mimeType,
+    width && height ? `${width}x${height}` : null,
+    typeof size === 'number' ? `${size} bytes` : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return {
+    type: 'image',
+    id: storageFile.id,
+    fileId: storageFile.id,
+    url: getStorageFileUrl(storageFile),
+    mimeType,
+    name,
+    ...(typeof size === 'number' ? { size } : {}),
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {}),
+    text: `Pasted image${metaParts.length ? ` (${metaParts.join(', ')})` : ''}: ${name}`,
+  };
+}
 
 function formatMessageContent(content: Message['content'][number]): string {
   if (typeof content === 'string') {
@@ -151,7 +225,12 @@ function ReferenceChip({
 }) {
   const metaLine = getReferenceMetaLine(reference);
   const isComposer = variant === 'composer';
-  const Icon = reference.type === 'quote' ? Quote : FileText;
+  const Icon =
+    reference.type === 'quote'
+      ? Quote
+      : reference.type === 'image'
+        ? ImageIcon
+        : FileText;
 
   return (
     <div
@@ -171,7 +250,7 @@ function ReferenceChip({
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            'truncate',
+            'truncate whitespace-pre-wrap',
             isComposer ? 'text-sm' : 'text-xs font-medium',
           )}
         >
@@ -180,7 +259,7 @@ function ReferenceChip({
         {metaLine && (
           <div
             className={cn(
-              'truncate',
+              'truncate whitespace-pre-wrap',
               isComposer
                 ? 'text-xs text-muted-foreground'
                 : 'text-[10px] text-primary-foreground/75',
@@ -306,6 +385,8 @@ export function Chat({
   );
   const [attachments, setAttachments] = React.useState<UploadingFile[]>([]);
   const [references, setReferences] = React.useState<ChatKitReference[]>([]);
+  const [isUploadingReferenceImages, setIsUploadingReferenceImages] =
+    React.useState(false);
   const [quoteSelection, setQuoteSelection] =
     React.useState<QuoteSelectionState | null>(null);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
@@ -663,7 +744,8 @@ export function Chat({
     (!trimmedDraft && !hasReferences) ||
     missingConfig ||
     isHistoryLoading ||
-    hasUploadingFiles;
+    hasUploadingFiles ||
+    isUploadingReferenceImages;
 
   const resizeComposerInput = React.useCallback(() => {
     const textarea = composerInputRef.current;
@@ -921,21 +1003,15 @@ export function Chat({
     fileInputRef.current?.click();
   };
 
+  const uploadContextFile = React.useCallback(
+    (file: File) => stream.client.contexts.uploadFile<StorageFile>(file),
+    [stream.client],
+  );
+
   const handleComposerKeyDown = (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
   ) => {
     if (event.key !== 'Enter') {
-      return;
-    }
-    if (event.shiftKey && (event.metaKey || event.ctrlKey)) {
-      if (event.nativeEvent.isComposing) {
-        return;
-      }
-      event.preventDefault();
-      if (isSendDisabled) {
-        return;
-      }
-      submitDraft(stream.followUpBehavior === 'queue' ? 'steer' : 'queue');
       return;
     }
     if (event.shiftKey) {
@@ -948,15 +1024,144 @@ export function Chat({
     if (isSendDisabled) {
       return;
     }
+
+    if (stream.isLoading) {
+      submitDraft(
+        getBusyComposerShortcutFollowUpMode(event.metaKey || event.ctrlKey),
+      );
+      return;
+    }
+
     submitDraft();
   };
+
+  const handleComposerPaste = React.useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) {
+        return;
+      }
+
+      const imageFiles = Array.from(clipboardData.items)
+        .filter(
+          (item) => item.kind === 'file' && item.type.startsWith('image/'),
+        )
+        .map((item) => item.getAsFile())
+        .filter((item): item is File => Boolean(item));
+
+      if (imageFiles.length > 0) {
+        event.preventDefault();
+
+        const maxCount = composer?.attachments?.maxCount ?? 10;
+        const maxSize = composer?.attachments?.maxSize ?? 100 * 1024 * 1024;
+        const currentImageReferenceCount = references.filter(
+          (reference) => reference.type === 'image',
+        ).length;
+        const availableSlots = Math.max(
+          0,
+          maxCount - currentImageReferenceCount,
+        );
+        const nextFiles = imageFiles
+          .filter((file) => file.size <= maxSize)
+          .slice(0, availableSlots);
+
+        if (nextFiles.length === 0) {
+          return;
+        }
+
+        setIsUploadingReferenceImages(true);
+        void Promise.allSettled(
+          nextFiles.map(async (file) => {
+            const [dimensions, storageFile] = await Promise.all([
+              readImageDimensions(file),
+              uploadContextFile(file),
+            ]);
+
+            return buildPastedImageReference(file, storageFile, dimensions);
+          }),
+        )
+          .then((results) => {
+            const nextReferences = results
+              .filter(
+                (
+                  result,
+                ): result is PromiseFulfilledResult<ChatKitImageReference> =>
+                  result.status === 'fulfilled',
+              )
+              .map((result) => result.value);
+
+            if (nextReferences.length > 0) {
+              setReferences((previous) =>
+                mergeReferences(previous, nextReferences),
+              );
+              composerInputRef.current?.focus();
+            }
+
+            results
+              .filter(
+                (result): result is PromiseRejectedResult =>
+                  result.status === 'rejected',
+              )
+              .forEach((result) => {
+                console.warn(
+                  '[Chat] Failed to upload pasted image reference:',
+                  result.reason,
+                );
+              });
+          })
+          .finally(() => {
+            setIsUploadingReferenceImages(false);
+          });
+
+        return;
+      }
+
+      const pastedText = clipboardData.getData('text/plain');
+      if (pastedText.trim().length <= LONG_TEXT_REFERENCE_THRESHOLD) {
+        return;
+      }
+
+      event.preventDefault();
+      setReferences((previous) =>
+        mergeReferences(previous, [
+          {
+            type: 'quote',
+            source: 'Pasted text',
+            text: pastedText,
+          },
+        ]),
+      );
+      composerInputRef.current?.focus();
+    },
+    [
+      composer?.attachments?.maxCount,
+      composer?.attachments?.maxSize,
+      references,
+      uploadContextFile,
+    ],
+  );
+
+  const alternateFollowUpShortcutLabel = React.useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return '\u2318Enter';
+    }
+
+    const platform = navigator.platform || navigator.userAgent;
+    return /Mac|iPhone|iPad|iPod/i.test(platform)
+      ? '\u2318Enter'
+      : 'Ctrl+Enter';
+  }, []);
+
+  const followUpShortcutLabels = React.useMemo(
+    () => getComposerFollowUpShortcutLabels(alternateFollowUpShortcutLabel),
+    [alternateFollowUpShortcutLabel],
+  );
 
   // Upload a single file to the server
   const uploadFile = React.useCallback(
     async (localId: string, file: File) => {
       try {
-        const result =
-          await stream.client.contexts.uploadFile<StorageFile>(file);
+        const result = await uploadContextFile(file);
         setAttachments((prev) =>
           prev.map((item) =>
             item.localId === localId
@@ -979,7 +1184,7 @@ export function Chat({
         );
       }
     },
-    [stream.client],
+    [uploadContextFile],
   );
 
   // Retry uploading a failed file
@@ -1714,6 +1919,7 @@ export function Chat({
               ref={composerInputRef}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onPaste={handleComposerPaste}
               onKeyDown={handleComposerKeyDown}
               rows={1}
               placeholder={inputPlaceholder}
@@ -1731,6 +1937,20 @@ export function Chat({
               onStop={() => stream.stop()}
               stopLabel={t('chat.stop')}
               sendLabel={t('chat.send')}
+              shortcuts={
+                stream.isLoading && trimmedDraft
+                  ? [
+                      {
+                        label: t('chat.followUps.steer'),
+                        keys: followUpShortcutLabels.steer,
+                      },
+                      {
+                        label: t('chat.followUps.queue'),
+                        keys: followUpShortcutLabels.queue,
+                      },
+                    ]
+                  : undefined
+              }
             />
           </div>
         </form>

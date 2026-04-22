@@ -87,6 +87,10 @@ function safeJson(value: unknown) {
   }
 }
 
+function formatDisplayValue(value: unknown) {
+  return typeof value === 'string' ? value : safeJson(value);
+}
+
 function ReasoningBlock({ reasoning }: { reasoning: TMessageContentReasoning[] }) {
   const blocks = reasoning.filter((item) => item.text?.trim());
   if (blocks.length === 0) return null;
@@ -166,7 +170,7 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
   const message = data.message ?? null;
   const output = data.output ?? null;
   const error = data.error ?? null;
-  const fallback = message ?? output ?? safeJson(data.data ?? data);
+  const fallback = message ?? output ?? data.data ?? data;
   const hasOutput = message !== null || output !== null;
 
   // Auto-expand when running with output available
@@ -242,13 +246,19 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
       {isExpanded && (
         <CardContent ref={contentRef} className="text-xs text-muted-foreground max-h-60 overflow-auto">
           {data.input && (
-            <pre className="whitespace-pre-wrap wrap-break-word">{JSON.stringify(data.input, null, 2)}</pre>
+            <pre className="whitespace-pre-wrap wrap-break-word">
+              {formatDisplayValue(data.input)}
+            </pre>
           )}
           {error ? (
-            <pre className="whitespace-pre-wrap wrap-break-word text-destructive">{typeof error === 'string' ? error : safeJson(error)}</pre>
+            <pre className="whitespace-pre-wrap wrap-break-word text-destructive">
+              {formatDisplayValue(error)}
+            </pre>
           ) : (
             hasOutput && (
-              <pre className="whitespace-pre-wrap wrap-break-word">{fallback}</pre>
+              <pre className="whitespace-pre-wrap wrap-break-word">
+                {formatDisplayValue(fallback)}
+              </pre>
             )
           )}
         </CardContent>
@@ -423,7 +433,7 @@ export function AssistantMessage({
           defaultValue={message.status === 'reasoning' ? 'reasoning' : 'answer'}
           className="w-full"
         >
-          <TabsList className="h-9">
+          <TabsList className="">
             <TabsTrigger value="answer">{t('message.answer')}</TabsTrigger>
             <TabsTrigger value="reasoning">{t('message.reasoning')}</TabsTrigger>
           </TabsList>

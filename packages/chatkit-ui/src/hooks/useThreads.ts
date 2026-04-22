@@ -156,17 +156,19 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     if (!threadId || !isStreamLoading) return;
 
     const now = new Date().toISOString();
+    const busyStatus: ChatConversationStatus = 'busy';
+
     setThreadRecords((prev) => {
       let changed = false;
       const next = prev.map((item) => {
         const isCurrentThread =
           item.threadId === threadId || item.id === threadId;
         if (!isCurrentThread) return item;
-        if (item.status === 'busy' && !item.error) return item;
+        if (item.status === busyStatus && !item.error) return item;
         changed = true;
         return {
           ...item,
-          status: 'busy',
+          status: busyStatus,
           error: undefined,
           updatedAt: now,
         };

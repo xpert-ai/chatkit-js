@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSteerFollowUpRunInput,
   createPendingFollowUp,
+  getBusyComposerShortcutFollowUpMode,
+  getComposerFollowUpShortcutLabels,
   mapPersistedPendingFollowUp,
   pendingFollowUpToUiMessage,
 } from './follow-ups';
@@ -90,7 +92,12 @@ describe('mapPersistedPendingFollowUp', () => {
       },
     });
 
-    expect(pendingFollowUpToUiMessage(pending!)).toMatchObject({
+    expect(pending).not.toBeNull();
+    if (!pending) {
+      return;
+    }
+
+    expect(pendingFollowUpToUiMessage(pending)).toMatchObject({
       type: 'human',
       content: '',
       referenceComposition: 'compose',
@@ -155,6 +162,22 @@ describe('buildSteerFollowUpRunInput', () => {
         aiMessageId: 'ai-1',
         executionId: 'run-1',
       },
+    });
+  });
+});
+
+describe('getBusyComposerShortcutFollowUpMode', () => {
+  it('maps Enter to steer and the modifier shortcut to queue', () => {
+    expect(getBusyComposerShortcutFollowUpMode(false)).toBe('steer');
+    expect(getBusyComposerShortcutFollowUpMode(true)).toBe('queue');
+  });
+});
+
+describe('getComposerFollowUpShortcutLabels', () => {
+  it('always shows Enter for steer and the modifier shortcut for queue', () => {
+    expect(getComposerFollowUpShortcutLabels('\u2318Enter')).toEqual({
+      steer: 'Enter',
+      queue: '\u2318Enter',
     });
   });
 });

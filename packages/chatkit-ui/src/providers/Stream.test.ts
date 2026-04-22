@@ -145,6 +145,72 @@ describe('applyStreamEvent', () => {
     ]);
   });
 
+  it('replays image references from server metadata without losing submitted input', () => {
+    let state = { messages: [] as any[] };
+    const setValues = vi.fn((next) => {
+      state = typeof next === 'function' ? next(state) : next;
+    });
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'values',
+        data: JSON.stringify({
+          messages: [
+            {
+              id: 'human-image-1',
+              role: 'human',
+              content: 'Pasted image',
+              metadata: {
+                referenceComposition: 'compose',
+                references: [
+                  {
+                    type: 'image',
+                    fileId: 'file-1',
+                    url: 'https://example.com/image.png',
+                    mimeType: 'image/png',
+                    name: 'diagram.png',
+                    width: 640,
+                    height: 480,
+                    size: 2048,
+                    text: 'Pasted image: diagram.png',
+                  },
+                ],
+              },
+              input: {
+                input: 'Referenced content:\n[Image] diagram.png',
+              },
+            },
+          ],
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages).toEqual([
+      expect.objectContaining({
+        id: 'human-image-1',
+        type: 'human',
+        submittedInput: 'Referenced content:\n[Image] diagram.png',
+        referenceComposition: 'compose',
+        references: [
+          expect.objectContaining({
+            type: 'image',
+            fileId: 'file-1',
+            name: 'diagram.png',
+            mimeType: 'image/png',
+          }),
+        ],
+      }),
+    ]);
+    expect(setError).not.toHaveBeenCalled();
+  });
+
   it('routes thread context usage chat events to realtime usage state without appending messages', () => {
     const setValues = vi.fn();
     const setError = vi.fn();
@@ -328,10 +394,7 @@ describe('applyStreamEvent', () => {
       ],
     };
     const setValues = vi.fn((updater) => {
-      state =
-        typeof updater === 'function'
-          ? updater(state)
-          : updater;
+      state = typeof updater === 'function' ? updater(state) : updater;
     });
 
     applyStreamEvent(
@@ -379,10 +442,7 @@ describe('applyStreamEvent', () => {
       ],
     };
     const setValues = vi.fn((updater) => {
-      state =
-        typeof updater === 'function'
-          ? updater(state)
-          : updater;
+      state = typeof updater === 'function' ? updater(state) : updater;
     });
     const consumeFreshAssistantSplit = vi
       .fn<() => boolean>()
@@ -509,41 +569,44 @@ describe('buildSteerFollowUpRunInput', () => {
 describe('getNextAutoQueuedFollowUp', () => {
   it('returns only queue follow-ups that are marked for auto draining', () => {
     expect(
-      getNextAutoQueuedFollowUp([
-        {
-          id: 'manual-queue',
-          clientMessageId: 'manual-queue',
-          mode: 'queue',
-          request: {
+      getNextAutoQueuedFollowUp(
+        [
+          {
             id: 'manual-queue',
-            input: { input: 'manual queue' },
-            followUpMode: 'queue',
+            clientMessageId: 'manual-queue',
+            mode: 'queue',
+            request: {
+              id: 'manual-queue',
+              input: { input: 'manual queue' },
+              followUpMode: 'queue',
+            },
+            createdAt: 1,
           },
-          createdAt: 1,
-        },
-        {
-          id: 'steer',
-          clientMessageId: 'steer',
-          mode: 'steer',
-          request: {
+          {
             id: 'steer',
-            input: { input: 'steer' },
-            followUpMode: 'steer',
+            clientMessageId: 'steer',
+            mode: 'steer',
+            request: {
+              id: 'steer',
+              input: { input: 'steer' },
+              followUpMode: 'steer',
+            },
+            createdAt: 2,
           },
-          createdAt: 2,
-        },
-        {
-          id: 'auto-queue',
-          clientMessageId: 'auto-queue',
-          mode: 'queue',
-          request: {
+          {
             id: 'auto-queue',
-            input: { input: 'auto queue' },
-            followUpMode: 'queue',
+            clientMessageId: 'auto-queue',
+            mode: 'queue',
+            request: {
+              id: 'auto-queue',
+              input: { input: 'auto queue' },
+              followUpMode: 'queue',
+            },
+            createdAt: 3,
           },
-          createdAt: 3,
-        },
-      ], ['auto-queue']),
+        ],
+        ['auto-queue'],
+      ),
     ).toMatchObject({
       id: 'auto-queue',
       mode: 'queue',
@@ -843,9 +906,9 @@ describe('shouldBroadcastThreadChange', () => {
 
 describe('createFetchWithClientSecretRefresh', () => {
   it('adds the organization header to the initial request', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(null, { status: 200 }),
-    );
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
     const request = createFetchWithClientSecretRefresh({
       fetchFn,
       getCurrentClientSecret: () => ({
