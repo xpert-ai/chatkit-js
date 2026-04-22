@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.1.1
+
+### Patch Changes
+
+- cf1a173: refenerces
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.1.1
+
+### Patch Changes
+
+- cf1a173: refenerces
+- Updated dependencies [cf1a173]
+  - @xpert-ai/chatkit-types@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
