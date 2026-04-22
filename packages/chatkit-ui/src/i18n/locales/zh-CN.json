@@ -76,7 +76,16 @@
     "close": "关闭"
   },
   "markdown": {
-    "copy": "复制"
+    "copy": "复制",
+    "mermaid": {
+      "title": "Mermaid",
+      "diagram": "图表",
+      "code": "代码",
+      "download": "下载 SVG",
+      "fullScreen": "全屏查看",
+      "rendering": "正在渲染图表",
+      "failed": "图表渲染失败"
+    }
   },
   "thread": {
     "errorToast": "发生错误，请重试。",
