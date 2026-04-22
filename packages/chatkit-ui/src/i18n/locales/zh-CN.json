@@ -27,7 +27,7 @@
       "pending": "待处理 Follow-up",
       "queue": "排队",
       "steer": "引导",
-      "steerAction": "Steer",
+      "steerAction": "引导",
       "promoteToSteer": "转为引导",
       "sendNow": "立即发送",
       "remove": "移除此待处理 Follow-up",

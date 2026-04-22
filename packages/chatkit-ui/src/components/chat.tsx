@@ -59,6 +59,10 @@ import {
   type ComposerValuePayload,
 } from '../lib/references';
 import { getMissingApiConfigurationKind } from '../lib/api-config';
+import {
+  getBusyComposerShortcutFollowUpMode,
+  getComposerFollowUpShortcutLabels,
+} from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 
@@ -927,17 +931,6 @@ export function Chat({
     if (event.key !== 'Enter') {
       return;
     }
-    if (event.shiftKey && (event.metaKey || event.ctrlKey)) {
-      if (event.nativeEvent.isComposing) {
-        return;
-      }
-      event.preventDefault();
-      if (isSendDisabled) {
-        return;
-      }
-      submitDraft(stream.followUpBehavior === 'queue' ? 'steer' : 'queue');
-      return;
-    }
     if (event.shiftKey) {
       return;
     }
@@ -948,8 +941,32 @@ export function Chat({
     if (isSendDisabled) {
       return;
     }
+
+    if (stream.isLoading) {
+      submitDraft(
+        getBusyComposerShortcutFollowUpMode(event.metaKey || event.ctrlKey),
+      );
+      return;
+    }
+
     submitDraft();
   };
+
+  const alternateFollowUpShortcutLabel = React.useMemo(() => {
+    if (typeof navigator === 'undefined') {
+      return '\u2318Enter';
+    }
+
+    const platform = navigator.platform || navigator.userAgent;
+    return /Mac|iPhone|iPad|iPod/i.test(platform)
+      ? '\u2318Enter'
+      : 'Ctrl+Enter';
+  }, []);
+
+  const followUpShortcutLabels = React.useMemo(
+    () => getComposerFollowUpShortcutLabels(alternateFollowUpShortcutLabel),
+    [alternateFollowUpShortcutLabel],
+  );
 
   // Upload a single file to the server
   const uploadFile = React.useCallback(
@@ -1731,6 +1748,20 @@ export function Chat({
               onStop={() => stream.stop()}
               stopLabel={t('chat.stop')}
               sendLabel={t('chat.send')}
+              shortcuts={
+                stream.isLoading && trimmedDraft
+                  ? [
+                      {
+                        label: t('chat.followUps.steer'),
+                        keys: followUpShortcutLabels.steer,
+                      },
+                      {
+                        label: t('chat.followUps.queue'),
+                        keys: followUpShortcutLabels.queue,
+                      },
+                    ]
+                  : undefined
+              }
             />
           </div>
         </form>

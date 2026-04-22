@@ -100,6 +100,21 @@ export function normalizeFollowUpBehavior(
   return value === 'queue' || value === 'steer' ? value : null;
 }
 
+export function getComposerFollowUpShortcutLabels(
+  queueShortcutLabel: string,
+): Record<FollowUpBehavior, string> {
+  return {
+    steer: 'Enter',
+    queue: queueShortcutLabel,
+  };
+}
+
+export function getBusyComposerShortcutFollowUpMode(
+  useQueueShortcut: boolean,
+): FollowUpBehavior {
+  return useQueueShortcut ? 'queue' : 'steer';
+}
+
 export function getFollowUpBehaviorStorageKey(
   assistantId?: string | null,
   organizationId?: string | null,
