@@ -76,7 +76,16 @@
     "close": "Close"
   },
   "markdown": {
-    "copy": "Copy"
+    "copy": "Copy",
+    "mermaid": {
+      "title": "Mermaid",
+      "diagram": "Diagram",
+      "code": "Code",
+      "download": "Download SVG",
+      "fullScreen": "Open full screen",
+      "rendering": "Rendering diagram",
+      "failed": "Failed to render diagram"
+    }
   },
   "thread": {
     "errorToast": "An error occurred. Please try again.",

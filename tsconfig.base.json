@@ -5,6 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
+      "@xpert-ai/a2ui-react": ["packages/chatkit-widgets/src/index.ts"],
       "@xpert-ai/chatkit-angular": ["packages/chatkit-angular/src/index.ts"],
       "@xpert-ai/chatkit-js": ["packages/chatkit-js/src/index.ts"],
       "@xpert-ai/chatkit-react": ["packages/chatkit-react/src/index.ts"],

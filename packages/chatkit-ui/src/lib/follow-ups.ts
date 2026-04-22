@@ -337,8 +337,11 @@ export function mergeFollowUpHumanInputs(
       ...rest,
     };
     const mergedInput = mergeInputText(acc.input, input);
-    const mergedFiles = mergeArrayValues(acc.files, files);
-    const mergedReferences = mergeArrayValues(acc.references, references);
+    const mergedFiles = mergeArrayValues<Partial<File>>(acc.files, files);
+    const mergedReferences = mergeArrayValues<ChatKitReference>(
+      acc.references,
+      references,
+    );
 
     if (mergedInput) {
       next.input = mergedInput;
@@ -452,6 +455,12 @@ export function mergeQueuedFollowUpGroup(
   const mergedHumanInput = mergeFollowUpHumanInputs(
     groupedItems.map((item) => extractRequestHumanInput(item.request)),
   );
+  const {
+    executionId: latestExecutionIdValue,
+    ...latestRequestWithoutExecutionId
+  } = latestRequest;
+  const latestExecutionId = normalizeTargetExecutionId(latestExecutionIdValue);
+  const targetExecutionId = resolvePendingFollowUpTargetExecutionId(leadItem);
 
   let context: Record<string, unknown> | undefined;
   let config: Record<string, unknown> | undefined;
@@ -467,17 +476,19 @@ export function mergeQueuedFollowUpGroup(
   return {
     items: groupedItems,
     request: {
-      ...latestRequest,
+      ...latestRequestWithoutExecutionId,
       id: leadItem.request.id ?? leadItem.id,
       input: mergedHumanInput,
       followUpMode: 'queue',
-      ...(resolvePendingFollowUpTargetExecutionId(leadItem)
-        ? { executionId: resolvePendingFollowUpTargetExecutionId(leadItem) }
-        : {}),
+      ...(targetExecutionId
+        ? { executionId: targetExecutionId }
+        : latestExecutionId
+          ? { executionId: latestExecutionId }
+          : {}),
     },
     ...(context ? { context } : {}),
     ...(config ? { config } : {}),
-    targetExecutionId: resolvePendingFollowUpTargetExecutionId(leadItem),
+    targetExecutionId,
   };
 }
 

@@ -8,14 +8,16 @@ import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import {
   Children,
-  FC,
+  isValidElement,
   memo,
   type ComponentPropsWithoutRef,
+  type FC,
   type ReactNode,
   useState,
 } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { SyntaxHighlighter } from "./syntax-highlighter";
+import { MermaidBlock } from "./mermaid-block";
 
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { cn } from "../../lib/utils";
@@ -43,6 +45,14 @@ const getTextContent = (children: ReactNode) =>
       return "";
     })
     .join("");
+
+const isMermaidBlockChild = (child: ReactNode) =>
+  isValidElement(child) && child.type === MermaidBlock;
+
+const isMermaidCodeElement = (child: ReactNode) =>
+  isValidElement<{ className?: string }>(child) &&
+  typeof child.props.className === "string" &&
+  child.props.className.includes("language-mermaid");
 
 const useCopyToClipboard = ({
   copiedDuration = 3000,
@@ -231,14 +241,21 @@ const defaultComponents: any = {
       {...props}
     />
   ),
-  pre: ({ className, node: _node, ...props }: MarkdownElementProps<"pre">) => (
-    <div
-      className={cn(
-        "max-w-4xl overflow-x-auto rounded-lg text-sm bg-black text-white dark:bg-zinc-800",
-        className,
-      )}
-      {...props}
-    />
+  pre: ({ className, children, node: _node }: MarkdownElementProps<"pre">) => (
+    Children.toArray(children).length === 1 &&
+    (isMermaidBlockChild(Children.toArray(children)[0]) ||
+      isMermaidCodeElement(Children.toArray(children)[0])) ? (
+      <>{children}</>
+    ) : (
+      <div
+        className={cn(
+          "max-w-4xl overflow-x-auto rounded-lg text-sm bg-black text-white dark:bg-zinc-800",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    )
   ),
   code: ({
     className,
@@ -246,13 +263,17 @@ const defaultComponents: any = {
     node: _node,
     ...props
   }: MarkdownElementProps<"code">) => {
-    const match = /language-(\w+)/.exec(className || "");
+    const match = /language-([\w-]+)/.exec(className || "");
     const code = getTextContent(children);
     const isBlockCode = code.includes("\n");
 
     if (match) {
       const language = match[1];
       const normalizedCode = code.replace(/\n$/, "");
+
+      if (language === "mermaid") {
+        return <MermaidBlock code={normalizedCode} />;
+      }
 
       return (
         <>

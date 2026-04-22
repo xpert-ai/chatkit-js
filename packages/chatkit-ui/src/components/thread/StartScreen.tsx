@@ -10,18 +10,20 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
-import type { XpertStartScreenOption, XpertIcon } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions, IconName } from '@xpert-ai/chatkit-types';
 import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
+type StartScreenOption = NonNullable<ChatKitOptions['startScreen']>;
+
 export type StartScreenProps = {
-  startScreen?: XpertStartScreenOption;
+  startScreen?: StartScreenOption;
   onPromptClick?: (prompt: string) => void;
   className?: string;
 };
 
 // Icon mapping for XpertIcon types used in start screen
-function getIconComponent(icon?: XpertIcon): React.ReactNode {
+function getIconComponent(icon?: IconName): React.ReactNode {
   const iconMap: Record<string, React.ReactNode> = {
     'circle-question': <HelpCircle size={20} />,
     'lightbulb': <Lightbulb size={20} />,
