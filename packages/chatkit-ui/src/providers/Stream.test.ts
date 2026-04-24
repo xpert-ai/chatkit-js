@@ -375,6 +375,116 @@ describe('applyStreamEvent', () => {
     expect(onFollowUpConsumed).not.toHaveBeenCalled();
   });
 
+  it('routes write_todos message components to the todos callback', () => {
+    const onTodosChange = vi.fn();
+    const setValues = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-03f21fa4e7054e9eb484c560c15fb3f5',
+            type: 'component',
+            agentKey: 'Agent_xSd1VKEicG',
+            data: {
+              input: {
+                todos: [
+                  {
+                    content: 'Render todos above the composer',
+                    status: 'completed',
+                  },
+                  {
+                    content: 'Update todos on later tool events',
+                    status: 'in_progress',
+                  },
+                ],
+              },
+              category: 'Tool',
+              toolset: 'todoListMiddleware',
+              tool: 'write_todos',
+              title: 'write_todos',
+              created_date: '2026-04-24T12:24:52.898Z',
+              status: 'running',
+            },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onTodosChange,
+    );
+
+    expect(onTodosChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: 'todo-1',
+            status: 'completed',
+          }),
+          expect.objectContaining({
+            id: 'todo-2',
+            status: 'in_progress',
+          }),
+        ],
+      }),
+    );
+    expect(setValues).not.toHaveBeenCalled();
+  });
+
+  it('clears todos when write_todos message component returns an empty list', () => {
+    const onTodosChange = vi.fn();
+    const setValues = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-2',
+            type: 'component',
+            agentKey: 'Agent_xSd1VKEicG',
+            data: {
+              input: {
+                todos: [],
+              },
+              category: 'Tool',
+              toolset: 'todoListMiddleware',
+              tool: 'write_todos',
+              title: 'write_todos',
+              created_date: '2026-04-24T12:24:52.898Z',
+              status: 'running',
+            },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onTodosChange,
+    );
+
+    expect(onTodosChange).toHaveBeenCalledWith(null);
+    expect(setValues).not.toHaveBeenCalled();
+  });
+
   it('appends streamed assistant text to the latest assistant message instead of a trailing steer user message', () => {
     let state = {
       messages: [

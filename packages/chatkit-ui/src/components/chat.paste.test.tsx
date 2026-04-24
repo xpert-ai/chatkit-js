@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [],
+      todos: null,
       pendingFollowUps: [],
       followUpBehavior: 'queue',
       isLoading: false,
@@ -110,6 +111,10 @@ vi.mock('./history/HistorySidebar', () => ({
 
 vi.mock('./composer/pending-follow-ups', () => ({
   PendingFollowUps: () => null,
+}));
+
+vi.mock('./composer/pending-todos', () => ({
+  PendingTodos: () => null,
 }));
 
 vi.mock('./thread/messages/ai', () => ({

@@ -38,6 +38,9 @@
       "manualQueueHint": "Ready to send as a new run",
       "steerHint": "Injects after the current tool call"
     },
+    "todos": {
+      "summary": "{{total}} tasks, {{completed}} completed"
+    },
     "errors": {
       "loadMessages": "Failed to load thread messages",
       "createThread": "Failed to create thread",

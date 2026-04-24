@@ -28,6 +28,7 @@ export type PendingFollowUpsProps = {
   onSendNow: (id: string) => void | Promise<void>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
+  attachToComposer?: boolean;
   className?: string;
 };
 
@@ -80,6 +81,7 @@ export function PendingFollowUps({
   onSendNow,
   onEdit,
   onRemove,
+  attachToComposer = true,
   className,
 }: PendingFollowUpsProps) {
   const { t } = useChatkitTranslation();
@@ -105,8 +107,9 @@ export function PendingFollowUps({
   return (
     <div
       className={cn(
-        'space-y-2 mx-2 p-2 border border-border border-b-0',
-        rounded.top,
+        'space-y-2 mx-2 p-2 border border-border',
+        attachToComposer ? 'border-b-0' : null,
+        attachToComposer ? rounded.top : rounded.panel,
         className,
       )}
     >

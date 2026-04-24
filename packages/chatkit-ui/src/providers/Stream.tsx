@@ -77,6 +77,10 @@ import {
   type PendingFollowUp,
   writePersistedFollowUpBehavior,
 } from '../lib/follow-ups';
+import {
+  extractTodoListFromMessageComponent,
+  type TodoListSnapshot,
+} from '../lib/todos';
 
 export {
   getAutoDrainQueuedFollowUpIds,
@@ -131,6 +135,7 @@ export type StreamContextType = {
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
   values: StateType;
   messages: ChatKitAIMessage[];
+  todos: TodoListSnapshot | null;
   pendingFollowUps: PendingFollowUp[];
   followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
@@ -867,6 +872,7 @@ export function applyStreamEvent(
     event: ReturnType<typeof parseFollowUpConsumedEvent>,
   ) => void,
   consumeFreshAssistantSplit?: () => boolean,
+  onTodosChange?: (snapshot: TodoListSnapshot | null) => void,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -920,6 +926,13 @@ export function applyStreamEvent(
 
     const message = payload.data;
     if (message.type === 'component') {
+      const todoSnapshot = extractTodoListFromMessageComponent(message);
+      if (todoSnapshot) {
+        onTodosChange?.(
+          todoSnapshot.items.length > 0 ? todoSnapshot : null,
+        );
+        return;
+      }
       sendEvent('public_event', ['log', { ...message, name: 'component' }]);
     }
     const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
@@ -1110,6 +1123,7 @@ const StreamSession = ({
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [todos, setTodos] = useState<TodoListSnapshot | null>(null);
   const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
     [],
   );
@@ -1469,6 +1483,7 @@ const StreamSession = ({
       } catch {
         // ignore stop errors from an already-idle stream
       }
+      setTodos(null);
       conversationIdRef.current = recordId;
       const response = await client.conversations.listMessages(recordId, {
         limit: DEFAULT_HISTORY_LIMIT,
@@ -1508,6 +1523,7 @@ const StreamSession = ({
       setError(null);
       setPendingFollowUps([]);
       setAutoQueuedFollowUpIds([]);
+      setTodos(null);
       setContextUsageByAgentKey({});
       setValues({ messages: initialMessages ?? [] });
       conversationIdRef.current = null;
@@ -1871,6 +1887,9 @@ const StreamSession = ({
               shouldStartFreshAssistantMessageAfterSteerRef.current = false;
               return shouldStartFreshAssistant;
             },
+            (snapshot) => {
+              setTodos(snapshot);
+            },
           );
         }
 
@@ -1930,6 +1949,7 @@ const StreamSession = ({
         return;
       }
       setError(null);
+      setTodos(null);
 
       try {
         stop();
@@ -2091,6 +2111,7 @@ const StreamSession = ({
       if (shouldStartNewThread) {
         setValues({ messages: [] });
         setContextUsageByAgentKey({});
+        setTodos(null);
         lastExecutionIdRef.current = null;
         lastEventIdRef.current = null;
       }
@@ -2155,6 +2176,7 @@ const StreamSession = ({
     contextUsageByAgentKey,
     values,
     messages: values.messages ?? [],
+    todos,
     pendingFollowUps,
     followUpBehavior,
     isLoading,

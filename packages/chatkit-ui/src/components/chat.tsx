@@ -33,6 +33,7 @@ import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
+import { PendingTodos } from './composer/pending-todos';
 import {
   AssistantMessage,
   AssistantStreamingIndicator,
@@ -430,6 +431,7 @@ export function Chat({
       ),
     [stream.pendingFollowUps],
   );
+  const hasPendingFollowUps = pendingFollowUps.length > 0;
 
   const clearQuoteSelection = React.useCallback(() => {
     setQuoteSelection(null);
@@ -1883,6 +1885,12 @@ export function Chat({
           </div>
         )}
 
+        <PendingTodos
+          snapshot={stream.todos}
+          attachToComposer={!hasPendingFollowUps}
+          className={hasPendingFollowUps ? 'mb-2' : undefined}
+        />
+
         <PendingFollowUps
           items={pendingFollowUps}
           isLoading={stream.isLoading}
@@ -1893,6 +1901,7 @@ export function Chat({
           onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
           onEdit={handleEditPendingFollowUp}
           onRemove={stream.removePendingFollowUp}
+          attachToComposer
         />
 
         <form className="flex items-end" onSubmit={handleSubmit}>
