@@ -1,4 +1,11 @@
-import type { ChatkitMessage, TMessageContentComplex, TMessageContentComponent, TMessageContentReasoning, TMessageContentText } from "@xpert-ai/chatkit-types"
+import type {
+  ChatkitMessage,
+  TMessageContentComplex,
+  TMessageContentComponent,
+  TMessageComponentStep,
+  TMessageContentReasoning,
+  TMessageContentText,
+} from "@xpert-ai/chatkit-types"
 import { isNil, omitBy } from "lodash-es"
 
 export type AssistantStreamingStatus = 'loading' | 'thinking' | 'answering'
@@ -171,17 +178,10 @@ export function appendMessageContent(aiMessage: ChatkitMessage, content: string 
         } else {
           const index = _content.findIndex((_) => _.type === 'component' && _.id === content.id)
           if (index > -1) {
-            _content[index] = {
-              ..._content[index],
-              ...content,
-              data: {
-                ...(<TMessageContentComponent>_content[index]).data,
-                ...omitBy((<TMessageContentComponent>content).data, isNil),
-                created_date:
-                  (<TMessageContentComponent>_content[index]).data.created_date ||
-                  (<TMessageContentComponent>content).data.created_date
-              }
-            }
+            _content[index] = mergeMessageComponent(
+              <TMessageContentComponent>_content[index],
+              <TMessageContentComponent>content,
+            )
           } else {
             _content.push(content)
           }
@@ -198,5 +198,44 @@ export function appendMessageContent(aiMessage: ChatkitMessage, content: string 
         aiMessage.content = [content]
       }
     }
+  }
+}
+
+type ComponentStepLike = Partial<TMessageComponentStep<unknown>> & {
+  category?: string
+}
+
+function mergeComponentStepData(
+  previous: TMessageContentComponent['data'],
+  incoming: TMessageContentComponent['data'],
+): TMessageContentComponent['data'] {
+  const previousData = (previous ?? {}) as ComponentStepLike
+  const incomingData = omitBy((incoming ?? {}) as ComponentStepLike, isNil)
+
+  return {
+    ...previousData,
+    ...incomingData,
+    type: previousData.type ?? incomingData.type,
+    category: previousData.category ?? incomingData.category,
+    toolset: previousData.toolset ?? incomingData.toolset,
+    toolset_id: previousData.toolset_id ?? incomingData.toolset_id,
+    tool: previousData.tool ?? incomingData.tool,
+    title: previousData.title ?? incomingData.title,
+    created_date: previousData.created_date ?? incomingData.created_date,
+  } as TMessageContentComponent['data']
+}
+
+function mergeMessageComponent(
+  previous: TMessageContentComponent,
+  incoming: TMessageContentComponent,
+): TMessageContentComponent {
+  return {
+    ...previous,
+    ...incoming,
+    id: previous.id ?? incoming.id,
+    type: previous.type ?? incoming.type,
+    agentKey: previous.agentKey ?? incoming.agentKey,
+    xpertName: previous.xpertName ?? incoming.xpertName,
+    data: mergeComponentStepData(previous.data, incoming.data),
   }
 }

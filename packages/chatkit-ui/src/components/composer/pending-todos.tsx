@@ -1,5 +1,11 @@
 import * as React from 'react';
-import { CheckCircle2, Circle, CircleDashed, ListTodo } from 'lucide-react';
+import {
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  CircleDashed,
+  ListTodo,
+} from 'lucide-react';
 
 import {
   countCompletedTodos,
@@ -55,6 +61,12 @@ export function PendingTodos({
 }: PendingTodosProps) {
   const { t } = useChatkitTranslation();
   const rounded = useRoundedClasses();
+  const listId = React.useId();
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsCollapsed(false);
+  }, [snapshot?.componentId]);
 
   if (!snapshot || snapshot.items.length === 0) {
     return null;
@@ -72,46 +84,65 @@ export function PendingTodos({
         className,
       )}
     >
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-foreground">
-        <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span>
-          {t('chat.todos.summary', {
-            total: snapshot.items.length,
-            completed: completedCount,
-          })}
-        </span>
-      </div>
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 text-left"
+        aria-expanded={!isCollapsed}
+        aria-controls={listId}
+        onClick={() => setIsCollapsed((prev) => !prev)}
+      >
+        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
+          <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">
+            {t('chat.todos.summary', {
+              total: snapshot.items.length,
+              completed: completedCount,
+            })}
+          </span>
+        </div>
+        <div className="flex items-center shrink-0">
+          <ChevronDown
+            className={cn(
+              'h-4 w-4 text-muted-foreground transition-transform',
+              isCollapsed ? null : 'rotate-180',
+            )}
+          />
+        </div>
+      </button>
 
-      <ol className="space-y-2.5">
-        {snapshot.items.map((item, index) => (
-          <li
-            key={item.id}
-            className="grid grid-cols-[16px_24px_minmax(0,1fr)] items-start gap-2"
-          >
-            <TodoStatusIcon status={item.status} />
-            <span
-              className={cn(
-                'text-sm leading-6 text-foreground',
-                item.status === 'completed' ? 'text-muted-foreground' : null,
-              )}
+      {!isCollapsed && (
+        <ol id={listId} className="mt-3 space-y-2.5">
+          {snapshot.items.map((item, index) => (
+            <li
+              key={item.id}
+              className="grid min-w-0 grid-cols-[16px_24px_minmax(0,1fr)] items-start gap-2 overflow-hidden"
             >
-              {index + 1}.
-            </span>
-            <span
-              className={cn(
-                'min-w-0 whitespace-pre-wrap text-sm leading-6 text-foreground',
-                item.status === 'completed'
-                  ? 'text-muted-foreground line-through'
-                  : item.status === 'in_progress'
-                    ? 'font-medium'
-                    : null,
-              )}
-            >
-              {item.content}
-            </span>
-          </li>
-        ))}
-      </ol>
+              <TodoStatusIcon status={item.status} />
+              <span
+                className={cn(
+                  'text-sm leading-6 text-foreground',
+                  item.status === 'completed' ? 'text-muted-foreground' : null,
+                )}
+              >
+                {index + 1}.
+              </span>
+              <span
+                title={item.content}
+                className={cn(
+                  'block min-w-0 truncate text-sm leading-6 text-foreground',
+                  item.status === 'completed'
+                    ? 'text-muted-foreground line-through'
+                    : item.status === 'in_progress'
+                      ? 'font-medium'
+                      : null,
+                )}
+              >
+                {item.content}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

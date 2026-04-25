@@ -421,6 +421,7 @@ describe('applyStreamEvent', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
       onTodosChange,
     );
 
@@ -478,10 +479,79 @@ describe('applyStreamEvent', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
       onTodosChange,
     );
 
-    expect(onTodosChange).toHaveBeenCalledWith(null);
+    expect(onTodosChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [],
+      }),
+    );
+    expect(setValues).not.toHaveBeenCalled();
+  });
+
+  it('merges later write_todos component updates with the current todos snapshot', () => {
+    const onTodosChange = vi.fn();
+    const setValues = vi.fn();
+    const currentTodos = {
+      componentId: 'tool-03f21fa4e7054e9eb484c560c15fb3f5',
+      title: 'write_todos',
+      tool: 'write_todos' as const,
+      category: 'Tool' as const,
+      toolset: 'todoListMiddleware',
+      status: 'running' as const,
+      createdDate: '2026-04-24T12:24:52.898Z',
+      items: [
+        {
+          id: 'todo-1',
+          content: 'Render todos above the composer',
+          status: 'completed' as const,
+        },
+      ],
+      receivedAt: Date.now(),
+    };
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-03f21fa4e7054e9eb484c560c15fb3f5',
+            type: 'component',
+            data: {
+              status: 'success',
+              end_date: '2026-04-24T12:24:52.899Z',
+              output: 'Updated todo list',
+            },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => currentTodos,
+      onTodosChange,
+    );
+
+    expect(onTodosChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        componentId: 'tool-03f21fa4e7054e9eb484c560c15fb3f5',
+        title: 'write_todos',
+        tool: 'write_todos',
+        status: 'success',
+        endDate: '2026-04-24T12:24:52.899Z',
+        output: 'Updated todo list',
+      }),
+    );
     expect(setValues).not.toHaveBeenCalled();
   });
 

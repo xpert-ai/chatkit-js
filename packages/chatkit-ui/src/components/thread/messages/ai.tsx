@@ -11,7 +11,13 @@ import type {
   TMessageContentText,
   TMessageComponentStep,
 } from '@xpert-ai/chatkit-types';
-import { ChevronDown, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import {
+  ChevronDown,
+  CheckCircle2,
+  Clock3,
+  XCircle,
+  Loader2,
+} from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import {
@@ -154,11 +160,50 @@ function MemoryBlock({ content }: { content: TMessageContentMemory }) {
 /** Partial step data: during streaming, fields arrive incrementally */
 type PartialStepData = Partial<TMessageComponentStep & { category?: string }>;
 
+function parseStepDate(value: unknown): number | null {
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function formatStepDuration(durationMs: number): string {
+  if (durationMs < 1_000) {
+    return `${durationMs}ms`;
+  }
+
+  if (durationMs < 10_000) {
+    return `${(durationMs / 1_000).toFixed(1)}s`;
+  }
+
+  if (durationMs < 60_000) {
+    return `${Math.round(durationMs / 1_000)}s`;
+  }
+
+  const hours = Math.floor(durationMs / 3_600_000);
+  const minutes = Math.floor((durationMs % 3_600_000) / 60_000);
+  const seconds = Math.floor((durationMs % 60_000) / 1_000);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
+}
+
 function ComponentBlock({ content }: { content: TMessageContentComponent }) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const previousScrollTopRef = React.useRef(0);
+  const [durationNow, setDurationNow] = React.useState(() => Date.now());
 
   const data = (content.data ?? {}) as PartialStepData;
   const category = data.category ?? 'Component';
@@ -172,11 +217,34 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
   const error = data.error ?? null;
   const fallback = message ?? output ?? data.data ?? data;
   const hasOutput = message !== null || output !== null;
+  const createdAt = parseStepDate(data.created_date);
+  const endedAt = parseStepDate(data.end_date);
+  const durationMs =
+    createdAt === null
+      ? null
+      : Math.max(0, (endedAt ?? durationNow) - createdAt);
+  const durationLabel =
+    durationMs === null ? null : formatStepDuration(durationMs);
 
   // Auto-expand when running with output available
   React.useEffect(() => {
     if (status === 'running' && output !== null) setIsExpanded(true);
   }, [status, output]);
+
+  React.useEffect(() => {
+    if (status !== 'running' || createdAt === null || endedAt !== null) {
+      return;
+    }
+
+    setDurationNow(Date.now());
+    const timer = window.setInterval(() => {
+      setDurationNow(Date.now());
+    }, 100);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [createdAt, endedAt, status]);
 
   React.useEffect(() => {
     const element = contentRef.current;
@@ -232,6 +300,12 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
           <CardTitle className="text-sm truncate">{title}</CardTitle>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {durationLabel && (
+            <div className="inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+              <Clock3 className="h-3 w-3" />
+              <span>{durationLabel}</span>
+            </div>
+          )}
           <Badge variant="secondary" className="rounded-lg px-1.5">{category}</Badge>
           <button
             className="text-muted-foreground hover:text-foreground transition-colors"

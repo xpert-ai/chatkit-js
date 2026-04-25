@@ -13,12 +13,21 @@ export type TodoItem = WriteTodosParam & {
   id: string;
 };
 
+export type TodoToolMessageStatus = 'running' | 'success' | 'fail';
+
 export type TodoListSnapshot = {
+  componentId: string;
+  title: string;
+  tool: 'write_todos';
+  category: 'Tool';
+  toolset: string;
+  status: TodoToolMessageStatus;
+  createdDate: string;
+  endDate?: string;
+  output?: string;
   items: TodoItem[];
   receivedAt: number;
 };
-
-export type TodoToolMessageStatus = 'running' | 'success' | 'fail';
 
 export type WriteTodosMessageComponentData = {
   input: WriteTodosParams;
@@ -35,6 +44,19 @@ export type WriteTodosMessageComponent = {
   type: 'component';
   agentKey?: string;
   data: WriteTodosMessageComponentData;
+};
+
+export type WriteTodosMessageComponentUpdateData = {
+  status?: TodoToolMessageStatus;
+  end_date?: string;
+  output?: string;
+};
+
+export type WriteTodosMessageComponentUpdate = {
+  id: string;
+  type: 'component';
+  agentKey?: string;
+  data: WriteTodosMessageComponentUpdateData;
 };
 
 type WriteTodosParamRecord = {
@@ -61,6 +83,12 @@ type WriteTodosMessageComponentRecord = {
   type?: unknown;
   agentKey?: unknown;
   data?: unknown;
+};
+
+type WriteTodosMessageComponentUpdateDataRecord = {
+  status?: unknown;
+  end_date?: unknown;
+  output?: unknown;
 };
 
 function isTodoItemStatus(value: unknown): value is TodoItemStatus {
@@ -129,11 +157,51 @@ export function isWriteTodosMessageComponent(
   );
 }
 
+export function isWriteTodosMessageComponentUpdateData(
+  value: unknown,
+): value is WriteTodosMessageComponentUpdateData {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as WriteTodosMessageComponentUpdateDataRecord;
+  return (
+    (record.status === undefined || isTodoToolMessageStatus(record.status)) &&
+    (record.end_date === undefined || typeof record.end_date === 'string') &&
+    (record.output === undefined || typeof record.output === 'string') &&
+    (record.status !== undefined ||
+      record.end_date !== undefined ||
+      record.output !== undefined)
+  );
+}
+
+export function isWriteTodosMessageComponentUpdate(
+  value: unknown,
+): value is WriteTodosMessageComponentUpdate {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as WriteTodosMessageComponentRecord;
+  return (
+    typeof record.id === 'string' &&
+    record.type === 'component' &&
+    isWriteTodosMessageComponentUpdateData(record.data)
+  );
+}
+
 export function createTodoListSnapshot(
-  params: WriteTodosParams,
+  component: WriteTodosMessageComponent,
 ): TodoListSnapshot {
   return {
-    items: params.todos.map((todo, index) => ({
+    componentId: component.id,
+    title: component.data.title,
+    tool: component.data.tool,
+    category: component.data.category,
+    toolset: component.data.toolset,
+    status: component.data.status,
+    createdDate: component.data.created_date,
+    items: component.data.input.todos.map((todo, index) => ({
       id: `todo-${index + 1}`,
       content: todo.content,
       status: todo.status,
@@ -142,14 +210,48 @@ export function createTodoListSnapshot(
   };
 }
 
-export function extractTodoListFromMessageComponent(
+export function mergeTodoListSnapshot(
+  snapshot: TodoListSnapshot,
+  update: WriteTodosMessageComponentUpdate,
+): TodoListSnapshot {
+  return {
+    ...snapshot,
+    status: update.data.status ?? snapshot.status,
+    endDate: update.data.end_date ?? snapshot.endDate,
+    output: update.data.output ?? snapshot.output,
+    receivedAt: Date.now(),
+  };
+}
+
+export function resolveTodoListSnapshotFromMessageComponent(
   value: unknown,
-): TodoListSnapshot | null {
-  if (!isWriteTodosMessageComponent(value)) {
-    return null;
+  currentSnapshot?: TodoListSnapshot | null,
+): {
+  matched: boolean;
+  snapshot: TodoListSnapshot | null;
+} {
+  if (isWriteTodosMessageComponent(value)) {
+    return {
+      matched: true,
+      snapshot: createTodoListSnapshot(value),
+    };
   }
 
-  return createTodoListSnapshot(value.data.input);
+  if (
+    currentSnapshot &&
+    isWriteTodosMessageComponentUpdate(value) &&
+    value.id === currentSnapshot.componentId
+  ) {
+    return {
+      matched: true,
+      snapshot: mergeTodoListSnapshot(currentSnapshot, value),
+    };
+  }
+
+  return {
+    matched: false,
+    snapshot: null,
+  };
 }
 
 export function countCompletedTodos(items: TodoItem[]): number {
