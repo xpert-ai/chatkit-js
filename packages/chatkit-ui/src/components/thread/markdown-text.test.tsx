@@ -181,4 +181,53 @@ graph TD; A-->B;
       }),
     );
   });
+
+  it("renders markdown tables in a horizontal scroll container and hooks into theme density", () => {
+    const { container } = renderMarkdown(`| 配置键 | 类型 |
+| --- | --- |
+| \`room_keyword_regex_list\` | \`list[str]\` |`, {
+      colorScheme: "light",
+      density: "compact",
+    });
+
+    const themedRoot = container.querySelector('[data-density="compact"]');
+    const tableContainer = container.querySelector(
+      '[data-slot="markdown-table-container"]',
+    );
+    const table = tableContainer?.querySelector("table");
+    const headerCell = screen.getByRole("columnheader", { name: "配置键" });
+    const bodyCell = screen.getByRole("cell", { name: "room_keyword_regex_list" });
+    const inlineCode = screen.getByText("room_keyword_regex_list");
+
+    expect(themedRoot).not.toBeNull();
+    expect(tableContainer).not.toBeNull();
+    expect(table).not.toBeNull();
+    expect(tableContainer).toHaveClass("overflow-x-auto");
+    expect(tableContainer).toHaveClass("max-w-full");
+    expect(table).toHaveClass("w-max");
+    expect(table).toHaveClass("min-w-full");
+    expect(themedRoot).toHaveStyle("--density-padding: 0.5rem");
+    expect(themedRoot).toHaveStyle("--density-gap: 0.25rem");
+    expect(themedRoot).toHaveStyle("--density-spacing: 0.75");
+    expect(table).toHaveStyle({
+      lineHeight: "max(1.375rem, calc(1.5rem * var(--density-spacing, 1)))",
+    });
+    expect(headerCell).toHaveStyle({
+      minWidth: "max(7rem, calc(8rem * var(--density-spacing, 1)))",
+      paddingInline: "calc(var(--density-padding, 1rem) * 1.25)",
+      paddingBlock: "max(0.5rem, calc(var(--density-padding, 1rem) * 0.75))",
+    });
+    expect(bodyCell).toHaveStyle({
+      minWidth: "max(7rem, calc(8rem * var(--density-spacing, 1)))",
+      paddingInline: "calc(var(--density-padding, 1rem) * 1.25)",
+      paddingBlock: "max(0.5rem, calc(var(--density-padding, 1rem) * 0.75))",
+    });
+    expect(inlineCode).toHaveClass("whitespace-pre-wrap");
+    expect(inlineCode).toHaveClass("[overflow-wrap:anywhere]");
+    expect(inlineCode).not.toHaveClass("break-all");
+    expect(inlineCode).toHaveStyle({
+      paddingInline: "max(0.25rem, calc(var(--density-gap, 0.5rem) * 0.75))",
+      paddingBlock: "max(0.125rem, calc(var(--density-gap, 0.5rem) * 0.5))",
+    });
+  });
 });

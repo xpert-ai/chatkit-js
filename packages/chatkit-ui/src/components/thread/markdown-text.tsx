@@ -30,6 +30,18 @@ interface CodeHeaderProps {
   code: string;
 }
 
+const markdownTableMinWidth = "max(7rem, calc(8rem * var(--density-spacing, 1)))";
+const markdownTableCellPaddingInline =
+  "calc(var(--density-padding, 1rem) * 1.25)";
+const markdownTableCellPaddingBlock =
+  "max(0.5rem, calc(var(--density-padding, 1rem) * 0.75))";
+const markdownTableLineHeight =
+  "max(1.375rem, calc(1.5rem * var(--density-spacing, 1)))";
+const markdownInlineCodePaddingInline =
+  "max(0.25rem, calc(var(--density-gap, 0.5rem) * 0.75))";
+const markdownInlineCodePaddingBlock =
+  "max(0.125rem, calc(var(--density-gap, 0.5rem) * 0.5))";
+
 type MarkdownElementProps<T extends keyof JSX.IntrinsicElements> =
   ComponentPropsWithoutRef<T> & {
     node?: unknown;
@@ -198,38 +210,70 @@ const defaultComponents: any = {
   table: ({
     className,
     node: _node,
+    style,
     ...props
   }: MarkdownElementProps<"table">) => (
-    <table
-      className={cn(
-        "my-5 w-full border-separate border-spacing-0 overflow-y-auto",
-        className,
-      )}
-      {...props}
-    />
+    <div
+      data-slot="markdown-table-container"
+      className="my-5 max-w-full overflow-x-auto rounded-xl border border-border bg-background"
+    >
+      <table
+        className={cn(
+          "min-w-full w-max border-separate border-spacing-0 text-sm",
+          className,
+        )}
+        style={{
+          lineHeight: markdownTableLineHeight,
+          ...style,
+        }}
+        {...props}
+      />
+    </div>
   ),
-  th: ({ className, node: _node, ...props }: MarkdownElementProps<"th">) => (
+  th: ({
+    className,
+    node: _node,
+    style,
+    ...props
+  }: MarkdownElementProps<"th">) => (
     <th
       className={cn(
-        "bg-muted border-border border-y border-l px-4 py-2 text-left font-bold first:rounded-tl-lg last:rounded-tr-lg last:border-r [&[align=center]]:text-center [&[align=right]]:text-right",
+        "bg-muted/80 border-border border-l text-left align-top font-semibold whitespace-normal break-words first:border-l-0 first:rounded-tl-xl last:rounded-tr-xl [&[align=center]]:text-center [&[align=right]]:text-right",
         className,
       )}
+      style={{
+        minWidth: markdownTableMinWidth,
+        paddingInline: markdownTableCellPaddingInline,
+        paddingBlock: markdownTableCellPaddingBlock,
+        ...style,
+      }}
       {...props}
     />
   ),
-  td: ({ className, node: _node, ...props }: MarkdownElementProps<"td">) => (
+  td: ({
+    className,
+    node: _node,
+    style,
+    ...props
+  }: MarkdownElementProps<"td">) => (
     <td
       className={cn(
-        "border-border border-b border-l px-4 py-2 text-left last:border-r [&[align=center]]:text-center [&[align=right]]:text-right",
+        "border-border border-t border-l text-left align-top whitespace-normal break-words first:border-l-0 [&[align=center]]:text-center [&[align=right]]:text-right [&_code]:break-words [&_code]:whitespace-pre-wrap [&_code]:[overflow-wrap:anywhere]",
         className,
       )}
+      style={{
+        minWidth: markdownTableMinWidth,
+        paddingInline: markdownTableCellPaddingInline,
+        paddingBlock: markdownTableCellPaddingBlock,
+        ...style,
+      }}
       {...props}
     />
   ),
   tr: ({ className, node: _node, ...props }: MarkdownElementProps<"tr">) => (
     <tr
       className={cn(
-        "m-0 p-0 even:bg-muted/50 [&:last-child>td:first-child]:rounded-bl-lg [&:last-child>td:last-child]:rounded-br-lg",
+        "m-0 p-0 even:bg-muted/30 [&:last-child>td:first-child]:rounded-bl-xl [&:last-child>td:last-child]:rounded-br-xl",
         className,
       )}
       {...props}
@@ -261,6 +305,7 @@ const defaultComponents: any = {
     className,
     children,
     node: _node,
+    style,
     ...props
   }: MarkdownElementProps<"code">) => {
     const match = /language-([\w-]+)/.exec(className || "");
@@ -308,9 +353,14 @@ const defaultComponents: any = {
     return (
       <code
         className={cn(
-          "bg-muted rounded px-1.5 py-0.5 font-mono text-[0.9em] font-semibold break-all",
+          "bg-muted rounded font-mono text-[0.9em] font-semibold whitespace-pre-wrap [overflow-wrap:anywhere]",
           className,
         )}
+        style={{
+          paddingInline: markdownInlineCodePaddingInline,
+          paddingBlock: markdownInlineCodePaddingBlock,
+          ...style,
+        }}
         {...props}
       >
         {children}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ASSISTANT_STREAM_IDLE_TO_THINKING_MS,
+  appendMessageContent,
   getAssistantStreamingStatus,
   hasRenderableAssistantMessage,
   hasRenderableMessageContent,
@@ -125,5 +126,65 @@ describe('message visibility helpers', () => {
         { now },
       ),
     ).toBe('answering');
+  });
+});
+
+describe('appendMessageContent', () => {
+  it('preserves tool metadata when a component update arrives with the same id', () => {
+    const message = {
+      id: 'assistant-1',
+      type: 'assistant',
+      content: [
+        {
+          id: 'tool-1',
+          type: 'component',
+          agentKey: 'Agent_xSd1VKEicG',
+          data: {
+            category: 'Tool',
+            toolset: 'todoListMiddleware',
+            tool: 'write_todos',
+            title: 'write_todos',
+            created_date: '2026-04-24T12:24:52.898Z',
+            status: 'running',
+            input: {
+              todos: [
+                {
+                  content: 'Query ontology structure',
+                  status: 'in_progress',
+                },
+              ],
+            },
+          },
+        },
+      ],
+    } as any;
+
+    appendMessageContent(message, {
+      id: 'tool-1',
+      type: 'component',
+      data: {
+        status: 'success',
+        end_date: '2026-04-24T12:24:54.398Z',
+        output: 'Updated todo list',
+      },
+    } as any);
+
+    expect(message.content).toEqual([
+      expect.objectContaining({
+        id: 'tool-1',
+        type: 'component',
+        agentKey: 'Agent_xSd1VKEicG',
+        data: expect.objectContaining({
+          category: 'Tool',
+          toolset: 'todoListMiddleware',
+          tool: 'write_todos',
+          title: 'write_todos',
+          created_date: '2026-04-24T12:24:52.898Z',
+          status: 'success',
+          end_date: '2026-04-24T12:24:54.398Z',
+          output: 'Updated todo list',
+        }),
+      }),
+    ]);
   });
 });
