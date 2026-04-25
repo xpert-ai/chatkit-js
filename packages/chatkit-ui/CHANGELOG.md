@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.1.2
+
+### Patch Changes
+
+- e6571b2: todos
+
 ## 0.1.1
 
 ### Patch Changes
