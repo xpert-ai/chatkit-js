@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ChatKitTheme } from "@xpert-ai/chatkit-types";
 import mermaid from "mermaid";
 import { describe, beforeEach, expect, it, vi } from "vitest";
 
@@ -27,7 +28,10 @@ type MermaidModule = {
 const mermaidMock = mermaid as unknown as MermaidModule;
 const writeTextMock = vi.fn<() => Promise<void>>();
 
-function renderMarkdown(markdown: string, theme = { colorScheme: "light" as const }) {
+function renderMarkdown(
+  markdown: string,
+  theme: ChatKitTheme = { colorScheme: "light" },
+) {
   return render(
     <ThemeProvider theme={theme}>
       <MarkdownText>{markdown}</MarkdownText>

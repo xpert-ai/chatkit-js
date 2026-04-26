@@ -100,6 +100,52 @@
     "reasoning": "Reasoning",
     "loading": "Loading",
     "thinking": "Thinking",
-    "answering": "Answering"
+    "answering": "Answering",
+    "toolGroup": {
+      "status": {
+        "running": "Processing",
+        "success": "Processed",
+        "fail": "Processing failed"
+      },
+      "inputTitle": "Input",
+      "outputTitle": "Output",
+      "errorTitle": "Error",
+      "jsonTitle": "JSON",
+      "jsonTree": "Tree",
+      "jsonRaw": "Raw",
+      "copy": "Copy",
+      "copied": "Copied",
+      "separator": ", ",
+      "categories": {
+        "files": {
+          "one": "{{count}} file",
+          "other": "{{count}} files"
+        },
+        "searches": {
+          "one": "{{count}} search",
+          "other": "{{count}} searches"
+        },
+        "commands": {
+          "one": "{{count}} command",
+          "other": "{{count}} commands"
+        },
+        "lists": {
+          "one": "{{count}} list",
+          "other": "{{count}} lists"
+        },
+        "tasks": {
+          "one": "{{count}} task",
+          "other": "{{count}} tasks"
+        },
+        "knowledges": {
+          "one": "{{count}} knowledge result",
+          "other": "{{count}} knowledge results"
+        },
+        "tools": {
+          "one": "{{count}} tool",
+          "other": "{{count}} tools"
+        }
+      }
+    }
   }
 }
