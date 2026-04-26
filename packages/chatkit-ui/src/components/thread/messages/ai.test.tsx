@@ -139,7 +139,7 @@ describe('AssistantMessage tool components', () => {
     vi.useRealTimers();
   });
 
-  it('groups consecutive completed tool components into a collapsed activity list', () => {
+  it('expands the latest completed tool group by default', () => {
     renderAssistant([
       createToolComponent('read-file', {
         type: 'files',
@@ -155,14 +155,12 @@ describe('AssistantMessage tool components', () => {
       name: /Processed 1 file, 1 search/,
     });
 
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('Read package.json')).not.toBeInTheDocument();
-
-    fireEvent.click(toggle);
-
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('read-file')).toBeInTheDocument();
     expect(screen.getByText('search-docs')).toBeInTheDocument();
+
+    const content = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    expect(content).toHaveClass('max-h-[200px]', 'overflow-y-auto');
 
     fireEvent.click(toggle);
 
@@ -170,7 +168,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.queryByText('read-file')).not.toBeInTheDocument();
   });
 
-  it('expands grouped tool components by default while one is running', () => {
+  it('expands the latest grouped tool components by default', () => {
     renderAssistant([
       createToolComponent('run-tests', {
         type: 'program',
@@ -184,10 +182,11 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     const toggle = screen.getByRole('button', {
-      name: /Processing 1 file, 1 command/,
+      name: /Processed 1 file, 1 command/,
     });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: /Processing/ })).not.toBeInTheDocument();
     expect(screen.getByText('Ran pnpm test')).toBeInTheDocument();
     expect(screen.getByText('read-file')).toBeInTheDocument();
   });
@@ -204,7 +203,26 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getAllByRole('button', { name: /Processed 2 tools/ }),
     ).toHaveLength(2);
+    const toggles = screen.getAllByRole('button', { name: /Processed 2 tools/ });
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(toggles[1]).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('The assistant answered between tools.')).toBeInTheDocument();
+    expect(screen.queryByText('first-tool')).not.toBeInTheDocument();
+    expect(screen.getByText('third-tool')).toBeInTheDocument();
+  });
+
+  it('collapses a tool group when a later non-group item appears', () => {
+    renderAssistant([
+      createToolComponent('first-tool'),
+      createToolComponent('second-tool'),
+      { type: 'text', text: 'Tools are done for now.' },
+    ]);
+
+    const toggle = screen.getByRole('button', { name: /Processed 2 tools/ });
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('first-tool')).not.toBeInTheDocument();
+    expect(screen.getByText('Tools are done for now.')).toBeInTheDocument();
   });
 
   it('ignores empty text and reasoning items between consecutive tool components', () => {
@@ -218,8 +236,8 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getByRole('button', { name: /Processed 2 tools/ }),
     ).toBeInTheDocument();
-    expect(screen.queryByText('first-tool')).not.toBeInTheDocument();
-    expect(screen.queryByText('second-tool')).not.toBeInTheDocument();
+    expect(screen.getByText('first-tool')).toBeInTheDocument();
+    expect(screen.getByText('second-tool')).toBeInTheDocument();
   });
 
   it('keeps each grouped tool component expandable with input and output details', () => {
@@ -230,10 +248,6 @@ describe('AssistantMessage tool components', () => {
       }),
       createToolComponent('run_command'),
     ]);
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
-    );
 
     const toolToggle = screen.getByRole('button', { name: /read_file/ });
     expect(toolToggle).toHaveAttribute('aria-expanded', 'false');
@@ -278,9 +292,6 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('dispatchRunnableTasks'),
     ]);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
-    );
     fireEvent.click(screen.getByRole('button', { name: /updateProjectTasks/ }));
 
     const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
@@ -329,10 +340,6 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('dispatchRunnableTasks'),
     ]);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
-    );
-
     expect(screen.getByText('更新项目任务')).toBeInTheDocument();
     expect(screen.queryByText('正在更新项目任务')).not.toBeInTheDocument();
   });
@@ -345,9 +352,6 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('run_command'),
     ]);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
-    );
     fireEvent.click(screen.getByRole('button', { name: /read_json/ }));
 
     expect(screen.getByText(/JSON · Object\(2\)/)).toBeInTheDocument();
@@ -368,9 +372,6 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('run_command'),
     ]);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /Processing failed 2 tools/ }),
-    );
     fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
 
     expect(screen.getByText('Error')).toBeInTheDocument();
@@ -386,11 +387,6 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     const toggle = screen.getByRole('button', { name: /Processed 1 file/ });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('Read file')).not.toBeInTheDocument();
-
-    fireEvent.click(toggle);
-
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Read file')).toBeInTheDocument();
   });
@@ -412,8 +408,10 @@ describe('AssistantMessage tool components', () => {
 
     const toggles = screen.getAllByRole('button', { name: /Processed 1 tool/ });
     expect(toggles).toHaveLength(2);
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(toggles[1]).toHaveAttribute('aria-expanded', 'true');
 
-    toggles.forEach((toggle) => fireEvent.click(toggle));
+    fireEvent.click(toggles[0]);
 
     expect(screen.getByText('first-tool')).toBeInTheDocument();
     expect(screen.getByText('second-tool')).toBeInTheDocument();
@@ -460,8 +458,6 @@ describe('AssistantMessage tool components', () => {
         } as any}
       />,
     );
-
-    fireEvent.click(screen.getByRole('button', { name: /Processed 1 task/ }));
 
     expect(screen.getByText('1.5s')).toBeInTheDocument();
   });

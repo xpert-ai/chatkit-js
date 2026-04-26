@@ -29,6 +29,7 @@ export type PartialStepData = Partial<Omit<TMessageComponentStep, 'message' | 't
   title?: LocalizedText;
 };
 type StepStatus = NonNullable<PartialStepData['status']>;
+type ToolGroupDisplayStatus = Exclude<StepStatus, 'running'>;
 
 type ToolGroupCategory =
   | 'files'
@@ -389,11 +390,7 @@ function getToolGroupCategoryCounts(
   }, {});
 }
 
-function getToolGroupStatus(items: TMessageContentComponent[]): StepStatus {
-  if (items.some((item) => getToolStepData(item).status === 'running')) {
-    return 'running';
-  }
-
+function getToolGroupDisplayStatus(items: TMessageContentComponent[]): ToolGroupDisplayStatus {
   if (items.some((item) => getToolStepData(item).status === 'fail')) {
     return 'fail';
   }
@@ -830,13 +827,17 @@ function ToolCallRow({ content }: { content: TMessageContentComponent }) {
   );
 }
 
-export function ToolComponentGroup({ items }: { items: TMessageContentComponent[] }) {
+export function ToolComponentGroup({
+  items,
+  hasFollowingItem,
+}: {
+  items: TMessageContentComponent[];
+  hasFollowingItem: boolean;
+}) {
   const { t } = useChatkitTranslation();
   const contentId = React.useId();
-  const groupStatus = getToolGroupStatus(items);
-  const isRunning = groupStatus === 'running';
-  const [isExpanded, setIsExpanded] = React.useState(isRunning);
-  const previousStatusRef = React.useRef(groupStatus);
+  const groupStatus = getToolGroupDisplayStatus(items);
+  const [isExpanded, setIsExpanded] = React.useState(!hasFollowingItem);
   const categoryCounts = getToolGroupCategoryCounts(items);
   const categorySummary = TOOL_GROUP_CATEGORY_ORDER.flatMap((category) => {
     const count = categoryCounts[category] ?? 0;
@@ -854,18 +855,8 @@ export function ToolComponentGroup({ items }: { items: TMessageContentComponent[
   const StatusIcon = config.icon;
 
   React.useEffect(() => {
-    const previousStatus = previousStatusRef.current;
-    previousStatusRef.current = groupStatus;
-
-    if (previousStatus !== 'running' && groupStatus === 'running') {
-      setIsExpanded(true);
-      return;
-    }
-
-    if (previousStatus === 'running' && groupStatus !== 'running') {
-      setIsExpanded(false);
-    }
-  }, [groupStatus]);
+    setIsExpanded(!hasFollowingItem);
+  }, [hasFollowingItem, items.length]);
 
   return (
     <div className="px-1 py-1">
@@ -881,7 +872,6 @@ export function ToolComponentGroup({ items }: { items: TMessageContentComponent[
             className={cn(
               'h-4 w-4 shrink-0',
               config.iconClass,
-              groupStatus === 'running' && 'animate-spin',
             )}
           />
           <span className="truncate">{summary}</span>
@@ -896,7 +886,7 @@ export function ToolComponentGroup({ items }: { items: TMessageContentComponent[
       </button>
 
       {isExpanded && (
-        <ul id={contentId} className="mt-2 space-y-1.5">
+        <ul id={contentId} className="mt-2 max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
           {items.map((item, index) => (
             <ToolCallRow key={item.id ?? `tool-item-${index}`} content={item} />
           ))}

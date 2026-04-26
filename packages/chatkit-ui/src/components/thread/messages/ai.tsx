@@ -410,6 +410,7 @@ function renderContentItem(
 function renderContentUnit(
   unit: ToolComponentRenderUnit,
   messageId: string,
+  hasFollowingItem: boolean,
 ): React.ReactNode {
   if (unit.type === 'item') {
     return renderContentItem(unit.item, unit.index, messageId);
@@ -419,7 +420,7 @@ function renderContentUnit(
     <div
       key={`tool-group-${unit.startIndex}-${unit.items[0]?.id ?? 'tool'}-${unit.items.length}`}
     >
-      <ToolComponentGroup items={unit.items} />
+      <ToolComponentGroup items={unit.items} hasFollowingItem={hasFollowingItem} />
     </div>
   );
 }
@@ -432,10 +433,12 @@ function renderContent(content: ChatkitMessage['content'] | any, messageId: stri
 
   if (!Array.isArray(content) || content.length === 0) return null;
 
+  const renderUnits = buildToolComponentRenderUnits(content);
+
   return (
     <div className="space-y-3">
-      {buildToolComponentRenderUnits(content).map((unit) =>
-        renderContentUnit(unit, messageId),
+      {renderUnits.map((unit, index) =>
+        renderContentUnit(unit, messageId, index < renderUnits.length - 1),
       )}
     </div>
   );
