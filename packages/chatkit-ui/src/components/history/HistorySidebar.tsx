@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { ScrollArea } from '../ui/scroll-area';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import {
   Sheet,
   SheetContent,
@@ -49,17 +50,25 @@ export function HistorySidebar({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={disabled}
-          className="h-8 w-8 cursor-pointer"
-        >
-          <History size={16} />
-          <span className="sr-only">{t('history.threadHistory')}</span>
-        </Button>
-      </SheetTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex h-8 w-8">
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={disabled}
+                className="h-8 w-8 cursor-pointer"
+                aria-label={t('history.threadHistory')}
+              >
+                <History size={16} />
+                <span className="sr-only">{t('history.threadHistory')}</span>
+              </Button>
+            </SheetTrigger>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{t('history.threadHistory')}</TooltipContent>
+      </Tooltip>
       <SheetContent side="right" className="w-80 p-0">
         <SheetHeader className="border-b p-4">
           <SheetTitle>{t('history.title')}</SheetTitle>
