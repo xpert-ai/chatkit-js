@@ -9,13 +9,10 @@ import type {
   TMessageContentMemory,
   TMessageContentReasoning,
   TMessageContentText,
-  TMessageComponentStep,
 } from '@xpert-ai/chatkit-types';
 import {
   ChevronDown,
-  CheckCircle2,
   Clock3,
-  XCircle,
   Loader2,
 } from 'lucide-react';
 
@@ -33,10 +30,23 @@ import { Badge } from '../../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { MarkdownText } from '../markdown-text';
+import {
+  buildToolComponentRenderUnits,
+  getToolActivityLabel,
+  getToolStepData,
+  ToolComponentGroup,
+  toolStatusConfig,
+  type ToolComponentRenderUnit,
+} from './tool-component-group';
+import {
+  getRequestUserInputResultCardData,
+  RequestUserInputResultCard,
+} from './request-user-input-result-card';
 import { WidgetMessage } from './widget';
 
 export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
+  messages?: ChatkitMessage[];
   className?: string;
   isStreaming?: boolean;
   streamingStatus?: AssistantStreamingStatus | null;
@@ -57,22 +67,6 @@ function isImageContent(content: TMessageContentComplex): content is MessageCont
 function isComponentContent(content: TMessageContentComplex): content is TMessageContentComponent {
   return content.type === 'component';
 }
-
-// Status styling configuration
-const statusConfig = {
-  success: {
-    iconClass: 'border-green-500 text-green-700',
-    icon: CheckCircle2,
-  },
-  fail: {
-    iconClass: 'border-red-500 text-red-700',
-    icon: XCircle,
-  },
-  running: {
-    iconClass: 'border-blue-500 text-blue-700',
-    icon: Loader2,
-  },
-};
 
 function isWidgetComponent(
   content: TMessageContentComponent,
@@ -157,9 +151,6 @@ function MemoryBlock({ content }: { content: TMessageContentMemory }) {
   );
 }
 
-/** Partial step data: during streaming, fields arrive incrementally */
-type PartialStepData = Partial<TMessageComponentStep & { category?: string }>;
-
 function parseStepDate(value: unknown): number | null {
   if (value instanceof Date) {
     const timestamp = value.getTime();
@@ -199,18 +190,16 @@ function formatStepDuration(durationMs: number): string {
 }
 
 function ComponentBlock({ content }: { content: TMessageContentComponent }) {
+  const { i18n } = useChatkitTranslation();
   const [isExpanded, setIsExpanded] = React.useState(false);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const previousScrollTopRef = React.useRef(0);
   const [durationNow, setDurationNow] = React.useState(() => Date.now());
 
-  const data = (content.data ?? {}) as PartialStepData;
+  const data = getToolStepData(content);
   const category = data.category ?? 'Component';
-  const title =
-    data.tool && category === 'Tool'
-      ? data.tool
-      : data.title ?? data.type ?? 'Component';
+  const title = getToolActivityLabel(content, i18n.language);
   const status = data.status ?? null;
   const message = data.message ?? null;
   const output = data.output ?? null;
@@ -287,7 +276,7 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
     element.scrollTop = element.scrollHeight;
   }, [isExpanded, output, status]);
 
-  const config = status ? statusConfig[status] : null;
+  const config = status ? toolStatusConfig[status] : null;
   const StatusIcon = config?.icon;
 
   return (
@@ -358,16 +347,25 @@ function UnknownBlock({ content }: { content: TMessageContentComplex }) {
 function renderContentItem(
   content: TMessageContentComplex | string,
   index: number,
-  messageId: string,
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
 ): React.ReactNode {
+  const messageId = message.id;
+
   if (typeof content === 'string') {
-    return <div key={`text-${index}`}>
-      <MarkdownText>{content}</MarkdownText>;
-    </div>;
+    return (
+      <div key={`text-${index}`}>
+        <MarkdownText>{content}</MarkdownText>
+      </div>
+    );
   }
 
   if (isTextContent(content)) {
-    return <div key={content.id ?? `text-${index}`}><MarkdownText>{content.text}</MarkdownText></div>;
+    return (
+      <div key={content.id ?? `text-${index}`}>
+        <MarkdownText>{content.text}</MarkdownText>
+      </div>
+    );
   }
 
   if (isReasoningContent(content)) {
@@ -387,6 +385,18 @@ function renderContentItem(
   }
 
   if (isComponentContent(content)) {
+    const requestUserInputResult = getRequestUserInputResultCardData(
+      content,
+      lookupMessages,
+    );
+    if (requestUserInputResult) {
+      return (
+        <div key={content.id ?? `request-user-input-result-${index}`}>
+          <RequestUserInputResultCard result={requestUserInputResult} />
+        </div>
+      );
+    }
+
     if (isWidgetComponent(content)) {
       return (
         <div key={content.id ?? `widget-${index}`}>
@@ -417,7 +427,27 @@ function renderContentItem(
   );
 }
 
-function renderContent(content: ChatkitMessage['content'] | any, messageId: string) {
+function renderContentUnit(
+  unit: ToolComponentRenderUnit,
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
+  hasFollowingItem: boolean,
+): React.ReactNode {
+  if (unit.type === 'item') {
+    return renderContentItem(unit.item, unit.index, message, lookupMessages);
+  }
+
+  return (
+    <div
+      key={`tool-group-${unit.startIndex}-${unit.items[0]?.id ?? 'tool'}-${unit.items.length}`}
+    >
+      <ToolComponentGroup items={unit.items} hasFollowingItem={hasFollowingItem} />
+    </div>
+  );
+}
+
+function renderContent(message: ChatkitMessage, lookupMessages: ChatkitMessage[]) {
+  const content = message.content;
   if (typeof content === 'string') {
     if (!content.trim()) return null;
     return <MarkdownText>{content}</MarkdownText>;
@@ -425,9 +455,21 @@ function renderContent(content: ChatkitMessage['content'] | any, messageId: stri
 
   if (!Array.isArray(content) || content.length === 0) return null;
 
+  const renderUnits = buildToolComponentRenderUnits(content, {
+    shouldGroupComponent: (item) =>
+      getRequestUserInputResultCardData(item, lookupMessages) === null,
+  });
+
   return (
     <div className="space-y-3">
-      {content.map((item, index) => renderContentItem(item, index, messageId))}
+      {renderUnits.map((unit, index) =>
+        renderContentUnit(
+          unit,
+          message,
+          lookupMessages,
+          index < renderUnits.length - 1,
+        ),
+      )}
     </div>
   );
 }
@@ -472,6 +514,7 @@ export function AssistantStreamingIndicator({
 
 export function AssistantMessage({
   message,
+  messages,
   className,
   isStreaming = false,
   streamingStatus,
@@ -481,8 +524,9 @@ export function AssistantMessage({
   const hasReasoning = hasRenderableReasoning(message.reasoning);
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
+  const lookupMessages = messages?.length ? messages : [message];
 
-  const answerNode = renderContent(message.content, message.id);
+  const answerNode = renderContent(message, lookupMessages);
   const reasoningNode = hasReasoning ? (
     <ReasoningBlock reasoning={message.reasoning ?? []} />
   ) : null;

@@ -72,8 +72,22 @@
   "composer": {
     "openMenu": "打开菜单",
     "addAttachment": "添加附件",
+    "planMode": "计划模式",
     "removeReference": "移除引用",
-    "quoteSelection": "引用选中内容"
+    "quoteSelection": "引用选中内容",
+    "requestUserInput": {
+      "title": "需要你的输入",
+      "recommended": "推荐",
+      "other": "其他",
+      "otherPlaceholder": "输入自定义回答",
+      "continue": "继续",
+      "dismiss": "关闭",
+      "previousQuestion": "上一个问题",
+      "nextQuestion": "下一个问题",
+      "questionProgress": "{{current}} / {{total}}",
+      "optionInfo": "{{label}} 的说明",
+      "submit": "继续"
+    }
   },
   "sheet": {
     "close": "关闭"
@@ -100,6 +114,57 @@
     "reasoning": "推理",
     "loading": "正在加载",
     "thinking": "正在思考",
-    "answering": "正在生成"
+    "answering": "正在生成",
+    "requestUserInputResult": {
+      "title": "已确认选择",
+      "option": "选项",
+      "other": "其他"
+    },
+    "toolGroup": {
+      "status": {
+        "running": "正在处理",
+        "success": "已处理",
+        "fail": "处理失败"
+      },
+      "inputTitle": "输入",
+      "outputTitle": "输出",
+      "errorTitle": "错误",
+      "jsonTitle": "JSON",
+      "jsonTree": "树形",
+      "jsonRaw": "原始",
+      "copy": "复制",
+      "copied": "已复制",
+      "separator": "，",
+      "categories": {
+        "files": {
+          "one": "{{count}} 个文件",
+          "other": "{{count}} 个文件"
+        },
+        "searches": {
+          "one": "{{count}} 个搜索",
+          "other": "{{count}} 个搜索"
+        },
+        "commands": {
+          "one": "{{count}} 个命令",
+          "other": "{{count}} 个命令"
+        },
+        "lists": {
+          "one": "{{count}} 个列表",
+          "other": "{{count}} 个列表"
+        },
+        "tasks": {
+          "one": "{{count}} 个任务",
+          "other": "{{count}} 个任务"
+        },
+        "knowledges": {
+          "one": "{{count}} 个知识结果",
+          "other": "{{count}} 个知识结果"
+        },
+        "tools": {
+          "one": "{{count}} 个工具调用",
+          "other": "{{count}} 个工具调用"
+        }
+      }
+    }
   }
 }

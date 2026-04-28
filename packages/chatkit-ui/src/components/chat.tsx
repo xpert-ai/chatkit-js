@@ -34,6 +34,7 @@ import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingTodos } from './composer/pending-todos';
+import { RequestUserInputPanel } from './composer/request-user-input-panel';
 import {
   AssistantMessage,
   AssistantStreamingIndicator,
@@ -385,6 +386,7 @@ export function Chat({
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
     null,
   );
+  const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
   const [attachments, setAttachments] = React.useState<UploadingFile[]>([]);
   const [references, setReferences] = React.useState<ChatKitReference[]>([]);
   const [isUploadingReferenceImages, setIsUploadingReferenceImages] =
@@ -433,6 +435,7 @@ export function Chat({
     [stream.pendingFollowUps],
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
+  const hasPendingRequestUserInput = Boolean(stream.pendingRequestUserInput);
 
   const clearQuoteSelection = React.useCallback(() => {
     setQuoteSelection(null);
@@ -745,6 +748,7 @@ export function Chat({
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
   const isSendDisabled =
     (!trimmedDraft && !hasReferences) ||
+    hasPendingRequestUserInput ||
     missingConfig ||
     isHistoryLoading ||
     hasUploadingFiles ||
@@ -896,11 +900,15 @@ export function Chat({
         files?: typeof uploadedFiles;
         references?: ChatKitReference[];
         referenceComposition?: ChatKitReferenceCompositionMode;
+        planMode?: boolean;
       } = {
         ...humanInput,
       };
       if (filesToSend) {
         inputPayload.files = filesToSend;
+      }
+      if (planModeEnabled) {
+        inputPayload.planMode = true;
       }
 
       const requestOptions = buildInjectedRequestOptions({
@@ -944,6 +952,7 @@ export function Chat({
       references,
       scrollToBottom,
       selectedTool,
+      planModeEnabled,
       stream,
       trimmedDraft,
       uploadedFiles,
@@ -1285,11 +1294,24 @@ export function Chat({
     const nextFollowUpMode = stream.isLoading
       ? stream.followUpBehavior
       : undefined;
+    const inputPayload = {
+      input: prompt,
+      ...(planModeEnabled ? { planMode: true } : {}),
+    };
+    const requestOptions = buildInjectedRequestOptions({
+      defaults: options?.request,
+      humanInput: inputPayload,
+    });
 
     stream.submit(
-      { input: { input: prompt } },
+      {
+        input: inputPayload,
+        ...(requestOptions.state ? { state: requestOptions.state } : {}),
+      },
       {
         ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+        ...(requestOptions.context ? { context: requestOptions.context } : {}),
+        ...(requestOptions.config ? { config: requestOptions.config } : {}),
         ...(!nextFollowUpMode
           ? {
               optimisticValues: (prev) => {
@@ -1620,6 +1642,18 @@ export function Chat({
                             ...(message as ChatkitMessage),
                             type: 'assistant',
                           }}
+                          messages={messages
+                            .slice(0, index + 1)
+                            .map(
+                              (item) =>
+                                ({
+                                  ...(item as ChatkitMessage),
+                                  type:
+                                    String(item.type) === 'ai'
+                                      ? 'assistant'
+                                      : item.type,
+                                }) as ChatkitMessage,
+                            )}
                           isStreaming={isStreamingMessage}
                           streamingStatus={streamingStatus}
                         />
@@ -1914,6 +1948,13 @@ export function Chat({
           attachToComposer
         />
 
+        <RequestUserInputPanel
+          request={stream.pendingRequestUserInput}
+          onSubmit={stream.submitRequestUserInput}
+          onDismiss={stream.stop}
+          attachToComposer
+        />
+
         <form className="flex items-end" onSubmit={handleSubmit}>
           {/* Capsule-shaped input container */}
           <div
@@ -1932,7 +1973,11 @@ export function Chat({
               onAttachmentClick={handleAttachmentClick}
               onToolSelect={handleToolSelect}
               selectedTool={selectedTool}
-              disabled={missingConfig || isHistoryLoading}
+              planModeEnabled={planModeEnabled}
+              onPlanModeChange={setPlanModeEnabled}
+              disabled={
+                missingConfig || isHistoryLoading || hasPendingRequestUserInput
+              }
             />
             <textarea
               ref={composerInputRef}
@@ -1942,7 +1987,9 @@ export function Chat({
               onKeyDown={handleComposerKeyDown}
               rows={1}
               placeholder={inputPlaceholder}
-              disabled={missingConfig || isHistoryLoading}
+              disabled={
+                missingConfig || isHistoryLoading || hasPendingRequestUserInput
+              }
               className={cn(
                 'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
                 'placeholder:text-muted-foreground',
@@ -1952,7 +1999,10 @@ export function Chat({
             <SendButton
               disabled={isSendDisabled}
               isLoading={stream.isLoading}
-              showStop={stream.isLoading && !trimmedDraft}
+              showStop={
+                stream.isLoading &&
+                (!trimmedDraft || hasPendingRequestUserInput)
+              }
               onStop={() => stream.stop()}
               stopLabel={t('chat.stop')}
               sendLabel={t('chat.send')}
