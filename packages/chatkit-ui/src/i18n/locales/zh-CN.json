@@ -94,6 +94,9 @@
   },
   "markdown": {
     "copy": "复制",
+    "plan": {
+      "download": "下载 Markdown"
+    },
     "mermaid": {
       "title": "Mermaid",
       "diagram": "图表",

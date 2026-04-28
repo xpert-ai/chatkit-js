@@ -1,10 +1,18 @@
 import React from 'react';
-import type {
-  ChatkitMessage,
-  TMessageComponentStep,
-  TMessageContentComponent,
+import {
+  REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
+  REQUEST_USER_INPUT_RESULT_TYPE,
+  type ChatkitMessage,
+  type TMessageComponentStep,
+  type TMessageContentComponent,
 } from '@xpert-ai/chatkit-types';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const chatkitLanguage = vi.hoisted(() => ({ value: 'en-US' }));
@@ -88,7 +96,9 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
 
 import { AssistantMessage } from './ai';
 
-type ToolComponentDataOverride = Partial<Omit<TMessageComponentStep, 'message' | 'title' | 'type'>> & {
+type ToolComponentDataOverride = Partial<
+  Omit<TMessageComponentStep, 'message' | 'title' | 'type'>
+> & {
   category?: 'Tool';
   type?: string;
   title?: string | Record<string, string>;
@@ -171,7 +181,9 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('read-file')).toBeInTheDocument();
     expect(screen.getByText('search-docs')).toBeInTheDocument();
 
-    const content = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    const content = document.getElementById(
+      toggle.getAttribute('aria-controls') ?? '',
+    );
     expect(content).toHaveClass('max-h-[200px]', 'overflow-y-auto');
 
     fireEvent.click(toggle);
@@ -198,7 +210,9 @@ describe('AssistantMessage tool components', () => {
     });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.queryByRole('button', { name: /Processing/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processing/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText('Ran pnpm test')).toBeInTheDocument();
     expect(screen.getByText('read-file')).toBeInTheDocument();
   });
@@ -215,10 +229,14 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getAllByRole('button', { name: /Processed 2 tools/ }),
     ).toHaveLength(2);
-    const toggles = screen.getAllByRole('button', { name: /Processed 2 tools/ });
+    const toggles = screen.getAllByRole('button', {
+      name: /Processed 2 tools/,
+    });
     expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
     expect(toggles[1]).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('The assistant answered between tools.')).toBeInTheDocument();
+    expect(
+      screen.getByText('The assistant answered between tools.'),
+    ).toBeInTheDocument();
     expect(screen.queryByText('first-tool')).not.toBeInTheDocument();
     expect(screen.getByText('third-tool')).toBeInTheDocument();
   });
@@ -255,7 +273,9 @@ describe('AssistantMessage tool components', () => {
   it('keeps each grouped tool component expandable with input and output details', () => {
     renderAssistant([
       createToolComponent('read_file', {
-        input: { path: 'packages/chatkit-ui/src/components/thread/messages/ai.tsx' },
+        input: {
+          path: 'packages/chatkit-ui/src/components/thread/messages/ai.tsx',
+        },
         output: 'file contents',
       }),
       createToolComponent('run_command'),
@@ -270,7 +290,9 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText(/JSON · Object\(1\)/)).toBeInTheDocument();
     expect(
-      screen.getByText(/packages\/chatkit-ui\/src\/components\/thread\/messages\/ai.tsx/),
+      screen.getByText(
+        /packages\/chatkit-ui\/src\/components\/thread\/messages\/ai.tsx/,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText('Output')).toBeInTheDocument();
     expect(screen.getByText('file contents')).toBeInTheDocument();
@@ -330,7 +352,10 @@ describe('AssistantMessage tool components', () => {
     renderAssistant([
       createToolComponent('updateProjectTasks', {
         title: { en_US: 'Update project tasks', zh_Hans: '更新项目任务' },
-        message: { en_US: 'Updating project tasks', zh_Hans: '正在更新项目任务' },
+        message: {
+          en_US: 'Updating project tasks',
+          zh_Hans: '正在更新项目任务',
+        },
         status: 'running',
       }),
       createToolComponent('dispatchRunnableTasks'),
@@ -346,7 +371,10 @@ describe('AssistantMessage tool components', () => {
     renderAssistant([
       createToolComponent('updateProjectTasks', {
         title: { en_US: 'Update project tasks', zh_Hans: '更新项目任务' },
-        message: { en_US: 'Updating project tasks', zh_Hans: '正在更新项目任务' },
+        message: {
+          en_US: 'Updating project tasks',
+          zh_Hans: '正在更新项目任务',
+        },
         status: 'success',
       }),
       createToolComponent('dispatchRunnableTasks'),
@@ -446,9 +474,47 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByLabelText('Selections confirmed')).toBeInTheDocument();
     expect(screen.getByText('您想开发什么类型的网站？')).toBeInTheDocument();
     expect(screen.getByText('企业官网/展示型网站')).toBeInTheDocument();
-    expect(screen.getByText('用于展示公司信息、产品或服务')).toBeInTheDocument();
+    expect(
+      screen.getByText('用于展示公司信息、产品或服务'),
+    ).toBeInTheDocument();
     expect(screen.getByText('您对技术栈有偏好吗？')).toBeInTheDocument();
     expect(screen.getByText('Angular')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processed 1 tool/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders explicitly typed request_user_input results without id inference', () => {
+    renderAssistant([
+      {
+        id: 'component-without-original-tool-call',
+        type: 'component',
+        data: {
+          status: 'success',
+          output: JSON.stringify({
+            type: REQUEST_USER_INPUT_RESULT_TYPE,
+            purpose: REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
+            answers: [
+              {
+                id: 'site_type',
+                question: '你希望这个网站是什么类型的？',
+                type: 'option',
+                value: '产品展示官网 (Recommended)',
+                label: '产品展示官网 (Recommended)',
+                description:
+                  '展示产品特性、功能介绍、下载/使用入口的营销型网站',
+              },
+            ],
+          }),
+        },
+      } as unknown as TMessageContentComponent,
+    ]);
+
+    expect(screen.getByLabelText('Selections confirmed')).toBeInTheDocument();
+    expect(
+      screen.getByText('你希望这个网站是什么类型的？'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('产品展示官网 (Recommended)')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Processed 1 tool/ }),
     ).not.toBeInTheDocument();
@@ -500,25 +566,27 @@ describe('AssistantMessage tool components', () => {
 
     render(
       <AssistantMessage
-        message={{
-          id: 'assistant-1',
-          type: 'assistant',
-          content: [
-            {
-              id: 'tool-1',
-              type: 'component',
-              data: {
-                category: 'Tool',
-                toolset: 'todoListMiddleware',
-                tool: 'write_todos',
-                title: 'write_todos',
-                created_date: '2026-04-24T12:24:52.898Z',
-                end_date: '2026-04-24T12:24:54.398Z',
-                status: 'success',
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [
+              {
+                id: 'tool-1',
+                type: 'component',
+                data: {
+                  category: 'Tool',
+                  toolset: 'todoListMiddleware',
+                  tool: 'write_todos',
+                  title: 'write_todos',
+                  created_date: '2026-04-24T12:24:52.898Z',
+                  end_date: '2026-04-24T12:24:54.398Z',
+                  status: 'success',
+                },
               },
-            },
-          ],
-        } as any}
+            ],
+          } as any
+        }
       />,
     );
 
@@ -531,24 +599,26 @@ describe('AssistantMessage tool components', () => {
 
     render(
       <AssistantMessage
-        message={{
-          id: 'assistant-1',
-          type: 'assistant',
-          content: [
-            {
-              id: 'tool-1',
-              type: 'component',
-              data: {
-                category: 'Tool',
-                toolset: 'todoListMiddleware',
-                tool: 'write_todos',
-                title: 'write_todos',
-                created_date: '2026-04-24T12:24:52.898Z',
-                status: 'running',
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [
+              {
+                id: 'tool-1',
+                type: 'component',
+                data: {
+                  category: 'Tool',
+                  toolset: 'todoListMiddleware',
+                  tool: 'write_todos',
+                  title: 'write_todos',
+                  created_date: '2026-04-24T12:24:52.898Z',
+                  status: 'running',
+                },
               },
-            },
-          ],
-        } as any}
+            ],
+          } as any
+        }
       />,
     );
 

@@ -2,6 +2,15 @@ import { type ToolCall } from '@langchain/core/messages/tool';
 
 export const REQUEST_USER_INPUT_TOOL_NAME = 'request_user_input';
 export type RequestUserInputToolName = typeof REQUEST_USER_INPUT_TOOL_NAME;
+export const REQUEST_USER_INPUT_RESULT_TYPE = 'request_user_input_result';
+export type RequestUserInputResultType = typeof REQUEST_USER_INPUT_RESULT_TYPE;
+export const REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION =
+  'plan_clarification';
+export const REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION =
+  'implementation_confirmation';
+export type RequestUserInputResultPurpose =
+  | typeof REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION
+  | typeof REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION;
 
 export interface RequestUserInputOption {
   label: string;
@@ -33,6 +42,8 @@ export interface RequestUserInputAnswer {
 }
 
 export interface RequestUserInputResult {
+  type: RequestUserInputResultType;
+  purpose: RequestUserInputResultPurpose;
   answers: RequestUserInputAnswer[];
 }
 
