@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-ui5",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SAP UI5 bindings for Xpert ChatKit",
   "type": "module",
   "sideEffects": false,

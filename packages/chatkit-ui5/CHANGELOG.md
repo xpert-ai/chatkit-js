@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui5
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [e598ceb]
+  - @xpert-ai/chatkit-web-component@0.2.0
+  - @xpert-ai/chatkit-types@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
