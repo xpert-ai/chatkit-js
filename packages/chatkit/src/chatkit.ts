@@ -4,18 +4,32 @@ import type {
 } from './message';
 import type { ChatKitOptions, FollowUpBehavior } from './options';
 
+export type UserMessageContent = unknown;
+export type ToolChoice = unknown;
+export type WorkflowTriggerParams =
+  | {
+      name?: string;
+      params?: Record<string, any>;
+    }
+  | Record<string, any>;
+
 export type EventHandler<K extends keyof ChatKitEvents> = (
   event: ChatKitEvents[K],
 ) => any;
 
 export type SendUserMessageParams = {
   text?: string;
+  content?: UserMessageContent[];
   state?: Record<string, any>;
   reply?: string;
   attachments?: Attachment[];
   newThread?: boolean;
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
+  toolChoice?: ToolChoice;
+  model?: string;
+  planMode?: boolean;
+  trigger?: WorkflowTriggerParams;
   followUpMode?: 'default' | FollowUpBehavior;
 };
 

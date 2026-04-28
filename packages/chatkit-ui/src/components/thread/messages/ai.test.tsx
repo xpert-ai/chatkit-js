@@ -21,6 +21,12 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
       const count = Number(values?.count ?? 0);
 
       switch (key) {
+        case 'message.requestUserInputResult.title':
+          return 'Selections confirmed';
+        case 'message.requestUserInputResult.option':
+          return 'Option';
+        case 'message.requestUserInputResult.other':
+          return 'Other';
         case 'message.toolGroup.status.running':
           return 'Processing';
         case 'message.toolGroup.status.success':
@@ -111,14 +117,20 @@ function createToolComponent(
   };
 }
 
-function renderAssistant(content: ChatkitMessage['content']) {
+function renderAssistant(
+  content: ChatkitMessage['content'],
+  overrides: Partial<ChatkitMessage> = {},
+) {
   return render(
     <AssistantMessage
-      message={{
-        id: 'assistant-1',
-        type: 'assistant',
-        content,
-      }}
+      message={
+        {
+          ...overrides,
+          id: 'assistant-1',
+          type: 'assistant',
+          content,
+        } as ChatkitMessage & { type: 'assistant' }
+      }
     />,
   );
 }
@@ -389,6 +401,57 @@ describe('AssistantMessage tool components', () => {
     const toggle = screen.getByRole('button', { name: /Processed 1 file/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Read file')).toBeInTheDocument();
+  });
+
+  it('renders request_user_input tool results as a confirmation card', () => {
+    renderAssistant(
+      [
+        {
+          id: 'call-request-input',
+          type: 'component',
+          data: {
+            status: 'success',
+            end_date: '2026-04-28T11:13:02.019Z',
+            output: JSON.stringify({
+              answers: [
+                {
+                  id: 'website_type',
+                  question: '您想开发什么类型的网站？',
+                  type: 'option',
+                  value: '企业官网/展示型网站',
+                  label: '企业官网/展示型网站',
+                  description: '用于展示公司信息、产品或服务',
+                },
+                {
+                  id: 'tech_stack',
+                  question: '您对技术栈有偏好吗？',
+                  type: 'other',
+                  value: 'Angular',
+                },
+              ],
+            }),
+          },
+        } as unknown as TMessageContentComponent,
+      ],
+      {
+        clientToolCalls: [
+          {
+            id: 'call-request-input',
+            name: 'request_user_input',
+          },
+        ] as any,
+      } as Partial<ChatkitMessage>,
+    );
+
+    expect(screen.getByLabelText('Selections confirmed')).toBeInTheDocument();
+    expect(screen.getByText('您想开发什么类型的网站？')).toBeInTheDocument();
+    expect(screen.getByText('企业官网/展示型网站')).toBeInTheDocument();
+    expect(screen.getByText('用于展示公司信息、产品或服务')).toBeInTheDocument();
+    expect(screen.getByText('您对技术栈有偏好吗？')).toBeInTheDocument();
+    expect(screen.getByText('Angular')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processed 1 tool/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('does not group across widget components', () => {

@@ -38,10 +38,15 @@ import {
   toolStatusConfig,
   type ToolComponentRenderUnit,
 } from './tool-component-group';
+import {
+  getRequestUserInputResultCardData,
+  RequestUserInputResultCard,
+} from './request-user-input-result-card';
 import { WidgetMessage } from './widget';
 
 export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
+  messages?: ChatkitMessage[];
   className?: string;
   isStreaming?: boolean;
   streamingStatus?: AssistantStreamingStatus | null;
@@ -342,8 +347,11 @@ function UnknownBlock({ content }: { content: TMessageContentComplex }) {
 function renderContentItem(
   content: TMessageContentComplex | string,
   index: number,
-  messageId: string,
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
 ): React.ReactNode {
+  const messageId = message.id;
+
   if (typeof content === 'string') {
     return (
       <div key={`text-${index}`}>
@@ -377,6 +385,18 @@ function renderContentItem(
   }
 
   if (isComponentContent(content)) {
+    const requestUserInputResult = getRequestUserInputResultCardData(
+      content,
+      lookupMessages,
+    );
+    if (requestUserInputResult) {
+      return (
+        <div key={content.id ?? `request-user-input-result-${index}`}>
+          <RequestUserInputResultCard result={requestUserInputResult} />
+        </div>
+      );
+    }
+
     if (isWidgetComponent(content)) {
       return (
         <div key={content.id ?? `widget-${index}`}>
@@ -409,11 +429,12 @@ function renderContentItem(
 
 function renderContentUnit(
   unit: ToolComponentRenderUnit,
-  messageId: string,
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
   hasFollowingItem: boolean,
 ): React.ReactNode {
   if (unit.type === 'item') {
-    return renderContentItem(unit.item, unit.index, messageId);
+    return renderContentItem(unit.item, unit.index, message, lookupMessages);
   }
 
   return (
@@ -425,7 +446,8 @@ function renderContentUnit(
   );
 }
 
-function renderContent(content: ChatkitMessage['content'] | any, messageId: string) {
+function renderContent(message: ChatkitMessage, lookupMessages: ChatkitMessage[]) {
+  const content = message.content;
   if (typeof content === 'string') {
     if (!content.trim()) return null;
     return <MarkdownText>{content}</MarkdownText>;
@@ -433,12 +455,20 @@ function renderContent(content: ChatkitMessage['content'] | any, messageId: stri
 
   if (!Array.isArray(content) || content.length === 0) return null;
 
-  const renderUnits = buildToolComponentRenderUnits(content);
+  const renderUnits = buildToolComponentRenderUnits(content, {
+    shouldGroupComponent: (item) =>
+      getRequestUserInputResultCardData(item, lookupMessages) === null,
+  });
 
   return (
     <div className="space-y-3">
       {renderUnits.map((unit, index) =>
-        renderContentUnit(unit, messageId, index < renderUnits.length - 1),
+        renderContentUnit(
+          unit,
+          message,
+          lookupMessages,
+          index < renderUnits.length - 1,
+        ),
       )}
     </div>
   );
@@ -484,6 +514,7 @@ export function AssistantStreamingIndicator({
 
 export function AssistantMessage({
   message,
+  messages,
   className,
   isStreaming = false,
   streamingStatus,
@@ -493,8 +524,9 @@ export function AssistantMessage({
   const hasReasoning = hasRenderableReasoning(message.reasoning);
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
+  const lookupMessages = messages?.length ? messages : [message];
 
-  const answerNode = renderContent(message.content, message.id);
+  const answerNode = renderContent(message, lookupMessages);
   const reasoningNode = hasReasoning ? (
     <ReasoningBlock reasoning={message.reasoning ?? []} />
   ) : null;

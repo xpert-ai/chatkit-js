@@ -72,8 +72,22 @@
   "composer": {
     "openMenu": "Open menu",
     "addAttachment": "Add attachment",
+    "planMode": "Plan mode",
     "removeReference": "Remove reference",
-    "quoteSelection": "Quote selection"
+    "quoteSelection": "Quote selection",
+    "requestUserInput": {
+      "title": "Input requested",
+      "recommended": "Recommended",
+      "other": "Other",
+      "otherPlaceholder": "Type a custom answer",
+      "continue": "Continue",
+      "dismiss": "Dismiss",
+      "previousQuestion": "Previous question",
+      "nextQuestion": "Next question",
+      "questionProgress": "{{current}} of {{total}}",
+      "optionInfo": "Details for {{label}}",
+      "submit": "Continue"
+    }
   },
   "sheet": {
     "close": "Close"
@@ -101,6 +115,11 @@
     "loading": "Loading",
     "thinking": "Thinking",
     "answering": "Answering",
+    "requestUserInputResult": {
+      "title": "Selections confirmed",
+      "option": "Option",
+      "other": "Other"
+    },
     "toolGroup": {
       "status": {
         "running": "Processing",

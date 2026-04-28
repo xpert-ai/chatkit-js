@@ -297,6 +297,7 @@ export type TChatRequestHuman = {
   files?: Partial<File>[];
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
+  planMode?: boolean;
   [key: string]: unknown;
 };
 

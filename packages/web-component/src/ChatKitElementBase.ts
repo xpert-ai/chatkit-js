@@ -8,6 +8,7 @@ import {
   ListView,
 } from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
+import type { SendUserMessageParams } from '@xpert-ai/chatkit-types';
 import { removeMethods } from './helpers';
 
 import type {
@@ -17,7 +18,6 @@ import type {
   ChatKitInnerOptions,
   ChatKitReq,
   UserMessageContent,
-  ToolChoice,
 } from '@xpert-ai/chatkit-web-shared';
 import { getCapabilities } from '@xpert-ai/chatkit-web-shared';
 import type { Capabilities, Capability } from '@xpert-ai/chatkit-web-shared';
@@ -455,25 +455,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   @requireCommandCapability
-  async sendUserMessage(params: {
-    text?: string;
-    content?: UserMessageContent[];
-    reply?: string;
-    attachments?: Attachment[];
-    references?: ChatKitReference[];
-    toolChoice?: ToolChoice;
-    model?: string;
-    newThread?: boolean;
-    /** Trigger parameters from workflow trigger configuration */
-    trigger?:
-      | {
-          name?: string;
-          params?: Record<string, any>;
-        }
-      | Record<string, any>;
-    /** Custom state variables for workflow */
-    state?: Record<string, any>;
-  }) {
+  async sendUserMessage(params: SendUserMessageParams) {
     await this.#loaded;
     await this.#messenger?.commands.sendUserMessage(params);
   }

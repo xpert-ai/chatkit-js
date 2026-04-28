@@ -72,8 +72,22 @@
   "composer": {
     "openMenu": "打开菜单",
     "addAttachment": "添加附件",
+    "planMode": "计划模式",
     "removeReference": "移除引用",
-    "quoteSelection": "引用选中内容"
+    "quoteSelection": "引用选中内容",
+    "requestUserInput": {
+      "title": "需要你的输入",
+      "recommended": "推荐",
+      "other": "其他",
+      "otherPlaceholder": "输入自定义回答",
+      "continue": "继续",
+      "dismiss": "关闭",
+      "previousQuestion": "上一个问题",
+      "nextQuestion": "下一个问题",
+      "questionProgress": "{{current}} / {{total}}",
+      "optionInfo": "{{label}} 的说明",
+      "submit": "继续"
+    }
   },
   "sheet": {
     "close": "关闭"
@@ -101,6 +115,11 @@
     "loading": "正在加载",
     "thinking": "正在思考",
     "answering": "正在生成",
+    "requestUserInputResult": {
+      "title": "已确认选择",
+      "option": "选项",
+      "other": "其他"
+    },
     "toolGroup": {
       "status": {
         "running": "正在处理",

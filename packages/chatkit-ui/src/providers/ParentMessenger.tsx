@@ -246,6 +246,14 @@ export function ParentMessengerProvider({
           }
           return;
         }
+        const requestHumanInput =
+          params.planMode === true ||
+          params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true
+            ? {
+                ...humanInput,
+                planMode: true,
+              }
+            : humanInput;
 
         const newMessage: Message & {
           references?: typeof references;
@@ -271,12 +279,12 @@ export function ParentMessengerProvider({
         const requestOptions = buildInjectedRequestOptions({
           defaults: latestOptionsRef.current?.request,
           state: params.state,
-          humanInput,
+          humanInput: requestHumanInput,
         });
 
         stream?.submit(
           {
-            input: humanInput,
+            input: requestHumanInput,
             ...(requestOptions.state ? { state: requestOptions.state } : {}),
           },
           {

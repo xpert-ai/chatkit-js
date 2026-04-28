@@ -21,12 +21,20 @@ import { type ToolCall } from '@langchain/core/messages/tool';
 import {
   ChatMessageEventTypeEnum,
   ChatMessageTypeEnum,
+  REQUEST_USER_INPUT_TOOL_NAME,
+  isLangGraphInterruptPayload,
+  isClientToolRequest,
   type ChatKitReference,
   type ChatKitReferenceCompositionMode,
   type ClientToolMessageInput,
   type ClientToolRequest,
   type ClientToolResponse,
   type FollowUpBehavior,
+  type LangGraphInterruptPayload,
+  type RequestUserInputAnswer,
+  type RequestUserInputToolArgs,
+  type RequestUserInputQuestion,
+  type RequestUserInputResult,
   type TChatRequest,
   type ChatEventEnvelope,
   type TMessageContentComplex,
@@ -68,7 +76,6 @@ import {
   getQueuedFollowUpGroup,
   isHiddenPendingFollowUpMessage,
   mapPersistedPendingFollowUp,
-  mergeFollowUpHumanInputs,
   mergeQueuedFollowUpGroup,
   pendingFollowUpToUiMessage,
   readPersistedFollowUpBehavior,
@@ -101,6 +108,7 @@ type ChatKitAIMessage = Message & {
   followUpStatus?: FollowUpStatus;
   targetExecutionId?: string | null;
   visibleAt?: string | null;
+  clientToolCalls?: ToolCall[];
 };
 
 type ChatKitMessageContentPart = NonNullable<
@@ -108,6 +116,13 @@ type ChatKitMessageContentPart = NonNullable<
 >[number];
 
 export type StateType = { messages: ChatKitAIMessage[] };
+
+export type PendingRequestUserInput = {
+  id: string;
+  toolCallId?: string;
+  params: RequestUserInputToolArgs;
+  createdAt: number;
+};
 
 export type StreamSubmitOptions = {
   optimisticValues?:
@@ -137,6 +152,7 @@ export type StreamContextType = {
   messages: ChatKitAIMessage[];
   todos: TodoListSnapshot | null;
   pendingFollowUps: PendingFollowUp[];
+  pendingRequestUserInput: PendingRequestUserInput | null;
   followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
   isReady: boolean;
@@ -158,6 +174,7 @@ export type StreamContextType = {
   canSendPendingFollowUpNow: (id: string) => boolean;
   sendPendingFollowUpNow: (id: string) => Promise<void>;
   promotePendingFollowUpToSteer: (id: string) => Promise<void>;
+  submitRequestUserInput: (answers: RequestUserInputAnswer[]) => void;
   setThreadId: (threadId: string | null) => void;
 };
 
@@ -168,6 +185,23 @@ const defaultApiUrl =
   'https://api.xpertai.cn/api/ai';
 
 const DEFAULT_HISTORY_LIMIT = 200;
+
+function createAbortError(message: string): Error | DOMException {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException(message, 'AbortError');
+  }
+
+  return new Error(message);
+}
+
+function isAbortError(error: unknown) {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'name' in error &&
+    (error as { name?: unknown }).name === 'AbortError'
+  );
+}
 
 function withClientSecretHeaders(
   headers: HeadersInit | undefined,
@@ -334,6 +368,18 @@ function extractReferences(value: unknown): ChatKitReference[] | undefined {
   }
 
   return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractToolCalls(value: unknown): ToolCall[] | undefined {
+  if (!isClientToolRequest(value) || value.clientToolCalls.length === 0) {
+    return undefined;
+  }
+
+  return value.clientToolCalls;
 }
 
 function extractSubmittedInput(value: unknown): string | undefined {
@@ -683,12 +729,14 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     extractSubmittedInput(raw) ??
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(raw);
+  const toolCalls = extractToolCalls(raw);
 
   return {
     id,
     type,
     content,
     executionId,
+    ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
     ...(references ? { references } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
@@ -705,6 +753,7 @@ function extractMessageMeta(data: unknown) {
     references?: ChatKitReference[];
     submittedInput?: string;
     referenceComposition?: ChatKitReferenceCompositionMode;
+    clientToolCalls?: ToolCall[];
   } = {};
 
   if (typeof raw.id === 'string') meta.id = raw.id;
@@ -715,6 +764,7 @@ function extractMessageMeta(data: unknown) {
   const references = extractReferences(raw);
   const submittedInput = extractSubmittedInput(raw);
   const referenceComposition = extractReferenceComposition(raw);
+  const clientToolCalls = extractToolCalls(raw);
   if (references) {
     meta.references = references;
   }
@@ -723,6 +773,9 @@ function extractMessageMeta(data: unknown) {
   }
   if (referenceComposition) {
     meta.referenceComposition = referenceComposition;
+  }
+  if (clientToolCalls) {
+    meta.clientToolCalls = clientToolCalls;
   }
 
   return meta;
@@ -803,40 +856,173 @@ function appendMessageComponent(
 }
 
 function normalizeClientToolRequest(value: unknown): ClientToolRequest | null {
+  return isClientToolRequest(value) ? value : null;
+}
+
+function readTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function normalizeRequestUserInputParams(
+  value: unknown,
+): RequestUserInputToolArgs | null {
   if (!value || typeof value !== 'object') return null;
-  const raw = value as {
-    clientToolCalls?: unknown;
-    toolCalls?: unknown;
-    tool_calls?: unknown;
-  };
-  const calls =
-    (Array.isArray(raw.clientToolCalls) && raw.clientToolCalls) ||
-    (Array.isArray(raw.toolCalls) && raw.toolCalls) ||
-    (Array.isArray(raw.tool_calls) && raw.tool_calls);
-  if (!calls) return null;
-  return { clientToolCalls: calls as ToolCall[] };
+
+  const questions = (value as { questions?: unknown }).questions;
+  if (
+    !Array.isArray(questions) ||
+    questions.length < 1 ||
+    questions.length > 3
+  ) {
+    return null;
+  }
+
+  const normalizedQuestions: RequestUserInputQuestion[] = [];
+  for (const question of questions) {
+    if (!question || typeof question !== 'object') return null;
+
+    const rawQuestion = question as {
+      id?: unknown;
+      header?: unknown;
+      question?: unknown;
+      options?: unknown;
+    };
+    const id = readTrimmedString(rawQuestion.id);
+    const header = readTrimmedString(rawQuestion.header);
+    const questionText = readTrimmedString(rawQuestion.question);
+    if (!id || !header || !questionText) return null;
+
+    const options = rawQuestion.options;
+    if (!Array.isArray(options) || options.length < 2 || options.length > 3) {
+      return null;
+    }
+
+    const normalizedOptions = options.map((option) => {
+      if (!option || typeof option !== 'object') return null;
+      const rawOption = option as {
+        label?: unknown;
+        description?: unknown;
+      };
+      const label = readTrimmedString(rawOption.label);
+      if (!label || typeof rawOption.description !== 'string') return null;
+
+      return {
+        label,
+        description: rawOption.description.trim(),
+      };
+    });
+
+    if (normalizedOptions.some((option) => option === null)) return null;
+
+    normalizedQuestions.push({
+      id,
+      header,
+      question: questionText,
+      options: normalizedOptions as RequestUserInputQuestion['options'],
+    });
+  }
+
+  return { questions: normalizedQuestions };
+}
+
+export function normalizeRequestUserInputToolCall(
+  call: ToolCall,
+): RequestUserInputToolArgs | null {
+  if (call.name !== REQUEST_USER_INPUT_TOOL_NAME) {
+    return null;
+  }
+
+  return normalizeRequestUserInputParams(call.args);
 }
 
 function collectClientToolRequests(payload: unknown): ClientToolRequest[] {
-  if (!payload || typeof payload !== 'object') return [];
-  const raw = payload as { tasks?: unknown };
-  if (!Array.isArray(raw.tasks)) return [];
+  if (!isLangGraphInterruptPayload(payload)) return [];
 
   const requests: ClientToolRequest[] = [];
-  for (const task of raw.tasks) {
-    if (!task || typeof task !== 'object') continue;
-    const interrupts = (task as { interrupts?: unknown }).interrupts;
-    if (!Array.isArray(interrupts)) continue;
-    for (const interrupt of interrupts) {
-      if (!interrupt || typeof interrupt !== 'object') continue;
-      const request = normalizeClientToolRequest(
-        (interrupt as { value?: unknown }).value,
-      );
+  const interruptPayload: LangGraphInterruptPayload = payload;
+  for (const task of interruptPayload.tasks) {
+    for (const interrupt of task.interrupts) {
+      const request = normalizeClientToolRequest(interrupt.value);
       if (request) requests.push(request);
     }
   }
 
   return requests;
+}
+
+function getToolCallIdentity(call: ToolCall): string {
+  return typeof call.id === 'string' && call.id.trim()
+    ? call.id
+    : `${call.name}:${JSON.stringify(call.args ?? {})}`;
+}
+
+function mergeClientToolCalls(
+  existing: unknown,
+  incoming: ToolCall[],
+): ToolCall[] {
+  const calls = Array.isArray(existing) ? ([...existing] as ToolCall[]) : [];
+  const seen = new Set(calls.map(getToolCallIdentity));
+
+  for (const call of incoming) {
+    const key = getToolCallIdentity(call);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    calls.push(call);
+  }
+
+  return calls;
+}
+
+function collectClientToolCalls(payload: unknown): ToolCall[] {
+  return collectClientToolRequests(payload).flatMap(
+    (request) => request.clientToolCalls ?? [],
+  );
+}
+
+function rememberClientToolCalls(
+  setValues: React.Dispatch<React.SetStateAction<StateType>>,
+  calls: ToolCall[],
+) {
+  if (calls.length === 0) return;
+
+  setValues((prev) => {
+    const messages = prev.messages ?? [];
+    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+
+    if (lastAssistantIndex < 0) {
+      return {
+        ...prev,
+        messages: [
+          ...messages,
+          {
+            id: createMessageId(),
+            type: 'ai',
+            content: '',
+            clientToolCalls: calls,
+          } as ChatKitAIMessage,
+        ],
+      };
+    }
+
+    const nextMessages = [...messages];
+    const lastAssistantMessage = nextMessages[lastAssistantIndex] as
+      | (ChatKitAIMessage & { clientToolCalls?: ToolCall[] })
+      | undefined;
+
+    if (!lastAssistantMessage) return prev;
+
+    nextMessages[lastAssistantIndex] = {
+      ...lastAssistantMessage,
+      clientToolCalls: mergeClientToolCalls(
+        lastAssistantMessage.clientToolCalls,
+        calls,
+      ),
+    } as ChatKitAIMessage;
+
+    return { ...prev, messages: nextMessages };
+  });
 }
 
 function normalizeToolMessagesResponse(
@@ -853,6 +1039,37 @@ function normalizeToolMessagesResponse(
     };
   }
   return null;
+}
+
+export async function resolveClientToolCallResponse(
+  call: ToolCall,
+  {
+    isParentAvailable,
+    sendCommand,
+    waitForRequestUserInput,
+  }: {
+    isParentAvailable: boolean;
+    sendCommand: ParentMessenger['sendCommand'];
+    waitForRequestUserInput: (
+      call: ToolCall,
+      params: RequestUserInputToolArgs,
+    ) => Promise<ClientToolMessageInput>;
+  },
+): Promise<unknown | null> {
+  const requestUserInputParams = normalizeRequestUserInputToolCall(call);
+  if (requestUserInputParams) {
+    return waitForRequestUserInput(call, requestUserInputParams);
+  }
+
+  if (!isParentAvailable) {
+    return null;
+  }
+
+  return sendCommand('onClientToolCall', {
+    name: call.name,
+    params: call.args,
+    id: call.id,
+  });
 }
 
 /**
@@ -992,6 +1209,9 @@ export function applyStreamEvent(
           ...(meta.referenceComposition
             ? { referenceComposition: meta.referenceComposition }
             : {}),
+          ...(meta.clientToolCalls
+            ? { clientToolCalls: meta.clientToolCalls }
+            : {}),
         };
         setValues((prev) => {
           const messages = prev.messages ?? [];
@@ -1014,6 +1234,9 @@ export function applyStreamEvent(
                   : {}),
                 ...(meta.referenceComposition
                   ? { referenceComposition: meta.referenceComposition }
+                  : {}),
+                ...(meta.clientToolCalls
+                  ? { clientToolCalls: meta.clientToolCalls }
                   : {}),
               };
               if (
@@ -1058,12 +1281,19 @@ export function applyStreamEvent(
             ...(meta.referenceComposition
               ? { referenceComposition: meta.referenceComposition }
               : {}),
+            ...(meta.clientToolCalls
+              ? { clientToolCalls: meta.clientToolCalls }
+              : {}),
           };
         });
         break;
       }
       case ChatMessageEventTypeEnum.ON_INTERRUPT: {
         interrupts.push(payload.data);
+        rememberClientToolCalls(
+          setValues,
+          collectClientToolCalls(payload.data),
+        );
         break;
       }
       case ChatMessageEventTypeEnum.ON_CLIENT_EFFECT: {
@@ -1129,6 +1359,8 @@ const StreamSession = ({
   const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
     [],
   );
+  const [pendingRequestUserInput, setPendingRequestUserInput] =
+    useState<PendingRequestUserInput | null>(null);
   const [autoQueuedFollowUpIds, setAutoQueuedFollowUpIds] = useState<string[]>(
     [],
   );
@@ -1149,6 +1381,13 @@ const StreamSession = ({
   const submitRef = useRef<StreamContextType['submit'] | null>(null);
   const todosRef = useRef<TodoListSnapshot | null>(null);
   const pendingFollowUpsRef = useRef<PendingFollowUp[]>([]);
+  const pendingRequestUserInputRef = useRef<PendingRequestUserInput | null>(
+    null,
+  );
+  const requestUserInputResolverRef = useRef<{
+    resolve: (message: ClientToolMessageInput) => void;
+    reject: (error: unknown) => void;
+  } | null>(null);
   const autoQueuedFollowUpIdsRef = useRef<Set<string>>(new Set());
   const queueDrainPromiseRef = useRef<Promise<void> | null>(null);
   const runtimeClientSecretRef = useRef(apiKey);
@@ -1184,6 +1423,81 @@ const StreamSession = ({
     todosRef.current = nextTodos;
     setTodos(nextTodos);
   }, []);
+  const updatePendingRequestUserInput = useCallback(
+    (nextRequest: PendingRequestUserInput | null) => {
+      pendingRequestUserInputRef.current = nextRequest;
+      setPendingRequestUserInput(nextRequest);
+    },
+    [],
+  );
+  const clearPendingRequestUserInput = useCallback(
+    (reason?: unknown) => {
+      const resolver = requestUserInputResolverRef.current;
+      requestUserInputResolverRef.current = null;
+      updatePendingRequestUserInput(null);
+
+      if (resolver) {
+        resolver.reject(
+          reason ??
+            createAbortError('The pending user input request was cancelled.'),
+        );
+      }
+    },
+    [updatePendingRequestUserInput],
+  );
+  const waitForRequestUserInput = useCallback(
+    (toolCall: ToolCall, params: RequestUserInputToolArgs) => {
+      clearPendingRequestUserInput(
+        createAbortError('A newer user input request replaced this one.'),
+      );
+
+      const requestId = toolCall.id ?? createMessageId();
+      const pendingRequest: PendingRequestUserInput = {
+        id: requestId,
+        ...(toolCall.id ? { toolCallId: toolCall.id } : {}),
+        params,
+        createdAt: Date.now(),
+      };
+
+      updatePendingRequestUserInput(pendingRequest);
+
+      return new Promise<ClientToolMessageInput>((resolve, reject) => {
+        requestUserInputResolverRef.current = {
+          resolve,
+          reject,
+        };
+      });
+    },
+    [clearPendingRequestUserInput, updatePendingRequestUserInput],
+  );
+  const submitRequestUserInput = useCallback(
+    (answers: RequestUserInputAnswer[]) => {
+      const pendingRequest = pendingRequestUserInputRef.current;
+      const resolver = requestUserInputResolverRef.current;
+      if (!pendingRequest || !resolver) {
+        return;
+      }
+
+      const content: RequestUserInputResult = { answers };
+      requestUserInputResolverRef.current = null;
+      updatePendingRequestUserInput(null);
+      resolver.resolve({
+        tool_call_id: pendingRequest.toolCallId ?? pendingRequest.id,
+        name: REQUEST_USER_INPUT_TOOL_NAME,
+        content,
+        status: 'success',
+      });
+    },
+    [updatePendingRequestUserInput],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearPendingRequestUserInput(
+        createAbortError('The user input request was cancelled.'),
+      );
+    };
+  }, [clearPendingRequestUserInput]);
 
   useEffect(() => {
     const nextOrganizationId = organizationId?.trim();
@@ -1245,8 +1559,11 @@ const StreamSession = ({
       lastThreadIdRef.current = currentThreadId;
       lastEventIdRef.current = null;
       setContextUsageByAgentKey({});
+      clearPendingRequestUserInput(
+        createAbortError('The user input request was cancelled.'),
+      );
     }
-  }, [threadId]);
+  }, [clearPendingRequestUserInput, threadId]);
 
   const refreshClientSecret =
     useCallback(async (): Promise<ResolvedClientSecret> => {
@@ -1346,13 +1663,16 @@ const StreamSession = ({
     const activeRunId = lastExecutionIdRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
+    clearPendingRequestUserInput(
+      createAbortError('The user input request was cancelled.'),
+    );
     setIsLoading(false);
     if (activeThreadId && activeRunId) {
       client.runs
         .cancel(activeThreadId, activeRunId, false)
         .catch(() => undefined);
     }
-  }, [client, threadId]);
+  }, [clearPendingRequestUserInput, client, threadId]);
 
   const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
@@ -1528,6 +1848,9 @@ const StreamSession = ({
       abortRef.current = null;
       setIsLoading(false);
       setError(null);
+      clearPendingRequestUserInput(
+        createAbortError('The user input request was cancelled.'),
+      );
       setPendingFollowUps([]);
       setAutoQueuedFollowUpIds([]);
       updateTodos(null);
@@ -1544,12 +1867,11 @@ const StreamSession = ({
         setThreadId(newThreadId);
       }
     },
-    [setThreadId, threadId, updateTodos],
+    [clearPendingRequestUserInput, setThreadId, threadId, updateTodos],
   );
 
   const handleInterrupt = useCallback(
     async (data: unknown) => {
-      if (!isParentAvailable) return;
       const requests = collectClientToolRequests(data);
       if (requests.length === 0) return;
 
@@ -1559,12 +1881,18 @@ const StreamSession = ({
         for (const call of calls) {
           let response: unknown;
           try {
-            response = await sendCommand('onClientToolCall', {
-              name: call.name,
-              params: call.args,
-              id: call.id,
+            response = await resolveClientToolCallResponse(call, {
+              isParentAvailable,
+              sendCommand,
+              waitForRequestUserInput,
             });
+            if (!response) {
+              continue;
+            }
           } catch (requestError) {
+            if (isAbortError(requestError)) {
+              continue;
+            }
             setError(requestError);
             continue;
           }
@@ -1591,7 +1919,7 @@ const StreamSession = ({
         );
       }
     },
-    [isParentAvailable, sendCommand, setError],
+    [isParentAvailable, sendCommand, setError, waitForRequestUserInput],
   );
 
   const resolveConversationId = useCallback(
@@ -1937,6 +2265,7 @@ const StreamSession = ({
       flushSteerFollowUps,
       markPendingFollowUpsAsQueued,
       removePendingFollowUps,
+      updateTodos,
     ],
   );
 
@@ -2003,7 +2332,14 @@ const StreamSession = ({
 
       await runStream(threadId, null, { joinExistingThread: true }, runId);
     },
-    [client, runStream, stop, loadConversationMessages, setThreadId, updateTodos],
+    [
+      client,
+      runStream,
+      stop,
+      loadConversationMessages,
+      setThreadId,
+      updateTodos,
+    ],
   );
 
   useEffect(() => {
@@ -2187,6 +2523,7 @@ const StreamSession = ({
     messages: values.messages ?? [],
     todos,
     pendingFollowUps,
+    pendingRequestUserInput,
     followUpBehavior,
     isLoading,
     isReady,
@@ -2201,6 +2538,7 @@ const StreamSession = ({
     canSendPendingFollowUpNow,
     sendPendingFollowUpNow,
     promotePendingFollowUpToSteer,
+    submitRequestUserInput,
     setThreadId,
   };
 

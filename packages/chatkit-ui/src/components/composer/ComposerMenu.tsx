@@ -4,6 +4,7 @@ import {
   Globe,
   Images,
   Lightbulb,
+  ListChecks,
   Paperclip,
   Pencil,
   Plus,
@@ -23,6 +24,8 @@ export type ComposerMenuProps = {
   onAttachmentClick?: () => void;
   onToolSelect?: (tool: ToolOption) => void;
   selectedTool?: ToolOption | null;
+  planModeEnabled?: boolean;
+  onPlanModeChange?: (enabled: boolean) => void;
   disabled?: boolean;
 };
 
@@ -48,6 +51,8 @@ export function ComposerMenu({
   onAttachmentClick,
   onToolSelect,
   selectedTool,
+  planModeEnabled = false,
+  onPlanModeChange,
   disabled = false,
 }: ComposerMenuProps) {
   const { t } = useChatkitTranslation();
@@ -59,11 +64,6 @@ export function ComposerMenu({
   const attachmentsEnabled = composer?.attachments?.enabled ?? false;
   const tools = composer?.tools ?? [];
 
-  // If no attachments and no tools, don't render the menu
-  if (!attachmentsEnabled && tools.length === 0) {
-    return null;
-  }
-
   const handleAttachmentClick = () => {
     onAttachmentClick?.();
     setOpen(false);
@@ -72,6 +72,10 @@ export function ComposerMenu({
   const handleToolSelect = (tool: ToolOption) => {
     onToolSelect?.(tool);
     setOpen(false);
+  };
+
+  const handlePlanModeToggle = () => {
+    onPlanModeChange?.(!planModeEnabled);
   };
 
   return (
@@ -110,10 +114,43 @@ export function ComposerMenu({
                 </span>
                 <span>{t('composer.addAttachment')}</span>
               </button>
-              {tools.length > 0 && (
-                <div className="my-1 h-px bg-border" />
-              )}
+              <div className="my-1 h-px bg-border" />
             </>
+          )}
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={planModeEnabled}
+            onClick={handlePlanModeToggle}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted transition-colors",
+              roundedClass,
+              planModeEnabled && "bg-muted"
+            )}
+          >
+            <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
+              <ListChecks size={16} />
+            </span>
+            <span className="min-w-0 flex-1 text-left">{t('composer.planMode')}</span>
+            <span
+              className={cn(
+                'relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors',
+                planModeEnabled ? 'bg-primary' : 'bg-muted-foreground/20',
+              )}
+              aria-hidden="true"
+            >
+              <span
+                className={cn(
+                  'inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform',
+                  planModeEnabled ? 'translate-x-[18px]' : 'translate-x-0.5',
+                )}
+              />
+            </span>
+          </button>
+
+          {tools.length > 0 && (
+            <div className="my-1 h-px bg-border" />
           )}
 
           {/* Tools */}

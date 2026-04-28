@@ -430,12 +430,18 @@ function flushPendingTools(
 
 export function buildToolComponentRenderUnits(
   content: Array<TMessageContentComplex | string | undefined>,
+  options?: {
+    shouldGroupComponent?: (content: TMessageContentComponent) => boolean;
+  },
 ): ToolComponentRenderUnit[] {
   const units: ToolComponentRenderUnit[] = [];
   const pendingTools: PendingToolComponent[] = [];
 
   content.forEach((item, index) => {
-    if (isGroupableToolComponent(item)) {
+    if (
+      isGroupableToolComponent(item) &&
+      options?.shouldGroupComponent?.(item) !== false
+    ) {
       pendingTools.push({ item, index });
       return;
     }
