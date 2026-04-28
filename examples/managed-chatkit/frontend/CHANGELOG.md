@@ -1,5 +1,13 @@
 # managed-chatkit-frontend
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [e598ceb]
+  - @xpert-ai/chatkit-types@0.2.0
+  - @xpert-ai/chatkit-react@0.1.1
+
 ## 0.0.8
 
 ### Patch Changes

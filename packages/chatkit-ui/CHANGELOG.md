@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-ui
 
+## 0.2.0
+
+### Minor Changes
+
+- e598ceb: plan mode
+
+### Patch Changes
+
+- Updated dependencies [e598ceb]
+  - @xpert-ai/chatkit-types@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes
