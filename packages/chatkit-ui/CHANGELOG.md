@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.2.1
+
+### Patch Changes
+
+- 17eaff4: plan mode's plan card
+- Updated dependencies [17eaff4]
+  - @xpert-ai/chatkit-types@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

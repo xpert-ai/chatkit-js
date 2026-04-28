@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.2.1
+
+### Patch Changes
+
+- 17eaff4: plan mode's plan card
+
 ## 0.2.0
 
 ### Minor Changes
