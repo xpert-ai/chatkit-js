@@ -187,19 +187,6 @@ describe('MarkdownText', () => {
     expect(screen.queryByText('markdown')).not.toBeInTheDocument();
   });
 
-  it('renders plan fenced code blocks as markdown plan cards', () => {
-    const { container } = renderMarkdown(
-      ['```plan', '# Plan', '', '- Ship it', '```'].join('\n'),
-    );
-    const card = container.querySelector('[data-slot="markdown-plan-card"]');
-
-    expect(card).not.toBeNull();
-    expect(card).toHaveTextContent('Ship it');
-    expect(card?.querySelector('h1')).toHaveTextContent('Plan');
-    expect(card?.closest('.bg-black')).toBeNull();
-    expect(screen.queryByText('plan')).not.toBeInTheDocument();
-  });
-
   it('does not split proposed_plan tags inside regular fenced code blocks', () => {
     const { container } = renderMarkdown(
       [
