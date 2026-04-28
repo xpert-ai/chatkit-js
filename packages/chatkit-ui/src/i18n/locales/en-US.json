@@ -94,6 +94,9 @@
   },
   "markdown": {
     "copy": "Copy",
+    "plan": {
+      "download": "Download Markdown"
+    },
     "mermaid": {
       "title": "Mermaid",
       "diagram": "Diagram",

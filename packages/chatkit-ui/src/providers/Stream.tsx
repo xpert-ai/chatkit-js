@@ -21,6 +21,9 @@ import { type ToolCall } from '@langchain/core/messages/tool';
 import {
   ChatMessageEventTypeEnum,
   ChatMessageTypeEnum,
+  REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION,
+  REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
+  REQUEST_USER_INPUT_RESULT_TYPE,
   REQUEST_USER_INPUT_TOOL_NAME,
   isLangGraphInterruptPayload,
   isClientToolRequest,
@@ -35,6 +38,7 @@ import {
   type RequestUserInputToolArgs,
   type RequestUserInputQuestion,
   type RequestUserInputResult,
+  type RequestUserInputResultPurpose,
   type TChatRequest,
   type ChatEventEnvelope,
   type TMessageContentComplex,
@@ -368,10 +372,6 @@ function extractReferences(value: unknown): ChatKitReference[] | undefined {
   }
 
   return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function extractToolCalls(value: unknown): ToolCall[] | undefined {
@@ -937,6 +937,18 @@ export function normalizeRequestUserInputToolCall(
   return normalizeRequestUserInputParams(call.args);
 }
 
+export function getRequestUserInputResultPurpose(
+  params: RequestUserInputToolArgs,
+): RequestUserInputResultPurpose {
+  const questions = params.questions;
+
+  if (questions.length === 1 && questions[0]?.id === 'implement_plan') {
+    return REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION;
+  }
+
+  return REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION;
+}
+
 function collectClientToolRequests(payload: unknown): ClientToolRequest[] {
   if (!isLangGraphInterruptPayload(payload)) return [];
 
@@ -1478,7 +1490,11 @@ const StreamSession = ({
         return;
       }
 
-      const content: RequestUserInputResult = { answers };
+      const content: RequestUserInputResult = {
+        type: REQUEST_USER_INPUT_RESULT_TYPE,
+        purpose: getRequestUserInputResultPurpose(pendingRequest.params),
+        answers,
+      };
       requestUserInputResolverRef.current = null;
       updatePendingRequestUserInput(null);
       resolver.resolve({

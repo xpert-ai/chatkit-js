@@ -3,6 +3,9 @@ import {
   CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
   ChatMessageTypeEnum,
+  REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION,
+  REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
+  REQUEST_USER_INPUT_RESULT_TYPE,
   type TThreadContextUsageEvent,
 } from '@xpert-ai/chatkit-types';
 
@@ -16,6 +19,7 @@ import {
   getNextAutoQueuedFollowUp,
   getQueuedFollowUpGroup,
   getPendingSteerFollowUpIds,
+  getRequestUserInputResultPurpose,
   mergeFollowUpHumanInputs,
   mergeQueuedFollowUpGroup,
   normalizeRequestUserInputParams,
@@ -104,7 +108,11 @@ describe('request_user_input normalization', () => {
       tool_call_id: 'call-1',
       name: 'request_user_input',
       status: 'success',
-      content: { answers: [] },
+      content: {
+        type: REQUEST_USER_INPUT_RESULT_TYPE,
+        purpose: REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
+        answers: [],
+      },
     });
 
     const response = await resolveClientToolCallResponse(
@@ -129,6 +137,33 @@ describe('request_user_input normalization', () => {
       validParams,
     );
     expect(sendCommand).not.toHaveBeenCalled();
+  });
+
+  it('marks request_user_input results as clarification until the implementation confirmation question', () => {
+    expect(getRequestUserInputResultPurpose(validParams)).toBe(
+      REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
+    );
+    expect(
+      getRequestUserInputResultPurpose({
+        questions: [
+          {
+            id: 'implement_plan',
+            header: 'Confirm',
+            question: 'Implement this plan?',
+            options: [
+              {
+                label: 'Yes, implement this plan',
+                description: 'Proceed with the proposed implementation.',
+              },
+              {
+                label: 'No, stop here',
+                description: 'Do not implement anything.',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION);
   });
 
   it('remembers request_user_input clientToolCalls from interrupt events for result components', () => {

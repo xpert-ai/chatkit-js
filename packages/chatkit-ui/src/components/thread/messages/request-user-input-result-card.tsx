@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  REQUEST_USER_INPUT_RESULT_TYPE,
   REQUEST_USER_INPUT_TOOL_NAME,
   type ChatkitMessage,
   type RequestUserInputAnswer,
@@ -48,7 +49,9 @@ function pushClientToolCallsFromRecord(record: RecordLike, calls: unknown[]) {
   }
 }
 
-function collectPotentialToolCalls(messages: ChatkitMessage | ChatkitMessage[]): unknown[] {
+function collectPotentialToolCalls(
+  messages: ChatkitMessage | ChatkitMessage[],
+): unknown[] {
   const calls: unknown[] = [];
   const messageList = Array.isArray(messages) ? messages : [messages];
 
@@ -105,7 +108,14 @@ function normalizeAnswer(value: unknown): RequestUserInputAnswer | null {
   };
 }
 
-function parseResultOutput(output: unknown): RequestUserInputAnswer[] | null {
+type ParsedRequestUserInputResult = {
+  answers: RequestUserInputAnswer[];
+  hasExplicitType: boolean;
+};
+
+function parseResultOutput(
+  output: unknown,
+): ParsedRequestUserInputResult | null {
   let result = output;
 
   if (typeof output === 'string') {
@@ -120,12 +130,16 @@ function parseResultOutput(output: unknown): RequestUserInputAnswer[] | null {
     return null;
   }
 
+  const hasExplicitType = result.type === REQUEST_USER_INPUT_RESULT_TYPE;
   const answers = result.answers.map(normalizeAnswer);
   if (answers.some((answer) => answer === null)) {
     return null;
   }
 
-  return answers as RequestUserInputAnswer[];
+  return {
+    answers: answers as RequestUserInputAnswer[],
+    hasExplicitType,
+  };
 }
 
 export function getRequestUserInputResultCardData(
@@ -139,19 +153,24 @@ export function getRequestUserInputResultCardData(
     return null;
   }
 
-  const toolCall = findRequestUserInputClientToolCallById(messages, content.id);
-  if (!toolCall) {
+  const result = parseResultOutput(data.output);
+  if (!result || result.answers.length === 0) {
     return null;
   }
 
-  const answers = parseResultOutput(data.output);
-  if (!answers || answers.length === 0) {
-    return null;
+  if (!result.hasExplicitType) {
+    const toolCall = findRequestUserInputClientToolCallById(
+      messages,
+      content.id,
+    );
+    if (!toolCall) {
+      return null;
+    }
   }
 
   return {
     toolCallId: content.id,
-    answers,
+    answers: result.answers,
   };
 }
 
