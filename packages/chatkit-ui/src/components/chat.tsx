@@ -51,6 +51,7 @@ import { useThreads } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { buildInjectedRequestOptions } from '../lib/request-options';
 import {
   buildHumanMessageInputPayload,
@@ -1490,20 +1491,29 @@ export function Chat({
         {history?.enabled !== false && (
           <div className="flex items-center gap-1">
             {/* New thread button */}
-            <button
-              type="button"
-              onClick={handleNewThread}
-              disabled={missingConfig || isHistoryLoading}
-              className={cn(
-                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                'text-muted-foreground hover:text-foreground hover:bg-muted',
-                'transition-colors duration-150',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-              title={t('history.newThread')}
-            >
-              <Pencil size={16} />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex h-8 w-8">
+                  <button
+                    type="button"
+                    onClick={handleNewThread}
+                    disabled={missingConfig || isHistoryLoading}
+                    className={cn(
+                      'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                      'text-muted-foreground hover:text-foreground hover:bg-muted',
+                      'transition-colors duration-150',
+                      'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
+                    )}
+                    aria-label={t('history.newThread')}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t('history.newThread')}
+              </TooltipContent>
+            </Tooltip>
             <HistorySidebar
               threads={threads}
               currentThreadId={stream.threadId ?? undefined}

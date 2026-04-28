@@ -1,6 +1,7 @@
 import type { EventSourceMessage, FetchEventSourceInit } from "@microsoft/fetch-event-source"
 import { EventEmitter } from "./EventEmitter"
 import { fetchEventSourceWithRetry } from "./fetchEventSourceWithRetry.js"
+import { safeRandomUUID } from "./safeRandomUUID.js"
 import type { AnyFunction } from "./types"
 import { FrameSafeHttpError, HttpError } from "./errors/HttpError"
 import { FrameSafeIntegrationError, IntegrationError } from "./errors/IntegrationError"
@@ -124,7 +125,7 @@ export abstract class BaseMessenger<
 
   fetch<T = unknown>(url: string, params: RequestInit) {
     return new Promise<unknown>((resolve, reject) => {
-      const nonce = crypto.randomUUID()
+      const nonce = safeRandomUUID()
       this.handlers.set(nonce, { resolve, reject, stack: new Error().stack || "" })
 
       // Special case for FormData since it isn't structured cloneable
@@ -161,7 +162,7 @@ export abstract class BaseMessenger<
   ) {
     return new Promise<unknown>((resolve, reject) => {
       const { onmessage, signal, ...rest } = params
-      const nonce = crypto.randomUUID()
+      const nonce = safeRandomUUID()
 
       this.handlers.set(nonce, { resolve, reject, stack: new Error().stack || "" })
       this.fetchEventSourceHandlers.set(nonce, {
@@ -189,7 +190,7 @@ export abstract class BaseMessenger<
       get: (_, command: string) => {
         return (data: Record<string, unknown>, transfer?: Transferable[]) => {
           return new Promise<unknown>((resolve, reject) => {
-            const nonce = crypto.randomUUID()
+            const nonce = safeRandomUUID()
             this.handlers.set(nonce, { resolve, reject, stack: new Error().stack || "" })
             this.sendMessage(
               {
