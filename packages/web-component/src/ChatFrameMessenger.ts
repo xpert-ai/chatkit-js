@@ -1,5 +1,10 @@
 import { BaseMessenger } from "@xpert-ai/chatkit-web-shared"
-import { InnerCommands, InnerEvents, OuterCommands, OuterEvents } from "@xpert-ai/chatkit-web-shared"
+import type {
+  InnerCommands,
+  InnerEvents,
+  OuterCommands,
+  OuterEvents,
+} from "@xpert-ai/chatkit-web-shared"
 
 export class ChatFrameMessenger extends BaseMessenger<
   OuterCommands,

@@ -1,7 +1,9 @@
+/// <reference path="./import-meta-env.d.ts" />
+
 import { encodeBase64 } from '@xpert-ai/chatkit-web-shared';
 
 import { ChatFrameMessenger } from './ChatFrameMessenger';
-import {
+import type {
   Card,
   ChatKitOptions,
   Entity,
