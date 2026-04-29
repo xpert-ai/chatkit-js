@@ -1,3 +1,5 @@
+/// <reference path="../import-meta-env.d.ts" />
+
 import type { ChatKitResponseMetadata } from "./HttpError"
 
 export const FRAME_SAFE_ERROR_KEY = "__chatkit_error__"

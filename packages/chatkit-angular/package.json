@@ -11,11 +11,11 @@
     "README.md"
   ],
   "scripts": {
-    "prebuild": "node \"$npm_execpath\" --filter @xpert-ai/chatkit-web-component... build",
+    "prebuild": "pnpm --filter @xpert-ai/chatkit-web-component... build",
     "build": "ng-packagr -p ng-package.json",
-    "predev": "node \"$npm_execpath\" --filter @xpert-ai/chatkit-web-component... build",
+    "predev": "pnpm --filter @xpert-ai/chatkit-web-component... build",
     "dev": "ng-packagr -p ng-package.json -w",
-    "pretype-check": "node \"$npm_execpath\" --filter @xpert-ai/chatkit-web-component... build",
+    "pretype-check": "pnpm --filter @xpert-ai/chatkit-web-component... build",
     "type-check": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {

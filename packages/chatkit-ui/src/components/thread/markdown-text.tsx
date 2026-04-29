@@ -225,7 +225,7 @@ function PlanCard({ children }: { children: string }) {
     <section
       data-slot="markdown-plan-card"
       className={cn(
-        'relative my-5 max-w-4xl rounded-lg border border-border bg-muted/25',
+        'relative my-5 max-w-4xl rounded-2xl border border-border bg-muted/25 shadow-lg',
       )}
     >
       <div className="absolute top-3 right-3 flex items-center gap-1">
