@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-vue
 
+## 0.1.2
+
+### Patch Changes
+
+- 811dddc: web component import
+- Updated dependencies [811dddc]
+  - @xpert-ai/chatkit-web-component@0.2.1
+
 ## 0.1.1
 
 ### Patch Changes
