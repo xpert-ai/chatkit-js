@@ -576,10 +576,16 @@ export function Chat({
             return;
           }
 
-          viewport.scrollTo({
-            top: viewport.scrollHeight,
-            behavior: smooth ? 'smooth' : 'instant',
-          });
+          const top = viewport.scrollHeight;
+
+          if (typeof viewport.scrollTo === 'function') {
+            viewport.scrollTo({
+              top,
+              behavior: smooth ? 'smooth' : 'instant',
+            });
+          } else {
+            viewport.scrollTop = top;
+          }
         }
       });
     },
