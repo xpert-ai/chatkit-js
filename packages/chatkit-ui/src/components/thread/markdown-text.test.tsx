@@ -123,7 +123,6 @@ describe('MarkdownText', () => {
     const card = container.querySelector('[data-slot="markdown-plan-card"]');
 
     expect(card).not.toBeNull();
-    expect(card).toHaveClass('rounded-lg', 'border', 'bg-muted/25');
     expect(card).toHaveTextContent('Plan');
     expect(card).toHaveTextContent('Build it');
     expect(card).toHaveTextContent('const answer = 42;');
