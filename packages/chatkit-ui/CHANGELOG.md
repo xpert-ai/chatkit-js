@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.2.2
+
+### Patch Changes
+
+- 811dddc: web component import
+- Updated dependencies [811dddc]
+  - @xpert-ai/chatkit-web-shared@0.1.1
+
 ## 0.2.1
 
 ### Patch Changes
