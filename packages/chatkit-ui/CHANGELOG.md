@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.2.3
+
+### Patch Changes
+
+- 361c358: skills & middlewares selection
+- 16e8f37: Load runtime capabilities and delete uploaded files through the Xpert SDK client.
+- Updated dependencies [361c358]
+  - @xpert-ai/chatkit-types@0.2.2
+
 ## 0.2.2
 
 ### Patch Changes
