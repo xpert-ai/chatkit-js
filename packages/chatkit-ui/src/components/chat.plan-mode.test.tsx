@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   return {
@@ -8,9 +8,11 @@ const mocks = vi.hoisted(() => {
       client: {
         contexts: {
           uploadFile: vi.fn(),
+          deleteFile: vi.fn(),
         },
         assistants: {
           get: vi.fn().mockResolvedValue(null),
+          getRuntimeCapabilities: vi.fn().mockRejectedValue({ status: 404 }),
         },
       },
       apiUrl: 'https://api.example.com',
@@ -176,7 +178,11 @@ function renderChat() {
 }
 
 describe('Chat plan mode payload', () => {
+  const originalFetch = globalThis.fetch;
+
   beforeEach(() => {
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockClear();
     mocks.stream.submit.mockClear();
     mocks.stream.messages = [];
     mocks.stream.pendingFollowUps = [];
@@ -184,11 +190,22 @@ describe('Chat plan mode payload', () => {
     mocks.stream.isLoading = false;
   });
 
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   it('omits planMode from regular sends by default', async () => {
     renderChat();
 
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'hello' } });
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);
@@ -205,12 +222,93 @@ describe('Chat plan mode payload', () => {
     expect(mocks.stream.submit.mock.calls[0][0].input).not.toHaveProperty(
       'planMode',
     );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('loads runtime capabilities through the SDK client and submits the default allow-list', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [
+        {
+          id: 'skill-default',
+          workspaceId: 'workspace-1',
+          label: 'Default Skill',
+          default: true,
+        },
+      ],
+      plugins: [
+        {
+          nodeKey: 'middleware-1',
+          provider: 'sandbox',
+          label: 'Sandbox',
+        },
+      ],
+    });
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        mocks.stream.client.assistants.getRuntimeCapabilities,
+      ).toHaveBeenCalledWith(
+        'assistant-1',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hello' } });
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          input: 'hello',
+          runtimeCapabilities: {
+            mode: 'allowlist',
+            skills: {
+              workspaceId: 'workspace-1',
+              ids: ['skill-default'],
+            },
+            plugins: {
+              nodeKeys: [],
+            },
+          },
+        },
+        state: {
+          human: {
+            input: 'hello',
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: {
+                workspaceId: 'workspace-1',
+                ids: ['skill-default'],
+              },
+              plugins: {
+                nodeKeys: [],
+              },
+            },
+          },
+        },
+      }),
+      expect.any(Object),
+    );
   });
 
   it('adds planMode to input and state.human when enabled', async () => {
     renderChat();
 
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
     fireEvent.click(screen.getByTestId('plan-mode-toggle'));
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
+
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'plan this' } });
     const send = screen.getByRole('button', { name: 'send' });

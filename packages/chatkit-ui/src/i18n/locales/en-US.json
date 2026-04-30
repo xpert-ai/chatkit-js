@@ -73,6 +73,16 @@
     "openMenu": "Open menu",
     "addAttachment": "Add attachment",
     "planMode": "Plan mode",
+    "capabilities": {
+      "title": "Skills & Plugins",
+      "skills": "Skills",
+      "plugins": "Plugins",
+      "runOnly": "This run",
+      "removeRunCapability": "Remove capability",
+      "emptySearch": "No matching skills or plugins"
+    },
+    "planModeActive": "Plan",
+    "disablePlanMode": "Turn off plan mode",
     "removeReference": "Remove reference",
     "quoteSelection": "Quote selection",
     "requestUserInput": {
@@ -95,6 +105,9 @@
   "markdown": {
     "copy": "Copy",
     "plan": {
+      "title": "Plan",
+      "expand": "Expand plan",
+      "collapse": "Collapse plan",
       "download": "Download Markdown"
     },
     "mermaid": {

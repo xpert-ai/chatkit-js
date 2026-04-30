@@ -73,6 +73,16 @@
     "openMenu": "打开菜单",
     "addAttachment": "添加附件",
     "planMode": "计划模式",
+    "capabilities": {
+      "title": "技能和插件",
+      "skills": "技能",
+      "plugins": "插件",
+      "runOnly": "本次运行",
+      "removeRunCapability": "移除能力",
+      "emptySearch": "没有匹配的 skill 或 plugin"
+    },
+    "planModeActive": "计划",
+    "disablePlanMode": "关闭计划模式",
     "removeReference": "移除引用",
     "quoteSelection": "引用选中内容",
     "requestUserInput": {
@@ -95,6 +105,9 @@
   "markdown": {
     "copy": "复制",
     "plan": {
+      "title": "Plan",
+      "expand": "展开计划",
+      "collapse": "折叠计划",
       "download": "下载 Markdown"
     },
     "mermaid": {

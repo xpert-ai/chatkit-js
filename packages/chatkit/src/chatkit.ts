@@ -1,6 +1,7 @@
 import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
+  RuntimeCapabilitiesSelection,
 } from './message';
 import type { ChatKitOptions, FollowUpBehavior } from './options';
 
@@ -29,6 +30,7 @@ export type SendUserMessageParams = {
   toolChoice?: ToolChoice;
   model?: string;
   planMode?: boolean;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
   trigger?: WorkflowTriggerParams;
   followUpMode?: 'default' | FollowUpBehavior;
 };

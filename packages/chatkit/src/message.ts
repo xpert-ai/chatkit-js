@@ -287,6 +287,17 @@ export type ChatKitReference =
 
 export type ChatKitReferenceCompositionMode = 'compose' | 'preserve';
 
+export type RuntimeCapabilitiesSelection = {
+  mode: 'allowlist';
+  skills: {
+    workspaceId?: string;
+    ids: string[];
+  };
+  plugins: {
+    nodeKeys: string[];
+  };
+};
+
 export const STATE_VARIABLE_HUMAN = 'human';
 
 /**
@@ -298,6 +309,7 @@ export type TChatRequestHuman = {
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
   planMode?: boolean;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
   [key: string]: unknown;
 };
 

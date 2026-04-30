@@ -13,9 +13,10 @@ import {
   type ComponentPropsWithoutRef,
   type FC,
   type ReactNode,
+  useId,
   useState,
 } from 'react';
-import { CheckIcon, CopyIcon, DownloadIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, CopyIcon, DownloadIcon, ListChecksIcon } from 'lucide-react';
 import { SyntaxHighlighter } from './syntax-highlighter';
 import { MermaidBlock } from './mermaid-block';
 
@@ -212,6 +213,8 @@ function MarkdownContent({ children }: { children: string }) {
 function PlanCard({ children }: { children: string }) {
   const { t } = useChatkitTranslation();
   const planMarkdown = normalizePlanMarkdown(children);
+  const contentId = useId();
+  const [isExpanded, setIsExpanded] = useState(false);
   const { isCopied, copyToClipboard } = useCopyToClipboard();
   const onCopy = () => {
     if (!planMarkdown || isCopied) return;
@@ -225,29 +228,84 @@ function PlanCard({ children }: { children: string }) {
     <section
       data-slot="markdown-plan-card"
       className={cn(
-        'relative my-5 max-w-4xl rounded-2xl border border-border bg-muted/25 shadow-lg',
+        'relative my-5 max-w-4xl overflow-hidden rounded-2xl border border-border bg-muted/25 shadow-lg',
       )}
     >
-      <div className="absolute top-3 right-3 flex items-center gap-1">
-        <TooltipIconButton
-          tooltip={t('markdown.plan.download')}
-          onClick={onDownload}
-          className="bg-background/80 text-muted-foreground hover:text-foreground"
-        >
-          <DownloadIcon className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltip={isCopied ? t('messageActions.copied') : t('markdown.copy')}
-          onClick={onCopy}
-          className="bg-background/80 text-muted-foreground hover:text-foreground"
-        >
-          {!isCopied && <CopyIcon className="size-4" />}
-          {isCopied && <CheckIcon className="size-4" />}
-        </TooltipIconButton>
+      <div
+        data-slot="markdown-plan-card-header"
+        className="flex items-center justify-between gap-3 bg-background/80 px-4 py-3"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <ListChecksIcon className="size-4" />
+          </span>
+          <h2 className="truncate text-base font-semibold text-foreground">
+            {t('markdown.plan.title')}
+          </h2>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <TooltipIconButton
+            type="button"
+            tooltip={t('markdown.plan.download')}
+            onClick={onDownload}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <DownloadIcon className="size-4" />
+          </TooltipIconButton>
+          <TooltipIconButton
+            type="button"
+            tooltip={isCopied ? t('messageActions.copied') : t('markdown.copy')}
+            onClick={onCopy}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {!isCopied && <CopyIcon className="size-4" />}
+            {isCopied && <CheckIcon className="size-4" />}
+          </TooltipIconButton>
+          <TooltipIconButton
+            type="button"
+            tooltip={
+              isExpanded
+                ? t('markdown.plan.collapse')
+                : t('markdown.plan.expand')
+            }
+            aria-expanded={isExpanded}
+            aria-controls={contentId}
+            onClick={() => setIsExpanded((previous) => !previous)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDownIcon
+              className={cn(
+                'size-4 transition-transform',
+                isExpanded && 'rotate-180',
+              )}
+            />
+          </TooltipIconButton>
+        </div>
       </div>
-      <div className='w-full max-h-[80vh] py-3 pr-4 pl-4 overflow-auto'>
+      <div
+        id={contentId}
+        data-slot="markdown-plan-card-content"
+        data-state={isExpanded ? 'expanded' : 'collapsed'}
+        className={cn(
+          'relative w-full px-4 py-3 transition-[max-height] duration-300 ease-in-out',
+          isExpanded
+            ? 'max-h-[80vh] overflow-auto'
+            : 'max-h-[200px] overflow-hidden',
+        )}
+      >
         <MarkdownContent>{planMarkdown}</MarkdownContent>
       </div>
+      {!isExpanded && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-32 items-end justify-center bg-gradient-to-b from-background/0 via-background/80 to-background/95 pb-6">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="pointer-events-auto rounded-full bg-foreground px-3 py-1.5 text-xs font-semibold text-background shadow-sm transition-colors hover:bg-foreground/90"
+          >
+            {t('markdown.plan.expand')}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

@@ -10,6 +10,10 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
         'composer.openMenu': 'Open menu',
         'composer.addAttachment': 'Add attachment',
         'composer.planMode': 'Plan mode',
+        'composer.capabilities.skills': 'Skills',
+        'composer.capabilities.plugins': 'Plugins',
+        'composer.planModeActive': 'Plan',
+        'composer.disablePlanMode': 'Turn off plan mode',
       };
       return labels[key] ?? key;
     },
@@ -25,6 +29,12 @@ vi.mock('../../providers/Theme', () => ({
 }));
 
 describe('ComposerMenu', () => {
+  function openMenu() {
+    const trigger = screen.getByRole('button', { name: 'Open menu' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Enter', code: 'Enter' });
+  }
+
   it('renders plan mode even without attachments or tools', () => {
     const onPlanModeChange = vi.fn();
 
@@ -35,13 +45,38 @@ describe('ComposerMenu', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    openMenu();
 
     const planMode = screen.getByRole('switch', { name: 'Plan mode' });
     expect(planMode).toHaveAttribute('aria-checked', 'false');
 
     fireEvent.click(planMode);
     expect(onPlanModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it('renders an active plan mode indicator that disables plan mode', () => {
+    const onPlanModeChange = vi.fn();
+
+    render(
+      <ComposerMenu planModeEnabled onPlanModeChange={onPlanModeChange} />,
+    );
+
+    const activePlanMode = screen.getByRole('button', {
+      name: 'Turn off plan mode',
+    });
+    expect(activePlanMode).toHaveTextContent('Plan');
+    expect(
+      activePlanMode.querySelector('[data-slot="plan-mode-indicator-icon"]'),
+    ).toBeInTheDocument();
+    expect(
+      activePlanMode.querySelector('[data-slot="plan-mode-remove-icon"]'),
+    ).toHaveClass('opacity-0', 'group-hover:opacity-100');
+
+    fireEvent.click(activePlanMode);
+    expect(onPlanModeChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.getByRole('button', { name: 'Turn off plan mode' }),
+    ).toHaveClass('h-8', 'text-xs');
   });
 
   it('keeps attachments and tools behavior alongside plan mode', () => {
@@ -68,21 +103,112 @@ describe('ComposerMenu', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    openMenu();
 
-    expect(
-      screen.getByRole('switch', { name: 'Plan mode' }),
-    ).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('switch', { name: 'Plan mode' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add attachment' }));
     expect(onAttachmentClick).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Search' }));
     expect(onToolSelect).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'search',
       }),
+    );
+  });
+
+  it('renders skills and plugins as drilldown panels', async () => {
+    const onRuntimeCapabilityToggle = vi.fn();
+
+    render(
+      <ComposerMenu
+        runtimeCapabilities={{
+          skills: [
+            {
+              id: 'skill-1',
+              workspaceId: 'workspace-1',
+              label: 'Research Skill',
+              description: 'Search and summarize',
+              meta: {
+                icon: {
+                  type: 'svg',
+                  value:
+                    '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /></svg>',
+                },
+              },
+            },
+          ],
+          plugins: [
+            {
+              nodeKey: 'middleware-1',
+              provider: 'sandbox',
+              label: 'Sandbox Plugin',
+              description: 'Run commands',
+              meta: {
+                icon: {
+                  type: 'svg',
+                  value:
+                    '<svg viewBox="0 0 16 16"><path d="M2 2h12v12H2z" /></svg>',
+                },
+              },
+            },
+          ],
+        }}
+        selectedRuntimeCapabilities={{
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: [] },
+          plugins: { nodeKeys: [] },
+        }}
+        onRuntimeCapabilityToggle={onRuntimeCapabilityToggle}
+      />,
+    );
+
+    openMenu();
+
+    expect(
+      screen.getByRole('menuitem', { name: 'Skills' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'Plugins' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: /Research Skill/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
+    const skillItem = await screen.findByRole('menuitemcheckbox', {
+      name: /Research Skill/,
+    });
+    expect(
+      skillItem.querySelector('[data-slot="runtime-capability-meta-icon"] svg'),
+    ).toBeInTheDocument();
+    fireEvent.click(skillItem);
+    expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
+      'skill',
+      'skill-1',
+      true,
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Plugins' }));
+    const pluginItem = await screen.findByRole('menuitemcheckbox', {
+      name: /Sandbox Plugin/,
+    });
+    expect(
+      pluginItem.querySelector(
+        '[data-slot="runtime-capability-meta-icon"] svg',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(pluginItem);
+    expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
+      'plugin',
+      'middleware-1',
+      true,
     );
   });
 });

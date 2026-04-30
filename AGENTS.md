@@ -15,3 +15,7 @@ app and follow existing patterns.
   ❌};
   ```
 - If the input and output data types are unknown, use a placeholder and request the type definitions from the user.
+- Xpert API calls in this repository must go through the `@xpert-ai/xpert-sdk`
+  `Client`. Do not call Xpert APIs with native `fetch`, `axios`, or other
+  ad hoc HTTP clients. If the SDK does not expose the needed endpoint yet,
+  update `@xpert-ai/xpert-sdk` first and ask the user to use that SDK version.

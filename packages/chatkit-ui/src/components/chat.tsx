@@ -1,16 +1,22 @@
 import * as React from 'react';
 import {
   ArrowDown,
+  Brain,
   FileText,
   ImageIcon,
   Loader2,
   Pencil,
+  Plug,
   Quote,
   RefreshCw,
   X,
 } from 'lucide-react';
 
-import type { Message } from '@xpert-ai/xpert-sdk';
+import type {
+  Message,
+  RuntimeCapabilitiesResponse,
+  RuntimeCapabilitiesSelection,
+} from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
   ChatKitImageReference,
@@ -70,6 +76,15 @@ import {
 } from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
+import {
+  createEmptyRuntimeCapabilitiesSelection,
+  createDefaultRuntimeCapabilitiesSelection,
+  getRuntimeCapabilityOptions,
+  isRuntimeCapabilitySelected,
+  mergeRuntimeCapabilitiesSelections,
+  toggleRuntimeCapabilitySelection,
+  type RuntimeCapabilityOption,
+} from '../lib/runtime-capabilities';
 
 export type ChatProps = {
   className?: string;
@@ -103,6 +118,59 @@ type QuoteSelectionState = {
   top: number;
   left: number;
 };
+
+type RuntimeCapabilityPaletteState = {
+  query: string;
+  start: number;
+  end: number;
+  activeIndex: number;
+};
+
+function resolveRuntimeCapabilityPalette(
+  value: string,
+  selectionStart: number | null | undefined,
+): RuntimeCapabilityPaletteState | null {
+  if (typeof selectionStart !== 'number') {
+    return null;
+  }
+
+  const beforeCaret = value.slice(0, selectionStart);
+  const match = /(^|\s)\/([^\s/]*)$/.exec(beforeCaret);
+  if (!match) {
+    return null;
+  }
+
+  const query = match[2] ?? '';
+  return {
+    query,
+    start: beforeCaret.length - query.length - 1,
+    end: selectionStart,
+    activeIndex: 0,
+  };
+}
+
+function removeRuntimeCapabilityTrigger(
+  value: string,
+  palette: RuntimeCapabilityPaletteState,
+): { value: string; caret: number } {
+  const before = value.slice(0, palette.start);
+  const after = value.slice(palette.end);
+  const needsSpace =
+    before.length > 0 && after.length > 0 && !/^\s/.test(after);
+  return {
+    value: `${before}${needsSpace ? ' ' : ''}${after}`.replace(/\s{2,}/g, ' '),
+    caret: palette.start + (needsSpace ? 1 : 0),
+  };
+}
+
+function getHttpStatus(error: unknown): number | null {
+  if (!error || typeof error !== 'object' || !('status' in error)) {
+    return null;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' ? status : null;
+}
 
 async function readImageDimensions(file: File): Promise<{
   width?: number;
@@ -387,6 +455,20 @@ export function Chat({
     null,
   );
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
+  const [runtimeCapabilities, setRuntimeCapabilities] =
+    React.useState<RuntimeCapabilitiesResponse | null>(null);
+  const [runtimeCapabilitiesReady, setRuntimeCapabilitiesReady] =
+    React.useState(false);
+  const [sessionRuntimeCapabilities, setSessionRuntimeCapabilities] =
+    React.useState<RuntimeCapabilitiesSelection>(() =>
+      createEmptyRuntimeCapabilitiesSelection(),
+    );
+  const [runRuntimeCapabilities, setRunRuntimeCapabilities] =
+    React.useState<RuntimeCapabilitiesSelection>(() =>
+      createEmptyRuntimeCapabilitiesSelection(),
+    );
+  const [runtimeCapabilityPalette, setRuntimeCapabilityPalette] =
+    React.useState<RuntimeCapabilityPaletteState | null>(null);
   const [attachments, setAttachments] = React.useState<UploadingFile[]>([]);
   const [references, setReferences] = React.useState<ChatKitReference[]>([]);
   const [isUploadingReferenceImages, setIsUploadingReferenceImages] =
@@ -427,6 +509,7 @@ export function Chat({
   );
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
+  const isComposerStacked = planModeEnabled || Boolean(selectedTool);
   const pendingFollowUps = React.useMemo(
     () =>
       [...(stream.pendingFollowUps ?? [])].sort(
@@ -436,6 +519,79 @@ export function Chat({
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
   const hasPendingRequestUserInput = Boolean(stream.pendingRequestUserInput);
+  const runtimeCapabilityOptions = React.useMemo(
+    () => getRuntimeCapabilityOptions(runtimeCapabilities),
+    [runtimeCapabilities],
+  );
+  const effectiveSessionRuntimeCapabilities = React.useMemo(
+    () =>
+      runtimeCapabilitiesReady && runtimeCapabilities
+        ? mergeRuntimeCapabilitiesSelections(
+            runtimeCapabilities,
+            sessionRuntimeCapabilities,
+          )
+        : null,
+    [runtimeCapabilities, runtimeCapabilitiesReady, sessionRuntimeCapabilities],
+  );
+  const effectiveRuntimeCapabilitiesForSubmit = React.useMemo(
+    () =>
+      runtimeCapabilitiesReady && runtimeCapabilities
+        ? mergeRuntimeCapabilitiesSelections(
+            runtimeCapabilities,
+            sessionRuntimeCapabilities,
+            runRuntimeCapabilities,
+          )
+        : null,
+    [
+      runtimeCapabilities,
+      runtimeCapabilitiesReady,
+      runRuntimeCapabilities,
+      sessionRuntimeCapabilities,
+    ],
+  );
+  const runRuntimeCapabilityOptions = React.useMemo(
+    () =>
+      runtimeCapabilityOptions.filter((option) =>
+        isRuntimeCapabilitySelected(
+          runRuntimeCapabilities,
+          option.type,
+          option.id,
+        ),
+      ),
+    [runRuntimeCapabilities, runtimeCapabilityOptions],
+  );
+  const paletteRuntimeCapabilityOptions = React.useMemo(() => {
+    if (!runtimeCapabilityPalette || !runtimeCapabilitiesReady) {
+      return [];
+    }
+
+    const query = runtimeCapabilityPalette.query.trim().toLowerCase();
+    return runtimeCapabilityOptions
+      .filter(
+        (option) =>
+          !isRuntimeCapabilitySelected(
+            effectiveRuntimeCapabilitiesForSubmit ??
+              createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
+            option.type,
+            option.id,
+          ),
+      )
+      .filter((option) => {
+        if (!query) {
+          return true;
+        }
+        return [option.label, option.description, option.type]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(query));
+      })
+      .slice(0, 8);
+  }, [
+    effectiveRuntimeCapabilitiesForSubmit,
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    runtimeCapabilityOptions,
+    runtimeCapabilityPalette,
+  ]);
 
   const clearQuoteSelection = React.useCallback(() => {
     setQuoteSelection(null);
@@ -852,6 +1008,98 @@ export function Chat({
     };
   }, [missingConfig, stream.client, stream.assistantId]);
 
+  React.useEffect(() => {
+    if (missingConfig || !stream.client || !stream.assistantId) {
+      setRuntimeCapabilities(null);
+      setRuntimeCapabilitiesReady(false);
+      setSessionRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
+      setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
+      setRuntimeCapabilityPalette(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    setRuntimeCapabilitiesReady(false);
+    setRuntimeCapabilities(null);
+    setRuntimeCapabilityPalette(null);
+
+    void stream.client.assistants
+      .getRuntimeCapabilities(stream.assistantId, {
+        signal: controller.signal,
+      })
+      .then((payload) => {
+        setRuntimeCapabilities(payload);
+        setRuntimeCapabilitiesReady(true);
+        setSessionRuntimeCapabilities(
+          createDefaultRuntimeCapabilitiesSelection(payload),
+        );
+        setRunRuntimeCapabilities(
+          createEmptyRuntimeCapabilitiesSelection(payload),
+        );
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (getHttpStatus(error) === 404) {
+          setRuntimeCapabilities(null);
+          setRuntimeCapabilitiesReady(false);
+          setSessionRuntimeCapabilities(
+            createEmptyRuntimeCapabilitiesSelection(),
+          );
+          setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
+          return;
+        }
+        console.warn('[Chat] Failed to load runtime capabilities:', error);
+        setRuntimeCapabilities(null);
+        setRuntimeCapabilitiesReady(false);
+        setSessionRuntimeCapabilities(
+          createEmptyRuntimeCapabilitiesSelection(),
+        );
+        setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
+      });
+
+    return () => controller.abort();
+  }, [missingConfig, stream.client, stream.assistantId]);
+
+  React.useEffect(() => {
+    setSessionRuntimeCapabilities(
+      createDefaultRuntimeCapabilitiesSelection(runtimeCapabilities),
+    );
+    setRunRuntimeCapabilities(
+      createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
+    );
+    setRuntimeCapabilityPalette(null);
+  }, [runtimeCapabilities, stream.threadId]);
+
+  React.useEffect(() => {
+    if (!runtimeCapabilityPalette) {
+      return;
+    }
+    if (paletteRuntimeCapabilityOptions.length === 0) {
+      setRuntimeCapabilityPalette((previous) =>
+        previous && previous.activeIndex !== 0
+          ? { ...previous, activeIndex: 0 }
+          : previous,
+      );
+      return;
+    }
+    if (
+      runtimeCapabilityPalette.activeIndex >=
+      paletteRuntimeCapabilityOptions.length
+    ) {
+      setRuntimeCapabilityPalette((previous) =>
+        previous
+          ? {
+              ...previous,
+              activeIndex: paletteRuntimeCapabilityOptions.length - 1,
+            }
+          : previous,
+      );
+    }
+  }, [paletteRuntimeCapabilityOptions.length, runtimeCapabilityPalette]);
+
   // Get successfully uploaded files (matching IStorageFile interface)
   const uploadedFiles = attachments
     .filter((a) => a.status === 'success' && a.storageFile)
@@ -863,6 +1111,83 @@ export function Chat({
       mimetype: a.storageFile?.mimetype ?? a.file.type,
       size: a.storageFile?.size ?? a.file.size,
     }));
+
+  const handleSessionRuntimeCapabilityToggle = React.useCallback(
+    (type: RuntimeCapabilityOption['type'], id: string, selected: boolean) => {
+      setSessionRuntimeCapabilities((previous) =>
+        toggleRuntimeCapabilitySelection(previous, type, id, selected),
+      );
+    },
+    [],
+  );
+
+  const updateRuntimeCapabilityPalette = React.useCallback((value: string) => {
+    const input = composerInputRef.current;
+    const nextPalette = resolveRuntimeCapabilityPalette(
+      value,
+      input?.selectionStart,
+    );
+    setRuntimeCapabilityPalette(nextPalette);
+  }, []);
+
+  const handleComposerChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const nextValue = event.target.value;
+      setDraft(nextValue);
+      updateRuntimeCapabilityPalette(nextValue);
+    },
+    [updateRuntimeCapabilityPalette],
+  );
+
+  const handleComposerSelect = React.useCallback(() => {
+    updateRuntimeCapabilityPalette(draft);
+  }, [draft, updateRuntimeCapabilityPalette]);
+
+  const selectRunRuntimeCapability = React.useCallback(
+    (option: RuntimeCapabilityOption) => {
+      const palette = runtimeCapabilityPalette;
+      if (!palette) {
+        return;
+      }
+
+      const nextDraft = removeRuntimeCapabilityTrigger(draft, palette);
+      setDraft(nextDraft.value);
+      setRunRuntimeCapabilities((previous) =>
+        toggleRuntimeCapabilitySelection(
+          previous,
+          option.type,
+          option.id,
+          true,
+        ),
+      );
+      setRuntimeCapabilityPalette(null);
+
+      requestAnimationFrame(() => {
+        const input = composerInputRef.current;
+        if (!input) {
+          return;
+        }
+        input.focus();
+        input.setSelectionRange(nextDraft.caret, nextDraft.caret);
+        resizeComposerInput();
+      });
+    },
+    [draft, resizeComposerInput, runtimeCapabilityPalette],
+  );
+
+  const removeRunRuntimeCapability = React.useCallback(
+    (option: RuntimeCapabilityOption) => {
+      setRunRuntimeCapabilities((previous) =>
+        toggleRuntimeCapabilitySelection(
+          previous,
+          option.type,
+          option.id,
+          false,
+        ),
+      );
+    },
+    [],
+  );
 
   const submitDraft = React.useCallback(
     (followUpOverride?: FollowUpBehavior) => {
@@ -907,6 +1232,7 @@ export function Chat({
         references?: ChatKitReference[];
         referenceComposition?: ChatKitReferenceCompositionMode;
         planMode?: boolean;
+        runtimeCapabilities?: RuntimeCapabilitiesSelection;
       } = {
         ...humanInput,
       };
@@ -915,6 +1241,10 @@ export function Chat({
       }
       if (planModeEnabled) {
         inputPayload.planMode = true;
+      }
+      if (effectiveRuntimeCapabilitiesForSubmit) {
+        inputPayload.runtimeCapabilities =
+          effectiveRuntimeCapabilitiesForSubmit;
       }
 
       const requestOptions = buildInjectedRequestOptions({
@@ -951,11 +1281,17 @@ export function Chat({
       }
       setAttachments([]);
       setReferences([]);
+      setRunRuntimeCapabilities(
+        createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
+      );
+      setRuntimeCapabilityPalette(null);
     },
     [
+      effectiveRuntimeCapabilitiesForSubmit,
       isSendDisabled,
       options?.request,
       references,
+      runtimeCapabilities,
       scrollToBottom,
       selectedTool,
       planModeEnabled,
@@ -1029,6 +1365,48 @@ export function Chat({
   const handleComposerKeyDown = (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
   ) => {
+    if (runtimeCapabilityPalette) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setRuntimeCapabilityPalette(null);
+        return;
+      }
+
+      if (
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'Tab'
+      ) {
+        event.preventDefault();
+        if (paletteRuntimeCapabilityOptions.length === 0) {
+          return;
+        }
+        setRuntimeCapabilityPalette((previous) => {
+          if (!previous) {
+            return previous;
+          }
+          const direction = event.key === 'ArrowUp' ? -1 : 1;
+          const nextIndex =
+            (previous.activeIndex +
+              direction +
+              paletteRuntimeCapabilityOptions.length) %
+            paletteRuntimeCapabilityOptions.length;
+          return { ...previous, activeIndex: nextIndex };
+        });
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        const option =
+          paletteRuntimeCapabilityOptions[runtimeCapabilityPalette.activeIndex];
+        if (option) {
+          event.preventDefault();
+          selectRunRuntimeCapability(option);
+          return;
+        }
+      }
+    }
+
     if (event.key !== 'Enter') {
       return;
     }
@@ -1267,15 +1645,7 @@ export function Chat({
     // If file was uploaded successfully, delete from server
     if (attachment.status === 'success' && attachment.storageFile?.id) {
       try {
-        await fetch(
-          `${stream.apiUrl}/contexts/file/${attachment.storageFile.id}`,
-          {
-            method: 'DELETE',
-            headers: {
-              Authorization: `Bearer ${effectiveClientSecret}`,
-            },
-          },
-        );
+        await stream.client.contexts.deleteFile(attachment.storageFile.id);
       } catch {
         // Still remove from local state even if server delete fails
       }
@@ -1300,9 +1670,16 @@ export function Chat({
     const nextFollowUpMode = stream.isLoading
       ? stream.followUpBehavior
       : undefined;
-    const inputPayload = {
+    const inputPayload: {
+      input: string;
+      planMode?: boolean;
+      runtimeCapabilities?: RuntimeCapabilitiesSelection;
+    } = {
       input: prompt,
       ...(planModeEnabled ? { planMode: true } : {}),
+      ...(effectiveSessionRuntimeCapabilities
+        ? { runtimeCapabilities: effectiveSessionRuntimeCapabilities }
+        : {}),
     };
     const requestOptions = buildInjectedRequestOptions({
       defaults: options?.request,
@@ -1466,6 +1843,7 @@ export function Chat({
   return (
     <div
       ref={viewportRef}
+      data-chatkit-root=""
       className={cn(
         'relative flex h-full w-full flex-col flex-1 overflow-y-auto bg-background shadow-sm',
         className,
@@ -1648,18 +2026,16 @@ export function Chat({
                             ...(message as ChatkitMessage),
                             type: 'assistant',
                           }}
-                          messages={messages
-                            .slice(0, index + 1)
-                            .map(
-                              (item) =>
-                                ({
-                                  ...(item as ChatkitMessage),
-                                  type:
-                                    String(item.type) === 'ai'
-                                      ? 'assistant'
-                                      : item.type,
-                                }) as ChatkitMessage,
-                            )}
+                          messages={messages.slice(0, index + 1).map(
+                            (item) =>
+                              ({
+                                ...(item as ChatkitMessage),
+                                type:
+                                  String(item.type) === 'ai'
+                                    ? 'assistant'
+                                    : item.type,
+                              }) as ChatkitMessage,
+                          )}
                           isStreaming={isStreamingMessage}
                           streamingStatus={streamingStatus}
                         />
@@ -1919,19 +2295,33 @@ export function Chat({
           </div>
         )}
 
-        {/* Selected tool indicator */}
-        {selectedTool && (
-          <div className="mb-2 flex items-center gap-2">
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-              {selectedTool.shortLabel ?? selectedTool.label}
+        {runRuntimeCapabilityOptions.length > 0 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {t('composer.capabilities.runOnly')}
             </span>
-            <button
-              type="button"
-              onClick={() => setSelectedTool(null)}
-              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted"
-            >
-              <X size={12} />
-            </button>
+            {runRuntimeCapabilityOptions.map((option) => (
+              <span
+                key={`${option.type}:${option.id}`}
+                className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+              >
+                {option.type === 'skill' ? (
+                  <Brain size={12} />
+                ) : (
+                  <Plug size={12} />
+                )}
+                <span className="max-w-40 truncate">{option.label}</span>
+                <button
+                  type="button"
+                  onClick={() => removeRunRuntimeCapability(option)}
+                  className="rounded-full p-0.5 hover:bg-primary/15"
+                  title={t('composer.capabilities.removeRunCapability')}
+                  aria-label={t('composer.capabilities.removeRunCapability')}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
           </div>
         )}
 
@@ -1961,34 +2351,74 @@ export function Chat({
           attachToComposer
         />
 
-        <form className="flex items-end" onSubmit={handleSubmit}>
-          {/* Capsule-shaped input container */}
+        {runtimeCapabilityPalette && runtimeCapabilitiesReady && (
           <div
             className={cn(
-              'flex flex-1 items-end gap-1 rounded-xl',
-              'bg-background border border-border shadow-sm',
-              'pl-1.5 pr-1.5 py-1',
-              'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-shadow duration-200',
+              'mb-2 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md',
               getRoundedClass(theme.radius),
             )}
           >
-            {/* Plus button inside input - left side */}
-            <ComposerMenu
-              composer={composer}
-              onAttachmentClick={handleAttachmentClick}
-              onToolSelect={handleToolSelect}
-              selectedTool={selectedTool}
-              planModeEnabled={planModeEnabled}
-              onPlanModeChange={setPlanModeEnabled}
-              disabled={
-                missingConfig || isHistoryLoading || hasPendingRequestUserInput
-              }
-            />
+            {paletteRuntimeCapabilityOptions.length > 0 ? (
+              paletteRuntimeCapabilityOptions.map((option, index) => (
+                <button
+                  key={`${option.type}:${option.id}`}
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    selectRunRuntimeCapability(option);
+                  }}
+                  className={cn(
+                    'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted',
+                    index === runtimeCapabilityPalette.activeIndex &&
+                      'bg-muted',
+                  )}
+                >
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
+                    {option.type === 'skill' ? (
+                      <Brain size={16} />
+                    ) : (
+                      <Plug size={16} />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{option.label}</span>
+                    {option.description && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {option.description}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                {t('composer.capabilities.emptySearch')}
+              </div>
+            )}
+          </div>
+        )}
+
+        <form className="flex items-end" onSubmit={handleSubmit}>
+          {/* Capsule-shaped input container */}
+          <div
+            data-slot="composer-input-shell"
+            data-layout={isComposerStacked ? 'stacked' : 'inline'}
+            className={cn(
+              'relative flex flex-1 overflow-hidden rounded-xl',
+              'bg-background border border-border shadow-sm',
+              isComposerStacked
+                ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
+                : 'min-h-12 px-1.5 py-1',
+              'focus-within:border-muted-foreground/30 focus-within:shadow-md',
+              'transition-[min-height,padding,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+              getRoundedClass(theme.radius),
+            )}
+          >
             <textarea
               ref={composerInputRef}
               value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              onChange={handleComposerChange}
+              onSelect={handleComposerSelect}
               onPaste={handleComposerPaste}
               onKeyDown={handleComposerKeyDown}
               rows={1}
@@ -1997,36 +2427,87 @@ export function Chat({
                 missingConfig || isHistoryLoading || hasPendingRequestUserInput
               }
               className={cn(
-                'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
+                'min-h-8 max-h-32 w-full resize-none bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11 mt-1',
                 'placeholder:text-muted-foreground',
                 'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             />
-            <SendButton
-              disabled={isSendDisabled}
-              isLoading={stream.isLoading}
-              showStop={
-                stream.isLoading &&
-                (!trimmedDraft || hasPendingRequestUserInput)
-              }
-              onStop={() => stream.stop()}
-              stopLabel={t('chat.stop')}
-              sendLabel={t('chat.send')}
-              shortcuts={
-                stream.isLoading && trimmedDraft
-                  ? [
-                      {
-                        label: t('chat.followUps.steer'),
-                        keys: followUpShortcutLabels.steer,
-                      },
-                      {
-                        label: t('chat.followUps.queue'),
-                        keys: followUpShortcutLabels.queue,
-                      },
-                    ]
-                  : undefined
-              }
-            />
+            <div
+              data-slot="composer-action-bar"
+              className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"
+            >
+              <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
+                <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+                  {/* Plus button inside input - left side */}
+                  <ComposerMenu
+                    composer={composer}
+                    onAttachmentClick={handleAttachmentClick}
+                    onToolSelect={handleToolSelect}
+                    selectedTool={selectedTool}
+                    planModeEnabled={planModeEnabled}
+                    onPlanModeChange={setPlanModeEnabled}
+                    runtimeCapabilities={
+                      runtimeCapabilitiesReady ? runtimeCapabilities : null
+                    }
+                    selectedRuntimeCapabilities={
+                      effectiveSessionRuntimeCapabilities
+                    }
+                    onRuntimeCapabilityToggle={
+                      handleSessionRuntimeCapabilityToggle
+                    }
+                    disabled={
+                      missingConfig ||
+                      isHistoryLoading ||
+                      hasPendingRequestUserInput
+                    }
+                  />
+                </div>
+
+                {selectedTool && (
+                  <span className="pointer-events-auto inline-flex h-8 min-w-0 max-w-[14rem] shrink items-center gap-1.5 rounded-full bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200">
+                    <span className="truncate">
+                      {selectedTool.shortLabel ?? selectedTool.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTool(null)}
+                      className="shrink-0 rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              <div className="pointer-events-auto shrink-0">
+                <SendButton
+                  disabled={isSendDisabled}
+                  isLoading={stream.isLoading}
+                  showStop={
+                    stream.isLoading &&
+                    (!trimmedDraft || hasPendingRequestUserInput)
+                  }
+                  onStop={() => stream.stop()}
+                  stopLabel={t('chat.stop')}
+                  sendLabel={t('chat.send')}
+                  shortcuts={
+                    stream.isLoading && trimmedDraft
+                      ? [
+                          {
+                            label: t('chat.followUps.steer'),
+                            keys: followUpShortcutLabels.steer,
+                          },
+                          {
+                            label: t('chat.followUps.queue'),
+                            keys: followUpShortcutLabels.queue,
+                          },
+                        ]
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
           </div>
         </form>
 

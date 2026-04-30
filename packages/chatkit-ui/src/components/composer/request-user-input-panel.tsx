@@ -31,6 +31,8 @@ type AnswerDraft =
       optionIndex?: number;
     };
 
+const emptyQuestions: RequestUserInputQuestion[] = [];
+
 export type RequestUserInputPanelProps = {
   request: PendingRequestUserInput | null;
   onSubmit: (answers: RequestUserInputAnswer[]) => void;
@@ -185,7 +187,7 @@ export function RequestUserInputPanel({
   const [drafts, setDrafts] = React.useState<Record<string, AnswerDraft>>({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
   const otherInputRef = React.useRef<HTMLInputElement | null>(null);
-  const questions = request?.params.questions ?? [];
+  const questions = request?.params.questions ?? emptyQuestions;
 
   React.useEffect(() => {
     setDrafts({});
@@ -599,23 +601,21 @@ export function RequestUserInputPanel({
                     ({t('composer.requestUserInput.recommended')})
                   </span>
                 ) : null}
-              </span>
-
-              <span className="flex items-center gap-2 text-muted-foreground">
                 {option.description ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
+                        data-slot="request-user-input-option-info"
                         onClick={(event) => event.stopPropagation()}
                         onKeyDown={(event) => event.stopPropagation()}
                         title={option.description}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-background/80 hover:text-foreground"
+                        className="ml-1.5 inline-flex h-6 w-6 align-middle items-center justify-center rounded-full text-muted-foreground hover:bg-background/80 hover:text-foreground"
                         aria-label={t('composer.requestUserInput.optionInfo', {
                           label: parsedLabel.label,
                         })}
                       >
-                        <Info className="h-4 w-4" />
+                        <Info className="h-3.5 w-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent
@@ -627,10 +627,14 @@ export function RequestUserInputPanel({
                     </TooltipContent>
                   </Tooltip>
                 ) : null}
+              </span>
+
+              <span className="flex items-center justify-end text-muted-foreground">
                 {selected ? (
                   <span
+                    data-slot="request-user-input-option-keyboard-hint"
                     aria-hidden="true"
-                    className="hidden items-center gap-0.5 sm:flex"
+                    className="flex items-center gap-0.5"
                   >
                     <ArrowUp className="h-4 w-4 opacity-45" />
                     <ArrowDown className="h-4 w-4 opacity-45" />

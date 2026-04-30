@@ -10,18 +10,22 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const uploadFile = vi.fn();
+  const deleteFile = vi.fn();
   const refreshThreads = vi.fn().mockResolvedValue(undefined);
 
   return {
     uploadFile,
+    deleteFile,
     refreshThreads,
     stream: {
       client: {
         contexts: {
           uploadFile,
+          deleteFile,
         },
         assistants: {
           get: vi.fn().mockResolvedValue(null),
+          getRuntimeCapabilities: vi.fn().mockRejectedValue({ status: 404 }),
         },
       },
       apiUrl: 'https://api.example.com',
@@ -164,9 +168,13 @@ describe('Chat composer paste behavior', () => {
   const originalCreateObjectUrl = URL.createObjectURL;
   const originalRevokeObjectUrl = URL.revokeObjectURL;
   const originalImage = window.Image;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
     mocks.uploadFile.mockReset();
+    mocks.deleteFile.mockReset();
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockClear();
     mocks.refreshThreads.mockClear();
     mocks.stream.messages = [];
     mocks.stream.pendingFollowUps = [];
@@ -195,6 +203,7 @@ describe('Chat composer paste behavior', () => {
     URL.createObjectURL = originalCreateObjectUrl;
     URL.revokeObjectURL = originalRevokeObjectUrl;
     window.Image = originalImage;
+    globalThis.fetch = originalFetch;
   });
 
   it('turns pasted long text into a quote reference instead of filling the textarea', () => {
@@ -284,6 +293,55 @@ describe('Chat composer paste behavior', () => {
       screen.getByText('image/png • 640x480 • 2.0 KB'),
     ).toBeInTheDocument();
     expect(textarea).toHaveValue('');
+  });
+
+  it('deletes uploaded attachments through the SDK client when removed', async () => {
+    mocks.uploadFile.mockResolvedValueOnce({
+      id: 'file-1',
+      file: 'uploads/report.pdf',
+      originalName: 'report.pdf',
+      mimetype: 'application/pdf',
+      size: 1024,
+    });
+    mocks.deleteFile.mockResolvedValueOnce(undefined);
+
+    const { container } = render(
+      <Chat
+        clientSecret="secret"
+        options={{
+          api: {
+            apiUrl: 'https://api.example.com',
+            getClientSecret: async () => 'secret',
+          },
+          composer: {
+            attachments: {
+              enabled: true,
+            },
+          },
+        }}
+      />,
+    );
+
+    const input = container.querySelector('input[type="file"]');
+    expect(input).toBeTruthy();
+
+    const file = new File(['content'], 'report.pdf', {
+      type: 'application/pdf',
+    });
+    fireEvent.change(input as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledWith(file));
+    const fileName = await screen.findByText('report.pdf');
+    const chip = fileName.closest('div');
+    const removeButton = chip?.querySelector('button');
+    expect(removeButton).toBeTruthy();
+
+    fireEvent.click(removeButton as HTMLButtonElement);
+
+    await waitFor(() => expect(mocks.deleteFile).toHaveBeenCalledWith('file-1'));
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('uploads multiple pasted images in order and creates one reference per image', async () => {

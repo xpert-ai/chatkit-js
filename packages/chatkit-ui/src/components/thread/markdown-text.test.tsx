@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import mermaid from 'mermaid';
 import { describe, beforeEach, expect, it, vi } from 'vitest';
@@ -121,19 +121,77 @@ describe('MarkdownText', () => {
       ].join('\n'),
     );
     const card = container.querySelector('[data-slot="markdown-plan-card"]');
+    const header = card?.querySelector(
+      '[data-slot="markdown-plan-card-header"]',
+    );
+    const content = card?.querySelector(
+      '[data-slot="markdown-plan-card-content"]',
+    );
 
     expect(card).not.toBeNull();
+    expect(header).not.toBeNull();
+    expect(content).not.toBeNull();
     expect(card).toHaveTextContent('Plan');
     expect(card).toHaveTextContent('Build it');
     expect(card).toHaveTextContent('const answer = 42;');
+    expect(header).toHaveTextContent('Plan');
+    expect(header).not.toHaveClass('border-b');
     expect(card?.querySelector('h1')).toHaveTextContent('Plan');
     expect(card?.querySelector('li')).toHaveTextContent('Build it');
     expect(
-      screen.getByRole('button', { name: 'Download Markdown' }),
+      within(header as HTMLElement).getByRole('button', {
+        name: 'Download Markdown',
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByRole('button', { name: 'Copy' }).length,
-    ).toBeGreaterThan(0);
+      within(header as HTMLElement).getByRole('button', { name: 'Copy' }),
+    ).toBeInTheDocument();
+    const expandButton = within(header as HTMLElement).getByRole('button', {
+      name: 'Expand plan',
+    });
+    expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+    expect(content).toHaveAttribute('data-state', 'collapsed');
+    expect(content).toHaveClass(
+      'max-h-[200px]',
+      'overflow-hidden',
+      'transition-[max-height]',
+      'duration-300',
+    );
+    const overlayExpandButton = within(card as HTMLElement).getAllByRole(
+      'button',
+      {
+        name: 'Expand plan',
+      },
+    )[1];
+    expect(overlayExpandButton).toBeInTheDocument();
+
+    fireEvent.click(overlayExpandButton);
+
+    const collapseButton = within(header as HTMLElement).getByRole('button', {
+      name: 'Collapse plan',
+    });
+    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    expect(content).toHaveAttribute('data-state', 'expanded');
+    expect(content).toHaveClass('max-h-[80vh]', 'overflow-auto');
+    expect(
+      within(card as HTMLElement).queryByRole('button', {
+        name: 'Expand plan',
+      }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(collapseButton);
+
+    expect(content).toHaveAttribute('data-state', 'collapsed');
+    expect(
+      within(header as HTMLElement).getByRole('button', {
+        name: 'Expand plan',
+      }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(card as HTMLElement).getAllByRole('button', {
+        name: 'Expand plan',
+      })[1],
+    ).toBeInTheDocument();
     expect(container).not.toHaveTextContent('<proposed_plan>');
     expect(container).not.toHaveTextContent('</proposed_plan>');
   });

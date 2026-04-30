@@ -88,4 +88,54 @@ describe('ParentMessengerProvider plan mode', () => {
       expect.any(Object),
     );
   });
+
+  it('passes runtimeCapabilities through sendUserMessage input and state', async () => {
+    render(
+      <ParentMessengerProvider>
+        <div />
+      </ParentMessengerProvider>,
+    );
+
+    const runtimeCapabilities = {
+      mode: 'allowlist' as const,
+      skills: { workspaceId: 'workspace-1', ids: ['skill-1'] },
+      plugins: { nodeKeys: ['middleware-1'] },
+    };
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onSendUserMessage',
+        nonce: 'runtime-capabilities-test',
+        data: {
+          text: 'Use this capability',
+          runtimeCapabilities,
+        },
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: parentWindow,
+    });
+
+    window.dispatchEvent(event);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          input: 'Use this capability',
+          runtimeCapabilities,
+        },
+        state: {
+          human: {
+            input: 'Use this capability',
+            runtimeCapabilities,
+          },
+        },
+      }),
+      expect.any(Object),
+    );
+  });
 });
