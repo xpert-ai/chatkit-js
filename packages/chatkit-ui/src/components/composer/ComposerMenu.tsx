@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  X,
 } from 'lucide-react';
 import type {
   ToolOption,
@@ -382,6 +383,32 @@ export function ComposerMenu({
           </>
         )}
       </DropdownMenuContent>
+      {planModeEnabled && (
+        <button
+          type="button"
+          aria-label={t('composer.disablePlanMode')}
+          disabled={disabled}
+          onClick={() => onPlanModeChange?.(false)}
+          className={cn(
+            'group inline-flex h-8 shrink-0 items-center gap-1.5 border border-primary/30 bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200 hover:bg-primary/15',
+            roundedClass,
+          )}
+        >
+          <span className="relative inline-flex h-4 w-4 items-center justify-center">
+            <ListChecks
+              data-slot="plan-mode-indicator-icon"
+              size={14}
+              className="absolute transition-all duration-150 group-hover:scale-75 group-hover:opacity-0"
+            />
+            <X
+              data-slot="plan-mode-remove-icon"
+              size={14}
+              className="absolute scale-75 opacity-0 transition-all duration-150 group-hover:scale-100 group-hover:opacity-100"
+            />
+          </span>
+          <span>{t('composer.planModeActive')}</span>
+        </button>
+      )}
     </DropdownMenu>
   );
 }

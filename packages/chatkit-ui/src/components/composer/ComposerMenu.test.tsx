@@ -12,6 +12,8 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
         'composer.planMode': 'Plan mode',
         'composer.capabilities.skills': 'Skills',
         'composer.capabilities.plugins': 'Plugins',
+        'composer.planModeActive': 'Plan',
+        'composer.disablePlanMode': 'Turn off plan mode',
       };
       return labels[key] ?? key;
     },
@@ -50,6 +52,31 @@ describe('ComposerMenu', () => {
 
     fireEvent.click(planMode);
     expect(onPlanModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it('renders an active plan mode indicator that disables plan mode', () => {
+    const onPlanModeChange = vi.fn();
+
+    render(
+      <ComposerMenu planModeEnabled onPlanModeChange={onPlanModeChange} />,
+    );
+
+    const activePlanMode = screen.getByRole('button', {
+      name: 'Turn off plan mode',
+    });
+    expect(activePlanMode).toHaveTextContent('Plan');
+    expect(
+      activePlanMode.querySelector('[data-slot="plan-mode-indicator-icon"]'),
+    ).toBeInTheDocument();
+    expect(
+      activePlanMode.querySelector('[data-slot="plan-mode-remove-icon"]'),
+    ).toHaveClass('opacity-0', 'group-hover:opacity-100');
+
+    fireEvent.click(activePlanMode);
+    expect(onPlanModeChange).toHaveBeenCalledWith(false);
+    expect(
+      screen.getByRole('button', { name: 'Turn off plan mode' }),
+    ).toHaveClass('h-8', 'text-xs');
   });
 
   it('keeps attachments and tools behavior alongside plan mode', () => {

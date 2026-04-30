@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PendingRequestUserInput } from '../../providers/Stream';
@@ -89,10 +89,15 @@ describe('RequestUserInputPanel', () => {
     expect(screen.getByText('Which scope should I use?')).toBeInTheDocument();
     expect(screen.getByText('Minimal')).toBeInTheDocument();
     expect(screen.getByText(/Recommended/)).toBeInTheDocument();
+    const firstOption = screen.getByRole('button', { name: /^1\. Minimal/i });
+    const firstOptionInfo = within(firstOption).getByLabelText(
+      'Details for Minimal',
+    );
+    expect(firstOption.children[1]).toContainElement(firstOptionInfo);
     expect(
       screen.queryByText('Change only the requested surface.'),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Details for Minimal')).toHaveAttribute(
+    expect(firstOptionInfo).toHaveAttribute(
       'title',
       'Change only the requested surface.',
     );
@@ -100,7 +105,16 @@ describe('RequestUserInputPanel', () => {
     const continueButton = screen.getByRole('button', { name: /continue/i });
     expect(continueButton).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('button', { name: /^1\. Minimal/i }));
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    expect(firstOption).toHaveAttribute('aria-pressed', 'true');
+    const keyboardHint = firstOption.querySelector(
+      '[data-slot="request-user-input-option-keyboard-hint"]',
+    );
+    expect(firstOption.lastElementChild).toContainElement(
+      keyboardHint as HTMLElement,
+    );
+
+    fireEvent.click(firstOption);
     expect(onSubmit).toHaveBeenCalledWith([
       {
         id: 'scope',
