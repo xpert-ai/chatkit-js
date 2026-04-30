@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.2.2
+
+### Patch Changes
+
+- 361c358: skills & middlewares selection
+
 ## 0.2.1
 
 ### Patch Changes
