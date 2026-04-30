@@ -73,6 +73,8 @@
     "openMenu": "Open menu",
     "addAttachment": "Add attachment",
     "planMode": "Plan mode",
+    "planModeActive": "Plan",
+    "disablePlanMode": "Turn off plan mode",
     "removeReference": "Remove reference",
     "quoteSelection": "Quote selection",
     "requestUserInput": {
@@ -95,6 +97,9 @@
   "markdown": {
     "copy": "Copy",
     "plan": {
+      "title": "Plan",
+      "expand": "Expand plan",
+      "collapse": "Collapse plan",
       "download": "Download Markdown"
     },
     "mermaid": {

@@ -427,6 +427,7 @@ export function Chat({
   );
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
+  const isComposerStacked = planModeEnabled || Boolean(selectedTool);
   const pendingFollowUps = React.useMemo(
     () =>
       [...(stream.pendingFollowUps ?? [])].sort(
@@ -1919,22 +1920,6 @@ export function Chat({
           </div>
         )}
 
-        {/* Selected tool indicator */}
-        {selectedTool && (
-          <div className="mb-2 flex items-center gap-2">
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-              {selectedTool.shortLabel ?? selectedTool.label}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedTool(null)}
-              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted"
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
-
         <PendingTodos
           snapshot={stream.todos}
           attachToComposer={!hasPendingFollowUps}
@@ -1964,27 +1949,19 @@ export function Chat({
         <form className="flex items-end" onSubmit={handleSubmit}>
           {/* Capsule-shaped input container */}
           <div
+            data-slot="composer-input-shell"
+            data-layout={isComposerStacked ? 'stacked' : 'inline'}
             className={cn(
-              'flex flex-1 items-end gap-1 rounded-xl',
+              'relative flex flex-1 overflow-hidden rounded-xl',
               'bg-background border border-border shadow-sm',
-              'pl-1.5 pr-1.5 py-1',
+              isComposerStacked
+                ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
+                : 'min-h-12 px-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-shadow duration-200',
+              'transition-[min-height,padding,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
               getRoundedClass(theme.radius),
             )}
           >
-            {/* Plus button inside input - left side */}
-            <ComposerMenu
-              composer={composer}
-              onAttachmentClick={handleAttachmentClick}
-              onToolSelect={handleToolSelect}
-              selectedTool={selectedTool}
-              planModeEnabled={planModeEnabled}
-              onPlanModeChange={setPlanModeEnabled}
-              disabled={
-                missingConfig || isHistoryLoading || hasPendingRequestUserInput
-              }
-            />
             <textarea
               ref={composerInputRef}
               value={draft}
@@ -1997,36 +1974,78 @@ export function Chat({
                 missingConfig || isHistoryLoading || hasPendingRequestUserInput
               }
               className={cn(
-                'min-h-8 max-h-32 flex-1 resize-none bg-transparent py-1 pr-2 text-sm leading-5 text-foreground outline-none',
+                'min-h-8 max-h-32 w-full resize-none bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11',
                 'placeholder:text-muted-foreground',
                 'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             />
-            <SendButton
-              disabled={isSendDisabled}
-              isLoading={stream.isLoading}
-              showStop={
-                stream.isLoading &&
-                (!trimmedDraft || hasPendingRequestUserInput)
-              }
-              onStop={() => stream.stop()}
-              stopLabel={t('chat.stop')}
-              sendLabel={t('chat.send')}
-              shortcuts={
-                stream.isLoading && trimmedDraft
-                  ? [
-                      {
-                        label: t('chat.followUps.steer'),
-                        keys: followUpShortcutLabels.steer,
-                      },
-                      {
-                        label: t('chat.followUps.queue'),
-                        keys: followUpShortcutLabels.queue,
-                      },
-                    ]
-                  : undefined
-              }
-            />
+            <div
+              data-slot="composer-action-bar"
+              className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"
+            >
+              <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
+                <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+                  {/* Plus button inside input - left side */}
+                  <ComposerMenu
+                    composer={composer}
+                    onAttachmentClick={handleAttachmentClick}
+                    onToolSelect={handleToolSelect}
+                    selectedTool={selectedTool}
+                    planModeEnabled={planModeEnabled}
+                    onPlanModeChange={setPlanModeEnabled}
+                    disabled={
+                      missingConfig ||
+                      isHistoryLoading ||
+                      hasPendingRequestUserInput
+                    }
+                  />
+                </div>
+
+                {selectedTool && (
+                  <span className="pointer-events-auto inline-flex h-8 min-w-0 max-w-[14rem] shrink items-center gap-1.5 rounded-full bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200">
+                    <span className="truncate">
+                      {selectedTool.shortLabel ?? selectedTool.label}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTool(null)}
+                      className="shrink-0 rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                )}
+              </div>
+
+              <div className="pointer-events-auto shrink-0">
+                <SendButton
+                  disabled={isSendDisabled}
+                  isLoading={stream.isLoading}
+                  showStop={
+                    stream.isLoading &&
+                    (!trimmedDraft || hasPendingRequestUserInput)
+                  }
+                  onStop={() => stream.stop()}
+                  stopLabel={t('chat.stop')}
+                  sendLabel={t('chat.send')}
+                  shortcuts={
+                    stream.isLoading && trimmedDraft
+                      ? [
+                          {
+                            label: t('chat.followUps.steer'),
+                            keys: followUpShortcutLabels.steer,
+                          },
+                          {
+                            label: t('chat.followUps.queue'),
+                            keys: followUpShortcutLabels.queue,
+                          },
+                        ]
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
           </div>
         </form>
 

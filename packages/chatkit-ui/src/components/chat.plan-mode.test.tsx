@@ -187,8 +187,15 @@ describe('Chat plan mode payload', () => {
   it('omits planMode from regular sends by default', async () => {
     renderChat();
 
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'hello' } });
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);
@@ -210,7 +217,14 @@ describe('Chat plan mode payload', () => {
   it('adds planMode to input and state.human when enabled', async () => {
     renderChat();
 
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
     fireEvent.click(screen.getByTestId('plan-mode-toggle'));
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
+
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'plan this' } });
     const send = screen.getByRole('button', { name: 'send' });
