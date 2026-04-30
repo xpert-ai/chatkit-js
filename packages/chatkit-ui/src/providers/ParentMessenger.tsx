@@ -248,10 +248,24 @@ export function ParentMessengerProvider({
         }
         const requestHumanInput =
           params.planMode === true ||
-          params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true
+          params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true ||
+          params.runtimeCapabilities ||
+          params.state?.[STATE_VARIABLE_HUMAN]?.runtimeCapabilities
             ? {
                 ...humanInput,
-                planMode: true,
+                ...(params.planMode === true ||
+                params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true
+                  ? { planMode: true }
+                  : {}),
+                ...(params.runtimeCapabilities
+                  ? { runtimeCapabilities: params.runtimeCapabilities }
+                  : params.state?.[STATE_VARIABLE_HUMAN]?.runtimeCapabilities
+                    ? {
+                        runtimeCapabilities:
+                          params.state[STATE_VARIABLE_HUMAN]
+                            .runtimeCapabilities,
+                      }
+                    : {}),
               }
             : humanInput;
 

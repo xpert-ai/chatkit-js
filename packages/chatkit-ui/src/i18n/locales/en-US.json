@@ -73,6 +73,14 @@
     "openMenu": "Open menu",
     "addAttachment": "Add attachment",
     "planMode": "Plan mode",
+    "capabilities": {
+      "title": "Skills & Plugins",
+      "skills": "Skills",
+      "plugins": "Plugins",
+      "runOnly": "This run",
+      "removeRunCapability": "Remove capability",
+      "emptySearch": "No matching skills or plugins"
+    },
     "removeReference": "Remove reference",
     "quoteSelection": "Quote selection",
     "requestUserInput": {

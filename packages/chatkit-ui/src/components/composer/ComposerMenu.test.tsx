@@ -10,6 +10,8 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
         'composer.openMenu': 'Open menu',
         'composer.addAttachment': 'Add attachment',
         'composer.planMode': 'Plan mode',
+        'composer.capabilities.skills': 'Skills',
+        'composer.capabilities.plugins': 'Plugins',
       };
       return labels[key] ?? key;
     },
@@ -25,6 +27,12 @@ vi.mock('../../providers/Theme', () => ({
 }));
 
 describe('ComposerMenu', () => {
+  function openMenu() {
+    const trigger = screen.getByRole('button', { name: 'Open menu' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Enter', code: 'Enter' });
+  }
+
   it('renders plan mode even without attachments or tools', () => {
     const onPlanModeChange = vi.fn();
 
@@ -35,7 +43,7 @@ describe('ComposerMenu', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    openMenu();
 
     const planMode = screen.getByRole('switch', { name: 'Plan mode' });
     expect(planMode).toHaveAttribute('aria-checked', 'false');
@@ -68,21 +76,89 @@ describe('ComposerMenu', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    openMenu();
 
     expect(
       screen.getByRole('switch', { name: 'Plan mode' }),
     ).toHaveAttribute('aria-checked', 'true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Add attachment' }),
+    );
     expect(onAttachmentClick).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Search' }));
     expect(onToolSelect).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'search',
       }),
+    );
+  });
+
+  it('renders skills and plugins as drilldown panels', async () => {
+    const onRuntimeCapabilityToggle = vi.fn();
+
+    render(
+      <ComposerMenu
+        runtimeCapabilities={{
+          skills: [
+            {
+              id: 'skill-1',
+              workspaceId: 'workspace-1',
+              label: 'Research Skill',
+              description: 'Search and summarize',
+            },
+          ],
+          plugins: [
+            {
+              nodeKey: 'middleware-1',
+              provider: 'sandbox',
+              label: 'Sandbox Plugin',
+              description: 'Run commands',
+            },
+          ],
+        }}
+        selectedRuntimeCapabilities={{
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: [] },
+          plugins: { nodeKeys: [] },
+        }}
+        onRuntimeCapabilityToggle={onRuntimeCapabilityToggle}
+      />,
+    );
+
+    openMenu();
+
+    expect(
+      screen.getByRole('menuitem', { name: 'Skills' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'Plugins' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: /Research Skill/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
+    fireEvent.click(
+      await screen.findByRole('menuitemcheckbox', { name: /Research Skill/ }),
+    );
+    expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
+      'skill',
+      'skill-1',
+      true,
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Plugins' }));
+    fireEvent.click(
+      await screen.findByRole('menuitemcheckbox', { name: /Sandbox Plugin/ }),
+    );
+    expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
+      'plugin',
+      'middleware-1',
+      true,
     );
   });
 });

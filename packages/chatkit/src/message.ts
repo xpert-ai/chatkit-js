@@ -287,6 +287,40 @@ export type ChatKitReference =
 
 export type ChatKitReferenceCompositionMode = 'compose' | 'preserve';
 
+export type RuntimeCapabilitySkill = {
+  id: string;
+  workspaceId: string;
+  label: string;
+  description?: string;
+  repositoryName?: string;
+  provider?: string;
+  default?: boolean;
+};
+
+export type RuntimeCapabilityPlugin = {
+  nodeKey: string;
+  provider: string;
+  label: string;
+  description?: string;
+  toolNames?: string[];
+};
+
+export type RuntimeCapabilitiesResponse = {
+  skills: RuntimeCapabilitySkill[];
+  plugins: RuntimeCapabilityPlugin[];
+};
+
+export type RuntimeCapabilitiesSelection = {
+  mode: 'allowlist';
+  skills: {
+    workspaceId?: string;
+    ids: string[];
+  };
+  plugins: {
+    nodeKeys: string[];
+  };
+};
+
 export const STATE_VARIABLE_HUMAN = 'human';
 
 /**
@@ -298,6 +332,7 @@ export type TChatRequestHuman = {
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
   planMode?: boolean;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
   [key: string]: unknown;
 };
 
