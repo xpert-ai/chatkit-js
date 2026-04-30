@@ -3,7 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@xpert-ai/a2ui-react": ["../chatkit-widgets/src/index.ts"],
+      "@xpert-ai/chatkit-types": ["../chatkit/src/index.ts"],
+      "@xpert-ai/chatkit-web-shared": ["../chatkit-web-shared/src/index.ts"]
     },
     "jsx": "react-jsx",
     "outDir": "dist",
