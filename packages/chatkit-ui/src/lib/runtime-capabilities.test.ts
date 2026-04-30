@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
 
-import {
-  createDefaultRuntimeCapabilitiesSelection,
-  normalizeRuntimeCapabilitiesResponse,
-} from './runtime-capabilities';
+import { createDefaultRuntimeCapabilitiesSelection } from './runtime-capabilities';
 
 describe('runtime capabilities helpers', () => {
-  it('normalizes default skills and uses them as the initial allow-list', () => {
-    const capabilities = normalizeRuntimeCapabilitiesResponse({
+  it('uses default skills as the initial allow-list', () => {
+    const capabilities: RuntimeCapabilitiesResponse = {
       skills: [
         {
           id: 'skill-default',
@@ -22,7 +20,7 @@ describe('runtime capabilities helpers', () => {
         },
       ],
       plugins: [],
-    });
+    };
 
     expect(capabilities.skills[0]?.default).toBe(true);
     expect(createDefaultRuntimeCapabilitiesSelection(capabilities)).toEqual({

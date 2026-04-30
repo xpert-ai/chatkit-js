@@ -287,29 +287,6 @@ export type ChatKitReference =
 
 export type ChatKitReferenceCompositionMode = 'compose' | 'preserve';
 
-export type RuntimeCapabilitySkill = {
-  id: string;
-  workspaceId: string;
-  label: string;
-  description?: string;
-  repositoryName?: string;
-  provider?: string;
-  default?: boolean;
-};
-
-export type RuntimeCapabilityPlugin = {
-  nodeKey: string;
-  provider: string;
-  label: string;
-  description?: string;
-  toolNames?: string[];
-};
-
-export type RuntimeCapabilitiesResponse = {
-  skills: RuntimeCapabilitySkill[];
-  plugins: RuntimeCapabilityPlugin[];
-};
-
 export type RuntimeCapabilitiesSelection = {
   mode: 'allowlist';
   skills: {

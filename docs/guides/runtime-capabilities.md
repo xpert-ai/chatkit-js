@@ -42,50 +42,25 @@ await client.assistants.getRuntimeCapabilities(assistantId);
 
 If `apiUrl` already points to the `/ai` mount, the SDK request resolves to:
 
-```ts
-GET `${apiUrl}/assistants/${assistantId}/runtime-capabilities`
+```text
+GET ${apiUrl}/assistants/${assistantId}/runtime-capabilities
 ```
 
-The response shape is:
+The response type is exported by `@xpert-ai/xpert-sdk@^0.0.9`:
 
 ```ts
-type RuntimeCapabilitiesResponse = {
-  skills: Array<{
-    id: string;
-    workspaceId: string;
-    label: string;
-    description?: string;
-    repositoryName?: string;
-    provider?: string;
-    default?: boolean;
-  }>;
-  plugins: Array<{
-    nodeKey: string;
-    provider: string;
-    label: string;
-    description?: string;
-    toolNames?: string[];
-  }>;
-};
+import type { RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
 ```
 
 `default: true` means the skill is checked initially in ChatKit. Required/system middleware is excluded from `plugins`.
+Skill `meta.icon` should be the installed skill package's `metadata.icon`; plugin `meta.icon` should be the middleware strategy's `meta.icon`.
 
 ## Runtime Selection Payload
 
 When the capability endpoint loads successfully, ChatKit sends a runtime allow-list with each message:
 
 ```ts
-type RuntimeCapabilitiesSelection = {
-  mode: 'allowlist';
-  skills: {
-    workspaceId?: string;
-    ids: string[];
-  };
-  plugins: {
-    nodeKeys: string[];
-  };
-};
+import type { RuntimeCapabilitiesSelection } from '@xpert-ai/xpert-sdk';
 ```
 
 The value is written to `input.runtimeCapabilities` and injected into `state.human.runtimeCapabilities`, so Xpert can read the same selection from the human input or graph state.
@@ -155,12 +130,12 @@ await chatkit.sendUserMessage({
     mode: 'allowlist',
     skills: {
       workspaceId: 'workspace_123',
-      ids: ['skill_code_review']
+      ids: ['skill_code_review'],
     },
     plugins: {
-      nodeKeys: ['Middleware_sandbox']
-    }
-  }
+      nodeKeys: ['Middleware_sandbox'],
+    },
+  },
 });
 ```
 

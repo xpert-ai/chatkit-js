@@ -12,7 +12,11 @@ import {
   X,
 } from 'lucide-react';
 
-import type { Message } from '@xpert-ai/xpert-sdk';
+import type {
+  Message,
+  RuntimeCapabilitiesResponse,
+  RuntimeCapabilitiesSelection,
+} from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
   ChatKitImageReference,
@@ -20,8 +24,6 @@ import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   FollowUpBehavior,
-  RuntimeCapabilitiesResponse,
-  RuntimeCapabilitiesSelection,
   ToolOption,
 } from '@xpert-ai/chatkit-types';
 
@@ -80,7 +82,6 @@ import {
   getRuntimeCapabilityOptions,
   isRuntimeCapabilitySelected,
   mergeRuntimeCapabilitiesSelections,
-  normalizeRuntimeCapabilitiesResponse,
   toggleRuntimeCapabilitySelection,
   type RuntimeCapabilityOption,
 } from '../lib/runtime-capabilities';
@@ -154,7 +155,8 @@ function removeRuntimeCapabilityTrigger(
 ): { value: string; caret: number } {
   const before = value.slice(0, palette.start);
   const after = value.slice(palette.end);
-  const needsSpace = before.length > 0 && after.length > 0 && !/^\s/.test(after);
+  const needsSpace =
+    before.length > 0 && after.length > 0 && !/^\s/.test(after);
   return {
     value: `${before}${needsSpace ? ' ' : ''}${after}`.replace(/\s{2,}/g, ' '),
     caret: palette.start + (needsSpace ? 1 : 0),
@@ -1027,14 +1029,13 @@ export function Chat({
         signal: controller.signal,
       })
       .then((payload) => {
-        const nextCapabilities = normalizeRuntimeCapabilitiesResponse(payload);
-        setRuntimeCapabilities(nextCapabilities);
+        setRuntimeCapabilities(payload);
         setRuntimeCapabilitiesReady(true);
         setSessionRuntimeCapabilities(
-          createDefaultRuntimeCapabilitiesSelection(nextCapabilities),
+          createDefaultRuntimeCapabilitiesSelection(payload),
         );
         setRunRuntimeCapabilities(
-          createEmptyRuntimeCapabilitiesSelection(nextCapabilities),
+          createEmptyRuntimeCapabilitiesSelection(payload),
         );
       })
       .catch((error: unknown) => {
@@ -1044,14 +1045,18 @@ export function Chat({
         if (getHttpStatus(error) === 404) {
           setRuntimeCapabilities(null);
           setRuntimeCapabilitiesReady(false);
-          setSessionRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
+          setSessionRuntimeCapabilities(
+            createEmptyRuntimeCapabilitiesSelection(),
+          );
           setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
           return;
         }
         console.warn('[Chat] Failed to load runtime capabilities:', error);
         setRuntimeCapabilities(null);
         setRuntimeCapabilitiesReady(false);
-        setSessionRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
+        setSessionRuntimeCapabilities(
+          createEmptyRuntimeCapabilitiesSelection(),
+        );
         setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
       });
 
@@ -1080,7 +1085,10 @@ export function Chat({
       );
       return;
     }
-    if (runtimeCapabilityPalette.activeIndex >= paletteRuntimeCapabilityOptions.length) {
+    if (
+      runtimeCapabilityPalette.activeIndex >=
+      paletteRuntimeCapabilityOptions.length
+    ) {
       setRuntimeCapabilityPalette((previous) =>
         previous
           ? {
@@ -1145,7 +1153,12 @@ export function Chat({
       const nextDraft = removeRuntimeCapabilityTrigger(draft, palette);
       setDraft(nextDraft.value);
       setRunRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(previous, option.type, option.id, true),
+        toggleRuntimeCapabilitySelection(
+          previous,
+          option.type,
+          option.id,
+          true,
+        ),
       );
       setRuntimeCapabilityPalette(null);
 
@@ -1165,7 +1178,12 @@ export function Chat({
   const removeRunRuntimeCapability = React.useCallback(
     (option: RuntimeCapabilityOption) => {
       setRunRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(previous, option.type, option.id, false),
+        toggleRuntimeCapabilitySelection(
+          previous,
+          option.type,
+          option.id,
+          false,
+        ),
       );
     },
     [],
@@ -1225,7 +1243,8 @@ export function Chat({
         inputPayload.planMode = true;
       }
       if (effectiveRuntimeCapabilitiesForSubmit) {
-        inputPayload.runtimeCapabilities = effectiveRuntimeCapabilitiesForSubmit;
+        inputPayload.runtimeCapabilities =
+          effectiveRuntimeCapabilitiesForSubmit;
       }
 
       const requestOptions = buildInjectedRequestOptions({
@@ -2007,18 +2026,16 @@ export function Chat({
                             ...(message as ChatkitMessage),
                             type: 'assistant',
                           }}
-                          messages={messages
-                            .slice(0, index + 1)
-                            .map(
-                              (item) =>
-                                ({
-                                  ...(item as ChatkitMessage),
-                                  type:
-                                    String(item.type) === 'ai'
-                                      ? 'assistant'
-                                      : item.type,
-                                }) as ChatkitMessage,
-                            )}
+                          messages={messages.slice(0, index + 1).map(
+                            (item) =>
+                              ({
+                                ...(item as ChatkitMessage),
+                                type:
+                                  String(item.type) === 'ai'
+                                    ? 'assistant'
+                                    : item.type,
+                              }) as ChatkitMessage,
+                          )}
                           isStreaming={isStreamingMessage}
                           streamingStatus={streamingStatus}
                         />
@@ -2352,7 +2369,8 @@ export function Chat({
                   }}
                   className={cn(
                     'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted',
-                    index === runtimeCapabilityPalette.activeIndex && 'bg-muted',
+                    index === runtimeCapabilityPalette.activeIndex &&
+                      'bg-muted',
                   )}
                 >
                   <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
@@ -2432,10 +2450,16 @@ export function Chat({
                     runtimeCapabilities={
                       runtimeCapabilitiesReady ? runtimeCapabilities : null
                     }
-                    selectedRuntimeCapabilities={effectiveSessionRuntimeCapabilities}
-                    onRuntimeCapabilityToggle={handleSessionRuntimeCapabilityToggle}
+                    selectedRuntimeCapabilities={
+                      effectiveSessionRuntimeCapabilities
+                    }
+                    onRuntimeCapabilityToggle={
+                      handleSessionRuntimeCapabilityToggle
+                    }
                     disabled={
-                      missingConfig || isHistoryLoading || hasPendingRequestUserInput
+                      missingConfig ||
+                      isHistoryLoading ||
+                      hasPendingRequestUserInput
                     }
                   />
                 </div>

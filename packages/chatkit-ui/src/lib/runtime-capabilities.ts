@@ -3,7 +3,7 @@ import type {
   RuntimeCapabilitiesSelection,
   RuntimeCapabilityPlugin,
   RuntimeCapabilitySkill,
-} from '@xpert-ai/chatkit-types';
+} from '@xpert-ai/xpert-sdk';
 
 export type RuntimeCapabilityOption =
   | {
@@ -21,90 +21,10 @@ export type RuntimeCapabilityOption =
       capability: RuntimeCapabilityPlugin;
     };
 
-function toString(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
-
-function normalizeSkill(value: unknown): RuntimeCapabilitySkill | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const id = toString(record.id);
-  const workspaceId = toString(record.workspaceId);
-  const label = toString(record.label) || id;
-  if (!id || !workspaceId || !label) {
-    return null;
-  }
-
-  return {
-    id,
-    workspaceId,
-    label,
-    ...(toString(record.description)
-      ? { description: toString(record.description) }
-      : {}),
-    ...(toString(record.repositoryName)
-      ? { repositoryName: toString(record.repositoryName) }
-      : {}),
-    ...(toString(record.provider) ? { provider: toString(record.provider) } : {}),
-    ...(record.default === true || record.defaultSelected === true
-      ? { default: true }
-      : {}),
-  };
-}
-
-function normalizePlugin(value: unknown): RuntimeCapabilityPlugin | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const nodeKey = toString(record.nodeKey);
-  const provider = toString(record.provider);
-  const label = toString(record.label) || provider || nodeKey;
-  if (!nodeKey || !provider || !label) {
-    return null;
-  }
-
-  return {
-    nodeKey,
-    provider,
-    label,
-    ...(toString(record.description)
-      ? { description: toString(record.description) }
-      : {}),
-    ...(Array.isArray(record.toolNames)
-      ? { toolNames: uniqueStrings(record.toolNames.filter((item): item is string => typeof item === 'string')) }
-      : {}),
-  };
-}
-
-export function normalizeRuntimeCapabilitiesResponse(
-  value: unknown,
-): RuntimeCapabilitiesResponse {
-  const record =
-    value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-
-  return {
-    skills: Array.isArray(record.skills)
-      ? record.skills
-          .map((item) => normalizeSkill(item))
-          .filter((item): item is RuntimeCapabilitySkill => item !== null)
-      : [],
-    plugins: Array.isArray(record.plugins)
-      ? record.plugins
-          .map((item) => normalizePlugin(item))
-          .filter((item): item is RuntimeCapabilityPlugin => item !== null)
-      : [],
-  };
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
+  );
 }
 
 export function createEmptyRuntimeCapabilitiesSelection(
@@ -224,9 +144,12 @@ export function getRuntimeCapabilityOptions(
 export function hasRuntimeCapabilitySelection(
   selection?: RuntimeCapabilitiesSelection | null,
 ): boolean {
-  return Boolean(
-    selection &&
-      (selection.skills.ids.length > 0 || selection.plugins.nodeKeys.length > 0),
+  if (!selection) {
+    return false;
+  }
+
+  return (
+    selection.skills.ids.length > 0 || selection.plugins.nodeKeys.length > 0
   );
 }
 

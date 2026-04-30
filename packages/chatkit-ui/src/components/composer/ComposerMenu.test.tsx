@@ -105,13 +105,12 @@ describe('ComposerMenu', () => {
 
     openMenu();
 
-    expect(
-      screen.getByRole('switch', { name: 'Plan mode' }),
-    ).toHaveAttribute('aria-checked', 'true');
-
-    fireEvent.click(
-      screen.getByRole('menuitem', { name: 'Add attachment' }),
+    expect(screen.getByRole('switch', { name: 'Plan mode' })).toHaveAttribute(
+      'aria-checked',
+      'true',
     );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add attachment' }));
     expect(onAttachmentClick).toHaveBeenCalledTimes(1);
 
     openMenu();
@@ -135,6 +134,13 @@ describe('ComposerMenu', () => {
               workspaceId: 'workspace-1',
               label: 'Research Skill',
               description: 'Search and summarize',
+              meta: {
+                icon: {
+                  type: 'svg',
+                  value:
+                    '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" /></svg>',
+                },
+              },
             },
           ],
           plugins: [
@@ -143,6 +149,13 @@ describe('ComposerMenu', () => {
               provider: 'sandbox',
               label: 'Sandbox Plugin',
               description: 'Run commands',
+              meta: {
+                icon: {
+                  type: 'svg',
+                  value:
+                    '<svg viewBox="0 0 16 16"><path d="M2 2h12v12H2z" /></svg>',
+                },
+              },
             },
           ],
         }}
@@ -168,9 +181,13 @@ describe('ComposerMenu', () => {
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
-    fireEvent.click(
-      await screen.findByRole('menuitemcheckbox', { name: /Research Skill/ }),
-    );
+    const skillItem = await screen.findByRole('menuitemcheckbox', {
+      name: /Research Skill/,
+    });
+    expect(
+      skillItem.querySelector('[data-slot="runtime-capability-meta-icon"] svg'),
+    ).toBeInTheDocument();
+    fireEvent.click(skillItem);
     expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
       'skill',
       'skill-1',
@@ -179,9 +196,15 @@ describe('ComposerMenu', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Plugins' }));
-    fireEvent.click(
-      await screen.findByRole('menuitemcheckbox', { name: /Sandbox Plugin/ }),
-    );
+    const pluginItem = await screen.findByRole('menuitemcheckbox', {
+      name: /Sandbox Plugin/,
+    });
+    expect(
+      pluginItem.querySelector(
+        '[data-slot="runtime-capability-meta-icon"] svg',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(pluginItem);
     expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
       'plugin',
       'middleware-1',

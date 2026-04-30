@@ -18,14 +18,18 @@ import {
   X,
 } from 'lucide-react';
 import type {
+  IconDefinition,
+  RuntimeCapabilitiesResponse,
+  RuntimeCapabilitiesSelection,
+} from '@xpert-ai/xpert-sdk';
+import type {
   ToolOption,
   ChatKitOptions,
   IconName,
-  RuntimeCapabilitiesResponse,
-  RuntimeCapabilitiesSelection,
 } from '@xpert-ai/chatkit-types';
 import { cn, getRoundedClass } from '../../lib/utils';
 import { Button } from '../ui/button';
+import { IconDefinitionRenderer } from '../ui/icon-definition';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -63,15 +67,15 @@ export type ComposerMenuProps = {
 // Icon mapping for XpertIcon types
 function getIconComponent(icon: IconName): React.ReactNode {
   const iconMap: Record<string, React.ReactNode> = {
-    'plus': <Plus size={16} />,
-    'document': <FileText size={16} />,
-    'write': <Pencil size={16} />,
-    'sparkle': <Sparkles size={16} />,
-    'lightbulb': <Lightbulb size={16} />,
+    plus: <Plus size={16} />,
+    document: <FileText size={16} />,
+    write: <Pencil size={16} />,
+    sparkle: <Sparkles size={16} />,
+    lightbulb: <Lightbulb size={16} />,
     'settings-slider': <SlidersHorizontal size={16} />,
-    'search': <Search size={16} />,
-    'globe': <Globe size={16} />,
-    'images': <Images size={16} />,
+    search: <Search size={16} />,
+    globe: <Globe size={16} />,
+    images: <Images size={16} />,
   };
 
   return iconMap[icon] || iconMap['sparkle'];
@@ -106,7 +110,8 @@ export function ComposerMenu({
   const skills = runtimeCapabilities?.skills ?? [];
   const plugins = runtimeCapabilities?.plugins ?? [];
   const hasRuntimeCapabilities = skills.length > 0 || plugins.length > 0;
-  const selectedSkillCount = selectedRuntimeCapabilities?.skills.ids.length ?? 0;
+  const selectedSkillCount =
+    selectedRuntimeCapabilities?.skills.ids.length ?? 0;
   const selectedPluginCount =
     selectedRuntimeCapabilities?.plugins.nodeKeys.length ?? 0;
 
@@ -148,6 +153,7 @@ export function ComposerMenu({
       label: string;
       description?: string;
       fallbackDescription?: string;
+      icon?: IconDefinition;
     },
   ) => {
     const selected = selectedRuntimeCapabilities
@@ -170,7 +176,16 @@ export function ComposerMenu({
         )}
       >
         <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-          <Icon size={16} />
+          {item.icon ? (
+            <IconDefinitionRenderer
+              icon={item.icon}
+              size={24}
+              dataSlot="runtime-capability-meta-icon"
+              fallback={<Icon size={16} />}
+            />
+          ) : (
+            <Icon size={16} />
+          )}
         </span>
         <span className="min-w-0 flex-1 text-left">
           <span className="block truncate">{item.label}</span>
@@ -212,6 +227,7 @@ export function ComposerMenu({
                 label: skill.label,
                 description: skill.description,
                 fallbackDescription: skill.repositoryName,
+                icon: skill.meta?.icon,
               }),
             )
           : plugins.map((plugin) =>
@@ -220,6 +236,7 @@ export function ComposerMenu({
                 label: plugin.label,
                 description: plugin.description,
                 fallbackDescription: plugin.provider,
+                icon: plugin.meta?.icon,
               }),
             )}
       </>
