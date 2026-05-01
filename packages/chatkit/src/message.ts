@@ -296,6 +296,9 @@ export type RuntimeCapabilitiesSelection = {
   plugins: {
     nodeKeys: string[];
   };
+  subAgents?: {
+    nodeKeys: string[];
+  };
 };
 
 export const STATE_VARIABLE_HUMAN = 'human';

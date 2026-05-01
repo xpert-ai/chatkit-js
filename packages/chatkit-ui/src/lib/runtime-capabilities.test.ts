@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
 
-import { createDefaultRuntimeCapabilitiesSelection } from './runtime-capabilities';
+import {
+  createDefaultRuntimeCapabilitiesSelection,
+  createEmptyRuntimeCapabilitiesSelection,
+  mergeRuntimeCapabilitiesSelections,
+  toggleRuntimeCapabilitySelection,
+} from './runtime-capabilities';
 
 describe('runtime capabilities helpers', () => {
   it('uses default skills as the initial allow-list', () => {
@@ -20,6 +25,13 @@ describe('runtime capabilities helpers', () => {
         },
       ],
       plugins: [],
+      subAgents: [
+        {
+          nodeKey: 'researcher',
+          type: 'agent',
+          label: 'Researcher',
+        },
+      ],
     };
 
     expect(capabilities.skills[0]?.default).toBe(true);
@@ -32,6 +44,53 @@ describe('runtime capabilities helpers', () => {
       plugins: {
         nodeKeys: [],
       },
+      subAgents: {
+        nodeKeys: [],
+      },
     });
+  });
+
+  it('normalizes empty selections with sub-agents for older responses', () => {
+    const capabilities: RuntimeCapabilitiesResponse = {
+      skills: [],
+      plugins: [],
+    };
+
+    expect(createEmptyRuntimeCapabilitiesSelection(capabilities)).toEqual({
+      mode: 'allowlist',
+      skills: { ids: [] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+    });
+  });
+
+  it('merges and toggles sub-agent selections', () => {
+    const capabilities = {
+      skills: [],
+      plugins: [],
+      subAgents: [
+        {
+          nodeKey: 'researcher',
+          type: 'agent' as const,
+          label: 'Researcher',
+        },
+      ],
+    };
+
+    const selection = toggleRuntimeCapabilitySelection(
+      createEmptyRuntimeCapabilitiesSelection(capabilities),
+      'subAgent',
+      'researcher',
+      true,
+    );
+
+    expect(selection.subAgents?.nodeKeys).toEqual(['researcher']);
+    expect(
+      mergeRuntimeCapabilitiesSelections(
+        capabilities,
+        selection,
+        createEmptyRuntimeCapabilitiesSelection(capabilities),
+      ).subAgents?.nodeKeys,
+    ).toEqual(['researcher']);
   });
 });

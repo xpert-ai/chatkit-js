@@ -226,23 +226,25 @@ describe('Chat plan mode payload', () => {
   });
 
   it('loads runtime capabilities through the SDK client and submits the default allow-list', async () => {
-    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
-      skills: [
-        {
-          id: 'skill-default',
-          workspaceId: 'workspace-1',
-          label: 'Default Skill',
-          default: true,
-        },
-      ],
-      plugins: [
-        {
-          nodeKey: 'middleware-1',
-          provider: 'sandbox',
-          label: 'Sandbox',
-        },
-      ],
-    });
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-default',
+            workspaceId: 'workspace-1',
+            label: 'Default Skill',
+            default: true,
+          },
+        ],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+      },
+    );
 
     renderChat();
 
@@ -276,6 +278,9 @@ describe('Chat plan mode payload', () => {
             plugins: {
               nodeKeys: [],
             },
+            subAgents: {
+              nodeKeys: [],
+            },
           },
         },
         state: {
@@ -288,6 +293,9 @@ describe('Chat plan mode payload', () => {
                 ids: ['skill-default'],
               },
               plugins: {
+                nodeKeys: [],
+              },
+              subAgents: {
                 nodeKeys: [],
               },
             },

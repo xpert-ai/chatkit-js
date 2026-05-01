@@ -1,11 +1,13 @@
 import * as React from 'react';
 import {
   ArrowLeft,
+  Bot,
   Brain,
   ChevronRight,
   FileText,
   Globe,
   Images,
+  Info,
   Lightbulb,
   ListChecks,
   Paperclip,
@@ -21,6 +23,7 @@ import type {
   IconDefinition,
   RuntimeCapabilitiesResponse,
   RuntimeCapabilitiesSelection,
+  RuntimeCapabilitySubAgent,
 } from '@xpert-ai/xpert-sdk';
 import type {
   ToolOption,
@@ -44,8 +47,10 @@ import {
   isRuntimeCapabilitySelected,
   type RuntimeCapabilityOption,
 } from '../../lib/runtime-capabilities';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { ChatkitAvatar, normalizeChatkitAvatar } from '../ui/chatkit-avatar';
 
-type CapabilityPanel = 'skills' | 'plugins';
+type CapabilityPanel = 'skills' | 'plugins' | 'subAgents';
 
 export type ComposerMenuProps = {
   composer?: ChatKitOptions['composer'];
@@ -109,11 +114,15 @@ export function ComposerMenu({
   const tools = composer?.tools ?? [];
   const skills = runtimeCapabilities?.skills ?? [];
   const plugins = runtimeCapabilities?.plugins ?? [];
-  const hasRuntimeCapabilities = skills.length > 0 || plugins.length > 0;
+  const subAgents = runtimeCapabilities?.subAgents ?? [];
+  const hasRuntimeCapabilities =
+    skills.length > 0 || plugins.length > 0 || subAgents.length > 0;
   const selectedSkillCount =
     selectedRuntimeCapabilities?.skills.ids.length ?? 0;
   const selectedPluginCount =
     selectedRuntimeCapabilities?.plugins.nodeKeys.length ?? 0;
+  const selectedSubAgentCount =
+    selectedRuntimeCapabilities?.subAgents?.nodeKeys.length ?? 0;
 
   const handleAttachmentClick = () => {
     onAttachmentClick?.();
@@ -146,6 +155,147 @@ export function ComposerMenu({
     collisionPadding: 8,
   };
 
+  const getCapabilityFallbackIcon = (type: RuntimeCapabilityOption['type']) => {
+    if (type === 'skill') return Brain;
+    if (type === 'plugin') return Plug;
+    return Bot;
+  };
+
+  const getParameterLabels = (subAgent: RuntimeCapabilitySubAgent) =>
+    (subAgent.parameters ?? [])
+      .map((parameter) => {
+        if (!parameter || typeof parameter !== 'object') return null;
+        const record = parameter as Record<string, unknown>;
+        return (
+          (typeof record.title === 'string' && record.title.trim()) ||
+          (typeof record.name === 'string' && record.name.trim()) ||
+          null
+        );
+      })
+      .filter((value): value is string => Boolean(value));
+
+  const renderDetailPills = (label: string, values?: string[]) => {
+    if (!values?.length) return null;
+
+    return (
+      <div className="space-y-1">
+        <div className="text-[11px] font-medium uppercase text-muted-foreground">
+          {label}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {values.slice(0, 6).map((value) => (
+            <span
+              key={value}
+              className="max-w-full truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
+            >
+              {value}
+            </span>
+          ))}
+          {values.length > 6 && (
+            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              +{values.length - 6}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSubAgentInfoButton = (subAgent: RuntimeCapabilitySubAgent) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('composer.capabilities.agentDetails')}
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          data-slot="runtime-sub-agent-info-trigger"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Info size={14} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="center"
+        sideOffset={8}
+        hideArrow
+        className="bg-transparent p-0 text-popover-foreground shadow-none"
+      >
+        {renderSubAgentDetailCard(subAgent)}
+      </TooltipContent>
+    </Tooltip>
+  );
+
+  const renderSubAgentDetailCard = (subAgent: RuntimeCapabilitySubAgent) => {
+    const parameterLabels = getParameterLabels(subAgent);
+    const agentKind =
+      subAgent.type === 'xpert'
+        ? t('composer.capabilities.xpertAgent')
+        : t('composer.capabilities.agent');
+
+    return (
+      <div
+        data-slot="runtime-sub-agent-detail-card"
+        className="pointer-events-none w-80 space-y-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+      >
+        <div className="flex items-start gap-3">
+          <ChatkitAvatar
+            avatar={normalizeChatkitAvatar(subAgent.avatar)}
+            label={subAgent.label}
+            className="h-9 w-9 shrink-0"
+            fallbackClassName="text-xs"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{subAgent.label}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {subAgent.name ?? agentKind}
+            </div>
+          </div>
+        </div>
+
+        {subAgent.description && (
+          <div className="line-clamp-4 text-xs leading-5 text-muted-foreground">
+            {subAgent.description}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-md bg-muted px-2 py-1">
+            <span className="block text-[11px] text-muted-foreground">
+              {t('composer.capabilities.type')}
+            </span>
+            <span className="font-medium">{agentKind}</span>
+          </div>
+          {(subAgent.agentKey || subAgent.xpertId) && (
+            <div className="rounded-md bg-muted px-2 py-1">
+              <span className="block text-[11px] text-muted-foreground">
+                {t('composer.capabilities.identifier')}
+              </span>
+              <span className="block truncate font-mono text-[11px]">
+                {subAgent.agentKey ?? subAgent.xpertId}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {renderDetailPills(t('composer.capabilities.inputs'), parameterLabels)}
+        {renderDetailPills(
+          t('composer.capabilities.tools'),
+          subAgent.toolNames,
+        )}
+        {renderDetailPills(
+          t('composer.capabilities.toolsets'),
+          subAgent.toolsetNames,
+        )}
+        {renderDetailPills(
+          t('composer.capabilities.knowledge'),
+          subAgent.knowledgebaseNames,
+        )}
+      </div>
+    );
+  };
+
   const renderCapabilityRow = (
     type: RuntimeCapabilityOption['type'],
     item: {
@@ -154,14 +304,35 @@ export function ComposerMenu({
       description?: string;
       fallbackDescription?: string;
       icon?: IconDefinition;
+      subAgent?: RuntimeCapabilitySubAgent;
     },
   ) => {
     const selected = selectedRuntimeCapabilities
       ? isRuntimeCapabilitySelected(selectedRuntimeCapabilities, type, item.id)
       : false;
-    const Icon = type === 'skill' ? Brain : Plug;
+    const Icon = getCapabilityFallbackIcon(type);
+    const icon =
+      type === 'subAgent' && item.subAgent ? (
+        <ChatkitAvatar
+          avatar={normalizeChatkitAvatar(item.subAgent.avatar)}
+          label={item.subAgent.label}
+          className="h-6 w-6"
+          fallbackClassName="text-[10px]"
+          imageClassName="object-cover"
+          data-slot="runtime-sub-agent-avatar"
+        />
+      ) : item.icon ? (
+        <IconDefinitionRenderer
+          icon={item.icon}
+          size={24}
+          dataSlot="runtime-capability-meta-icon"
+          fallback={<Icon size={16} />}
+        />
+      ) : (
+        <Icon size={16} />
+      );
 
-    return (
+    const row = (
       <DropdownMenuCheckboxItem
         key={item.id}
         checked={selected}
@@ -176,16 +347,7 @@ export function ComposerMenu({
         )}
       >
         <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-          {item.icon ? (
-            <IconDefinitionRenderer
-              icon={item.icon}
-              size={24}
-              dataSlot="runtime-capability-meta-icon"
-              fallback={<Icon size={16} />}
-            />
-          ) : (
-            <Icon size={16} />
-          )}
+          {icon}
         </span>
         <span className="min-w-0 flex-1 text-left">
           <span className="block truncate">{item.label}</span>
@@ -195,15 +357,53 @@ export function ComposerMenu({
             </span>
           )}
         </span>
+        {type === 'subAgent' && item.subAgent
+          ? renderSubAgentInfoButton(item.subAgent)
+          : null}
       </DropdownMenuCheckboxItem>
     );
+
+    return row;
   };
 
   const renderCapabilityPanel = (panel: CapabilityPanel) => {
-    const isSkillsPanel = panel === 'skills';
-    const title = isSkillsPanel
-      ? t('composer.capabilities.skills')
-      : t('composer.capabilities.plugins');
+    const title =
+      panel === 'skills'
+        ? t('composer.capabilities.skills')
+        : panel === 'plugins'
+          ? t('composer.capabilities.plugins')
+          : t('composer.capabilities.subAgents');
+
+    const rows =
+      panel === 'skills'
+        ? skills.map((skill) =>
+            renderCapabilityRow('skill', {
+              id: skill.id,
+              label: skill.label,
+              description: skill.description,
+              fallbackDescription: skill.repositoryName,
+              icon: skill.meta?.icon,
+            }),
+          )
+        : panel === 'plugins'
+          ? plugins.map((plugin) =>
+              renderCapabilityRow('plugin', {
+                id: plugin.nodeKey,
+                label: plugin.label,
+                description: plugin.description,
+                fallbackDescription: plugin.provider,
+                icon: plugin.meta?.icon,
+              }),
+            )
+          : subAgents.map((subAgent) =>
+              renderCapabilityRow('subAgent', {
+                id: subAgent.nodeKey,
+                label: subAgent.label,
+                description: subAgent.description,
+                fallbackDescription: subAgent.name,
+                subAgent,
+              }),
+            );
 
     return (
       <>
@@ -220,25 +420,7 @@ export function ComposerMenu({
           <span className="min-w-0 flex-1 text-left">{title}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        {isSkillsPanel
-          ? skills.map((skill) =>
-              renderCapabilityRow('skill', {
-                id: skill.id,
-                label: skill.label,
-                description: skill.description,
-                fallbackDescription: skill.repositoryName,
-                icon: skill.meta?.icon,
-              }),
-            )
-          : plugins.map((plugin) =>
-              renderCapabilityRow('plugin', {
-                id: plugin.nodeKey,
-                label: plugin.label,
-                description: plugin.description,
-                fallbackDescription: plugin.provider,
-                icon: plugin.meta?.icon,
-              }),
-            )}
+        {rows}
       </>
     );
   };
@@ -370,6 +552,29 @@ export function ComposerMenu({
                     {selectedPluginCount > 0 && (
                       <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
                         {selectedPluginCount}
+                      </span>
+                    )}
+                    <ChevronRight size={16} className="text-muted-foreground" />
+                  </DropdownMenuItem>
+                )}
+
+                {subAgents.length > 0 && (
+                  <DropdownMenuItem
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setActivePanel('subAgents');
+                    }}
+                    className={cn('gap-3 px-3 py-2', roundedClass)}
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
+                      <Bot size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-left">
+                      {t('composer.capabilities.subAgents')}
+                    </span>
+                    {selectedSubAgentCount > 0 && (
+                      <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                        {selectedSubAgentCount}
                       </span>
                     )}
                     <ChevronRight size={16} className="text-muted-foreground" />

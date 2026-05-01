@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ComposerMenu } from './ComposerMenu';
@@ -12,6 +18,16 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
         'composer.planMode': 'Plan mode',
         'composer.capabilities.skills': 'Skills',
         'composer.capabilities.plugins': 'Plugins',
+        'composer.capabilities.subAgents': 'Sub-agents',
+        'composer.capabilities.agent': 'Agent',
+        'composer.capabilities.xpertAgent': 'Xpert',
+        'composer.capabilities.agentDetails': 'Agent details',
+        'composer.capabilities.type': 'Type',
+        'composer.capabilities.identifier': 'ID',
+        'composer.capabilities.inputs': 'Inputs',
+        'composer.capabilities.tools': 'Tools',
+        'composer.capabilities.toolsets': 'Toolsets',
+        'composer.capabilities.knowledge': 'Knowledge',
         'composer.planModeActive': 'Plan',
         'composer.disablePlanMode': 'Turn off plan mode',
       };
@@ -158,11 +174,28 @@ describe('ComposerMenu', () => {
               },
             },
           ],
+          subAgents: [
+            {
+              nodeKey: 'researcher',
+              type: 'agent',
+              label: 'Researcher',
+              name: 'researcher',
+              description: 'Research helper',
+              avatar: {
+                background: '#123456',
+              },
+              parameters: [{ name: 'topic', title: 'Topic' }],
+              toolNames: ['search'],
+              toolsetNames: ['Search Tools'],
+              knowledgebaseNames: ['Docs'],
+            },
+          ],
         }}
         selectedRuntimeCapabilities={{
           mode: 'allowlist',
           skills: { workspaceId: 'workspace-1', ids: [] },
           plugins: { nodeKeys: [] },
+          subAgents: { nodeKeys: [] },
         }}
         onRuntimeCapabilityToggle={onRuntimeCapabilityToggle}
       />,
@@ -175,6 +208,9 @@ describe('ComposerMenu', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('menuitem', { name: 'Plugins' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'Sub-agents' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('menuitemcheckbox', { name: /Research Skill/ }),
@@ -210,5 +246,35 @@ describe('ComposerMenu', () => {
       'middleware-1',
       true,
     );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Plugins' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sub-agents' }));
+    const subAgentItem = await screen.findByRole('menuitemcheckbox', {
+      name: /Researcher/,
+    });
+    expect(
+      subAgentItem.querySelector('[data-slot="runtime-sub-agent-avatar"]'),
+    ).toBeInTheDocument();
+    fireEvent.click(subAgentItem);
+    expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
+      'subAgent',
+      'researcher',
+      true,
+    );
+    expect(
+      document.querySelector('[data-slot="runtime-sub-agent-detail-card"]'),
+    ).not.toBeInTheDocument();
+    fireEvent.pointerMove(
+      screen.getByRole('button', { name: 'Agent details' }),
+    );
+    await waitFor(() => {
+      const detailCard = document.querySelector(
+        '[data-slot="runtime-sub-agent-detail-card"]',
+      );
+      expect(detailCard).toBeInTheDocument();
+      expect(
+        within(detailCard as HTMLElement).getByText('Search Tools'),
+      ).toBeInTheDocument();
+    });
   });
 });
