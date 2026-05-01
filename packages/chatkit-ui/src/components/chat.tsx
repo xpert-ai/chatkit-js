@@ -86,6 +86,12 @@ import {
   toggleRuntimeCapabilitySelection,
   type RuntimeCapabilityOption,
 } from '../lib/runtime-capabilities';
+import {
+  hasMissingRuntimeCapabilityReferences,
+  loadConversationRuntimeCapabilities,
+  persistConversationRuntimeCapabilities as persistRuntimeCapabilitiesToConversation,
+  type MissingRuntimeCapabilityReferences,
+} from '../lib/conversation-runtime-capabilities';
 
 export type ChatProps = {
   className?: string;
@@ -199,6 +205,20 @@ function getHttpStatus(error: unknown): number | null {
 
   const status = (error as { status?: unknown }).status;
   return typeof status === 'number' ? status : null;
+}
+
+function warnMissingRuntimeCapabilityReferences(
+  action: string,
+  missing: MissingRuntimeCapabilityReferences,
+) {
+  if (!hasMissingRuntimeCapabilityReferences(missing)) {
+    return;
+  }
+
+  console.warn(
+    `[Chat] Runtime capabilities ${action} include unavailable references:`,
+    missing,
+  );
 }
 
 async function readImageDimensions(file: File): Promise<{
@@ -522,6 +542,7 @@ export function Chat({
   const autoScrollFrameRef = React.useRef<number | null>(null);
   const isPointerDownRef = React.useRef(false);
   const lastTouchYRef = React.useRef<number | null>(null);
+  const runtimeCapabilityPreferenceLoadRef = React.useRef(0);
 
   const resolvedTitle = title ?? t('chat.title');
   const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
@@ -621,6 +642,36 @@ export function Chat({
     runtimeCapabilityOptions,
     runtimeCapabilityPalette,
   ]);
+
+  const persistSessionRuntimeCapabilities = React.useCallback(
+    async (
+      threadId: string,
+      selection: RuntimeCapabilitiesSelection | null | undefined,
+    ) => {
+      if (!runtimeCapabilities || !selection) {
+        return;
+      }
+
+      try {
+        const result = await persistRuntimeCapabilitiesToConversation({
+          client: stream.client,
+          threadId,
+          capabilities: runtimeCapabilities,
+          selection,
+        });
+        warnMissingRuntimeCapabilityReferences(
+          'persisted selection',
+          result.missing,
+        );
+      } catch (error) {
+        console.warn(
+          '[Chat] Failed to persist runtime capabilities selection:',
+          error,
+        );
+      }
+    },
+    [runtimeCapabilities, stream.client],
+  );
 
   const clearQuoteSelection = React.useCallback(() => {
     setQuoteSelection(null);
@@ -1093,14 +1144,70 @@ export function Chat({
   }, [missingConfig, stream.client, stream.assistantId]);
 
   React.useEffect(() => {
-    setSessionRuntimeCapabilities(
-      createDefaultRuntimeCapabilitiesSelection(runtimeCapabilities),
-    );
     setRunRuntimeCapabilities(
       createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
     );
     setRuntimeCapabilityPalette(null);
-  }, [runtimeCapabilities, stream.threadId]);
+
+    if (!runtimeCapabilitiesReady || !runtimeCapabilities) {
+      setSessionRuntimeCapabilities(
+        createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
+      );
+      return;
+    }
+
+    const defaultSelection =
+      createDefaultRuntimeCapabilitiesSelection(runtimeCapabilities);
+    const threadId = stream.threadId?.trim();
+    if (!threadId) {
+      setSessionRuntimeCapabilities(defaultSelection);
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = runtimeCapabilityPreferenceLoadRef.current + 1;
+    runtimeCapabilityPreferenceLoadRef.current = requestId;
+    setSessionRuntimeCapabilities(defaultSelection);
+
+    void loadConversationRuntimeCapabilities({
+      client: stream.client,
+      threadId,
+      capabilities: runtimeCapabilities,
+    })
+      .then(({ selection, missing }) => {
+        if (
+          cancelled ||
+          runtimeCapabilityPreferenceLoadRef.current !== requestId
+        ) {
+          return;
+        }
+
+        warnMissingRuntimeCapabilityReferences('loaded selection', missing);
+        setSessionRuntimeCapabilities(selection ?? defaultSelection);
+      })
+      .catch((error: unknown) => {
+        if (
+          cancelled ||
+          runtimeCapabilityPreferenceLoadRef.current !== requestId
+        ) {
+          return;
+        }
+        console.warn(
+          '[Chat] Failed to load persisted runtime capabilities selection:',
+          error,
+        );
+        setSessionRuntimeCapabilities(defaultSelection);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    stream.client,
+    stream.threadId,
+  ]);
 
   React.useEffect(() => {
     if (!runtimeCapabilityPalette) {
@@ -1143,33 +1250,53 @@ export function Chat({
 
   const handleSessionRuntimeCapabilityToggle = React.useCallback(
     (type: RuntimeCapabilityOption['type'], id: string, selected: boolean) => {
-      setSessionRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(previous, type, id, selected),
+      setSessionRuntimeCapabilities((previous) => {
+        const nextSelection = toggleRuntimeCapabilitySelection(
+          previous,
+          type,
+          id,
+          selected,
+        );
+
+        const threadId = stream.threadId?.trim();
+        if (threadId) {
+          void persistSessionRuntimeCapabilities(threadId, nextSelection);
+        }
+
+        return nextSelection;
+      });
+    },
+    [persistSessionRuntimeCapabilities, stream.threadId],
+  );
+
+  const updateRuntimeCapabilityPalette = React.useCallback(
+    (value: string, selectionStart?: number | null) => {
+      const input = composerInputRef.current;
+      const nextPalette = resolveRuntimeCapabilityPalette(
+        value,
+        typeof selectionStart === 'number'
+          ? selectionStart
+          : input?.selectionStart,
       );
+      setRuntimeCapabilityPalette(nextPalette);
     },
     [],
   );
-
-  const updateRuntimeCapabilityPalette = React.useCallback((value: string) => {
-    const input = composerInputRef.current;
-    const nextPalette = resolveRuntimeCapabilityPalette(
-      value,
-      input?.selectionStart,
-    );
-    setRuntimeCapabilityPalette(nextPalette);
-  }, []);
 
   const handleComposerChange = React.useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
       const nextValue = event.target.value;
       setDraft(nextValue);
-      updateRuntimeCapabilityPalette(nextValue);
+      updateRuntimeCapabilityPalette(nextValue, event.target.selectionStart);
     },
     [updateRuntimeCapabilityPalette],
   );
 
   const handleComposerSelect = React.useCallback(() => {
-    updateRuntimeCapabilityPalette(draft);
+    updateRuntimeCapabilityPalette(
+      draft,
+      composerInputRef.current?.selectionStart,
+    );
   }, [draft, updateRuntimeCapabilityPalette]);
 
   const selectRunRuntimeCapability = React.useCallback(
@@ -1280,6 +1407,12 @@ export function Chat({
         defaults: options?.request,
         humanInput: inputPayload,
       });
+      const sessionRuntimeCapabilitiesForPersistence =
+        effectiveSessionRuntimeCapabilities;
+      const shouldPersistSessionRuntimeCapabilities =
+        !!sessionRuntimeCapabilitiesForPersistence &&
+        !stream.threadId &&
+        !nextFollowUpMode;
 
       stream.submit(
         {
@@ -1292,6 +1425,15 @@ export function Chat({
             ? { context: requestOptions.context }
             : {}),
           ...(requestOptions.config ? { config: requestOptions.config } : {}),
+          ...(shouldPersistSessionRuntimeCapabilities
+            ? {
+                onThreadResolved: (threadId) =>
+                  persistSessionRuntimeCapabilities(
+                    threadId,
+                    sessionRuntimeCapabilitiesForPersistence,
+                  ),
+              }
+            : {}),
           ...(!nextFollowUpMode
             ? {
                 optimisticValues: (prev) => {
@@ -1317,8 +1459,10 @@ export function Chat({
     },
     [
       effectiveRuntimeCapabilitiesForSubmit,
+      effectiveSessionRuntimeCapabilities,
       isSendDisabled,
       options?.request,
+      persistSessionRuntimeCapabilities,
       references,
       runtimeCapabilities,
       scrollToBottom,
@@ -1714,6 +1858,12 @@ export function Chat({
       defaults: options?.request,
       humanInput: inputPayload,
     });
+    const sessionRuntimeCapabilitiesForPersistence =
+      effectiveSessionRuntimeCapabilities;
+    const shouldPersistSessionRuntimeCapabilities =
+      !!sessionRuntimeCapabilitiesForPersistence &&
+      !stream.threadId &&
+      !nextFollowUpMode;
 
     stream.submit(
       {
@@ -1724,6 +1874,15 @@ export function Chat({
         ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
         ...(requestOptions.context ? { context: requestOptions.context } : {}),
         ...(requestOptions.config ? { config: requestOptions.config } : {}),
+        ...(shouldPersistSessionRuntimeCapabilities
+          ? {
+              onThreadResolved: (threadId) =>
+                persistSessionRuntimeCapabilities(
+                  threadId,
+                  sessionRuntimeCapabilitiesForPersistence,
+                ),
+            }
+          : {}),
         ...(!nextFollowUpMode
           ? {
               optimisticValues: (prev) => {

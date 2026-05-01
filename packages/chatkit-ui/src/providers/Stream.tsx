@@ -142,6 +142,7 @@ export type StreamSubmitOptions = {
   newThread?: boolean;
   joinExistingThread?: boolean;
   followUpMode?: FollowUpBehavior;
+  onThreadResolved?: (threadId: string) => void | Promise<void>;
 };
 
 export type StreamContextType = {
@@ -2501,6 +2502,16 @@ const StreamSession = ({
       if (desiredThreadId && desiredThreadId !== nextThreadId) {
         nextThreadId = desiredThreadId;
         setThreadId(desiredThreadId);
+      }
+      if (options?.onThreadResolved) {
+        void Promise.resolve(options.onThreadResolved(nextThreadId)).catch(
+          (callbackError) => {
+            console.warn(
+              '[chatkit-ui] Failed to run thread resolved callback',
+              callbackError,
+            );
+          },
+        );
       }
       if (nextThreadId !== previousThreadId) {
         lastEventIdRef.current = null;
