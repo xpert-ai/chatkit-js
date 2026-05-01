@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-types
 
+## 0.2.3
+
+### Patch Changes
+
+- 5c0cab1: sub-agents selection
+- 96aac52: Add ChatKit runtime sub-agent selection.
+
 ## 0.2.2
 
 ### Patch Changes
