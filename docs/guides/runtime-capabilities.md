@@ -106,7 +106,7 @@ When loading succeeds:
 - The composer menu shows `Skills` and `Plugins` panels.
 - Default skills are checked automatically.
 - Optional skills and plugins are unchecked.
-- The current session selection is kept per active thread and resets when switching threads or starting a new thread.
+- The current session selection is persisted on the conversation and restored when reopening that thread.
 - Sending a message includes a runtime allow-list even when all options are unchecked.
 
 The composer also supports a `/` palette:

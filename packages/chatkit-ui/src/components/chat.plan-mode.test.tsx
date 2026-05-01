@@ -14,12 +14,16 @@ const mocks = vi.hoisted(() => {
           get: vi.fn().mockResolvedValue(null),
           getRuntimeCapabilities: vi.fn().mockRejectedValue({ status: 404 }),
         },
+        conversations: {
+          search: vi.fn().mockResolvedValue({ items: [] }),
+          update: vi.fn(),
+        },
       },
       apiUrl: 'https://api.example.com',
       assistantId: 'assistant-1',
       apiKey: 'secret',
       organizationId: undefined,
-      threadId: null,
+      threadId: null as string | null,
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [],
@@ -90,17 +94,68 @@ vi.mock('./composer/ComposerMenu', () => ({
   ComposerMenu: ({
     planModeEnabled,
     onPlanModeChange,
+    runtimeCapabilities,
+    selectedRuntimeCapabilities,
+    onRuntimeCapabilityToggle,
   }: {
     planModeEnabled?: boolean;
     onPlanModeChange?: (enabled: boolean) => void;
+    runtimeCapabilities?: unknown;
+    selectedRuntimeCapabilities?: {
+      plugins: { nodeKeys: string[] };
+      subAgents?: { nodeKeys: string[] };
+    } | null;
+    onRuntimeCapabilityToggle?: (
+      type: 'skill' | 'plugin' | 'subAgent',
+      id: string,
+      selected: boolean,
+    ) => void;
   }) => (
-    <button
-      type="button"
-      data-testid="plan-mode-toggle"
-      onClick={() => onPlanModeChange?.(!planModeEnabled)}
-    >
-      {planModeEnabled ? 'plan-on' : 'plan-off'}
-    </button>
+    <div>
+      <button
+        type="button"
+        data-testid="plan-mode-toggle"
+        onClick={() => onPlanModeChange?.(!planModeEnabled)}
+      >
+        {planModeEnabled ? 'plan-on' : 'plan-off'}
+      </button>
+      <span data-testid="selected-plugins">
+        {selectedRuntimeCapabilities?.plugins.nodeKeys.join(',') ?? ''}
+      </span>
+      <span data-testid="selected-sub-agents">
+        {selectedRuntimeCapabilities?.subAgents?.nodeKeys.join(',') ?? ''}
+      </span>
+      <span data-testid="runtime-capabilities-ready">
+        {runtimeCapabilities ? 'ready' : 'not-ready'}
+      </span>
+      <button
+        type="button"
+        data-testid="select-plugin"
+        onClick={() =>
+          onRuntimeCapabilityToggle?.('plugin', 'middleware-1', true)
+        }
+      >
+        select plugin
+      </button>
+      <button
+        type="button"
+        data-testid="clear-plugin"
+        onClick={() =>
+          onRuntimeCapabilityToggle?.('plugin', 'middleware-1', false)
+        }
+      >
+        clear plugin
+      </button>
+      <button
+        type="button"
+        data-testid="select-sub-agent"
+        onClick={() =>
+          onRuntimeCapabilityToggle?.('subAgent', 'researcher', true)
+        }
+      >
+        select sub-agent
+      </button>
+    </div>
   ),
 }));
 
@@ -144,6 +199,7 @@ vi.mock('./thread/StartScreen', () => ({
 vi.mock('./ui/chatkit-avatar', () => ({
   ChatkitAvatar: () => null,
   extractAssistantAvatar: () => null,
+  normalizeChatkitAvatar: (avatar: unknown) => avatar,
 }));
 
 vi.mock('./thread/context-usage-indicator', () => ({
@@ -183,7 +239,11 @@ describe('Chat plan mode payload', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
     mocks.stream.client.assistants.getRuntimeCapabilities.mockClear();
+    mocks.stream.client.conversations.search.mockClear();
+    mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
+    mocks.stream.client.conversations.update.mockClear();
     mocks.stream.submit.mockClear();
+    mocks.stream.threadId = null;
     mocks.stream.messages = [];
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
@@ -303,6 +363,237 @@ describe('Chat plan mode payload', () => {
         },
       }),
       expect.any(Object),
+    );
+  });
+
+  it('hydrates session runtime capabilities from the active conversation options', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-default',
+            workspaceId: 'workspace-1',
+            label: 'Default Skill',
+            default: true,
+          },
+        ],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+        subAgents: [
+          {
+            nodeKey: 'researcher',
+            type: 'agent',
+            label: 'Researcher',
+          },
+        ],
+      },
+    );
+    mocks.stream.client.conversations.search.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'conversation-1',
+          threadId: 'thread-1',
+          options: {
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { workspaceId: 'workspace-1', ids: [] },
+              plugins: { nodeKeys: ['middleware-1'] },
+              subAgents: { nodeKeys: ['researcher'] },
+            },
+          },
+        },
+      ],
+    });
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('selected-plugins')).toHaveTextContent(
+        'middleware-1',
+      ),
+    );
+    expect(screen.getByTestId('selected-sub-agents')).toHaveTextContent(
+      'researcher',
+    );
+    expect(mocks.stream.client.conversations.search).toHaveBeenCalledWith({
+      where: { threadId: 'thread-1' },
+      limit: 1,
+    });
+  });
+
+  it('persists session capability toggles without replacing other conversation options', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+        subAgents: [
+          {
+            nodeKey: 'researcher',
+            type: 'agent',
+            label: 'Researcher',
+          },
+        ],
+      },
+    );
+    mocks.stream.client.conversations.search.mockResolvedValue({
+      items: [
+        {
+          id: 'conversation-1',
+          threadId: 'thread-1',
+          options: {
+            parameters: { input: 'hello' },
+            features: ['files'],
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { ids: [] },
+              plugins: { nodeKeys: ['middleware-1'] },
+              subAgents: { nodeKeys: [] },
+            },
+          },
+        },
+      ],
+    });
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('selected-plugins')).toHaveTextContent(
+        'middleware-1',
+      ),
+    );
+    fireEvent.click(screen.getByTestId('clear-plugin'));
+
+    await waitFor(() =>
+      expect(mocks.stream.client.conversations.update).toHaveBeenCalledWith(
+        'conversation-1',
+        {
+          options: {
+            parameters: { input: 'hello' },
+            features: ['files'],
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { ids: [] },
+              plugins: { nodeKeys: [] },
+              subAgents: { nodeKeys: [] },
+            },
+          },
+        },
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('select-sub-agent'));
+
+    await waitFor(() =>
+      expect(mocks.stream.client.conversations.update).toHaveBeenLastCalledWith(
+        'conversation-1',
+        expect.objectContaining({
+          options: expect.objectContaining({
+            parameters: { input: 'hello' },
+            runtimeCapabilities: expect.objectContaining({
+              subAgents: { nodeKeys: ['researcher'] },
+            }),
+          }),
+        }),
+      ),
+    );
+  });
+
+  it('submits run-only palette capabilities without persisting them to the conversation', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+        subAgents: [],
+      },
+    );
+    mocks.stream.client.conversations.search.mockResolvedValue({
+      items: [
+        {
+          id: 'conversation-1',
+          threadId: 'thread-new',
+          options: {
+            parameters: { input: 'seed' },
+          },
+        },
+      ],
+    });
+    mocks.stream.submit.mockImplementationOnce(
+      async (_values: any, options: any) => {
+        await options?.onThreadResolved?.('thread-new');
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    Object.defineProperty(textarea, 'selectionStart', {
+      configurable: true,
+      writable: true,
+      value: 5,
+    });
+    Object.defineProperty(textarea, 'selectionEnd', {
+      configurable: true,
+      writable: true,
+      value: 5,
+    });
+    fireEvent.change(textarea, {
+      target: { value: '/sand', selectionStart: 5, selectionEnd: 5 },
+    });
+    fireEvent.mouseDown(await screen.findByText('Sandbox'));
+    fireEvent.change(textarea, { target: { value: 'run it' } });
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.stream.submit.mock.calls[0][0].input.runtimeCapabilities,
+    ).toEqual({
+      mode: 'allowlist',
+      skills: { ids: [] },
+      plugins: { nodeKeys: ['middleware-1'] },
+      subAgents: { nodeKeys: [] },
+    });
+    await waitFor(() =>
+      expect(mocks.stream.client.conversations.update).toHaveBeenCalledWith(
+        'conversation-1',
+        {
+          options: {
+            parameters: { input: 'seed' },
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { ids: [] },
+              plugins: { nodeKeys: [] },
+              subAgents: { nodeKeys: [] },
+            },
+          },
+        },
+      ),
     );
   });
 
