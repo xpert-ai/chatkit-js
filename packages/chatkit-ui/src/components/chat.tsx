@@ -51,6 +51,7 @@ import {
   ChatkitAvatar,
   type ChatkitAvatarData,
   extractAssistantAvatar,
+  normalizeChatkitAvatar,
 } from './ui/chatkit-avatar';
 import { useStreamManager } from '../hooks/useStream';
 import { useThreads } from '../hooks/useThreads';
@@ -94,6 +95,34 @@ export type ChatProps = {
   options?: ChatKitOptions | null;
   isClientSecretInitializing?: boolean;
 };
+
+function RuntimeCapabilityIcon({
+  option,
+  variant,
+}: {
+  option: RuntimeCapabilityOption;
+  variant: 'chip' | 'list';
+}) {
+  const iconSize = variant === 'chip' ? 12 : 16;
+  if (option.type === 'skill') {
+    return <Brain size={iconSize} />;
+  }
+
+  if (option.type === 'plugin') {
+    return <Plug size={iconSize} />;
+  }
+
+  return (
+    <ChatkitAvatar
+      avatar={normalizeChatkitAvatar(option.capability.avatar)}
+      label={option.label}
+      className={variant === 'chip' ? 'h-4 w-4' : 'h-6 w-6'}
+      fallbackClassName={variant === 'chip' ? 'text-[9px]' : 'text-[10px]'}
+      imageClassName="object-cover"
+      data-slot="runtime-sub-agent-avatar"
+    />
+  );
+}
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | string
@@ -2305,11 +2334,7 @@ export function Chat({
                 key={`${option.type}:${option.id}`}
                 className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
               >
-                {option.type === 'skill' ? (
-                  <Brain size={12} />
-                ) : (
-                  <Plug size={12} />
-                )}
+                <RuntimeCapabilityIcon option={option} variant="chip" />
                 <span className="max-w-40 truncate">{option.label}</span>
                 <button
                   type="button"
@@ -2374,11 +2399,7 @@ export function Chat({
                   )}
                 >
                   <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-                    {option.type === 'skill' ? (
-                      <Brain size={16} />
-                    ) : (
-                      <Plug size={16} />
-                    )}
+                    <RuntimeCapabilityIcon option={option} variant="list" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{option.label}</span>

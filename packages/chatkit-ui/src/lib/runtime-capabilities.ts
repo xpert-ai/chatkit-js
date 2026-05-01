@@ -3,6 +3,7 @@ import type {
   RuntimeCapabilitiesSelection,
   RuntimeCapabilityPlugin,
   RuntimeCapabilitySkill,
+  RuntimeCapabilitySubAgent,
 } from '@xpert-ai/xpert-sdk';
 
 export type RuntimeCapabilityOption =
@@ -19,6 +20,13 @@ export type RuntimeCapabilityOption =
       label: string;
       description?: string;
       capability: RuntimeCapabilityPlugin;
+    }
+  | {
+      type: 'subAgent';
+      id: string;
+      label: string;
+      description?: string;
+      capability: RuntimeCapabilitySubAgent;
     };
 
 function uniqueStrings(values: readonly string[]): string[] {
@@ -40,6 +48,9 @@ export function createEmptyRuntimeCapabilitiesSelection(
     plugins: {
       nodeKeys: [],
     },
+    subAgents: {
+      nodeKeys: [],
+    },
   };
 }
 
@@ -58,6 +69,9 @@ export function createDefaultRuntimeCapabilitiesSelection(
       ),
     },
     plugins: {
+      nodeKeys: [],
+    },
+    subAgents: {
       nodeKeys: [],
     },
   };
@@ -84,6 +98,11 @@ export function mergeRuntimeCapabilitiesSelections(
         selections.flatMap((selection) => selection?.plugins.nodeKeys ?? []),
       ),
     },
+    subAgents: {
+      nodeKeys: uniqueStrings(
+        selections.flatMap((selection) => selection?.subAgents?.nodeKeys ?? []),
+      ),
+    },
   };
 }
 
@@ -94,26 +113,41 @@ export function toggleRuntimeCapabilitySelection(
   selected?: boolean,
 ): RuntimeCapabilitiesSelection {
   const ids =
-    type === 'skill' ? selection.skills.ids : selection.plugins.nodeKeys;
+    type === 'skill'
+      ? selection.skills.ids
+      : type === 'plugin'
+        ? selection.plugins.nodeKeys
+        : (selection.subAgents?.nodeKeys ?? []);
   const shouldSelect = selected ?? !ids.includes(id);
   const nextIds = shouldSelect
     ? uniqueStrings([...ids, id])
     : ids.filter((item) => item !== id);
 
-  return type === 'skill'
-    ? {
-        ...selection,
-        skills: {
-          ...selection.skills,
-          ids: nextIds,
-        },
-      }
-    : {
-        ...selection,
-        plugins: {
-          nodeKeys: nextIds,
-        },
-      };
+  if (type === 'skill') {
+    return {
+      ...selection,
+      skills: {
+        ...selection.skills,
+        ids: nextIds,
+      },
+    };
+  }
+
+  if (type === 'plugin') {
+    return {
+      ...selection,
+      plugins: {
+        nodeKeys: nextIds,
+      },
+    };
+  }
+
+  return {
+    ...selection,
+    subAgents: {
+      nodeKeys: nextIds,
+    },
+  };
 }
 
 export function getRuntimeCapabilityOptions(
@@ -138,6 +172,13 @@ export function getRuntimeCapabilityOptions(
       description: capability.description ?? capability.provider,
       capability,
     })),
+    ...(capabilities.subAgents ?? []).map((capability) => ({
+      type: 'subAgent' as const,
+      id: capability.nodeKey,
+      label: capability.label,
+      description: capability.description ?? capability.name,
+      capability,
+    })),
   ];
 }
 
@@ -149,7 +190,9 @@ export function hasRuntimeCapabilitySelection(
   }
 
   return (
-    selection.skills.ids.length > 0 || selection.plugins.nodeKeys.length > 0
+    selection.skills.ids.length > 0 ||
+    selection.plugins.nodeKeys.length > 0 ||
+    (selection.subAgents?.nodeKeys.length ?? 0) > 0
   );
 }
 
@@ -158,7 +201,13 @@ export function isRuntimeCapabilitySelected(
   type: RuntimeCapabilityOption['type'],
   id: string,
 ): boolean {
-  return type === 'skill'
-    ? selection.skills.ids.includes(id)
-    : selection.plugins.nodeKeys.includes(id);
+  if (type === 'skill') {
+    return selection.skills.ids.includes(id);
+  }
+
+  if (type === 'plugin') {
+    return selection.plugins.nodeKeys.includes(id);
+  }
+
+  return selection.subAgents?.nodeKeys.includes(id) ?? false;
 }
