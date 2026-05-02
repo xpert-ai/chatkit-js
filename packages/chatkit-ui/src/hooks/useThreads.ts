@@ -58,6 +58,23 @@ const toDate = (value: string | undefined): Date | undefined => {
   return new Date(timestamp);
 };
 
+const getErrorMessage = (error: unknown): string | undefined => {
+  if (!error) return undefined;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+
+  if (typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') return message;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+};
+
 const toThreadItem = (threadRecord: ThreadRecord): ThreadItem => ({
   id: threadRecord.threadId ?? threadRecord.id,
   recordId: threadRecord.id,
@@ -82,6 +99,7 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     assistantId,
     isReady,
     isLoading: isStreamLoading,
+    error: streamError,
   } = useStreamContext();
   const [threadRecords, setThreadRecords] = React.useState<ThreadRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -176,6 +194,32 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
       return changed ? sortThreadRecords(next) : prev;
     });
   }, [threadId, isStreamLoading]);
+
+  React.useEffect(() => {
+    const message = getErrorMessage(streamError)?.trim();
+    if (!threadId || !message) return;
+
+    const now = new Date().toISOString();
+    const errorStatus: ChatConversationStatus = 'error';
+
+    setThreadRecords((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const isCurrentThread =
+          item.threadId === threadId || item.id === threadId;
+        if (!isCurrentThread) return item;
+        if (item.status === errorStatus && item.error === message) return item;
+        changed = true;
+        return {
+          ...item,
+          status: errorStatus,
+          error: message,
+          updatedAt: now,
+        };
+      });
+      return changed ? sortThreadRecords(next) : prev;
+    });
+  }, [threadId, streamError]);
 
   React.useEffect(() => {
     if (!isReady || !threadId || isStreamLoading) return;

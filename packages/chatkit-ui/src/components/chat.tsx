@@ -2019,14 +2019,16 @@ export function Chat({
     [threads, stream.threadId],
   );
 
-  const errorMessage =
+  const streamErrorMessage =
     stream.error instanceof Error ? stream.error.message : undefined;
 
   const threadErrorMessage = React.useMemo(() => {
+    if (streamErrorMessage?.trim()) return streamErrorMessage.trim();
     if (currentThread?.status !== 'error') return undefined;
     const message = currentThread.error?.trim();
     return message || t('thread.errorToast');
-  }, [currentThread, t]);
+  }, [currentThread, streamErrorMessage, t]);
+  const errorMessage = threadErrorMessage ? undefined : streamErrorMessage;
   const currentThreadIsRunning =
     stream.isLoading ||
     currentThread?.status === 'busy' ||

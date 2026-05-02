@@ -363,6 +363,64 @@ describe('request_user_input normalization', () => {
 });
 
 describe('applyStreamEvent', () => {
+  it('sets stream error from conversation end error events', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CONVERSATION_END,
+          data: {
+            id: 'conversation-1',
+            status: 'error',
+            error: 'Invalid node name "sandbox_service_stop" in Send packet',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(setError).toHaveBeenCalledWith(expect.any(Error));
+    expect((setError.mock.calls[0]?.[0] as Error).message).toBe(
+      'Invalid node name "sandbox_service_stop" in Send packet',
+    );
+  });
+
+  it('sets stream error from LangGraph error events', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_ERROR,
+          data: {
+            message: 'Run failed',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(setError).toHaveBeenCalledWith(expect.any(Error));
+    expect((setError.mock.calls[0]?.[0] as Error).message).toBe('Run failed');
+  });
+
   it('normalizes replayed conversation messages with references and submitted input', () => {
     let state = { messages: [] as any[] };
     const setValues = vi.fn((next) => {

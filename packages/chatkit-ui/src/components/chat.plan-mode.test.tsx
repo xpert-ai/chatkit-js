@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => {
           services: [],
           isRefreshing: false,
           refreshedAt: null,
-          error: null,
+          error: null as unknown,
         },
       },
       pendingFollowUps: [],
@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => {
       followUpBehavior: 'queue',
       isLoading: false,
       isReady: true,
-      error: null,
+      error: null as unknown,
       loadThread: vi.fn(),
       loadConversationMessages: vi.fn(),
       submit: vi.fn(),
@@ -262,6 +262,7 @@ describe('Chat plan mode payload', () => {
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.isLoading = false;
+    mocks.stream.error = null;
   });
 
   afterEach(() => {
@@ -297,6 +298,22 @@ describe('Chat plan mode payload', () => {
       'planMode',
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('shows active stream errors in the thread error area', async () => {
+    mocks.stream.error = new Error(
+      'Invalid node name "sandbox_service_stop" in Send packet',
+    );
+
+    renderChat();
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(
+          'Invalid node name "sandbox_service_stop" in Send packet',
+        ),
+      ).toHaveLength(1);
+    });
   });
 
   it('loads runtime capabilities through the SDK client and submits the default allow-list', async () => {
