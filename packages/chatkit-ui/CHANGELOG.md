@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.2.5
+
+### Patch Changes
+
+- 8bf0360: Show active sandbox services above the composer and refresh them from runtime tool messages.
+
 ## 0.2.4
 
 ### Patch Changes
