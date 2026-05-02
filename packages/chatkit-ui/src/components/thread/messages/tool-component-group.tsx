@@ -9,18 +9,31 @@ import type {
   TMessageContentText,
 } from '@xpert-ai/chatkit-types';
 import {
+  BookOpen,
+  Brain,
+  Building2,
   Check,
   CheckCircle2,
   ChevronRight,
+  CircleHelp,
   Copy,
+  FileText,
+  Files,
   Loader2,
+  ListTodo,
+  Network,
+  Repeat2,
+  SquareTerminal,
+  Wrench,
   XCircle,
+  type LucideIcon,
 } from 'lucide-react';
 
 import { type LocalizedText, resolveLocalizedText } from '../../../i18n/localized-text';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { normalizeChatkitAvatar } from '../../ui/chatkit-avatar';
 
 /** Partial step data: during streaming, fields arrive incrementally */
 export type PartialStepData = Partial<Omit<TMessageComponentStep, 'message' | 'title'>> & {
@@ -30,6 +43,7 @@ export type PartialStepData = Partial<Omit<TMessageComponentStep, 'message' | 't
 };
 type StepStatus = NonNullable<PartialStepData['status']>;
 type ToolGroupDisplayStatus = Exclude<StepStatus, 'running'>;
+type ToolStepRunState = boolean | undefined;
 
 type ToolGroupCategory =
   | 'files'
@@ -165,6 +179,21 @@ function parseStepDate(value: unknown): number | null {
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
+function isThreadKnownIdle(isThreadRunning: ToolStepRunState) {
+  return isThreadRunning === false;
+}
+
+export function getEffectiveToolStepStatus(
+  data: PartialStepData,
+  isThreadRunning?: ToolStepRunState,
+): StepStatus | undefined {
+  if (data.status === 'running' && isThreadKnownIdle(isThreadRunning)) {
+    return 'fail';
+  }
+
+  return data.status;
+}
+
 function formatStepDuration(durationMs: number): string {
   if (durationMs < 1_000) {
     return `${durationMs}ms`;
@@ -189,11 +218,36 @@ function formatStepDuration(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function useToolStepDurationLabel(data: PartialStepData) {
+function useFrozenTimestamp(shouldFreeze: boolean) {
+  const [frozenAt, setFrozenAt] = React.useState<number | null>(() =>
+    shouldFreeze ? Date.now() : null,
+  );
+
+  React.useEffect(() => {
+    if (shouldFreeze) {
+      setFrozenAt((current) => current ?? Date.now());
+      return;
+    }
+
+    setFrozenAt(null);
+  }, [shouldFreeze]);
+
+  return frozenAt;
+}
+
+function useToolStepDurationLabel(
+  data: PartialStepData,
+  options?: {
+    status?: StepStatus;
+    fallbackEndedAt?: number | null;
+  },
+) {
   const [durationNow, setDurationNow] = React.useState(() => Date.now());
   const createdAt = parseStepDate(data.created_date);
-  const endedAt = parseStepDate(data.end_date);
-  const status = data.status;
+  const explicitEndedAt = parseStepDate(data.end_date);
+  const status = options?.status ?? data.status;
+  const endedAt =
+    explicitEndedAt ?? (status !== 'running' ? (options?.fallbackEndedAt ?? null) : null);
 
   React.useEffect(() => {
     if (status !== 'running' || createdAt === null || endedAt !== null) {
@@ -390,20 +444,35 @@ function getToolGroupCategoryCounts(
   }, {});
 }
 
-function getToolGroupDisplayStatus(items: TMessageContentComponent[]): ToolGroupDisplayStatus {
-  if (items.some((item) => getToolStepData(item).status === 'fail')) {
+function getEffectiveToolGroupDisplayStatus(
+  items: TMessageContentComponent[],
+  isThreadRunning?: ToolStepRunState,
+): ToolGroupDisplayStatus {
+  if (
+    items.some((item) => {
+      const data = getToolStepData(item);
+      return (
+        getEffectiveToolStepStatus(data, isThreadRunning) === 'fail' ||
+        Boolean(data.error)
+      );
+    })
+  ) {
     return 'fail';
   }
 
   return 'success';
 }
 
-export function getToolActivityLabel(content: TMessageContentComponent, language: string) {
+export function getToolActivityLabel(
+  content: TMessageContentComponent,
+  language: string,
+  statusOverride?: StepStatus,
+) {
   const data = getToolStepData(content);
   const runningCandidates = [data.message, data.title, data.tool, data.type];
   const completedCandidates = [data.title, data.message, data.tool, data.type];
-  const candidates =
-    data.status === 'running' ? runningCandidates : completedCandidates;
+  const status = statusOverride ?? data.status;
+  const candidates = status === 'running' ? runningCandidates : completedCandidates;
 
   for (const candidate of candidates) {
     const label = resolveLocalizedText(candidate, language);
@@ -473,6 +542,275 @@ function getToolCallOutputRenderer(data: PartialStepData): ToolCallOutputRendere
   }
 
   return DefaultToolCallOutput;
+}
+
+function createToolsetIconUrl(
+  toolset: unknown,
+  organizationId?: string,
+  apiUrl?: string,
+) {
+  const normalizedToolset = typeof toolset === 'string' ? toolset.trim() : '';
+  if (!normalizedToolset) return null;
+
+  const path = `/api/xpert-toolset/builtin-provider/${encodeURIComponent(
+    normalizedToolset,
+  )}/icon`;
+  const params = new URLSearchParams();
+  if (organizationId?.trim()) {
+    params.set('org', organizationId.trim());
+  }
+
+  const normalizedApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : '';
+  let baseUrl = '';
+  if (normalizedApiUrl) {
+    try {
+      const url = new URL(normalizedApiUrl);
+      baseUrl = `${url.origin}${path}`;
+    } catch {
+      baseUrl = path;
+    }
+  } else {
+    baseUrl = path;
+  }
+
+  const query = params.toString();
+  return query ? `${baseUrl}?${query}` : baseUrl;
+}
+
+function createToolsetAvatarUrl(toolsetId: unknown, apiUrl?: string) {
+  const normalizedToolsetId = typeof toolsetId === 'string' ? toolsetId.trim() : '';
+  if (!normalizedToolsetId) return null;
+
+  const path = `/api/xpert-toolset/${encodeURIComponent(normalizedToolsetId)}/avatar`;
+  const normalizedApiUrl = typeof apiUrl === 'string' ? apiUrl.trim() : '';
+
+  if (!normalizedApiUrl) return path;
+
+  try {
+    const url = new URL(normalizedApiUrl);
+    return `${url.origin}${path}`;
+  } catch {
+    return path;
+  }
+}
+
+function shouldUseToolsetAvatar(toolset: unknown) {
+  const normalized = normalizeToolToken(toolset);
+  return normalized === 'mcp' || normalized === 'openapi';
+}
+
+function useToolsetAvatar(toolsetId: unknown, enabled: boolean, apiUrl?: string) {
+  const avatarUrl = enabled ? createToolsetAvatarUrl(toolsetId, apiUrl) : null;
+  const [avatar, setAvatar] = React.useState<unknown>(null);
+
+  React.useEffect(() => {
+    if (!avatarUrl) {
+      setAvatar(null);
+      return;
+    }
+
+    let cancelled = false;
+    void fetch(avatarUrl)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((value) => {
+        if (!cancelled) setAvatar(value);
+      })
+      .catch(() => {
+        if (!cancelled) setAvatar(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [avatarUrl]);
+
+  return normalizeChatkitAvatar(avatar);
+}
+
+function unicodeFromUnified(unified?: string): string | undefined {
+  const normalized = typeof unified === 'string' ? unified.trim() : '';
+  if (!normalized) return undefined;
+
+  try {
+    return normalized
+      .split('-')
+      .map((hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+      .join('');
+  } catch {
+    return undefined;
+  }
+}
+
+function ToolAvatarIcon({
+  avatar,
+  label,
+  className,
+}: {
+  avatar: NonNullable<ReturnType<typeof normalizeChatkitAvatar>>;
+  label: string;
+  className?: string;
+}) {
+  if (avatar.url) {
+    return (
+      <img
+        alt=""
+        aria-hidden="true"
+        className={cn('rounded-sm object-cover', className)}
+        data-slot="tool-step-icon"
+        src={avatar.url}
+      />
+    );
+  }
+
+  const emoji = unicodeFromUnified(avatar.emoji?.unified);
+  if (emoji) {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          'inline-flex items-center justify-center rounded-sm text-[10px] leading-none',
+          className,
+        )}
+        data-slot="tool-step-icon"
+        style={avatar.background ? { background: avatar.background } : undefined}
+        title={label}
+      >
+        {emoji}
+      </span>
+    );
+  }
+
+  return (
+    <CircleHelp
+      className={className}
+      aria-hidden="true"
+      data-slot="tool-step-icon"
+    />
+  );
+}
+
+function getKnownToolsetIcon(toolset: unknown): LucideIcon | null {
+  const normalized = normalizeToolToken(toolset);
+  if (!normalized) return null;
+
+  switch (normalized) {
+    case 'project':
+      return Building2;
+    case 'transfer_to':
+      return Repeat2;
+    case 'knowledge':
+    case 'knowledgebase':
+      return BookOpen;
+    case 'project_tasks':
+      return ListTodo;
+    case 'memories':
+      return Brain;
+    case 'workflow_agent_tool':
+      return Wrench;
+    case 'workflow_task':
+      return Network;
+    default:
+      return null;
+  }
+}
+
+function getStepTypeIcon(type: unknown): LucideIcon | null {
+  const normalized = normalizeToolToken(type);
+  if (!normalized) return null;
+
+  switch (normalized) {
+    case 'file':
+      return FileText;
+    case 'files':
+      return Files;
+    case 'program':
+      return SquareTerminal;
+    case 'knowledges':
+      return BookOpen;
+    default:
+      return null;
+  }
+}
+
+function ToolStepIcon({
+  data,
+  className,
+  organizationId,
+  apiUrl,
+}: {
+  data: PartialStepData;
+  className?: string;
+  organizationId?: string;
+  apiUrl?: string;
+}) {
+  const usesToolsetAvatar = shouldUseToolsetAvatar(data.toolset);
+  const avatar = useToolsetAvatar(
+    data.toolset_id,
+    usesToolsetAvatar,
+    apiUrl,
+  );
+  if (avatar) {
+    return (
+      <ToolAvatarIcon
+        avatar={avatar}
+        label={String(data.tool ?? data.toolset ?? 'Tool')}
+        className={className}
+      />
+    );
+  }
+
+  const TypeIcon = getStepTypeIcon(data.type);
+  if (TypeIcon) {
+    return (
+      <TypeIcon
+        className={className}
+        aria-hidden="true"
+        data-slot="tool-step-icon"
+      />
+    );
+  }
+
+  const ToolsetIcon = getKnownToolsetIcon(data.toolset);
+  if (ToolsetIcon) {
+    return (
+      <ToolsetIcon
+        className={className}
+        aria-hidden="true"
+        data-slot="tool-step-icon"
+      />
+    );
+  }
+
+  if (usesToolsetAvatar) {
+    return (
+      <CircleHelp
+        className={className}
+        aria-hidden="true"
+        data-slot="tool-step-icon"
+      />
+    );
+  }
+
+  const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
+  if (iconUrl) {
+    return (
+      <img
+        alt=""
+        aria-hidden="true"
+        className={cn('rounded-sm object-contain', className)}
+        data-slot="tool-step-icon"
+        src={iconUrl}
+      />
+    );
+  }
+
+  return (
+    <CircleHelp
+      className={className}
+      aria-hidden="true"
+      data-slot="tool-step-icon"
+    />
+  );
 }
 
 function getJsonValueSummary(value: JsonValue) {
@@ -757,20 +1095,36 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   );
 }
 
-function ToolCallRow({ content }: { content: TMessageContentComponent }) {
+function ToolCallRow({
+  content,
+  isThreadRunning,
+  organizationId,
+  apiUrl,
+}: {
+  content: TMessageContentComponent;
+  isThreadRunning?: ToolStepRunState;
+  organizationId?: string;
+  apiUrl?: string;
+}) {
   const { i18n } = useChatkitTranslation();
   const data = getToolStepData(content);
-  const status = data.status;
+  const status = getEffectiveToolStepStatus(data, isThreadRunning);
   const itemConfig = status ? toolStatusConfig[status] : null;
   const ItemStatusIcon = itemConfig?.icon;
   const hasError = status === 'fail' || Boolean(data.error);
-  const label = getToolActivityLabel(content, i18n.language);
+  const label = getToolActivityLabel(content, i18n.language, status);
   const detailsId = React.useId();
   const hasDetails =
     data.input !== undefined ||
     data.error !== undefined ||
     data.output !== undefined;
-  const durationLabel = useToolStepDurationLabel(data);
+  const fallbackEndedAt = useFrozenTimestamp(
+    data.status === 'running' && status === 'fail',
+  );
+  const durationLabel = useToolStepDurationLabel(data, {
+    status,
+    fallbackEndedAt,
+  });
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   React.useEffect(() => {
@@ -795,12 +1149,22 @@ function ToolCallRow({ content }: { content: TMessageContentComponent }) {
           if (hasDetails) setIsExpanded((prev) => !prev);
         }}
       >
-        {ItemStatusIcon ? (
+        {status === 'running' && ItemStatusIcon ? (
           <ItemStatusIcon
             className={cn(
               'h-3.5 w-3.5 shrink-0',
               itemConfig?.iconClass,
-              status === 'running' && 'animate-spin',
+              'animate-spin',
+            )}
+          />
+        ) : status ? (
+          <ToolStepIcon
+            data={data}
+            organizationId={organizationId}
+            apiUrl={apiUrl}
+            className={cn(
+              'h-3.5 w-3.5 shrink-0',
+              hasError ? 'text-destructive' : 'text-muted-foreground',
             )}
           />
         ) : (
@@ -836,13 +1200,19 @@ function ToolCallRow({ content }: { content: TMessageContentComponent }) {
 export function ToolComponentGroup({
   items,
   hasFollowingItem,
+  isThreadRunning,
+  organizationId,
+  apiUrl,
 }: {
   items: TMessageContentComponent[];
   hasFollowingItem: boolean;
+  isThreadRunning?: ToolStepRunState;
+  organizationId?: string;
+  apiUrl?: string;
 }) {
   const { t } = useChatkitTranslation();
   const contentId = React.useId();
-  const groupStatus = getToolGroupDisplayStatus(items);
+  const groupStatus = getEffectiveToolGroupDisplayStatus(items, isThreadRunning);
   const [isExpanded, setIsExpanded] = React.useState(!hasFollowingItem);
   const categoryCounts = getToolGroupCategoryCounts(items);
   const categorySummary = TOOL_GROUP_CATEGORY_ORDER.flatMap((category) => {
@@ -892,9 +1262,15 @@ export function ToolComponentGroup({
       </button>
 
       {isExpanded && (
-        <ul id={contentId} className="mt-2 max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
+        <ul id={contentId} className="mt-2 space-y-1.5 overflow-y-auto pr-1">
           {items.map((item, index) => (
-            <ToolCallRow key={item.id ?? `tool-item-${index}`} content={item} />
+            <ToolCallRow
+              key={item.id ?? `tool-item-${index}`}
+              content={item}
+              isThreadRunning={isThreadRunning}
+              organizationId={organizationId}
+              apiUrl={apiUrl}
+            />
           ))}
         </ul>
       )}

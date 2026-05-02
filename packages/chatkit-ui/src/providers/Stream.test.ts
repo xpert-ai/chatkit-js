@@ -363,6 +363,64 @@ describe('request_user_input normalization', () => {
 });
 
 describe('applyStreamEvent', () => {
+  it('sets stream error from conversation end error events', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CONVERSATION_END,
+          data: {
+            id: 'conversation-1',
+            status: 'error',
+            error: 'Invalid node name "sandbox_service_stop" in Send packet',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(setError).toHaveBeenCalledWith(expect.any(Error));
+    expect((setError.mock.calls[0]?.[0] as Error).message).toBe(
+      'Invalid node name "sandbox_service_stop" in Send packet',
+    );
+  });
+
+  it('sets stream error from LangGraph error events', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_ERROR,
+          data: {
+            message: 'Run failed',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(setError).toHaveBeenCalledWith(expect.any(Error));
+    expect((setError.mock.calls[0]?.[0] as Error).message).toBe('Run failed');
+  });
+
   it('normalizes replayed conversation messages with references and submitted input', () => {
     let state = { messages: [] as any[] };
     const setValues = vi.fn((next) => {
@@ -830,6 +888,104 @@ describe('applyStreamEvent', () => {
       }),
     );
     expect(setValues).not.toHaveBeenCalled();
+  });
+
+  it('routes sandbox service tool components to runtime activity refresh without hiding the transcript message', () => {
+    const onRuntimeActivityTrigger = vi.fn();
+    const sendEvent = vi.fn();
+    const setValues = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-service-1',
+            type: 'component',
+            agentKey: 'Agent_xSd1VKEicG',
+            data: {
+              input: {
+                name: 'web',
+              },
+              category: 'Tool',
+              toolset: 'sandbox',
+              tool: 'sandbox_service_start',
+              title: 'sandbox_service_start',
+              created_date: '2026-05-02T12:24:52.898Z',
+              status: 'running',
+            },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onRuntimeActivityTrigger,
+    );
+
+    expect(onRuntimeActivityTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: 'sandbox-services',
+        tool: 'sandbox_service_start',
+        componentId: 'tool-service-1',
+        threadId: 'thread-1',
+      }),
+    );
+    expect(sendEvent).toHaveBeenCalledWith('public_event', [
+      'log',
+      expect.objectContaining({
+        id: 'tool-service-1',
+        name: 'component',
+      }),
+    ]);
+    expect(setValues).toHaveBeenCalled();
+  });
+
+  it('does not trigger runtime activity refresh for other tool components', () => {
+    const onRuntimeActivityTrigger = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-other-1',
+            type: 'component',
+            data: {
+              category: 'Tool',
+              tool: 'shell_exec',
+              status: 'running',
+            },
+          },
+        }),
+      },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onRuntimeActivityTrigger,
+    );
+
+    expect(onRuntimeActivityTrigger).not.toHaveBeenCalled();
   });
 
   it('merges later write_todos component updates with the current todos snapshot', () => {

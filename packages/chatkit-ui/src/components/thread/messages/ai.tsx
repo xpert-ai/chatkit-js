@@ -50,6 +50,9 @@ export type AssistantMessageProps = {
   className?: string;
   isStreaming?: boolean;
   streamingStatus?: AssistantStreamingStatus | null;
+  isThreadRunning?: boolean;
+  organizationId?: string;
+  apiUrl?: string;
 };
 
 function isTextContent(content: TMessageContentComplex): content is TMessageContentText {
@@ -432,6 +435,11 @@ function renderContentUnit(
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
   hasFollowingItem: boolean,
+  options?: {
+    isThreadRunning?: boolean;
+    organizationId?: string;
+    apiUrl?: string;
+  },
 ): React.ReactNode {
   if (unit.type === 'item') {
     return renderContentItem(unit.item, unit.index, message, lookupMessages);
@@ -441,12 +449,26 @@ function renderContentUnit(
     <div
       key={`tool-group-${unit.startIndex}-${unit.items[0]?.id ?? 'tool'}-${unit.items.length}`}
     >
-      <ToolComponentGroup items={unit.items} hasFollowingItem={hasFollowingItem} />
+      <ToolComponentGroup
+        items={unit.items}
+        hasFollowingItem={hasFollowingItem}
+        isThreadRunning={options?.isThreadRunning}
+        organizationId={options?.organizationId}
+        apiUrl={options?.apiUrl}
+      />
     </div>
   );
 }
 
-function renderContent(message: ChatkitMessage, lookupMessages: ChatkitMessage[]) {
+function renderContent(
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
+  options?: {
+    isThreadRunning?: boolean;
+    organizationId?: string;
+    apiUrl?: string;
+  },
+) {
   const content = message.content;
   if (typeof content === 'string') {
     if (!content.trim()) return null;
@@ -468,6 +490,7 @@ function renderContent(message: ChatkitMessage, lookupMessages: ChatkitMessage[]
           message,
           lookupMessages,
           index < renderUnits.length - 1,
+          options,
         ),
       )}
     </div>
@@ -518,6 +541,9 @@ export function AssistantMessage({
   className,
   isStreaming = false,
   streamingStatus,
+  isThreadRunning,
+  organizationId,
+  apiUrl,
 }: AssistantMessageProps) {
   const { t } = useChatkitTranslation();
   const hasContent = hasRenderableMessageContent(message.content);
@@ -526,7 +552,11 @@ export function AssistantMessage({
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
   const lookupMessages = messages?.length ? messages : [message];
 
-  const answerNode = renderContent(message, lookupMessages);
+  const answerNode = renderContent(message, lookupMessages, {
+    isThreadRunning,
+    organizationId,
+    apiUrl,
+  });
   const reasoningNode = hasReasoning ? (
     <ReasoningBlock reasoning={message.reasoning ?? []} />
   ) : null;

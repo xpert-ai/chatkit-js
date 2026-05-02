@@ -41,6 +41,10 @@
     "todos": {
       "summary": "{{total}} tasks, {{completed}} completed"
     },
+    "runtimeServices": {
+      "summary": "{{count}} services running",
+      "stop": "Stop service"
+    },
     "errors": {
       "loadMessages": "Failed to load thread messages",
       "createThread": "Failed to create thread",

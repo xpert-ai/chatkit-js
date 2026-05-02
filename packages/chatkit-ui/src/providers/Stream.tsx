@@ -92,6 +92,16 @@ import {
   resolveTodoListSnapshotFromMessageComponent,
   type TodoListSnapshot,
 } from '../lib/todos';
+import {
+  resolveRuntimeActivityTriggerFromMessageComponent,
+  type RuntimeActivitiesState,
+  type RuntimeActivityProviderId,
+  type RuntimeActivityTrigger,
+} from '../lib/runtime-activity';
+import {
+  logRuntimeActivity,
+  useRuntimeActivities,
+} from './runtime-activities';
 
 export {
   getAutoDrainQueuedFollowUpIds,
@@ -156,6 +166,7 @@ export type StreamContextType = {
   values: StateType;
   messages: ChatKitAIMessage[];
   todos: TodoListSnapshot | null;
+  runtimeActivities: RuntimeActivitiesState;
   pendingFollowUps: PendingFollowUp[];
   pendingRequestUserInput: PendingRequestUserInput | null;
   followUpBehavior: FollowUpBehavior;
@@ -180,6 +191,10 @@ export type StreamContextType = {
   sendPendingFollowUpNow: (id: string) => Promise<void>;
   promotePendingFollowUpToSteer: (id: string) => Promise<void>;
   submitRequestUserInput: (answers: RequestUserInputAnswer[]) => void;
+  stopRuntimeActivityItem: (
+    providerId: RuntimeActivityProviderId,
+    itemId: string,
+  ) => Promise<void>;
   setThreadId: (threadId: string | null) => void;
 };
 
@@ -288,6 +303,57 @@ function parseEventData(raw: string): ChatEventEnvelope | null {
 }
 
 type StreamChunk = { id?: string; event: string; data: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringifyUnknown(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.message;
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function getStreamEventErrorMessage(
+  eventType: ChatMessageEventTypeEnum,
+  data: unknown,
+): string | undefined {
+  const record = isRecord(data) ? data : null;
+
+  if (
+    eventType === ChatMessageEventTypeEnum.ON_ERROR ||
+    eventType === ChatMessageEventTypeEnum.ON_TOOL_ERROR ||
+    eventType === ChatMessageEventTypeEnum.ON_RETRIEVER_ERROR
+  ) {
+    return (
+      stringifyUnknown(record?.error) ??
+      stringifyUnknown(record?.message) ??
+      stringifyUnknown(data)
+    )?.trim();
+  }
+
+  if (eventType !== ChatMessageEventTypeEnum.ON_CONVERSATION_END) {
+    return undefined;
+  }
+
+  const status =
+    typeof record?.status === 'string' ? record.status.toLowerCase() : '';
+  if (status !== 'error' && record?.error == null) {
+    return undefined;
+  }
+
+  return (
+    stringifyUnknown(record?.error) ??
+    stringifyUnknown(record?.message) ??
+    stringifyUnknown(data)
+  )?.trim();
+}
 
 function normalizeRoleToMessageType(role?: string): Message['type'] {
   const normalized = (role ?? '').toLowerCase();
@@ -1104,6 +1170,7 @@ export function applyStreamEvent(
   consumeFreshAssistantSplit?: () => boolean,
   getCurrentTodos?: () => TodoListSnapshot | null,
   onTodosChange?: (snapshot: TodoListSnapshot | null) => void,
+  onRuntimeActivityTrigger?: (trigger: RuntimeActivityTrigger) => void,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -1157,6 +1224,15 @@ export function applyStreamEvent(
 
     const message = payload.data;
     if (message.type === 'component') {
+      const runtimeActivityTrigger =
+        resolveRuntimeActivityTriggerFromMessageComponent(message);
+      if (runtimeActivityTrigger) {
+        onRuntimeActivityTrigger?.({
+          ...runtimeActivityTrigger,
+          threadId: eventContext?.threadId ?? null,
+        });
+      }
+
       const todoResolution = resolveTodoListSnapshotFromMessageComponent(
         message,
         getCurrentTodos?.() ?? null,
@@ -1190,6 +1266,14 @@ export function applyStreamEvent(
       state: langGraphEventState,
       context: eventContext,
     });
+
+    const eventErrorMessage = getStreamEventErrorMessage(
+      eventType,
+      payload.data,
+    );
+    if (eventErrorMessage) {
+      setError(new Error(eventErrorMessage));
+    }
 
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
@@ -1432,6 +1516,10 @@ const StreamSession = ({
   );
   const suppressThreadChangeRef = useRef(false);
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
+  const getRuntimeOrganizationId = useCallback(
+    () => runtimeOrganizationIdRef.current,
+    [],
+  );
   const updateTodos = useCallback((nextTodos: TodoListSnapshot | null) => {
     todosRef.current = nextTodos;
     setTodos(nextTodos);
@@ -1570,18 +1658,6 @@ const StreamSession = ({
     sendEvent('public_event', ['thread.change', { threadId: currentThreadId }]);
   }, [threadId, isParentAvailable, sendEvent]);
 
-  useEffect(() => {
-    const currentThreadId = threadId ?? null;
-    if (lastThreadIdRef.current !== currentThreadId) {
-      lastThreadIdRef.current = currentThreadId;
-      lastEventIdRef.current = null;
-      setContextUsageByAgentKey({});
-      clearPendingRequestUserInput(
-        createAbortError('The user input request was cancelled.'),
-      );
-    }
-  }, [clearPendingRequestUserInput, threadId]);
-
   const refreshClientSecret =
     useCallback(async (): Promise<ResolvedClientSecret> => {
       if (!isParentAvailable) {
@@ -1674,6 +1750,53 @@ const StreamSession = ({
       }),
     [apiUrl, fetchWithClientSecretRefresh],
   );
+  const runtimeActivitiesEnabled =
+    createMissingApiConfigurationError({
+      apiUrl,
+      clientSecret: runtimeClientSecret,
+    }) === null;
+
+  useEffect(() => {
+    logRuntimeActivity('stream config', {
+      threadId: threadId ?? null,
+      enabled: runtimeActivitiesEnabled,
+      hasApiUrl: apiUrl.trim().length > 0,
+      hasClientSecret: runtimeClientSecret.trim().length > 0,
+      organizationId: runtimeOrganizationId ?? null,
+    });
+  }, [
+    apiUrl,
+    runtimeActivitiesEnabled,
+    runtimeClientSecret,
+    runtimeOrganizationId,
+    threadId,
+  ]);
+
+  const {
+    runtimeActivities,
+    clearRuntimeActivities,
+    refreshSandboxServices,
+    handleRuntimeActivityTrigger,
+    stopRuntimeActivityItem,
+  } = useRuntimeActivities<StateType>({
+    client,
+    threadId: threadId ?? null,
+    enabled: runtimeActivitiesEnabled,
+    getOrganizationId: getRuntimeOrganizationId,
+    setError,
+  });
+
+  useEffect(() => {
+    const currentThreadId = threadId ?? null;
+    if (lastThreadIdRef.current !== currentThreadId) {
+      lastThreadIdRef.current = currentThreadId;
+      lastEventIdRef.current = null;
+      setContextUsageByAgentKey({});
+      clearPendingRequestUserInput(
+        createAbortError('The user input request was cancelled.'),
+      );
+    }
+  }, [clearPendingRequestUserInput, threadId]);
 
   const stop = useCallback(() => {
     const activeThreadId = threadId ?? null;
@@ -1828,6 +1951,7 @@ const StreamSession = ({
         // ignore stop errors from an already-idle stream
       }
       updateTodos(null);
+      clearRuntimeActivities();
       conversationIdRef.current = recordId;
       const response = await client.conversations.listMessages(recordId, {
         limit: DEFAULT_HISTORY_LIMIT,
@@ -1852,7 +1976,14 @@ const StreamSession = ({
       setValues({ messages: mapped ?? [] });
       return mapped as ChatKitAIMessage[];
     },
-    [apiUrl, client, runtimeClientSecret, stop, updateTodos],
+    [
+      apiUrl,
+      clearRuntimeActivities,
+      client,
+      runtimeClientSecret,
+      stop,
+      updateTodos,
+    ],
   );
 
   const reset = useCallback(
@@ -1871,6 +2002,7 @@ const StreamSession = ({
       setPendingFollowUps([]);
       setAutoQueuedFollowUpIds([]);
       updateTodos(null);
+      clearRuntimeActivities();
       setContextUsageByAgentKey({});
       setValues({ messages: initialMessages ?? [] });
       conversationIdRef.current = null;
@@ -1884,7 +2016,13 @@ const StreamSession = ({
         setThreadId(newThreadId);
       }
     },
-    [clearPendingRequestUserInput, setThreadId, threadId, updateTodos],
+    [
+      clearPendingRequestUserInput,
+      clearRuntimeActivities,
+      setThreadId,
+      threadId,
+      updateTodos,
+    ],
   );
 
   const handleInterrupt = useCallback(
@@ -2243,6 +2381,7 @@ const StreamSession = ({
             (snapshot) => {
               updateTodos(snapshot);
             },
+            handleRuntimeActivityTrigger,
           );
         }
 
@@ -2283,6 +2422,7 @@ const StreamSession = ({
       markPendingFollowUpsAsQueued,
       removePendingFollowUps,
       updateTodos,
+      handleRuntimeActivityTrigger,
     ],
   );
 
@@ -2304,6 +2444,7 @@ const StreamSession = ({
       }
       setError(null);
       updateTodos(null);
+      clearRuntimeActivities();
 
       try {
         stop();
@@ -2329,6 +2470,10 @@ const StreamSession = ({
 
       conversationIdRef.current = conversation.id;
       await loadConversationMessages(conversation.id);
+      await refreshSandboxServices({
+        targetThreadId: threadId,
+        force: true,
+      });
 
       const status = String(conversation.status ?? '').toLowerCase();
       const shouldJoinStream =
@@ -2354,6 +2499,8 @@ const StreamSession = ({
       runStream,
       stop,
       loadConversationMessages,
+      clearRuntimeActivities,
+      refreshSandboxServices,
       setThreadId,
       updateTodos,
     ],
@@ -2473,6 +2620,7 @@ const StreamSession = ({
         setValues({ messages: [] });
         setContextUsageByAgentKey({});
         updateTodos(null);
+        clearRuntimeActivities();
         lastExecutionIdRef.current = null;
         lastEventIdRef.current = null;
       }
@@ -2524,6 +2672,7 @@ const StreamSession = ({
       addAutoQueuedFollowUpIds,
       markPendingFollowUpsAsQueued,
       runStream,
+      clearRuntimeActivities,
       sendSteerFollowUp,
       setThreadId,
       threadId,
@@ -2549,6 +2698,7 @@ const StreamSession = ({
     values,
     messages: values.messages ?? [],
     todos,
+    runtimeActivities,
     pendingFollowUps,
     pendingRequestUserInput,
     followUpBehavior,
@@ -2566,6 +2716,7 @@ const StreamSession = ({
     sendPendingFollowUpNow,
     promotePendingFollowUpToSteer,
     submitRequestUserInput,
+    stopRuntimeActivityItem,
     setThreadId,
   };
 

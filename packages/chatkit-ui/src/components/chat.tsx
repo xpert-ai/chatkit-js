@@ -39,6 +39,7 @@ import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
+import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
 import {
@@ -569,6 +570,7 @@ export function Chat({
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
   const hasPendingRequestUserInput = Boolean(stream.pendingRequestUserInput);
+  const hasPendingTodos = Boolean(stream.todos?.items.length);
   const runtimeCapabilityOptions = React.useMemo(
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
     [runtimeCapabilities],
@@ -2017,14 +2019,20 @@ export function Chat({
     [threads, stream.threadId],
   );
 
-  const errorMessage =
+  const streamErrorMessage =
     stream.error instanceof Error ? stream.error.message : undefined;
 
   const threadErrorMessage = React.useMemo(() => {
+    if (streamErrorMessage?.trim()) return streamErrorMessage.trim();
     if (currentThread?.status !== 'error') return undefined;
     const message = currentThread.error?.trim();
     return message || t('thread.errorToast');
-  }, [currentThread, t]);
+  }, [currentThread, streamErrorMessage, t]);
+  const errorMessage = threadErrorMessage ? undefined : streamErrorMessage;
+  const currentThreadIsRunning =
+    stream.isLoading ||
+    currentThread?.status === 'busy' ||
+    String(currentThread?.status ?? '').toLowerCase() === 'running';
 
   const assistantTitle = assistantName || resolvedTitle;
 
@@ -2226,6 +2234,9 @@ export function Chat({
                           )}
                           isStreaming={isStreamingMessage}
                           streamingStatus={streamingStatus}
+                          isThreadRunning={currentThreadIsRunning}
+                          organizationId={stream.organizationId}
+                          apiUrl={stream.apiUrl}
                         />
                       ) : (
                         <>
@@ -2508,6 +2519,15 @@ export function Chat({
             ))}
           </div>
         )}
+
+        <PendingRuntimeServices
+          state={stream.runtimeActivities.sandboxServices}
+          onStopService={(serviceId) =>
+            stream.stopRuntimeActivityItem('sandbox-services', serviceId)
+          }
+          attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
+          className={hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined}
+        />
 
         <PendingTodos
           snapshot={stream.todos}

@@ -28,12 +28,21 @@ const mocks = vi.hoisted(() => {
       values: { messages: [] },
       messages: [],
       todos: null,
+      runtimeActivities: {
+        sandboxServices: {
+          providerId: 'sandbox-services',
+          services: [],
+          isRefreshing: false,
+          refreshedAt: null,
+          error: null as unknown,
+        },
+      },
       pendingFollowUps: [],
       pendingRequestUserInput: null,
       followUpBehavior: 'queue',
       isLoading: false,
       isReady: true,
-      error: null,
+      error: null as unknown,
       loadThread: vi.fn(),
       loadConversationMessages: vi.fn(),
       submit: vi.fn(),
@@ -45,6 +54,7 @@ const mocks = vi.hoisted(() => {
       sendPendingFollowUpNow: vi.fn(),
       promotePendingFollowUpToSteer: vi.fn(),
       submitRequestUserInput: vi.fn(),
+      stopRuntimeActivityItem: vi.fn(),
       setThreadId: vi.fn(),
     },
   };
@@ -179,6 +189,10 @@ vi.mock('./composer/pending-todos', () => ({
   PendingTodos: () => null,
 }));
 
+vi.mock('./composer/pending-runtime-services', () => ({
+  PendingRuntimeServices: () => null,
+}));
+
 vi.mock('./composer/request-user-input-panel', () => ({
   RequestUserInputPanel: () => null,
 }));
@@ -248,6 +262,7 @@ describe('Chat plan mode payload', () => {
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.isLoading = false;
+    mocks.stream.error = null;
   });
 
   afterEach(() => {
@@ -283,6 +298,22 @@ describe('Chat plan mode payload', () => {
       'planMode',
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('shows active stream errors in the thread error area', async () => {
+    mocks.stream.error = new Error(
+      'Invalid node name "sandbox_service_stop" in Send packet',
+    );
+
+    renderChat();
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(
+          'Invalid node name "sandbox_service_stop" in Send packet',
+        ),
+      ).toHaveLength(1);
+    });
   });
 
   it('loads runtime capabilities through the SDK client and submits the default allow-list', async () => {
