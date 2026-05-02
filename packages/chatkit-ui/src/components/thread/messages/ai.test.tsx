@@ -593,6 +593,96 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('1.5s')).toBeInTheDocument();
   });
 
+  it('shows the tool icon for completed tool rows instead of a status check', () => {
+    const { container } = renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'success',
+      }),
+    ]);
+
+    expect(
+      container.querySelector('[data-slot="tool-step-icon"]'),
+    ).toBeInTheDocument();
+  });
+
+  it('uses the builtin provider icon URL for provider toolsets', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [
+              createToolComponent('search-web', {
+                type: 'tool',
+                toolset: 'tavily',
+                title: 'search-web',
+                status: 'success',
+              }),
+            ],
+          } as any
+        }
+        apiUrl="https://api.example.com/api/ai"
+        organizationId="org-1"
+      />,
+    );
+
+    expect(
+      container.querySelector('img[data-slot="tool-step-icon"]'),
+    ).toHaveAttribute(
+      'src',
+      'https://api.example.com/api/xpert-toolset/builtin-provider/tavily/icon?org=org-1',
+    );
+  });
+
+  it('marks stale running tools as failed and freezes their duration when the thread is idle', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-24T12:24:54.398Z'));
+
+    render(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [
+              {
+                id: 'tool-1',
+                type: 'component',
+                data: {
+                  category: 'Tool',
+                  toolset: 'todoListMiddleware',
+                  tool: 'write_todos',
+                  title: 'write_todos',
+                  message: 'Writing todos',
+                  created_date: '2026-04-24T12:24:52.898Z',
+                  status: 'running',
+                },
+              },
+            ],
+          } as any
+        }
+        isThreadRunning={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Processing failed 1 task/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('write_todos')).toBeInTheDocument();
+    expect(screen.queryByText('Writing todos')).not.toBeInTheDocument();
+    expect(screen.getByText('1.5s')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByText('1.5s')).toBeInTheDocument();
+    expect(screen.queryByText('2.5s')).not.toBeInTheDocument();
+  });
+
   it('updates the running tool duration over time', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-04-24T12:24:54.398Z'));

@@ -2027,6 +2027,10 @@ export function Chat({
     const message = currentThread.error?.trim();
     return message || t('thread.errorToast');
   }, [currentThread, t]);
+  const currentThreadIsRunning =
+    stream.isLoading ||
+    currentThread?.status === 'busy' ||
+    String(currentThread?.status ?? '').toLowerCase() === 'running';
 
   const assistantTitle = assistantName || resolvedTitle;
 
@@ -2228,6 +2232,9 @@ export function Chat({
                           )}
                           isStreaming={isStreamingMessage}
                           streamingStatus={streamingStatus}
+                          isThreadRunning={currentThreadIsRunning}
+                          organizationId={stream.organizationId}
+                          apiUrl={stream.apiUrl}
                         />
                       ) : (
                         <>
