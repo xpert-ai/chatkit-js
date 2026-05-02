@@ -39,6 +39,7 @@ import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
+import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
 import {
@@ -569,6 +570,7 @@ export function Chat({
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
   const hasPendingRequestUserInput = Boolean(stream.pendingRequestUserInput);
+  const hasPendingTodos = Boolean(stream.todos?.items.length);
   const runtimeCapabilityOptions = React.useMemo(
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
     [runtimeCapabilities],
@@ -2508,6 +2510,15 @@ export function Chat({
             ))}
           </div>
         )}
+
+        <PendingRuntimeServices
+          state={stream.runtimeActivities.sandboxServices}
+          onStopService={(serviceId) =>
+            stream.stopRuntimeActivityItem('sandbox-services', serviceId)
+          }
+          attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
+          className={hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined}
+        />
 
         <PendingTodos
           snapshot={stream.todos}

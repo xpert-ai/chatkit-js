@@ -28,6 +28,15 @@ const mocks = vi.hoisted(() => {
       values: { messages: [] },
       messages: [],
       todos: null,
+      runtimeActivities: {
+        sandboxServices: {
+          providerId: 'sandbox-services',
+          services: [],
+          isRefreshing: false,
+          refreshedAt: null,
+          error: null,
+        },
+      },
       pendingFollowUps: [],
       pendingRequestUserInput: null,
       followUpBehavior: 'queue',
@@ -45,6 +54,7 @@ const mocks = vi.hoisted(() => {
       sendPendingFollowUpNow: vi.fn(),
       promotePendingFollowUpToSteer: vi.fn(),
       submitRequestUserInput: vi.fn(),
+      stopRuntimeActivityItem: vi.fn(),
       setThreadId: vi.fn(),
     },
   };
@@ -177,6 +187,10 @@ vi.mock('./composer/pending-follow-ups', () => ({
 
 vi.mock('./composer/pending-todos', () => ({
   PendingTodos: () => null,
+}));
+
+vi.mock('./composer/pending-runtime-services', () => ({
+  PendingRuntimeServices: () => null,
 }));
 
 vi.mock('./composer/request-user-input-panel', () => ({

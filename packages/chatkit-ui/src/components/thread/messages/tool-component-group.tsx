@@ -892,7 +892,7 @@ export function ToolComponentGroup({
       </button>
 
       {isExpanded && (
-        <ul id={contentId} className="mt-2 max-h-[200px] space-y-1.5 overflow-y-auto pr-1">
+        <ul id={contentId} className="mt-2 space-y-1.5 overflow-y-auto pr-1">
           {items.map((item, index) => (
             <ToolCallRow key={item.id ?? `tool-item-${index}`} content={item} />
           ))}

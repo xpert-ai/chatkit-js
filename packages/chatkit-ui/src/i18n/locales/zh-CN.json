@@ -41,6 +41,10 @@
     "todos": {
       "summary": "共 {{total}} 个任务，已经完成 {{completed}} 个"
     },
+    "runtimeServices": {
+      "summary": "正在运行 {{count}} 个服务",
+      "stop": "停止服务"
+    },
     "errors": {
       "loadMessages": "加载线程消息失败",
       "createThread": "创建线程失败",
