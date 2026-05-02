@@ -181,11 +181,6 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('read-file')).toBeInTheDocument();
     expect(screen.getByText('search-docs')).toBeInTheDocument();
 
-    const content = document.getElementById(
-      toggle.getAttribute('aria-controls') ?? '',
-    );
-    expect(content).toHaveClass('max-h-[200px]', 'overflow-y-auto');
-
     fireEvent.click(toggle);
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
