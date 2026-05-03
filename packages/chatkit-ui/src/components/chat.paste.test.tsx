@@ -222,7 +222,7 @@ describe('Chat composer paste behavior', () => {
     globalThis.fetch = originalFetch;
   });
 
-  it('turns pasted long text into a quote reference instead of filling the textarea', () => {
+  it('turns pasted long text into a quote reference instead of filling the composer', () => {
     render(<Chat clientSecret="secret" />);
 
     const textarea = screen.getByRole('textbox');
@@ -237,11 +237,11 @@ describe('Chat composer paste behavior', () => {
     fireEvent(textarea, pasteEvent);
 
     expect(pasteEvent.defaultPrevented).toBe(true);
-    expect(textarea).toHaveValue('');
+    expect(textarea).toHaveTextContent('');
     expect(screen.getByText('Pasted text')).toBeInTheDocument();
   });
 
-  it('leaves short pasted text to the browser default behavior', () => {
+  it('inserts short pasted text as plain composer text', () => {
     render(<Chat clientSecret="secret" />);
 
     const textarea = screen.getByRole('textbox');
@@ -254,7 +254,8 @@ describe('Chat composer paste behavior', () => {
 
     fireEvent(textarea, pasteEvent);
 
-    expect(pasteEvent.defaultPrevented).toBe(false);
+    expect(pasteEvent.defaultPrevented).toBe(true);
+    expect(screen.getByRole('textbox')).toHaveTextContent('short text');
     expect(screen.queryByText('Pasted text')).not.toBeInTheDocument();
   });
 
@@ -308,7 +309,7 @@ describe('Chat composer paste behavior', () => {
     expect(
       screen.getByText('image/png • 640x480 • 2.0 KB'),
     ).toBeInTheDocument();
-    expect(textarea).toHaveValue('');
+    expect(textarea).toHaveTextContent('');
   });
 
   it('deletes uploaded attachments through the SDK client when removed', async () => {
@@ -356,7 +357,9 @@ describe('Chat composer paste behavior', () => {
 
     fireEvent.click(removeButton as HTMLButtonElement);
 
-    await waitFor(() => expect(mocks.deleteFile).toHaveBeenCalledWith('file-1'));
+    await waitFor(() =>
+      expect(mocks.deleteFile).toHaveBeenCalledWith('file-1'),
+    );
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 

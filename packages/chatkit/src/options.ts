@@ -1,5 +1,5 @@
-
 import type { ClientToolMessageInput } from './interrupt';
+import type { ChatKitSlashCommand } from './commands';
 import type * as Widgets from './widgets';
 
 export * from './widgets';
@@ -306,9 +306,7 @@ export type ChatKitClientSecretObject = {
   organizationId?: string;
 };
 
-export type ChatKitClientSecretResult =
-  | string
-  | ChatKitClientSecretObject;
+export type ChatKitClientSecretResult = string | ChatKitClientSecretObject;
 
 export type ChatKitRequestContext = {
   /**
@@ -534,6 +532,12 @@ export type ChatKitOptions = {
 
     /** A list of models that users can choose from before sending a message. */
     models?: ModelOption[];
+
+    /**
+     * Slash commands shown when users type `/` at the start of the composer.
+     * Command names should not include the leading slash.
+     */
+    slashCommands?: ChatKitSlashCommand[];
   };
 
   /**

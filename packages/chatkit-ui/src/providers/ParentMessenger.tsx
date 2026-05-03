@@ -33,7 +33,12 @@ type CommandMessageMap = {
   onClientToolCall: unknown;
   onGetClientSecret: string | null;
   onWidgetAction: {
-    action: string;
+    action:
+      | string
+      | {
+          type: string;
+          payload?: Record<string, unknown>;
+        };
     widgetItem: unknown;
   };
 };

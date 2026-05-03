@@ -2,8 +2,12 @@ import * as React from 'react';
 import {
   ArrowDown,
   Brain,
+  CircleHelp,
+  Command as CommandIcon,
+  Eraser,
   FileText,
   ImageIcon,
+  ListChecks,
   Loader2,
   Pencil,
   Plug,
@@ -14,7 +18,6 @@ import {
 
 import type {
   Message,
-  RuntimeCapabilitiesResponse,
   RuntimeCapabilitiesSelection,
 } from '@xpert-ai/xpert-sdk';
 import type {
@@ -23,6 +26,7 @@ import type {
   ChatKitOptions,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
+  ChatKitCommandSource,
   FollowUpBehavior,
   ToolOption,
 } from '@xpert-ai/chatkit-types';
@@ -59,6 +63,7 @@ import { useThreads } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
+import { IconDefinitionRenderer } from './ui/icon-definition';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { buildInjectedRequestOptions } from '../lib/request-options';
 import {
@@ -93,6 +98,39 @@ import {
   persistConversationRuntimeCapabilities as persistRuntimeCapabilitiesToConversation,
   type MissingRuntimeCapabilityReferences,
 } from '../lib/conversation-runtime-capabilities';
+import {
+  createComposerCapabilityPart,
+  createComposerTextParts,
+  findAdjacentComposerCapability,
+  getComposerCapabilityKeys,
+  getComposerCapabilityPartMap,
+  getComposerCapabilitySelectionKeys,
+  getComposerEditingLength,
+  getComposerEditingText,
+  getComposerPlainText,
+  getComposerSelectionOffset,
+  getComposerSelectionOffsets,
+  getRuntimeCapabilityOptionKey,
+  normalizeComposerParts,
+  readComposerPartsFromElement,
+  removeComposerCapabilityTokens,
+  replaceComposerRange,
+  setComposerSelectionOffset,
+  type ComposerCapabilityPart,
+  type ComposerPart,
+} from '../lib/composer-parts';
+import {
+  createSlashPaletteOptions,
+  getActionRuntimeCapabilities,
+  parseSlashCommandInvocation,
+  renderSlashCommandTemplate,
+  resolveRuntimeCapabilityPalette,
+  resolveSlashCommands,
+  type ResolvedSlashCommand,
+  type RuntimeCapabilitiesWithCommands,
+  type RuntimeCapabilityPaletteState,
+  type SlashPaletteOption,
+} from '../lib/slash-commands';
 
 export type ChatProps = {
   className?: string;
@@ -112,11 +150,25 @@ function RuntimeCapabilityIcon({
 }) {
   const iconSize = variant === 'chip' ? 12 : 16;
   if (option.type === 'skill') {
-    return <Brain size={iconSize} />;
+    return (
+      <IconDefinitionRenderer
+        icon={option.capability.meta?.icon}
+        size={iconSize}
+        dataSlot="runtime-capability-meta-icon"
+        fallback={<Brain size={iconSize} />}
+      />
+    );
   }
 
   if (option.type === 'plugin') {
-    return <Plug size={iconSize} />;
+    return (
+      <IconDefinitionRenderer
+        icon={option.capability.meta?.icon}
+        size={iconSize}
+        dataSlot="runtime-capability-meta-icon"
+        fallback={<Plug size={iconSize} />}
+      />
+    );
   }
 
   return (
@@ -129,6 +181,19 @@ function RuntimeCapabilityIcon({
       data-slot="runtime-sub-agent-avatar"
     />
   );
+}
+
+function SlashCommandIcon({ command }: { command: ResolvedSlashCommand }) {
+  if (command.name === 'plan') {
+    return <ListChecks size={16} />;
+  }
+  if (command.name === 'clear') {
+    return <Eraser size={16} />;
+  }
+  if (command.name === 'help') {
+    return <CircleHelp size={16} />;
+  }
+  return <CommandIcon size={16} />;
 }
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
@@ -147,6 +212,8 @@ type HumanMessageWithMeta = Message & {
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
+  runtimeCapabilityOptions?: RuntimeCapabilityOption[];
 };
 
 type QuoteSelectionState = {
@@ -155,49 +222,13 @@ type QuoteSelectionState = {
   left: number;
 };
 
-type RuntimeCapabilityPaletteState = {
-  query: string;
-  start: number;
-  end: number;
-  activeIndex: number;
+type SubmitDraftOptions = {
+  followUpOverride?: FollowUpBehavior;
+  inputText?: string;
+  displayText?: string;
+  commandSource?: ChatKitCommandSource;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
 };
-
-function resolveRuntimeCapabilityPalette(
-  value: string,
-  selectionStart: number | null | undefined,
-): RuntimeCapabilityPaletteState | null {
-  if (typeof selectionStart !== 'number') {
-    return null;
-  }
-
-  const beforeCaret = value.slice(0, selectionStart);
-  const match = /(^|\s)\/([^\s/]*)$/.exec(beforeCaret);
-  if (!match) {
-    return null;
-  }
-
-  const query = match[2] ?? '';
-  return {
-    query,
-    start: beforeCaret.length - query.length - 1,
-    end: selectionStart,
-    activeIndex: 0,
-  };
-}
-
-function removeRuntimeCapabilityTrigger(
-  value: string,
-  palette: RuntimeCapabilityPaletteState,
-): { value: string; caret: number } {
-  const before = value.slice(0, palette.start);
-  const after = value.slice(palette.end);
-  const needsSpace =
-    before.length > 0 && after.length > 0 && !/^\s/.test(after);
-  return {
-    value: `${before}${needsSpace ? ' ' : ''}${after}`.replace(/\s{2,}/g, ' '),
-    caret: palette.start + (needsSpace ? 1 : 0),
-  };
-}
 
 function getHttpStatus(error: unknown): number | null {
   if (!error || typeof error !== 'object' || !('status' in error)) {
@@ -219,6 +250,19 @@ function warnMissingRuntimeCapabilityReferences(
   console.warn(
     `[Chat] Runtime capabilities ${action} include unavailable references:`,
     missing,
+  );
+}
+
+function getSelectedRuntimeCapabilityOptions(
+  selection: RuntimeCapabilitiesSelection | null | undefined,
+  options: RuntimeCapabilityOption[],
+): RuntimeCapabilityOption[] {
+  if (!selection) {
+    return [];
+  }
+
+  return options.filter((option) =>
+    isRuntimeCapabilitySelected(selection, option.type, option.id),
   );
 }
 
@@ -500,13 +544,17 @@ export function Chat({
     return () => window.clearInterval(timer);
   }, [stream.isLoading]);
 
-  const [draft, setDraft] = React.useState('');
+  const [composerParts, setComposerParts] = React.useState<ComposerPart[]>([]);
+  const [renderedComposerParts, setRenderedComposerParts] = React.useState<
+    ComposerPart[]
+  >([]);
+  const [composerDomVersion, setComposerDomVersion] = React.useState(0);
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
     null,
   );
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
   const [runtimeCapabilities, setRuntimeCapabilities] =
-    React.useState<RuntimeCapabilitiesResponse | null>(null);
+    React.useState<RuntimeCapabilitiesWithCommands | null>(null);
   const [runtimeCapabilitiesReady, setRuntimeCapabilitiesReady] =
     React.useState(false);
   const [sessionRuntimeCapabilities, setSessionRuntimeCapabilities] =
@@ -535,7 +583,13 @@ export function Chat({
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const composerInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const composerInputRef = React.useRef<HTMLDivElement>(null);
+  const slashPaletteRef = React.useRef<HTMLDivElement>(null);
+  const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
+    [],
+  );
+  const composerPartsRef = React.useRef<ComposerPart[]>([]);
+  const pendingComposerCaretOffsetRef = React.useRef<number | null>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const forceFollowRef = React.useRef(false);
   const previousMessageCountRef = React.useRef(0);
@@ -557,6 +611,10 @@ export function Chat({
   const messages = React.useMemo(
     () => stream.messages ?? [],
     [stream.messages],
+  );
+  const draft = React.useMemo(
+    () => getComposerPlainText(composerParts),
+    [composerParts],
   );
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
@@ -612,33 +670,40 @@ export function Chat({
       ),
     [runRuntimeCapabilities, runtimeCapabilityOptions],
   );
-  const paletteRuntimeCapabilityOptions = React.useMemo(() => {
-    if (!runtimeCapabilityPalette || !runtimeCapabilitiesReady) {
-      return [];
-    }
-
-    const query = runtimeCapabilityPalette.query.trim().toLowerCase();
-    return runtimeCapabilityOptions
-      .filter(
+  const composerRuntimeCapabilitySelectionKeys = React.useMemo(
+    () => getComposerCapabilitySelectionKeys(composerParts),
+    [composerParts],
+  );
+  const detachedRunRuntimeCapabilityOptions = React.useMemo(
+    () =>
+      runRuntimeCapabilityOptions.filter(
         (option) =>
-          !isRuntimeCapabilitySelected(
-            effectiveRuntimeCapabilitiesForSubmit ??
-              createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
-            option.type,
-            option.id,
+          !composerRuntimeCapabilitySelectionKeys.has(
+            getRuntimeCapabilityOptionKey(option),
           ),
-      )
-      .filter((option) => {
-        if (!query) {
-          return true;
-        }
-        return [option.label, option.description, option.type]
-          .filter(Boolean)
-          .some((value) => value?.toLowerCase().includes(query));
-      })
-      .slice(0, 8);
+      ),
+    [composerRuntimeCapabilitySelectionKeys, runRuntimeCapabilityOptions],
+  );
+  const resolvedSlashCommands = React.useMemo(
+    () =>
+      resolveSlashCommands(
+        composer?.slashCommands,
+        runtimeCapabilities?.commands,
+      ),
+    [composer?.slashCommands, runtimeCapabilities?.commands],
+  );
+  const slashPaletteOptions = React.useMemo<SlashPaletteOption[]>(() => {
+    return createSlashPaletteOptions({
+      palette: runtimeCapabilityPalette,
+      resolvedCommands: resolvedSlashCommands,
+      runtimeCapabilitiesReady,
+      runtimeCapabilityOptions,
+      runtimeCapabilities,
+      effectiveRuntimeCapabilitiesForSubmit,
+    });
   }, [
     effectiveRuntimeCapabilitiesForSubmit,
+    resolvedSlashCommands,
     runtimeCapabilities,
     runtimeCapabilitiesReady,
     runtimeCapabilityOptions,
@@ -679,7 +744,80 @@ export function Chat({
     setQuoteSelection(null);
   }, []);
 
-  useParentMessenger({
+  const commitComposerParts = React.useCallback(
+    (
+      nextParts: ComposerPart[],
+      options?: {
+        caretOffset?: number | null;
+        resetDom?: boolean;
+        syncRemovedCapabilityTokens?: boolean;
+      },
+    ) => {
+      const normalized = normalizeComposerParts(nextParts);
+      const previous = composerPartsRef.current;
+      composerPartsRef.current = normalized;
+
+      if (typeof options?.caretOffset === 'number') {
+        pendingComposerCaretOffsetRef.current = options.caretOffset;
+      }
+
+      if (options?.syncRemovedCapabilityTokens ?? true) {
+        const nextKeys = getComposerCapabilityKeys(normalized);
+        const removedCapabilities = previous.filter(
+          (part): part is ComposerCapabilityPart =>
+            part.type === 'capability' && !nextKeys.has(part.key),
+        );
+
+        if (removedCapabilities.length > 0) {
+          setRunRuntimeCapabilities((selection) => {
+            let nextSelection = selection;
+            for (const part of removedCapabilities) {
+              nextSelection = toggleRuntimeCapabilitySelection(
+                nextSelection,
+                part.capability.type,
+                part.capability.id,
+                false,
+              );
+            }
+            return nextSelection;
+          });
+        }
+      }
+
+      setComposerParts(normalized);
+      if (options?.resetDom) {
+        setRenderedComposerParts(normalized);
+        setComposerDomVersion((version) => version + 1);
+      }
+    },
+    [],
+  );
+
+  const setComposerText = React.useCallback(
+    (text: string, caretOffset = text.length) => {
+      commitComposerParts(createComposerTextParts(text), {
+        caretOffset,
+        resetDom: true,
+        syncRemovedCapabilityTokens: true,
+      });
+    },
+    [commitComposerParts],
+  );
+
+  const focusComposerAt = React.useCallback((position?: number) => {
+    const nextPosition =
+      position ?? getComposerEditingLength(composerPartsRef.current);
+    pendingComposerCaretOffsetRef.current = nextPosition;
+    requestAnimationFrame(() => {
+      const input = composerInputRef.current;
+      if (!input) {
+        return;
+      }
+      setComposerSelectionOffset(input, nextPosition);
+    });
+  }, []);
+
+  const parentMessenger = useParentMessenger({
     onSetComposerValue: React.useCallback(
       (payload: ComposerValuePayload | null) => {
         if (!payload) {
@@ -687,7 +825,7 @@ export function Chat({
         }
 
         if (typeof payload.text === 'string') {
-          setDraft(payload.text);
+          setComposerText(payload.text);
         }
 
         if (Array.isArray(payload.references)) {
@@ -709,7 +847,7 @@ export function Chat({
           setSelectedTool(nextTool);
         }
       },
-      [composer?.tools],
+      [composer?.tools, setComposerText],
     ),
     onFocusComposer: React.useCallback(() => {
       composerInputRef.current?.focus();
@@ -999,23 +1137,27 @@ export function Chat({
     isUploadingReferenceImages;
 
   const resizeComposerInput = React.useCallback(() => {
-    const textarea = composerInputRef.current;
-    if (!textarea) {
+    const input = composerInputRef.current;
+    if (!input) {
       return;
     }
-    textarea.style.height = 'auto';
-    const nextHeight = Math.min(
-      textarea.scrollHeight,
-      COMPOSER_INPUT_MAX_HEIGHT,
-    );
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+    input.style.maxHeight = `${COMPOSER_INPUT_MAX_HEIGHT}px`;
+    input.style.overflowY =
+      input.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
   }, []);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
+    composerPartsRef.current = composerParts;
     resizeComposerInput();
-  }, [draft, resizeComposerInput]);
+    const caretOffset = pendingComposerCaretOffsetRef.current;
+    if (typeof caretOffset === 'number') {
+      pendingComposerCaretOffsetRef.current = null;
+      const input = composerInputRef.current;
+      if (input) {
+        setComposerSelectionOffset(input, caretOffset);
+      }
+    }
+  }, [composerDomVersion, composerParts, resizeComposerInput]);
 
   React.useEffect(() => {
     document.addEventListener('selectionchange', syncQuoteSelection);
@@ -1215,7 +1357,7 @@ export function Chat({
     if (!runtimeCapabilityPalette) {
       return;
     }
-    if (paletteRuntimeCapabilityOptions.length === 0) {
+    if (slashPaletteOptions.length === 0) {
       setRuntimeCapabilityPalette((previous) =>
         previous && previous.activeIndex !== 0
           ? { ...previous, activeIndex: 0 }
@@ -1223,20 +1365,38 @@ export function Chat({
       );
       return;
     }
-    if (
-      runtimeCapabilityPalette.activeIndex >=
-      paletteRuntimeCapabilityOptions.length
-    ) {
+    if (runtimeCapabilityPalette.activeIndex >= slashPaletteOptions.length) {
       setRuntimeCapabilityPalette((previous) =>
         previous
           ? {
               ...previous,
-              activeIndex: paletteRuntimeCapabilityOptions.length - 1,
+              activeIndex: slashPaletteOptions.length - 1,
             }
           : previous,
       );
     }
-  }, [paletteRuntimeCapabilityOptions.length, runtimeCapabilityPalette]);
+  }, [slashPaletteOptions.length, runtimeCapabilityPalette]);
+
+  React.useLayoutEffect(() => {
+    if (!runtimeCapabilityPalette) {
+      return;
+    }
+
+    const container = slashPaletteRef.current;
+    const option =
+      slashPaletteOptionRefs.current[runtimeCapabilityPalette.activeIndex];
+    if (!container || !option) {
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const optionRect = option.getBoundingClientRect();
+    if (optionRect.top < containerRect.top) {
+      container.scrollTop -= containerRect.top - optionRect.top;
+    } else if (optionRect.bottom > containerRect.bottom) {
+      container.scrollTop += optionRect.bottom - containerRect.bottom;
+    }
+  }, [runtimeCapabilityPalette, slashPaletteOptions.length]);
 
   // Get successfully uploaded files (matching IStorageFile interface)
   const uploadedFiles = attachments
@@ -1272,66 +1432,65 @@ export function Chat({
   );
 
   const updateRuntimeCapabilityPalette = React.useCallback(
-    (value: string, selectionStart?: number | null) => {
+    (parts: ComposerPart[], selectionStart?: number | null) => {
       const input = composerInputRef.current;
+      const editingText = getComposerEditingText(parts);
       const nextPalette = resolveRuntimeCapabilityPalette(
-        value,
+        editingText,
         typeof selectionStart === 'number'
           ? selectionStart
-          : input?.selectionStart,
+          : input
+            ? getComposerSelectionOffset(input)
+            : getComposerEditingLength(parts),
       );
       setRuntimeCapabilityPalette(nextPalette);
     },
     [],
   );
 
-  const handleComposerChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const nextValue = event.target.value;
-      setDraft(nextValue);
-      updateRuntimeCapabilityPalette(nextValue, event.target.selectionStart);
+  const syncComposerInputFromElement = React.useCallback(
+    (input: HTMLDivElement) => {
+      const previousCapabilities = getComposerCapabilityPartMap(
+        composerPartsRef.current,
+      );
+      const nextParts = readComposerPartsFromElement(
+        input,
+        previousCapabilities,
+      );
+      const selectionOffset =
+        getComposerSelectionOffsets(input)?.end ??
+        getComposerEditingLength(nextParts);
+      commitComposerParts(nextParts, {
+        caretOffset: selectionOffset,
+        resetDom: false,
+      });
+      updateRuntimeCapabilityPalette(nextParts, selectionOffset);
     },
-    [updateRuntimeCapabilityPalette],
+    [commitComposerParts, updateRuntimeCapabilityPalette],
+  );
+
+  const handleComposerInput = React.useCallback(
+    (event: React.FormEvent<HTMLDivElement>) => {
+      syncComposerInputFromElement(event.currentTarget);
+    },
+    [syncComposerInputFromElement],
+  );
+
+  const handleComposerCompositionEnd = React.useCallback(
+    (event: React.CompositionEvent<HTMLDivElement>) => {
+      syncComposerInputFromElement(event.currentTarget);
+    },
+    [syncComposerInputFromElement],
   );
 
   const handleComposerSelect = React.useCallback(() => {
     updateRuntimeCapabilityPalette(
-      draft,
-      composerInputRef.current?.selectionStart,
+      composerPartsRef.current,
+      composerInputRef.current
+        ? getComposerSelectionOffset(composerInputRef.current)
+        : undefined,
     );
-  }, [draft, updateRuntimeCapabilityPalette]);
-
-  const selectRunRuntimeCapability = React.useCallback(
-    (option: RuntimeCapabilityOption) => {
-      const palette = runtimeCapabilityPalette;
-      if (!palette) {
-        return;
-      }
-
-      const nextDraft = removeRuntimeCapabilityTrigger(draft, palette);
-      setDraft(nextDraft.value);
-      setRunRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(
-          previous,
-          option.type,
-          option.id,
-          true,
-        ),
-      );
-      setRuntimeCapabilityPalette(null);
-
-      requestAnimationFrame(() => {
-        const input = composerInputRef.current;
-        if (!input) {
-          return;
-        }
-        input.focus();
-        input.setSelectionRange(nextDraft.caret, nextDraft.caret);
-        resizeComposerInput();
-      });
-    },
-    [draft, resizeComposerInput, runtimeCapabilityPalette],
-  );
+  }, [updateRuntimeCapabilityPalette]);
 
   const removeRunRuntimeCapability = React.useCallback(
     (option: RuntimeCapabilityOption) => {
@@ -1343,23 +1502,35 @@ export function Chat({
           false,
         ),
       );
+      commitComposerParts(
+        removeComposerCapabilityTokens(composerPartsRef.current, option),
+        {
+          resetDom: true,
+          syncRemovedCapabilityTokens: false,
+        },
+      );
     },
-    [],
+    [commitComposerParts],
   );
 
   const submitDraft = React.useCallback(
-    (followUpOverride?: FollowUpBehavior) => {
+    (optionsOrFollowUp?: FollowUpBehavior | SubmitDraftOptions) => {
       if (isSendDisabled) return;
 
+      const submitOptions =
+        typeof optionsOrFollowUp === 'string'
+          ? { followUpOverride: optionsOrFollowUp }
+          : (optionsOrFollowUp ?? {});
+      const contentToSubmit = (submitOptions.inputText ?? trimmedDraft).trim();
       const filesToSend =
         uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
       const referencesToSend =
         references.length > 0 ? [...references] : undefined;
       const nextFollowUpMode = stream.isLoading
-        ? (followUpOverride ?? stream.followUpBehavior)
+        ? (submitOptions.followUpOverride ?? stream.followUpBehavior)
         : undefined;
       const humanInput = buildHumanMessageInputPayload({
-        content: trimmedDraft,
+        content: contentToSubmit,
         references: referencesToSend,
       });
 
@@ -1367,8 +1538,25 @@ export function Chat({
         return;
       }
 
+      const runtimeCapabilitiesForSubmit =
+        submitOptions.runtimeCapabilities &&
+        runtimeCapabilities &&
+        runtimeCapabilitiesReady
+          ? mergeRuntimeCapabilitiesSelections(
+              runtimeCapabilities,
+              effectiveRuntimeCapabilitiesForSubmit,
+              submitOptions.runtimeCapabilities,
+            )
+          : effectiveRuntimeCapabilitiesForSubmit;
+      const runtimeCapabilityOptionsForMessage =
+        getSelectedRuntimeCapabilityOptions(
+          runtimeCapabilitiesForSubmit,
+          runtimeCapabilityOptions,
+        );
+
       const displayContent =
-        trimmedDraft ||
+        submitOptions.displayText ||
+        contentToSubmit ||
         (referencesToSend ? t('chat.referencedContentOnly') : '');
       const newMessage: HumanMessageWithMeta = {
         id: createMessageId(),
@@ -1378,11 +1566,21 @@ export function Chat({
         ...(humanInput.referenceComposition
           ? { referenceComposition: humanInput.referenceComposition }
           : {}),
+        ...(runtimeCapabilitiesForSubmit
+          ? { runtimeCapabilities: runtimeCapabilitiesForSubmit }
+          : {}),
+        ...(runtimeCapabilityOptionsForMessage.length > 0
+          ? { runtimeCapabilityOptions: runtimeCapabilityOptionsForMessage }
+          : {}),
         ...(filesToSend ? { attachments: filesToSend } : {}),
         ...(referencesToSend ? { references: referencesToSend } : {}),
       };
 
-      setDraft('');
+      commitComposerParts([], {
+        caretOffset: 0,
+        resetDom: true,
+        syncRemovedCapabilityTokens: false,
+      });
 
       const inputPayload: {
         input: string;
@@ -1391,6 +1589,7 @@ export function Chat({
         referenceComposition?: ChatKitReferenceCompositionMode;
         planMode?: boolean;
         runtimeCapabilities?: RuntimeCapabilitiesSelection;
+        commandSource?: ChatKitCommandSource;
       } = {
         ...humanInput,
       };
@@ -1400,9 +1599,11 @@ export function Chat({
       if (planModeEnabled) {
         inputPayload.planMode = true;
       }
-      if (effectiveRuntimeCapabilitiesForSubmit) {
-        inputPayload.runtimeCapabilities =
-          effectiveRuntimeCapabilitiesForSubmit;
+      if (runtimeCapabilitiesForSubmit) {
+        inputPayload.runtimeCapabilities = runtimeCapabilitiesForSubmit;
+      }
+      if (submitOptions.commandSource) {
+        inputPayload.commandSource = submitOptions.commandSource;
       }
 
       const requestOptions = buildInjectedRequestOptions({
@@ -1467,8 +1668,11 @@ export function Chat({
       persistSessionRuntimeCapabilities,
       references,
       runtimeCapabilities,
+      runtimeCapabilitiesReady,
+      runtimeCapabilityOptions,
       scrollToBottom,
       selectedTool,
+      commitComposerParts,
       planModeEnabled,
       stream,
       trimmedDraft,
@@ -1477,8 +1681,233 @@ export function Chat({
     ],
   );
 
+  const addRunRuntimeCapabilities = React.useCallback(
+    (selection: RuntimeCapabilitiesSelection) => {
+      setRunRuntimeCapabilities((previous) =>
+        runtimeCapabilities
+          ? mergeRuntimeCapabilitiesSelections(
+              runtimeCapabilities,
+              previous,
+              selection,
+            )
+          : previous,
+      );
+    },
+    [runtimeCapabilities],
+  );
+
+  const insertComposerCapabilityToken = React.useCallback(
+    (
+      capability: RuntimeCapabilityOption,
+      range?: { start: number; end: number },
+    ) => {
+      const token = createComposerCapabilityPart(capability, createMessageId());
+      const currentParts = composerPartsRef.current;
+      const replaceRange = range ?? {
+        start: getComposerEditingLength(currentParts),
+        end: getComposerEditingLength(currentParts),
+      };
+      const nextParts = replaceComposerRange(
+        currentParts,
+        replaceRange.start,
+        replaceRange.end,
+        [token],
+      );
+      commitComposerParts(nextParts, {
+        caretOffset: replaceRange.start + 1,
+        resetDom: true,
+        syncRemovedCapabilityTokens: true,
+      });
+      setRunRuntimeCapabilities((previous) =>
+        toggleRuntimeCapabilitySelection(
+          previous,
+          capability.type,
+          capability.id,
+          true,
+        ),
+      );
+      setRuntimeCapabilityPalette(null);
+      focusComposerAt(replaceRange.start + 1);
+    },
+    [commitComposerParts, focusComposerAt],
+  );
+
+  const executeSlashCommand = React.useCallback(
+    (command: ResolvedSlashCommand, args: string) => {
+      const action = command.action;
+      const commandSource: ChatKitCommandSource = {
+        type: 'slash_command',
+        name: command.name,
+        source: command.source,
+        executionType: action.type,
+      };
+
+      if (command.source === 'builtin') {
+        if (command.name === 'plan') {
+          setPlanModeEnabled((enabled) => !enabled);
+          setComposerText('', 0);
+          setRuntimeCapabilityPalette(null);
+          focusComposerAt(0);
+          return true;
+        }
+        if (command.name === 'clear') {
+          setComposerText('', 0);
+          setAttachments([]);
+          setReferences([]);
+          setRunRuntimeCapabilities(
+            createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
+          );
+          setRuntimeCapabilityPalette(null);
+          focusComposerAt(0);
+          return true;
+        }
+        if (command.name === 'help') {
+          setComposerText('/', 1);
+          setRuntimeCapabilityPalette({
+            query: '',
+            start: 0,
+            end: 1,
+            activeIndex: 0,
+            atMessageStart: true,
+            commandListOnly: true,
+          });
+          focusComposerAt(1);
+          return true;
+        }
+      }
+
+      if (action.type === 'select_capability') {
+        const capability = action.capability;
+        const option = runtimeCapabilityOptions.find(
+          (item) => item.type === capability.type && item.id === capability.id,
+        );
+        if (option) {
+          insertComposerCapabilityToken(option, {
+            start: 0,
+            end: getComposerEditingLength(composerPartsRef.current),
+          });
+        } else {
+          setRunRuntimeCapabilities((previous) =>
+            toggleRuntimeCapabilitySelection(
+              previous,
+              capability.type,
+              capability.id,
+              true,
+            ),
+          );
+          setComposerText('', 0);
+          setRuntimeCapabilityPalette(null);
+          focusComposerAt(0);
+        }
+        return true;
+      }
+
+      if (action.type === 'insert_text') {
+        const rendered = renderSlashCommandTemplate(action.template, args);
+        const runtimeSelection = getActionRuntimeCapabilities(action);
+        if (runtimeSelection) {
+          addRunRuntimeCapabilities(runtimeSelection);
+        }
+        setComposerText(rendered);
+        setRuntimeCapabilityPalette(null);
+        focusComposerAt(rendered.length);
+        return true;
+      }
+
+      if (action.type === 'submit_prompt') {
+        const rendered = renderSlashCommandTemplate(action.template, args);
+        if (!rendered) {
+          return true;
+        }
+        submitDraft({
+          inputText: rendered,
+          displayText: rendered,
+          commandSource,
+          runtimeCapabilities:
+            getActionRuntimeCapabilities(action) ?? undefined,
+        });
+        return true;
+      }
+
+      if (action.type === 'client_action') {
+        void parentMessenger
+          .sendCommand('onWidgetAction', {
+            action: action.action,
+            widgetItem: {
+              id: `slash-command:${command.name}`,
+              widget: {
+                type: 'slash_command',
+              },
+            },
+          })
+          .catch((error) => {
+            console.warn('[Chat] Failed to run slash command action:', error);
+          });
+        setComposerText('', 0);
+        setRuntimeCapabilityPalette(null);
+        focusComposerAt(0);
+        return true;
+      }
+
+      return false;
+    },
+    [
+      addRunRuntimeCapabilities,
+      focusComposerAt,
+      insertComposerCapabilityToken,
+      parentMessenger,
+      runtimeCapabilities,
+      runtimeCapabilityOptions,
+      setComposerText,
+      submitDraft,
+    ],
+  );
+
+  const selectSlashPaletteOption = React.useCallback(
+    (option: SlashPaletteOption) => {
+      const palette = runtimeCapabilityPalette;
+      if (!palette) {
+        return;
+      }
+
+      if (option.kind === 'capability') {
+        insertComposerCapabilityToken(option.capability, {
+          start: palette.start,
+          end: palette.end,
+        });
+        return;
+      }
+
+      executeSlashCommand(option.command, '');
+    },
+    [
+      executeSlashCommand,
+      insertComposerCapabilityToken,
+      runtimeCapabilityPalette,
+    ],
+  );
+
+  const executeSlashCommandFromDraft = React.useCallback(() => {
+    const invocation = parseSlashCommandInvocation(draft);
+    if (!invocation) {
+      return false;
+    }
+
+    const command = resolvedSlashCommands.find(
+      (item) => item.name === invocation.name,
+    );
+    if (!command) {
+      return false;
+    }
+
+    return executeSlashCommand(command, invocation.args);
+  }, [draft, executeSlashCommand, resolvedSlashCommands]);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (executeSlashCommandFromDraft()) {
+      return;
+    }
     submitDraft();
   };
 
@@ -1496,7 +1925,7 @@ export function Chat({
         item.request?.input?.references,
       );
       stream.removePendingFollowUp(id);
-      setDraft(text);
+      setComposerText(text);
       setReferences(nextReferences);
 
       requestAnimationFrame(() => {
@@ -1507,10 +1936,10 @@ export function Chat({
 
         input.focus();
         const position = text.length;
-        input.setSelectionRange(position, position);
+        setComposerSelectionOffset(input, position);
       });
     },
-    [pendingFollowUps, stream],
+    [pendingFollowUps, setComposerText, stream],
   );
 
   const handleQuoteSelection = React.useCallback(() => {
@@ -1538,7 +1967,7 @@ export function Chat({
   );
 
   const handleComposerKeyDown = (
-    event: React.KeyboardEvent<HTMLTextAreaElement>,
+    event: React.KeyboardEvent<HTMLDivElement>,
   ) => {
     if (runtimeCapabilityPalette) {
       if (event.key === 'Escape') {
@@ -1553,7 +1982,7 @@ export function Chat({
         event.key === 'Tab'
       ) {
         event.preventDefault();
-        if (paletteRuntimeCapabilityOptions.length === 0) {
+        if (slashPaletteOptions.length === 0) {
           return;
         }
         setRuntimeCapabilityPalette((previous) => {
@@ -1562,10 +1991,8 @@ export function Chat({
           }
           const direction = event.key === 'ArrowUp' ? -1 : 1;
           const nextIndex =
-            (previous.activeIndex +
-              direction +
-              paletteRuntimeCapabilityOptions.length) %
-            paletteRuntimeCapabilityOptions.length;
+            (previous.activeIndex + direction + slashPaletteOptions.length) %
+            slashPaletteOptions.length;
           return { ...previous, activeIndex: nextIndex };
         });
         return;
@@ -1573,10 +2000,39 @@ export function Chat({
 
       if (event.key === 'Enter') {
         const option =
-          paletteRuntimeCapabilityOptions[runtimeCapabilityPalette.activeIndex];
+          slashPaletteOptions[runtimeCapabilityPalette.activeIndex];
         if (option) {
           event.preventDefault();
-          selectRunRuntimeCapability(option);
+          selectSlashPaletteOption(option);
+          return;
+        }
+      }
+    }
+
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      const input = composerInputRef.current;
+      const selection = input ? getComposerSelectionOffsets(input) : null;
+      if (selection && selection.start === selection.end) {
+        const adjacentCapability = findAdjacentComposerCapability(
+          composerPartsRef.current,
+          selection.start,
+          event.key === 'Backspace' ? 'before' : 'after',
+        );
+        if (adjacentCapability) {
+          event.preventDefault();
+          const nextCaret =
+            event.key === 'Backspace'
+              ? Math.max(0, selection.start - 1)
+              : selection.start;
+          commitComposerParts(
+            composerPartsRef.current.filter(
+              (part) =>
+                part.type !== 'capability' ||
+                part.key !== adjacentCapability.key,
+            ),
+            { caretOffset: nextCaret, resetDom: true },
+          );
+          setRuntimeCapabilityPalette(null);
           return;
         }
       }
@@ -1586,6 +2042,29 @@ export function Chat({
       return;
     }
     if (event.shiftKey) {
+      event.preventDefault();
+      const input = composerInputRef.current;
+      const selection = input
+        ? getComposerSelectionOffsets(input)
+        : {
+            start: getComposerEditingLength(composerPartsRef.current),
+            end: getComposerEditingLength(composerPartsRef.current),
+          };
+      const start =
+        selection?.start ?? getComposerEditingLength(composerPartsRef.current);
+      const end =
+        selection?.end ?? getComposerEditingLength(composerPartsRef.current);
+      const nextParts = replaceComposerRange(
+        composerPartsRef.current,
+        start,
+        end,
+        createComposerTextParts('\n'),
+      );
+      commitComposerParts(nextParts, {
+        caretOffset: start + 1,
+        resetDom: true,
+      });
+      updateRuntimeCapabilityPalette(nextParts, start + 1);
       return;
     }
     if (event.nativeEvent.isComposing) {
@@ -1597,17 +2076,23 @@ export function Chat({
     }
 
     if (stream.isLoading) {
+      if (executeSlashCommandFromDraft()) {
+        return;
+      }
       submitDraft(
         getBusyComposerShortcutFollowUpMode(event.metaKey || event.ctrlKey),
       );
       return;
     }
 
+    if (executeSlashCommandFromDraft()) {
+      return;
+    }
     submitDraft();
   };
 
   const handleComposerPaste = React.useCallback(
-    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
       const clipboardData = event.clipboardData;
       if (!clipboardData) {
         return;
@@ -1689,6 +2174,30 @@ export function Chat({
 
       const pastedText = clipboardData.getData('text/plain');
       if (pastedText.trim().length <= LONG_TEXT_REFERENCE_THRESHOLD) {
+        if (!pastedText) {
+          return;
+        }
+        event.preventDefault();
+        const input = composerInputRef.current;
+        const selection = input
+          ? getComposerSelectionOffsets(input)
+          : {
+              start: getComposerEditingLength(composerPartsRef.current),
+              end: getComposerEditingLength(composerPartsRef.current),
+            };
+        const nextParts = replaceComposerRange(
+          composerPartsRef.current,
+          selection?.start ??
+            getComposerEditingLength(composerPartsRef.current),
+          selection?.end ?? getComposerEditingLength(composerPartsRef.current),
+          createComposerTextParts(pastedText),
+        );
+        const caretOffset =
+          (selection?.start ??
+            getComposerEditingLength(composerPartsRef.current)) +
+          pastedText.length;
+        commitComposerParts(nextParts, { caretOffset, resetDom: true });
+        updateRuntimeCapabilityPalette(nextParts, caretOffset);
         return;
       }
 
@@ -1707,7 +2216,9 @@ export function Chat({
     [
       composer?.attachments?.maxCount,
       composer?.attachments?.maxSize,
+      commitComposerParts,
       references,
+      updateRuntimeCapabilityPalette,
       uploadContextFile,
     ],
   );
@@ -1990,8 +2501,14 @@ export function Chat({
     });
 
     if (humanInput) {
+      const retryInput = {
+        ...humanInput,
+        ...(lastHumanMessage?.runtimeCapabilities
+          ? { runtimeCapabilities: lastHumanMessage.runtimeCapabilities }
+          : {}),
+      };
       stream.submit(
-        { input: humanInput },
+        { input: retryInput },
         {
           optimisticValues: (prev) => {
             // Remove the AI message that we're retrying
@@ -2173,6 +2690,14 @@ export function Chat({
               const humanMessage = message as HumanMessageWithMeta;
               const humanReferences = humanMessage.references ?? [];
               const humanAttachments = humanMessage.attachments ?? [];
+              const humanRuntimeCapabilityOptions =
+                message.type === 'human'
+                  ? (humanMessage.runtimeCapabilityOptions ??
+                    getSelectedRuntimeCapabilityOptions(
+                      humanMessage.runtimeCapabilities,
+                      runtimeCapabilityOptions,
+                    ))
+                  : [];
               const hasHumanAttachments =
                 message.type === 'human' && humanAttachments.length > 0;
               const canQuoteMessage =
@@ -2184,6 +2709,7 @@ export function Chat({
                 !isAssistantMessage &&
                 !hasPlainRenderableContent &&
                 !hasHumanAttachments &&
+                humanRuntimeCapabilityOptions.length === 0 &&
                 humanReferences.length === 0
               ) {
                 return null;
@@ -2240,6 +2766,25 @@ export function Chat({
                         />
                       ) : (
                         <>
+                          {message.type === 'human' &&
+                            humanRuntimeCapabilityOptions.length > 0 && (
+                              <div className="mb-2 flex flex-wrap gap-1.5">
+                                {humanRuntimeCapabilityOptions.map((option) => (
+                                  <span
+                                    key={`${option.type}:${option.id}`}
+                                    className="inline-flex max-w-full items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs font-medium text-primary-foreground"
+                                  >
+                                    <RuntimeCapabilityIcon
+                                      option={option}
+                                      variant="chip"
+                                    />
+                                    <span className="max-w-[9rem] truncate">
+                                      {option.label}
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           {message.type === 'human' &&
                             humanReferences.length > 0 && (
                               <div className="mb-2 flex flex-wrap gap-1.5">
@@ -2494,12 +3039,12 @@ export function Chat({
           </div>
         )}
 
-        {runRuntimeCapabilityOptions.length > 0 && (
+        {detachedRunRuntimeCapabilityOptions.length > 0 && (
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">
               {t('composer.capabilities.runOnly')}
             </span>
-            {runRuntimeCapabilityOptions.map((option) => (
+            {detachedRunRuntimeCapabilityOptions.map((option) => (
               <span
                 key={`${option.type}:${option.id}`}
                 className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
@@ -2526,7 +3071,9 @@ export function Chat({
             stream.stopRuntimeActivityItem('sandbox-services', serviceId)
           }
           attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
-          className={hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined}
+          className={
+            hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined
+          }
         />
 
         <PendingTodos
@@ -2555,35 +3102,50 @@ export function Chat({
           attachToComposer
         />
 
-        {runtimeCapabilityPalette && runtimeCapabilitiesReady && (
+        {runtimeCapabilityPalette && (
           <div
+            ref={slashPaletteRef}
+            data-slot="slash-palette"
             className={cn(
               'mb-2 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md',
               getRoundedClass(theme.radius),
             )}
           >
-            {paletteRuntimeCapabilityOptions.length > 0 ? (
-              paletteRuntimeCapabilityOptions.map((option, index) => (
+            {slashPaletteOptions.length > 0 ? (
+              slashPaletteOptions.map((option, index) => (
                 <button
-                  key={`${option.type}:${option.id}`}
+                  key={option.id}
+                  ref={(element) => {
+                    slashPaletteOptionRefs.current[index] = element;
+                  }}
+                  data-slot="slash-palette-option"
                   type="button"
                   onMouseDown={(event) => {
                     event.preventDefault();
-                    selectRunRuntimeCapability(option);
+                    selectSlashPaletteOption(option);
                   }}
                   className={cn(
-                    'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted',
+                    'flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-muted',
                     index === runtimeCapabilityPalette.activeIndex &&
                       'bg-muted',
                   )}
                 >
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-                    <RuntimeCapabilityIcon option={option} variant="list" />
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
+                    {option.kind === 'command' ? (
+                      <SlashCommandIcon command={option.command} />
+                    ) : (
+                      <RuntimeCapabilityIcon
+                        option={option.capability}
+                        variant="list"
+                      />
+                    )}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{option.label}</span>
+                  <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                    <span className="shrink-0 truncate font-medium">
+                      {option.label}
+                    </span>
                     {option.description && (
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
                         {option.description}
                       </span>
                     )}
@@ -2614,25 +3176,61 @@ export function Chat({
               getRoundedClass(theme.radius),
             )}
           >
-            <textarea
+            <div
+              key={composerDomVersion}
               ref={composerInputRef}
-              value={draft}
-              onChange={handleComposerChange}
+              role="textbox"
+              aria-multiline="true"
+              aria-disabled={
+                missingConfig || isHistoryLoading || hasPendingRequestUserInput
+              }
+              contentEditable={
+                !(
+                  missingConfig ||
+                  isHistoryLoading ||
+                  hasPendingRequestUserInput
+                )
+              }
+              suppressContentEditableWarning
+              onInput={handleComposerInput}
+              onCompositionEnd={handleComposerCompositionEnd}
               onSelect={handleComposerSelect}
               onPaste={handleComposerPaste}
               onKeyDown={handleComposerKeyDown}
-              rows={1}
-              placeholder={inputPlaceholder}
-              disabled={
-                missingConfig || isHistoryLoading || hasPendingRequestUserInput
-              }
+              data-placeholder={inputPlaceholder}
               className={cn(
-                'min-h-8 max-h-32 w-full resize-none bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                'min-h-8 max-h-32 w-full overflow-hidden whitespace-pre-wrap break-words bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
                 isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11 mt-1',
-                'placeholder:text-muted-foreground',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
+                (missingConfig ||
+                  isHistoryLoading ||
+                  hasPendingRequestUserInput) &&
+                  'cursor-not-allowed opacity-50',
               )}
-            />
+            >
+              {renderedComposerParts.map((part, index) =>
+                part.type === 'text' ? (
+                  <React.Fragment key={`text-${index}`}>
+                    {part.text}
+                  </React.Fragment>
+                ) : (
+                  <span
+                    key={part.key}
+                    data-composer-capability-key={part.key}
+                    data-capability-type={part.capability.type}
+                    data-capability-id={part.capability.id}
+                    contentEditable={false}
+                    className="mx-0.5 inline-flex max-w-[14rem] select-none items-center gap-1 text-sm font-semibold text-primary align-baseline"
+                  >
+                    <RuntimeCapabilityIcon
+                      option={part.capability}
+                      variant="chip"
+                    />
+                    <span className="truncate">{part.capability.label}</span>
+                  </span>
+                ),
+              )}
+            </div>
             <div
               data-slot="composer-action-bar"
               className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"

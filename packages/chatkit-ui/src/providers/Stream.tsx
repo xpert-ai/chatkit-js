@@ -13,6 +13,7 @@ import {
   Client,
   type Checkpoint,
   type Config,
+  type RuntimeCapabilitiesSelection,
   type StreamMode,
   type ChatMessage,
 } from '@xpert-ai/xpert-sdk';
@@ -27,8 +28,8 @@ import {
   REQUEST_USER_INPUT_TOOL_NAME,
   isLangGraphInterruptPayload,
   isClientToolRequest,
-  type ChatKitReference,
   type ChatKitReferenceCompositionMode,
+  type ChatKitReference,
   type ClientToolMessageInput,
   type ClientToolRequest,
   type ClientToolResponse,
@@ -66,11 +67,22 @@ import {
   parseThreadContextUsageEvent,
   type ThreadContextUsageByAgentKey,
 } from '../lib/thread-context-usage';
-import { normalizeReferences } from '../lib/references';
 import {
   parseFollowUpConsumedEvent,
   resolveFollowUpConsumedIds,
 } from '../lib/follow-up-consumed';
+import {
+  extractClientToolCalls,
+  extractMessageExecutionId,
+  extractMessageReferences,
+  extractReferenceComposition,
+  extractRuntimeCapabilities,
+  extractSubmittedInput,
+  isMessageMetadataContainer,
+  normalizeMessageType,
+  normalizeRoleToMessageType,
+  type MessageMetadataContainer,
+} from '../lib/message-metadata';
 import {
   getAutoDrainQueuedFollowUpIds,
   getPendingSteerFollowUpIds,
@@ -98,10 +110,7 @@ import {
   type RuntimeActivityProviderId,
   type RuntimeActivityTrigger,
 } from '../lib/runtime-activity';
-import {
-  logRuntimeActivity,
-  useRuntimeActivities,
-} from './runtime-activities';
+import { logRuntimeActivity, useRuntimeActivities } from './runtime-activities';
 
 export {
   getAutoDrainQueuedFollowUpIds,
@@ -118,6 +127,7 @@ type ChatKitAIMessage = Message & {
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
   followUpMode?: FollowUpBehavior;
   followUpStatus?: FollowUpStatus;
   targetExecutionId?: string | null;
@@ -355,166 +365,18 @@ function getStreamEventErrorMessage(
   )?.trim();
 }
 
-function normalizeRoleToMessageType(role?: string): Message['type'] {
-  const normalized = (role ?? '').toLowerCase();
-  if (normalized === 'user' || normalized === 'human') return 'human';
-  if (normalized === 'assistant' || normalized === 'ai') return 'ai';
-  if (normalized === 'system') return 'system';
-  if (normalized === 'tool') return 'tool';
-  return 'ai';
-}
-
-type PersistedChatMessage = ChatMessage & {
-  references?: unknown;
-  input?: unknown;
-  metadata?: unknown;
-  state?: unknown;
-  submittedInput?: unknown;
-  referenceComposition?: unknown;
-  followUpMode?: FollowUpBehavior;
-  followUpStatus?: FollowUpStatus;
-  targetExecutionId?: string | null;
-  visibleAt?: string | null;
-  thirdPartyMessage?: unknown;
-};
+type PersistedChatMessage = ChatMessage &
+  MessageMetadataContainer & {
+    followUpMode?: FollowUpBehavior;
+    followUpStatus?: FollowUpStatus;
+    targetExecutionId?: string | null;
+    visibleAt?: string | null;
+    thirdPartyMessage?: unknown;
+  };
 
 function normalizeThreadIdentifier(threadId?: string | null): string | null {
   const normalized = typeof threadId === 'string' ? threadId.trim() : '';
   return normalized ? normalized : null;
-}
-
-type ReferencePayloadContainer = {
-  references?: unknown;
-  input?: unknown;
-  metadata?: unknown;
-  state?: unknown;
-  submittedInput?: unknown;
-  referenceComposition?: unknown;
-};
-
-type ReferenceStateContainer = {
-  human?: unknown;
-};
-
-function isReferencePayloadContainer(
-  value: unknown,
-): value is ReferencePayloadContainer {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getNestedReferenceCandidate(value: unknown): unknown {
-  return isReferencePayloadContainer(value) ? value.references : undefined;
-}
-
-function getNestedInputCandidate(value: unknown): unknown {
-  return isReferencePayloadContainer(value) ? value.input : undefined;
-}
-
-function extractReferences(value: unknown): ChatKitReference[] | undefined {
-  const direct = normalizeReferences(value);
-  if (direct.length > 0) {
-    return direct;
-  }
-
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    value.references,
-    getNestedReferenceCandidate(value.input),
-    getNestedReferenceCandidate(value.metadata),
-    getNestedReferenceCandidate(state?.human),
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeReferences(candidate);
-    if (normalized.length > 0) {
-      return normalized;
-    }
-  }
-
-  return undefined;
-}
-
-function extractToolCalls(value: unknown): ToolCall[] | undefined {
-  if (!isClientToolRequest(value) || value.clientToolCalls.length === 0) {
-    return undefined;
-  }
-
-  return value.clientToolCalls;
-}
-
-function extractSubmittedInput(value: unknown): string | undefined {
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  if (typeof value.submittedInput === 'string') {
-    return value.submittedInput;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    value.input,
-    getNestedInputCandidate(value.input),
-    getNestedInputCandidate(value.metadata),
-    isReferencePayloadContainer(state?.human) ? state.human.input : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string') {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
-function extractReferenceComposition(
-  value: unknown,
-): ChatKitReferenceCompositionMode | undefined {
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  if (
-    value.referenceComposition === 'compose' ||
-    value.referenceComposition === 'preserve'
-  ) {
-    return value.referenceComposition;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    isReferencePayloadContainer(value.input)
-      ? value.input.referenceComposition
-      : undefined,
-    isReferencePayloadContainer(value.metadata)
-      ? value.metadata.referenceComposition
-      : undefined,
-    isReferencePayloadContainer(state?.human)
-      ? state.human.referenceComposition
-      : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate === 'compose' || candidate === 'preserve') {
-      return candidate;
-    }
-  }
-
-  return undefined;
 }
 
 export function shouldBroadcastThreadChange({
@@ -531,13 +393,16 @@ export function shouldBroadcastThreadChange({
 function mapChatMessageToUiMessage(
   message: PersistedChatMessage,
 ): ChatKitAIMessage {
-  const references = extractReferences(message);
+  const references = extractMessageReferences(message);
   const content = message.content ?? '';
-  const type = normalizeRoleToMessageType(message.role);
+  const type = normalizeRoleToMessageType(
+    typeof message.role === 'string' ? message.role : undefined,
+  );
   const submittedInput =
     extractSubmittedInput(message) ??
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(message);
+  const runtimeCapabilities = extractRuntimeCapabilities(message);
 
   return {
     id: message.id ?? createMessageId(),
@@ -545,9 +410,10 @@ function mapChatMessageToUiMessage(
     content,
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
-    ...(references ? { references } : {}),
+    ...(references.length > 0 ? { references } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
+    ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
     ...(message.followUpMode ? { followUpMode: message.followUpMode } : {}),
     ...(message.followUpStatus
       ? { followUpStatus: message.followUpStatus }
@@ -561,7 +427,7 @@ function mapChatMessageToUiMessage(
   } as ChatKitAIMessage;
 }
 
-function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
+function sortMessagesByCreatedAt<T extends ChatMessage>(items: T[]): T[] {
   return [...items].sort((a, b) => {
     const aTime = Date.parse(a.createdAt ?? '');
     const bTime = Date.parse(b.createdAt ?? '');
@@ -570,27 +436,6 @@ function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
     if (Number.isNaN(bTime)) return 1;
     return aTime - bTime;
   });
-}
-
-function normalizeMessageType(
-  value: unknown,
-): ChatKitAIMessage['type'] | undefined {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.toLowerCase();
-  switch (normalized) {
-    case 'user':
-    case 'human':
-      return 'human';
-    case 'assistant':
-    case 'ai':
-      return 'ai';
-    case 'system':
-      return 'system';
-    case 'tool':
-      return 'tool';
-    default:
-      return value as ChatKitAIMessage['type'];
-  }
 }
 
 function isAssistantMessage(message: ChatKitAIMessage | undefined) {
@@ -760,9 +605,9 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   if (typeof data === 'string') {
     return { id: createMessageId(), type: 'ai', content: data };
   }
-  if (Array.isArray(data) || typeof data !== 'object') return null;
+  if (!isMessageMetadataContainer(data)) return null;
 
-  const raw = data as Record<string, unknown>;
+  const raw = data;
   const content: ChatKitAIMessage['content'] = (() => {
     if ('content' in raw) {
       const rawContent = (raw as { content?: Message['content'] }).content;
@@ -791,12 +636,13 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const id = typeof raw.id === 'string' ? raw.id : createMessageId();
   const executionId =
     typeof raw.executionId === 'string' ? raw.executionId : undefined;
-  const references = extractReferences(raw);
+  const references = extractMessageReferences(raw);
   const submittedInput =
     extractSubmittedInput(raw) ??
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(raw);
-  const toolCalls = extractToolCalls(raw);
+  const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const toolCalls = extractClientToolCalls(raw);
 
   return {
     id,
@@ -804,15 +650,14 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     content,
     executionId,
     ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
-    ...(references ? { references } : {}),
+    ...(references.length > 0 ? { references } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
+    ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
   };
 }
 
-function extractMessageMeta(data: unknown) {
-  if (!data || typeof data !== 'object') return {};
-  const raw = data as Record<string, unknown>;
+function extractMessageMeta(raw: MessageMetadataContainer) {
   const meta: {
     id?: string;
     type?: ChatKitAIMessage['type'];
@@ -820,6 +665,7 @@ function extractMessageMeta(data: unknown) {
     references?: ChatKitReference[];
     submittedInput?: string;
     referenceComposition?: ChatKitReferenceCompositionMode;
+    runtimeCapabilities?: RuntimeCapabilitiesSelection;
     clientToolCalls?: ToolCall[];
   } = {};
 
@@ -828,11 +674,12 @@ function extractMessageMeta(data: unknown) {
   if ('content' in raw) {
     meta.content = (raw as { content?: Message['content'] }).content;
   }
-  const references = extractReferences(raw);
+  const references = extractMessageReferences(raw);
   const submittedInput = extractSubmittedInput(raw);
   const referenceComposition = extractReferenceComposition(raw);
-  const clientToolCalls = extractToolCalls(raw);
-  if (references) {
+  const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const clientToolCalls = extractClientToolCalls(raw);
+  if (references.length > 0) {
     meta.references = references;
   }
   if (submittedInput !== undefined) {
@@ -841,18 +688,14 @@ function extractMessageMeta(data: unknown) {
   if (referenceComposition) {
     meta.referenceComposition = referenceComposition;
   }
+  if (runtimeCapabilities) {
+    meta.runtimeCapabilities = runtimeCapabilities;
+  }
   if (clientToolCalls) {
     meta.clientToolCalls = clientToolCalls;
   }
 
   return meta;
-}
-
-function extractExecutionId(data: unknown) {
-  if (!data || typeof data !== 'object') return undefined;
-  const raw = data as Record<string, unknown>;
-  const value = raw.executionId ?? raw.execution_id;
-  return typeof value === 'string' ? value : undefined;
 }
 
 function updateLatestMessage(
@@ -1182,14 +1025,11 @@ export function applyStreamEvent(
     return;
   }
 
-  if (typeof parsed === 'object' && parsed !== null && 'messages' in parsed) {
-    const nextMessages = (parsed as { messages?: unknown[] }).messages;
-    if (Array.isArray(nextMessages)) {
-      const normalizedMessages = nextMessages
-        .map((item) => createMessageFromData(item))
-        .filter((item): item is ChatKitAIMessage => Boolean(item));
-      setValues((prev) => ({ ...prev, messages: normalizedMessages }));
-    }
+  if (isMessageMetadataContainer(parsed) && Array.isArray(parsed.messages)) {
+    const normalizedMessages = parsed.messages
+      .map((item) => createMessageFromData(item))
+      .filter((item): item is ChatKitAIMessage => Boolean(item));
+    setValues((prev) => ({ ...prev, messages: normalizedMessages }));
     return;
   }
 
@@ -1253,12 +1093,18 @@ export function applyStreamEvent(
     const eventType = (
       typeof payload.event === 'string' ? payload.event.toLowerCase() : ''
     ) as ChatMessageEventTypeEnum;
-    const meta = extractMessageMeta(payload.data);
-    const executionId = extractExecutionId(payload.data);
+    const eventPayloadData: unknown = payload.data;
+    const eventData = isMessageMetadataContainer(eventPayloadData)
+      ? eventPayloadData
+      : null;
+    const meta = eventData ? extractMessageMeta(eventData) : {};
+    const executionId = eventData
+      ? extractMessageExecutionId(eventData)
+      : undefined;
 
     mapLangGraphEventToChatKit({
       eventType,
-      data: payload.data,
+      data: eventPayloadData,
       tags: payload.tags,
       messageType: typeof meta.type === 'string' ? meta.type : undefined,
       executionId,
@@ -1269,7 +1115,7 @@ export function applyStreamEvent(
 
     const eventErrorMessage = getStreamEventErrorMessage(
       eventType,
-      payload.data,
+      eventPayloadData,
     );
     if (eventErrorMessage) {
       setError(new Error(eventErrorMessage));
@@ -1278,7 +1124,6 @@ export function applyStreamEvent(
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
       case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
-        const eventData = payload.data as { messages?: unknown[] } | null;
         if (eventData && Array.isArray(eventData.messages)) {
           const normalizedMessages = eventData.messages
             .map((item) => createMessageFromData(item))
@@ -1306,6 +1151,9 @@ export function applyStreamEvent(
           ...(meta.referenceComposition
             ? { referenceComposition: meta.referenceComposition }
             : {}),
+          ...(meta.runtimeCapabilities
+            ? { runtimeCapabilities: meta.runtimeCapabilities }
+            : {}),
           ...(meta.clientToolCalls
             ? { clientToolCalls: meta.clientToolCalls }
             : {}),
@@ -1331,6 +1179,9 @@ export function applyStreamEvent(
                   : {}),
                 ...(meta.referenceComposition
                   ? { referenceComposition: meta.referenceComposition }
+                  : {}),
+                ...(meta.runtimeCapabilities
+                  ? { runtimeCapabilities: meta.runtimeCapabilities }
                   : {}),
                 ...(meta.clientToolCalls
                   ? { clientToolCalls: meta.clientToolCalls }
@@ -1361,7 +1212,8 @@ export function applyStreamEvent(
         if (
           meta.content === undefined &&
           meta.id === undefined &&
-          meta.type === undefined
+          meta.type === undefined &&
+          !meta.runtimeCapabilities
         ) {
           break;
         }
@@ -1377,6 +1229,9 @@ export function applyStreamEvent(
               : {}),
             ...(meta.referenceComposition
               ? { referenceComposition: meta.referenceComposition }
+              : {}),
+            ...(meta.runtimeCapabilities
+              ? { runtimeCapabilities: meta.runtimeCapabilities }
               : {}),
             ...(meta.clientToolCalls
               ? { clientToolCalls: meta.clientToolCalls }
