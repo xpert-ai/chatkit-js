@@ -1,16 +1,10 @@
 import * as React from 'react';
 import {
   ArrowDown,
-  Brain,
-  CircleHelp,
-  Command as CommandIcon,
-  Eraser,
   FileText,
   ImageIcon,
-  ListChecks,
   Loader2,
   Pencil,
-  Plug,
   Quote,
   RefreshCw,
   X,
@@ -41,11 +35,13 @@ import { type StorageFile, type UploadingFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
+import { SlashPalette } from './composer/SlashPalette';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
+import { useSlashCommands } from './chat/useSlashCommands';
 import {
   AssistantMessage,
   AssistantStreamingIndicator,
@@ -56,14 +52,13 @@ import {
   ChatkitAvatar,
   type ChatkitAvatarData,
   extractAssistantAvatar,
-  normalizeChatkitAvatar,
 } from './ui/chatkit-avatar';
+import { RuntimeCapabilityIcon } from './runtime-capability-icon';
 import { useStreamManager } from '../hooks/useStream';
 import { useThreads } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
-import { IconDefinitionRenderer } from './ui/icon-definition';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { buildInjectedRequestOptions } from '../lib/request-options';
 import {
@@ -120,16 +115,9 @@ import {
   type ComposerPart,
 } from '../lib/composer-parts';
 import {
-  createSlashPaletteOptions,
-  getActionRuntimeCapabilities,
-  parseSlashCommandInvocation,
-  renderSlashCommandTemplate,
   resolveRuntimeCapabilityPalette,
-  resolveSlashCommands,
-  type ResolvedSlashCommand,
   type RuntimeCapabilitiesWithCommands,
   type RuntimeCapabilityPaletteState,
-  type SlashPaletteOption,
 } from '../lib/slash-commands';
 
 export type ChatProps = {
@@ -140,61 +128,6 @@ export type ChatProps = {
   options?: ChatKitOptions | null;
   isClientSecretInitializing?: boolean;
 };
-
-function RuntimeCapabilityIcon({
-  option,
-  variant,
-}: {
-  option: RuntimeCapabilityOption;
-  variant: 'chip' | 'list';
-}) {
-  const iconSize = variant === 'chip' ? 12 : 16;
-  if (option.type === 'skill') {
-    return (
-      <IconDefinitionRenderer
-        icon={option.capability.meta?.icon}
-        size={iconSize}
-        dataSlot="runtime-capability-meta-icon"
-        fallback={<Brain size={iconSize} />}
-      />
-    );
-  }
-
-  if (option.type === 'plugin') {
-    return (
-      <IconDefinitionRenderer
-        icon={option.capability.meta?.icon}
-        size={iconSize}
-        dataSlot="runtime-capability-meta-icon"
-        fallback={<Plug size={iconSize} />}
-      />
-    );
-  }
-
-  return (
-    <ChatkitAvatar
-      avatar={normalizeChatkitAvatar(option.capability.avatar)}
-      label={option.label}
-      className={variant === 'chip' ? 'h-4 w-4' : 'h-6 w-6'}
-      fallbackClassName={variant === 'chip' ? 'text-[9px]' : 'text-[10px]'}
-      imageClassName="object-cover"
-      data-slot="runtime-sub-agent-avatar"
-    />
-  );
-}
-
-function SlashCommandIcon({ command }: { command: ResolvedSlashCommand }) {
-  if (command.name === 'plan') {
-    return <ListChecks size={16} />;
-  }
-  if (command.name === 'clear') {
-    return <Eraser size={16} />;
-  }
-  if (command.name === 'help') {
-    return <CircleHelp size={16} />;
-  }
-  return <CommandIcon size={16} />;
-}
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | string
@@ -216,6 +149,37 @@ type HumanMessageWithMeta = Message & {
   runtimeCapabilityOptions?: RuntimeCapabilityOption[];
 };
 
+function getSlashPaletteEmptyLabelKey(
+  palette: RuntimeCapabilityPaletteState,
+  runtimeCapabilitiesReady: boolean,
+): string {
+  if (!palette.capabilityTypes || palette.capabilityTypes.length !== 1) {
+    return 'composer.capabilities.emptySearch';
+  }
+
+  if (!runtimeCapabilitiesReady) {
+    return 'composer.slashCommands.empty.loadingCapabilities';
+  }
+
+  const hasQuery = palette.query.trim().length > 0;
+  const capabilityType = palette.capabilityTypes[0];
+  if (capabilityType === 'skill') {
+    return hasQuery
+      ? 'composer.slashCommands.empty.matchingSkills'
+      : 'composer.slashCommands.empty.skills';
+  }
+
+  if (capabilityType === 'plugin') {
+    return hasQuery
+      ? 'composer.slashCommands.empty.matchingPlugins'
+      : 'composer.slashCommands.empty.plugins';
+  }
+
+  return hasQuery
+    ? 'composer.slashCommands.empty.matchingSubAgents'
+    : 'composer.slashCommands.empty.subAgents';
+}
+
 type QuoteSelectionState = {
   reference: ChatKitReference;
   top: number;
@@ -228,6 +192,7 @@ type SubmitDraftOptions = {
   displayText?: string;
   commandSource?: ChatKitCommandSource;
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
+  planMode?: boolean;
 };
 
 function getHttpStatus(error: unknown): number | null {
@@ -684,31 +649,6 @@ export function Chat({
       ),
     [composerRuntimeCapabilitySelectionKeys, runRuntimeCapabilityOptions],
   );
-  const resolvedSlashCommands = React.useMemo(
-    () =>
-      resolveSlashCommands(
-        composer?.slashCommands,
-        runtimeCapabilities?.commands,
-      ),
-    [composer?.slashCommands, runtimeCapabilities?.commands],
-  );
-  const slashPaletteOptions = React.useMemo<SlashPaletteOption[]>(() => {
-    return createSlashPaletteOptions({
-      palette: runtimeCapabilityPalette,
-      resolvedCommands: resolvedSlashCommands,
-      runtimeCapabilitiesReady,
-      runtimeCapabilityOptions,
-      runtimeCapabilities,
-      effectiveRuntimeCapabilitiesForSubmit,
-    });
-  }, [
-    effectiveRuntimeCapabilitiesForSubmit,
-    resolvedSlashCommands,
-    runtimeCapabilities,
-    runtimeCapabilitiesReady,
-    runtimeCapabilityOptions,
-    runtimeCapabilityPalette,
-  ]);
 
   const persistSessionRuntimeCapabilities = React.useCallback(
     async (
@@ -1291,7 +1231,6 @@ export function Chat({
     setRunRuntimeCapabilities(
       createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
     );
-    setRuntimeCapabilityPalette(null);
 
     if (!runtimeCapabilitiesReady || !runtimeCapabilities) {
       setSessionRuntimeCapabilities(
@@ -1352,51 +1291,6 @@ export function Chat({
     stream.client,
     stream.threadId,
   ]);
-
-  React.useEffect(() => {
-    if (!runtimeCapabilityPalette) {
-      return;
-    }
-    if (slashPaletteOptions.length === 0) {
-      setRuntimeCapabilityPalette((previous) =>
-        previous && previous.activeIndex !== 0
-          ? { ...previous, activeIndex: 0 }
-          : previous,
-      );
-      return;
-    }
-    if (runtimeCapabilityPalette.activeIndex >= slashPaletteOptions.length) {
-      setRuntimeCapabilityPalette((previous) =>
-        previous
-          ? {
-              ...previous,
-              activeIndex: slashPaletteOptions.length - 1,
-            }
-          : previous,
-      );
-    }
-  }, [slashPaletteOptions.length, runtimeCapabilityPalette]);
-
-  React.useLayoutEffect(() => {
-    if (!runtimeCapabilityPalette) {
-      return;
-    }
-
-    const container = slashPaletteRef.current;
-    const option =
-      slashPaletteOptionRefs.current[runtimeCapabilityPalette.activeIndex];
-    if (!container || !option) {
-      return;
-    }
-
-    const containerRect = container.getBoundingClientRect();
-    const optionRect = option.getBoundingClientRect();
-    if (optionRect.top < containerRect.top) {
-      container.scrollTop -= containerRect.top - optionRect.top;
-    } else if (optionRect.bottom > containerRect.bottom) {
-      container.scrollTop += optionRect.bottom - containerRect.bottom;
-    }
-  }, [runtimeCapabilityPalette, slashPaletteOptions.length]);
 
   // Get successfully uploaded files (matching IStorageFile interface)
   const uploadedFiles = attachments
@@ -1529,6 +1423,7 @@ export function Chat({
       const nextFollowUpMode = stream.isLoading
         ? (submitOptions.followUpOverride ?? stream.followUpBehavior)
         : undefined;
+      const effectivePlanMode = submitOptions.planMode ?? planModeEnabled;
       const humanInput = buildHumanMessageInputPayload({
         content: contentToSubmit,
         references: referencesToSend,
@@ -1596,7 +1491,7 @@ export function Chat({
       if (filesToSend) {
         inputPayload.files = filesToSend;
       }
-      if (planModeEnabled) {
+      if (effectivePlanMode) {
         inputPayload.planMode = true;
       }
       if (runtimeCapabilitiesForSubmit) {
@@ -1732,176 +1627,94 @@ export function Chat({
     [commitComposerParts, focusComposerAt],
   );
 
-  const executeSlashCommand = React.useCallback(
-    (command: ResolvedSlashCommand, args: string) => {
-      const action = command.action;
-      const commandSource: ChatKitCommandSource = {
-        type: 'slash_command',
-        name: command.name,
-        source: command.source,
-        executionType: action.type,
+  const {
+    slashPaletteOptions,
+    executeSlashCommandFromDraft,
+    selectSlashPaletteOption,
+  } = useSlashCommands({
+    hostCommands: composer?.slashCommands,
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    runtimeCapabilityOptions,
+    effectiveRuntimeCapabilitiesForSubmit,
+    draft,
+    palette: runtimeCapabilityPalette,
+    setPalette: setRuntimeCapabilityPalette,
+    parentMessenger,
+    getComposerEditingLength: () =>
+      getComposerEditingLength(composerPartsRef.current),
+    setComposerText,
+    focusComposerAt,
+    setPlanModeEnabled,
+    addRunRuntimeCapabilities,
+    setRunRuntimeCapabilities,
+    insertComposerCapabilityToken,
+    submitPrompt: submitDraft,
+  });
+  const slashPaletteEmptyLabel = runtimeCapabilityPalette
+    ? t(
+        getSlashPaletteEmptyLabelKey(
+          runtimeCapabilityPalette,
+          runtimeCapabilitiesReady,
+        ),
+      )
+    : t('composer.capabilities.emptySearch');
+  const slashPaletteCapabilityEmptyLabels = runtimeCapabilitiesReady
+    ? {
+        skill: t('composer.slashCommands.empty.skills'),
+        plugin: t('composer.slashCommands.empty.plugins'),
+        subAgent: t('composer.slashCommands.empty.subAgents'),
+      }
+    : {
+        skill: t('composer.slashCommands.empty.loadingCapabilities'),
+        plugin: t('composer.slashCommands.empty.loadingCapabilities'),
+        subAgent: t('composer.slashCommands.empty.loadingCapabilities'),
       };
 
-      if (command.source === 'builtin') {
-        if (command.name === 'plan') {
-          setPlanModeEnabled((enabled) => !enabled);
-          setComposerText('', 0);
-          setRuntimeCapabilityPalette(null);
-          focusComposerAt(0);
-          return true;
-        }
-        if (command.name === 'clear') {
-          setComposerText('', 0);
-          setAttachments([]);
-          setReferences([]);
-          setRunRuntimeCapabilities(
-            createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
-          );
-          setRuntimeCapabilityPalette(null);
-          focusComposerAt(0);
-          return true;
-        }
-        if (command.name === 'help') {
-          setComposerText('/', 1);
-          setRuntimeCapabilityPalette({
-            query: '',
-            start: 0,
-            end: 1,
-            activeIndex: 0,
-            atMessageStart: true,
-            commandListOnly: true,
-          });
-          focusComposerAt(1);
-          return true;
-        }
-      }
+  React.useEffect(() => {
+    if (!runtimeCapabilityPalette) {
+      return;
+    }
+    if (slashPaletteOptions.length === 0) {
+      setRuntimeCapabilityPalette((previous) =>
+        previous && previous.activeIndex !== 0
+          ? { ...previous, activeIndex: 0 }
+          : previous,
+      );
+      return;
+    }
+    if (runtimeCapabilityPalette.activeIndex >= slashPaletteOptions.length) {
+      setRuntimeCapabilityPalette((previous) =>
+        previous
+          ? {
+              ...previous,
+              activeIndex: slashPaletteOptions.length - 1,
+            }
+          : previous,
+      );
+    }
+  }, [slashPaletteOptions.length, runtimeCapabilityPalette]);
 
-      if (action.type === 'select_capability') {
-        const capability = action.capability;
-        const option = runtimeCapabilityOptions.find(
-          (item) => item.type === capability.type && item.id === capability.id,
-        );
-        if (option) {
-          insertComposerCapabilityToken(option, {
-            start: 0,
-            end: getComposerEditingLength(composerPartsRef.current),
-          });
-        } else {
-          setRunRuntimeCapabilities((previous) =>
-            toggleRuntimeCapabilitySelection(
-              previous,
-              capability.type,
-              capability.id,
-              true,
-            ),
-          );
-          setComposerText('', 0);
-          setRuntimeCapabilityPalette(null);
-          focusComposerAt(0);
-        }
-        return true;
-      }
-
-      if (action.type === 'insert_text') {
-        const rendered = renderSlashCommandTemplate(action.template, args);
-        const runtimeSelection = getActionRuntimeCapabilities(action);
-        if (runtimeSelection) {
-          addRunRuntimeCapabilities(runtimeSelection);
-        }
-        setComposerText(rendered);
-        setRuntimeCapabilityPalette(null);
-        focusComposerAt(rendered.length);
-        return true;
-      }
-
-      if (action.type === 'submit_prompt') {
-        const rendered = renderSlashCommandTemplate(action.template, args);
-        if (!rendered) {
-          return true;
-        }
-        submitDraft({
-          inputText: rendered,
-          displayText: rendered,
-          commandSource,
-          runtimeCapabilities:
-            getActionRuntimeCapabilities(action) ?? undefined,
-        });
-        return true;
-      }
-
-      if (action.type === 'client_action') {
-        void parentMessenger
-          .sendCommand('onWidgetAction', {
-            action: action.action,
-            widgetItem: {
-              id: `slash-command:${command.name}`,
-              widget: {
-                type: 'slash_command',
-              },
-            },
-          })
-          .catch((error) => {
-            console.warn('[Chat] Failed to run slash command action:', error);
-          });
-        setComposerText('', 0);
-        setRuntimeCapabilityPalette(null);
-        focusComposerAt(0);
-        return true;
-      }
-
-      return false;
-    },
-    [
-      addRunRuntimeCapabilities,
-      focusComposerAt,
-      insertComposerCapabilityToken,
-      parentMessenger,
-      runtimeCapabilities,
-      runtimeCapabilityOptions,
-      setComposerText,
-      submitDraft,
-    ],
-  );
-
-  const selectSlashPaletteOption = React.useCallback(
-    (option: SlashPaletteOption) => {
-      const palette = runtimeCapabilityPalette;
-      if (!palette) {
-        return;
-      }
-
-      if (option.kind === 'capability') {
-        insertComposerCapabilityToken(option.capability, {
-          start: palette.start,
-          end: palette.end,
-        });
-        return;
-      }
-
-      executeSlashCommand(option.command, '');
-    },
-    [
-      executeSlashCommand,
-      insertComposerCapabilityToken,
-      runtimeCapabilityPalette,
-    ],
-  );
-
-  const executeSlashCommandFromDraft = React.useCallback(() => {
-    const invocation = parseSlashCommandInvocation(draft);
-    if (!invocation) {
-      return false;
+  React.useLayoutEffect(() => {
+    if (!runtimeCapabilityPalette) {
+      return;
     }
 
-    const command = resolvedSlashCommands.find(
-      (item) => item.name === invocation.name,
-    );
-    if (!command) {
-      return false;
+    const container = slashPaletteRef.current;
+    const option =
+      slashPaletteOptionRefs.current[runtimeCapabilityPalette.activeIndex];
+    if (!container || !option) {
+      return;
     }
 
-    return executeSlashCommand(command, invocation.args);
-  }, [draft, executeSlashCommand, resolvedSlashCommands]);
+    const containerRect = container.getBoundingClientRect();
+    const optionRect = option.getBoundingClientRect();
+    if (optionRect.top < containerRect.top) {
+      container.scrollTop -= containerRect.top - optionRect.top;
+    } else if (optionRect.bottom > containerRect.bottom) {
+      container.scrollTop += optionRect.bottom - containerRect.bottom;
+    }
+  }, [runtimeCapabilityPalette, slashPaletteOptions.length]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3103,61 +2916,16 @@ export function Chat({
         />
 
         {runtimeCapabilityPalette && (
-          <div
-            ref={slashPaletteRef}
-            data-slot="slash-palette"
-            className={cn(
-              'mb-2 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md',
-              getRoundedClass(theme.radius),
-            )}
-          >
-            {slashPaletteOptions.length > 0 ? (
-              slashPaletteOptions.map((option, index) => (
-                <button
-                  key={option.id}
-                  ref={(element) => {
-                    slashPaletteOptionRefs.current[index] = element;
-                  }}
-                  data-slot="slash-palette-option"
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    selectSlashPaletteOption(option);
-                  }}
-                  className={cn(
-                    'flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-muted',
-                    index === runtimeCapabilityPalette.activeIndex &&
-                      'bg-muted',
-                  )}
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-                    {option.kind === 'command' ? (
-                      <SlashCommandIcon command={option.command} />
-                    ) : (
-                      <RuntimeCapabilityIcon
-                        option={option.capability}
-                        variant="list"
-                      />
-                    )}
-                  </span>
-                  <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                    <span className="shrink-0 truncate font-medium">
-                      {option.label}
-                    </span>
-                    {option.description && (
-                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                {t('composer.capabilities.emptySearch')}
-              </div>
-            )}
-          </div>
+          <SlashPalette
+            palette={runtimeCapabilityPalette}
+            options={slashPaletteOptions}
+            paletteRef={slashPaletteRef}
+            optionRefs={slashPaletteOptionRefs}
+            roundedClass={getRoundedClass(theme.radius)}
+            emptyLabel={slashPaletteEmptyLabel}
+            capabilityEmptyLabels={slashPaletteCapabilityEmptyLabels}
+            onSelect={selectSlashPaletteOption}
+          />
         )}
 
         <form className="flex items-end" onSubmit={handleSubmit}>

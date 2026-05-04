@@ -89,7 +89,21 @@ vi.mock('../hooks/useThreads', () => ({
 
 vi.mock('../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { defaultValue?: string }) => {
+      const labels: Record<string, string> = {
+        'composer.slashCommands.commands.plan.label': 'Localized Plan',
+        'composer.slashCommands.commands.plan.description':
+          'Localized plan mode',
+        'composer.slashCommands.commands.plugins.label': 'Localized Plugins',
+        'composer.slashCommands.commands.plugins.description':
+          'Localized runtime plugins',
+        'composer.slashCommands.empty.plugins': 'No localized plugins to add',
+      };
+      return labels[key] ?? options?.defaultValue ?? key;
+    },
+    i18n: {
+      language: 'en-US',
+    },
   }),
 }));
 
@@ -491,6 +505,72 @@ describe('Chat plan mode payload', () => {
     );
   });
 
+  it('executes /plan with args as a plan-mode prompt', async () => {
+    renderChat();
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/plan investigate the bug');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          input: 'investigate the bug',
+          planMode: true,
+          commandSource: {
+            type: 'slash_command',
+            name: 'plan',
+            source: 'builtin',
+            executionType: 'client_action',
+          },
+        },
+        state: {
+          human: {
+            input: 'investigate the bug',
+            planMode: true,
+            commandSource: {
+              type: 'slash_command',
+              name: 'plan',
+              source: 'builtin',
+              executionType: 'client_action',
+            },
+          },
+        },
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('localizes remaining built-in slash command labels and descriptions', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/plan');
+
+    expect(screen.getByText('Localized Plan')).toBeInTheDocument();
+    expect(
+      screen.getByText('[prompt] Localized plan mode'),
+    ).toBeInTheDocument();
+  });
+
   it('merges runtime command capability selections into submitted prompts', async () => {
     mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
       {
@@ -507,6 +587,14 @@ describe('Chat plan mode payload', () => {
           {
             name: 'review',
             label: 'Review',
+            kind: 'prompt_workflow',
+            workflow: {
+              type: 'prompt_workflow',
+              name: 'review',
+              label: 'Review',
+              description: 'Review the current target',
+              tags: ['quality'],
+            },
             action: {
               type: 'submit_prompt',
               template: 'Review this: {{args}}',
@@ -550,8 +638,140 @@ describe('Chat plan mode payload', () => {
         name: 'review',
         source: 'runtime',
         executionType: 'submit_prompt',
+        kind: 'prompt_workflow',
+        workflow: {
+          type: 'prompt_workflow',
+          name: 'review',
+          label: 'Review',
+          description: 'Review the current target',
+          tags: ['quality'],
+        },
       },
     });
+  });
+
+  it('opens a skill-only selector from the /skills command', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [
+          {
+            nodeKey: 'plugin-search',
+            provider: 'search',
+            label: 'Search Plugin',
+          },
+        ],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/skills');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(screen.getByText('Review Skill')).toBeInTheDocument();
+    expect(screen.queryByText('Search Plugin')).not.toBeInTheDocument();
+  });
+
+  it('opens a plugin-only selector from the localized slash palette item', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [
+          {
+            nodeKey: 'plugin-search',
+            provider: 'search',
+            label: 'Search Plugin',
+          },
+        ],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/');
+    fireEvent.mouseDown(screen.getByText('Localized Plugins'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Search Plugin')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Review Skill')).not.toBeInTheDocument();
+    expect(screen.getByText('Localized Plan')).toBeInTheDocument();
+    expect(
+      screen.getByText('Localized Plugins').closest('button'),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Search Plugin').closest('button')).toHaveAttribute(
+      'data-depth',
+      '1',
+    );
+  });
+
+  it('shows a specific empty state for slash capability panels', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/');
+    fireEvent.mouseDown(screen.getByText('Localized Plugins'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('No localized plugins to add'),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('hydrates session runtime capabilities from the active conversation options', async () => {

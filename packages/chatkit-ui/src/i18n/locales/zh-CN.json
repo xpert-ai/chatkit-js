@@ -95,6 +95,36 @@
       "toolsets": "工具集",
       "knowledge": "知识库"
     },
+    "slashCommands": {
+      "commands": {
+        "plan": {
+          "label": "计划",
+          "description": "切换计划模式",
+          "argsHint": "[提示词]"
+        },
+        "skills": {
+          "label": "技能",
+          "description": "显示运行时技能"
+        },
+        "plugins": {
+          "label": "插件",
+          "description": "显示运行时插件"
+        },
+        "subagents": {
+          "label": "子智能体",
+          "description": "显示运行时子智能体"
+        }
+      },
+      "empty": {
+        "loadingCapabilities": "正在加载运行时能力...",
+        "skills": "没有可添加的技能",
+        "plugins": "没有可添加的插件",
+        "subAgents": "没有可添加的子智能体",
+        "matchingSkills": "没有匹配的可添加技能",
+        "matchingPlugins": "没有匹配的可添加插件",
+        "matchingSubAgents": "没有匹配的可添加子智能体"
+      }
+    },
     "planModeActive": "计划",
     "disablePlanMode": "关闭计划模式",
     "removeReference": "移除引用",

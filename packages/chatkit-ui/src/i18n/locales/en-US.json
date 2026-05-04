@@ -95,6 +95,36 @@
       "toolsets": "Toolsets",
       "knowledge": "Knowledge"
     },
+    "slashCommands": {
+      "commands": {
+        "plan": {
+          "label": "Plan",
+          "description": "Toggle plan mode",
+          "argsHint": "[prompt]"
+        },
+        "skills": {
+          "label": "Skills",
+          "description": "Show runtime skills"
+        },
+        "plugins": {
+          "label": "Plugins",
+          "description": "Show runtime plugins"
+        },
+        "subagents": {
+          "label": "Sub-agents",
+          "description": "Show runtime sub-agents"
+        }
+      },
+      "empty": {
+        "loadingCapabilities": "Loading runtime capabilities...",
+        "skills": "No skills to add",
+        "plugins": "No plugins to add",
+        "subAgents": "No sub-agents to add",
+        "matchingSkills": "No matching skills to add",
+        "matchingPlugins": "No matching plugins to add",
+        "matchingSubAgents": "No matching sub-agents to add"
+      }
+    },
     "planModeActive": "Plan",
     "disablePlanMode": "Turn off plan mode",
     "removeReference": "Remove reference",

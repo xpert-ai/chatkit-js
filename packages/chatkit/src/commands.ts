@@ -1,8 +1,19 @@
 export type ChatKitSlashCommandExecutionType =
   | 'insert_text'
+  | 'insert_invocation'
   | 'submit_prompt'
   | 'client_action'
   | 'select_capability';
+
+export type ChatKitSlashCommandKind = 'command' | 'prompt_workflow';
+
+export type ChatKitPromptWorkflow = {
+  type: 'prompt_workflow';
+  name?: string;
+  label?: string;
+  description?: string;
+  tags?: string[];
+};
 
 export type ChatKitSlashCommandCapability =
   | {
@@ -25,6 +36,11 @@ export type ChatKitSlashCommandAction =
       runtimeCapabilities?: unknown;
     }
   | {
+      type: 'insert_invocation';
+      template: string;
+      runtimeCapabilities?: unknown;
+    }
+  | {
       type: 'submit_prompt';
       template: string;
       runtimeCapabilities?: unknown;
@@ -41,6 +57,12 @@ export type ChatKitSlashCommandAction =
       capability: ChatKitSlashCommandCapability;
     };
 
+export type ChatKitSlashCommandAvailability = {
+  disabled?: boolean;
+  reason?: string;
+  [key: string]: unknown;
+};
+
 export type ChatKitSlashCommand = {
   /**
    * Command name without the leading slash.
@@ -50,6 +72,12 @@ export type ChatKitSlashCommand = {
   label?: string;
   description?: string;
   icon?: string | Record<string, unknown>;
+  category?: string;
+  aliases?: string[];
+  argsHint?: string;
+  availability?: ChatKitSlashCommandAvailability;
+  kind?: ChatKitSlashCommandKind;
+  workflow?: ChatKitPromptWorkflow;
   action: ChatKitSlashCommandAction;
   source?: Record<string, unknown>;
   meta?: Record<string, unknown>;
@@ -60,4 +88,6 @@ export type ChatKitCommandSource = {
   name: string;
   source: 'builtin' | 'host' | 'runtime';
   executionType: ChatKitSlashCommandExecutionType;
+  kind?: ChatKitSlashCommandKind;
+  workflow?: ChatKitPromptWorkflow;
 };
