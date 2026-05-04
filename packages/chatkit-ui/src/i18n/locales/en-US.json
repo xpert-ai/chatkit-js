@@ -141,6 +141,25 @@
       "questionProgress": "{{current}} of {{total}}",
       "optionInfo": "Details for {{label}}",
       "submit": "Continue"
+    },
+    "hitl": {
+      "title": "Action review",
+      "actionProgress": "{{current}} of {{total}}",
+      "previousAction": "Previous action",
+      "nextAction": "Next action",
+      "arguments": "Arguments",
+      "approve": "Approve",
+      "edit": "Edit",
+      "reject": "Reject",
+      "respond": "Respond",
+      "rejectMessage": "Feedback for the agent",
+      "respondMessage": "Response to the agent",
+      "rejectPlaceholder": "Explain why this action should not run",
+      "respondPlaceholder": "Tell the agent what to do instead",
+      "invalidJson": "Arguments must be a valid JSON object",
+      "responseRequired": "A response message is required",
+      "dismiss": "Dismiss",
+      "submit": "Confirm"
     }
   },
   "sheet": {

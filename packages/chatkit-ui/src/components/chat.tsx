@@ -40,6 +40,7 @@ import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
+import { HITLApprovalPanel } from './composer/hitl-approval-panel';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
 import { useSlashCommands } from './chat/useSlashCommands';
 import {
@@ -593,6 +594,9 @@ export function Chat({
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
   const hasPendingRequestUserInput = Boolean(stream.pendingRequestUserInput);
+  const hasPendingHITLRequest = Boolean(stream.pendingHITLRequest);
+  const hasPendingInteractiveRequest =
+    hasPendingRequestUserInput || hasPendingHITLRequest;
   const hasPendingTodos = Boolean(stream.todos?.items.length);
   const runtimeCapabilityOptions = React.useMemo(
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
@@ -1070,7 +1074,7 @@ export function Chat({
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
   const isSendDisabled =
     (!trimmedDraft && !hasReferences) ||
-    hasPendingRequestUserInput ||
+    hasPendingInteractiveRequest ||
     missingConfig ||
     isHistoryLoading ||
     hasUploadingFiles ||
@@ -2268,7 +2272,16 @@ export function Chat({
     setHistoryError(null);
     const thread = threads.find((item) => item.id === id);
     if (!thread) return;
-    if (id === stream.threadId) return;
+    if (id === stream.threadId) {
+      if (
+        thread.status === 'interrupted' &&
+        thread.recordId &&
+        !stream.pendingHITLRequest
+      ) {
+        void loadConversationMessages(thread.recordId);
+      }
+      return;
+    }
     stream.reset(id, []);
     if (thread.recordId) {
       void loadConversationMessages(thread.recordId);
@@ -2915,6 +2928,13 @@ export function Chat({
           attachToComposer
         />
 
+        <HITLApprovalPanel
+          request={stream.pendingHITLRequest}
+          onSubmit={stream.submitHITLDecision}
+          onDismiss={stream.stop}
+          attachToComposer
+        />
+
         {runtimeCapabilityPalette && (
           <SlashPalette
             palette={runtimeCapabilityPalette}
@@ -2950,13 +2970,15 @@ export function Chat({
               role="textbox"
               aria-multiline="true"
               aria-disabled={
-                missingConfig || isHistoryLoading || hasPendingRequestUserInput
+                missingConfig ||
+                isHistoryLoading ||
+                hasPendingInteractiveRequest
               }
               contentEditable={
                 !(
                   missingConfig ||
                   isHistoryLoading ||
-                  hasPendingRequestUserInput
+                  hasPendingInteractiveRequest
                 )
               }
               suppressContentEditableWarning
@@ -2972,7 +2994,7 @@ export function Chat({
                 'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
                 (missingConfig ||
                   isHistoryLoading ||
-                  hasPendingRequestUserInput) &&
+                  hasPendingInteractiveRequest) &&
                   'cursor-not-allowed opacity-50',
               )}
             >
@@ -3025,7 +3047,7 @@ export function Chat({
                     disabled={
                       missingConfig ||
                       isHistoryLoading ||
-                      hasPendingRequestUserInput
+                      hasPendingInteractiveRequest
                     }
                   />
                 </div>
@@ -3052,7 +3074,7 @@ export function Chat({
                   isLoading={stream.isLoading}
                   showStop={
                     stream.isLoading &&
-                    (!trimmedDraft || hasPendingRequestUserInput)
+                    (!trimmedDraft || hasPendingInteractiveRequest)
                   }
                   onStop={() => stream.stop()}
                   stopLabel={t('chat.stop')}

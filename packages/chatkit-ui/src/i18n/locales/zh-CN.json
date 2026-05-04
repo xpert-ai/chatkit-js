@@ -141,6 +141,25 @@
       "questionProgress": "{{current}} / {{total}}",
       "optionInfo": "{{label}} 的说明",
       "submit": "继续"
+    },
+    "hitl": {
+      "title": "操作审核",
+      "actionProgress": "{{current}} / {{total}}",
+      "previousAction": "上一个操作",
+      "nextAction": "下一个操作",
+      "arguments": "参数",
+      "approve": "批准",
+      "edit": "编辑",
+      "reject": "拒绝",
+      "respond": "回复",
+      "rejectMessage": "给智能体的反馈",
+      "respondMessage": "回复智能体",
+      "rejectPlaceholder": "说明为什么不应执行此操作",
+      "respondPlaceholder": "告诉智能体下一步该怎么做",
+      "invalidJson": "参数必须是有效的 JSON 对象",
+      "responseRequired": "需要填写回复内容",
+      "dismiss": "关闭",
+      "submit": "确认"
     }
   },
   "sheet": {

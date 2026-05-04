@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => {
       },
       pendingFollowUps: [],
       pendingRequestUserInput: null,
+      pendingHITLRequest: null,
       followUpBehavior: 'queue',
       isLoading: false,
       isReady: true,
@@ -63,6 +64,7 @@ const mocks = vi.hoisted(() => {
       sendPendingFollowUpNow: vi.fn(),
       promotePendingFollowUpToSteer: vi.fn(),
       submitRequestUserInput: vi.fn(),
+      submitHITLDecision: vi.fn(),
       stopRuntimeActivityItem: vi.fn(),
       setThreadId: vi.fn(),
     },
@@ -93,6 +95,9 @@ vi.mock('../hooks/useThreads', () => ({
 vi.mock('../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
     t: (key: string) => key,
+    i18n: {
+      language: 'en-US',
+    },
   }),
 }));
 

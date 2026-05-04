@@ -328,6 +328,34 @@ export type TInterruptCommand = {
   agentKey?: string;
 };
 
+export type TXpertChatState = {
+  [STATE_VARIABLE_HUMAN]?: TChatRequestHuman;
+} & Record<string, any>;
+
+export type TXpertChatResumeDecision = {
+  type: 'confirm' | 'reject';
+  payload?: unknown;
+};
+
+export type TXpertChatInterruptPatch = Pick<
+  TInterruptCommand,
+  'agentKey' | 'toolCalls' | 'update'
+>;
+
+export type TXpertChatTarget = {
+  aiMessageId?: string;
+  executionId?: string;
+};
+
+export type TXpertChatResumeRequest = {
+  action: 'resume';
+  conversationId: string;
+  target: TXpertChatTarget;
+  decision: TXpertChatResumeDecision;
+  patch?: TXpertChatInterruptPatch;
+  state?: TXpertChatState;
+};
+
 export type TChatRequest = {
   /**
    * The human input, include parameters
@@ -336,7 +364,7 @@ export type TChatRequest = {
   /**
    * Custom graph state
    */
-  state?: { [STATE_VARIABLE_HUMAN]: TChatRequestHuman } & Record<string, any>;
+  state?: TXpertChatState;
   agentKey?: string;
   projectId?: string;
   conversationId?: string;

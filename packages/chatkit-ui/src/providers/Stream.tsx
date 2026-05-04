@@ -34,6 +34,8 @@ import {
   type ClientToolRequest,
   type ClientToolResponse,
   type FollowUpBehavior,
+  type HITLDecision,
+  type HITLResponse,
   type LangGraphInterruptPayload,
   type RequestUserInputAnswer,
   type RequestUserInputToolArgs,
@@ -41,6 +43,7 @@ import {
   type RequestUserInputResult,
   type RequestUserInputResultPurpose,
   type TChatRequest,
+  type TXpertChatResumeRequest,
   type ChatEventEnvelope,
   type TMessageContentComplex,
   type TMessageContentComponent,
@@ -110,6 +113,11 @@ import {
   type RuntimeActivityProviderId,
   type RuntimeActivityTrigger,
 } from '../lib/runtime-activity';
+import {
+  buildHITLResumeRunInput,
+  useHITLInterrupts,
+  type PendingHITLRequest,
+} from '../lib/hitl';
 import { logRuntimeActivity, useRuntimeActivities } from './runtime-activities';
 
 export {
@@ -121,6 +129,7 @@ export {
   mergeFollowUpHumanInputs,
   mergeQueuedFollowUpGroup,
 } from '../lib/follow-ups';
+export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
   executionId?: string;
@@ -140,6 +149,8 @@ type ChatKitMessageContentPart = NonNullable<
 >[number];
 
 export type StateType = { messages: ChatKitAIMessage[] };
+
+type StreamRunInput = TChatRequest | TXpertChatResumeRequest;
 
 export type PendingRequestUserInput = {
   id: string;
@@ -165,6 +176,23 @@ export type StreamSubmitOptions = {
   onThreadResolved?: (threadId: string) => void | Promise<void>;
 };
 
+type ResumeStreamOptions = Pick<
+  StreamSubmitOptions,
+  'streamMode' | 'streamSubgraphs' | 'streamResumable' | 'context' | 'config'
+>;
+
+export function retainResumeStreamOptions(
+  options?: StreamSubmitOptions,
+): ResumeStreamOptions {
+  return {
+    streamMode: options?.streamMode,
+    streamSubgraphs: options?.streamSubgraphs,
+    streamResumable: options?.streamResumable,
+    ...(options?.context ? { context: options.context } : {}),
+    ...(options?.config ? { config: options.config } : {}),
+  };
+}
+
 export type StreamContextType = {
   client: Client<StateType>;
   apiUrl: string;
@@ -179,6 +207,7 @@ export type StreamContextType = {
   runtimeActivities: RuntimeActivitiesState;
   pendingFollowUps: PendingFollowUp[];
   pendingRequestUserInput: PendingRequestUserInput | null;
+  pendingHITLRequest: PendingHITLRequest | null;
   followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
   isReady: boolean;
@@ -186,7 +215,7 @@ export type StreamContextType = {
   loadThread: (threadId: string) => Promise<void>;
   loadConversationMessages: (recordId: string) => Promise<ChatKitAIMessage[]>;
   submit: (
-    values?: TChatRequest | null,
+    values?: StreamRunInput | null,
     options?: StreamSubmitOptions,
   ) => Promise<void>;
   stop: () => void;
@@ -201,6 +230,7 @@ export type StreamContextType = {
   sendPendingFollowUpNow: (id: string) => Promise<void>;
   promotePendingFollowUpToSteer: (id: string) => Promise<void>;
   submitRequestUserInput: (answers: RequestUserInputAnswer[]) => void;
+  submitHITLDecision: (decisions: HITLDecision[]) => void;
   stopRuntimeActivityItem: (
     providerId: RuntimeActivityProviderId,
     itemId: string,
@@ -379,6 +409,26 @@ function normalizeThreadIdentifier(threadId?: string | null): string | null {
   return normalized ? normalized : null;
 }
 
+function getConversationThreadId(conversation: unknown): string | null {
+  if (!isRecord(conversation)) return null;
+
+  const threadId = conversation.threadId ?? conversation.thread_id;
+  return typeof threadId === 'string'
+    ? normalizeThreadIdentifier(threadId)
+    : null;
+}
+
+function isResumeRunInput(
+  input?: StreamRunInput | null,
+): input is TXpertChatResumeRequest {
+  return Boolean(
+    input &&
+      typeof input === 'object' &&
+      'action' in input &&
+      input.action === 'resume',
+  );
+}
+
 export function shouldBroadcastThreadChange({
   threadId,
   hasObservedThreadSelection,
@@ -454,6 +504,35 @@ function findLatestAssistantMessageIndex(messages: ChatKitAIMessage[]) {
   }
 
   return -1;
+}
+
+function getLatestExecutionIdFromMessages(messages: ChatKitAIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const executionId = messages[index]?.executionId?.trim();
+    if (executionId) return executionId;
+  }
+
+  return null;
+}
+
+function getLatestAssistantMessageTarget(messages: ChatKitAIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!isAssistantMessage(message)) continue;
+
+    const aiMessageId =
+      typeof message?.id === 'string' && message.id.trim()
+        ? message.id.trim()
+        : undefined;
+    const executionId = message?.executionId?.trim() || undefined;
+
+    return {
+      ...(aiMessageId ? { aiMessageId } : {}),
+      ...(executionId ? { executionId } : {}),
+    };
+  }
+
+  return {};
 }
 
 function appendMessages(
@@ -1354,15 +1433,12 @@ const StreamSession = ({
     threadId: null,
     promise: null,
   });
-  const lastStreamOptionsRef = useRef<
-    Pick<
-      StreamSubmitOptions,
-      'streamMode' | 'streamSubgraphs' | 'streamResumable'
-    >
-  >({});
+  const lastStreamOptionsRef = useRef<ResumeStreamOptions>({});
   const lastExecutionIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const activeThreadIdRef = useRef<string | null>(threadId ?? null);
+  const clientRef = useRef<Client<StateType> | null>(null);
   const shouldStartFreshAssistantMessageAfterSteerRef = useRef(false);
   // Track the previous threadId so we only reset SSE state on actual thread changes.
   const lastThreadIdRef = useRef<string | null>(threadId ?? null);
@@ -1375,6 +1451,10 @@ const StreamSession = ({
     () => runtimeOrganizationIdRef.current,
     [],
   );
+
+  useEffect(() => {
+    activeThreadIdRef.current = threadId ?? null;
+  }, [threadId]);
   const updateTodos = useCallback((nextTodos: TodoListSnapshot | null) => {
     todosRef.current = nextTodos;
     setTodos(nextTodos);
@@ -1450,14 +1530,75 @@ const StreamSession = ({
     },
     [updatePendingRequestUserInput],
   );
+  const submitHITLResponse = useCallback(
+    async (response: HITLResponse, executionId?: string) => {
+      let conversationId = conversationIdRef.current?.trim() || null;
+      if (!conversationId) {
+        const activeThreadId = activeThreadIdRef.current?.trim() || null;
+        if (activeThreadId) {
+          const activeClient = clientRef.current;
+          if (!activeClient) {
+            throw new Error('Missing Xpert client for HITL resume');
+          }
+          const conversationResult = await activeClient.conversations.search({
+            where: { threadId: activeThreadId },
+            limit: 1,
+          });
+          conversationId =
+            conversationResult.items?.[0]?.id?.trim() ?? null;
+          conversationIdRef.current = conversationId;
+        }
+      }
+      if (!conversationId) {
+        throw new Error('Missing conversation context for HITL resume');
+      }
+
+      const latestTarget = getLatestAssistantMessageTarget(
+        valuesRef.current.messages ?? [],
+      );
+      const resumeInput = buildHITLResumeRunInput({
+        response,
+        conversationId,
+        executionId:
+          executionId ??
+          latestTarget.executionId ??
+          lastExecutionIdRef.current ??
+          undefined,
+        aiMessageId: latestTarget.aiMessageId,
+      });
+
+      return (
+        submitRef.current?.(resumeInput, lastStreamOptionsRef.current) ??
+        Promise.resolve()
+      );
+    },
+    [],
+  );
+  const rememberHITLExecutionId = useCallback((executionId: string) => {
+    lastExecutionIdRef.current = executionId;
+  }, []);
+  const {
+    pendingHITLRequest,
+    clearPendingHITLRequest,
+    submitHITLDecision,
+    hydratePendingHITLRequestFromOperation,
+    handleHITLInterrupt,
+  } = useHITLInterrupts({
+    submitResponse: submitHITLResponse,
+    setError,
+    onExecutionId: rememberHITLExecutionId,
+  });
 
   useEffect(() => {
     return () => {
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
       );
+      clearPendingHITLRequest(
+        createAbortError('The HITL request was cancelled.'),
+      );
     };
-  }, [clearPendingRequestUserInput]);
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput]);
 
   useEffect(() => {
     const nextOrganizationId = organizationId?.trim();
@@ -1605,6 +1746,7 @@ const StreamSession = ({
       }),
     [apiUrl, fetchWithClientSecretRefresh],
   );
+  clientRef.current = client;
   const runtimeActivitiesEnabled =
     createMissingApiConfigurationError({
       apiUrl,
@@ -1650,8 +1792,11 @@ const StreamSession = ({
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
       );
+      clearPendingHITLRequest(
+        createAbortError('The HITL request was cancelled.'),
+      );
     }
-  }, [clearPendingRequestUserInput, threadId]);
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput, threadId]);
 
   const stop = useCallback(() => {
     const activeThreadId = threadId ?? null;
@@ -1661,13 +1806,16 @@ const StreamSession = ({
     clearPendingRequestUserInput(
       createAbortError('The user input request was cancelled.'),
     );
+    clearPendingHITLRequest(
+      createAbortError('The HITL request was cancelled.'),
+    );
     setIsLoading(false);
     if (activeThreadId && activeRunId) {
       client.runs
         .cancel(activeThreadId, activeRunId, false)
         .catch(() => undefined);
     }
-  }, [clearPendingRequestUserInput, client, threadId]);
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput, client, threadId]);
 
   const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
@@ -1806,12 +1954,22 @@ const StreamSession = ({
         // ignore stop errors from an already-idle stream
       }
       updateTodos(null);
+      activeThreadIdRef.current = null;
       clearRuntimeActivities();
       conversationIdRef.current = recordId;
-      const response = await client.conversations.listMessages(recordId, {
-        limit: DEFAULT_HISTORY_LIMIT,
-        offset: 0,
-      });
+      const [conversationDetail, response] = await Promise.all([
+        client.conversations.get(recordId).catch((detailError) => {
+          console.warn(
+            '[chatkit-ui] Failed to load conversation detail for pending HITL',
+            detailError,
+          );
+          return null;
+        }),
+        client.conversations.listMessages(recordId, {
+          limit: DEFAULT_HISTORY_LIMIT,
+          offset: 0,
+        }),
+      ]);
       const persistedMessages =
         (response.items as PersistedChatMessage[] | undefined) ?? [];
       const persistedPendingFollowUps = persistedMessages
@@ -1828,13 +1986,25 @@ const StreamSession = ({
         ),
       );
       const mapped = sorted.map(mapChatMessageToUiMessage);
+      const latestExecutionId = getLatestExecutionIdFromMessages(mapped);
+      lastExecutionIdRef.current = latestExecutionId;
+      const loadedThreadId = getConversationThreadId(conversationDetail);
+      if (loadedThreadId) {
+        activeThreadIdRef.current = loadedThreadId;
+        setThreadId(loadedThreadId);
+      }
       setValues({ messages: mapped ?? [] });
+      hydratePendingHITLRequestFromOperation(
+        (conversationDetail as { operation?: unknown } | null)?.operation,
+        latestExecutionId,
+      );
       return mapped as ChatKitAIMessage[];
     },
     [
       apiUrl,
       clearRuntimeActivities,
       client,
+      hydratePendingHITLRequestFromOperation,
       runtimeClientSecret,
       stop,
       updateTodos,
@@ -1854,6 +2024,9 @@ const StreamSession = ({
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
       );
+      clearPendingHITLRequest(
+        createAbortError('The HITL request was cancelled.'),
+      );
       setPendingFollowUps([]);
       setAutoQueuedFollowUpIds([]);
       updateTodos(null);
@@ -1861,6 +2034,7 @@ const StreamSession = ({
       setContextUsageByAgentKey({});
       setValues({ messages: initialMessages ?? [] });
       conversationIdRef.current = null;
+      activeThreadIdRef.current = newThreadId ?? null;
       shouldStartFreshAssistantMessageAfterSteerRef.current = false;
       lastExecutionIdRef.current = null;
       lastEventIdRef.current = null;
@@ -1872,6 +2046,7 @@ const StreamSession = ({
       }
     },
     [
+      clearPendingHITLRequest,
       clearPendingRequestUserInput,
       clearRuntimeActivities,
       setThreadId,
@@ -1883,7 +2058,6 @@ const StreamSession = ({
   const handleInterrupt = useCallback(
     async (data: unknown) => {
       const requests = collectClientToolRequests(data);
-      if (requests.length === 0) return;
 
       const toolMessages: ClientToolMessageInput[] = [];
       for (const request of requests) {
@@ -1928,8 +2102,16 @@ const StreamSession = ({
           lastStreamOptionsRef.current,
         );
       }
+
+      await handleHITLInterrupt(data);
     },
-    [isParentAvailable, sendCommand, setError, waitForRequestUserInput],
+    [
+      handleHITLInterrupt,
+      isParentAvailable,
+      sendCommand,
+      setError,
+      waitForRequestUserInput,
+    ],
   );
 
   const resolveConversationId = useCallback(
@@ -2160,7 +2342,7 @@ const StreamSession = ({
   const runStream = useCallback(
     async (
       nextThreadId: string,
-      input?: TChatRequest | null,
+      input?: StreamRunInput | null,
       options?: StreamSubmitOptions,
       runId?: string,
     ) => {
@@ -2308,6 +2490,7 @@ const StreamSession = ({
       }
 
       setThreadId(threadId);
+      activeThreadIdRef.current = threadId;
       lastEventIdRef.current = null;
 
       const conversationResult = await client.conversations.search({
@@ -2323,14 +2506,43 @@ const StreamSession = ({
         return;
       }
 
+      let conversationDetail = conversation;
+      if (
+        String(conversation.status ?? '').toLowerCase() === 'interrupted' &&
+        (conversation as { operation?: unknown }).operation == null
+      ) {
+        try {
+          conversationDetail = await client.conversations.get(conversation.id);
+        } catch (detailError) {
+          console.warn(
+            '[chatkit-ui] Failed to load conversation detail for pending HITL',
+            detailError,
+          );
+        }
+      }
+
       conversationIdRef.current = conversation.id;
-      await loadConversationMessages(conversation.id);
+      const loadedMessages = await loadConversationMessages(conversation.id);
       await refreshSandboxServices({
         targetThreadId: threadId,
         force: true,
       });
+      const latestExecutionId = getLatestExecutionIdFromMessages(
+        loadedMessages as ChatKitAIMessage[],
+      );
+      if (latestExecutionId) {
+        lastExecutionIdRef.current = latestExecutionId;
+      }
+      const hasPendingHITL = hydratePendingHITLRequestFromOperation(
+        (conversationDetail as { operation?: unknown }).operation,
+        latestExecutionId,
+      );
+      if (hasPendingHITL) return;
 
-      const status = String(conversation.status ?? '').toLowerCase();
+      const status = String(
+        conversationDetail.status ?? conversation.status ?? '',
+      ).toLowerCase();
+      if (status === 'interrupted') return;
       const shouldJoinStream =
         !status || status === 'running' || status === 'busy';
       if (!shouldJoinStream) return;
@@ -2354,6 +2566,7 @@ const StreamSession = ({
       runStream,
       stop,
       loadConversationMessages,
+      hydratePendingHITLRequestFromOperation,
       clearRuntimeActivities,
       refreshSandboxServices,
       setThreadId,
@@ -2422,18 +2635,21 @@ const StreamSession = ({
   ]);
 
   const submit = useCallback(
-    async (input?: TChatRequest | null, options?: StreamSubmitOptions) => {
+    async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
       setError(null);
       const followUpMode = isLoadingRef.current
         ? options?.followUpMode
         : undefined;
-      if (input && followUpMode) {
+      const humanInput = input && 'input' in input ? input : null;
+      if (humanInput && followUpMode) {
         const pending = createPendingFollowUp(
           {
-            ...input,
-            id: input.id ?? createMessageId(),
+            ...humanInput,
+            id: humanInput.id ?? createMessageId(),
             executionId:
-              input.executionId ?? lastExecutionIdRef.current ?? undefined,
+              humanInput.executionId ??
+              lastExecutionIdRef.current ??
+              undefined,
             followUpMode,
           },
           followUpMode,
@@ -2465,11 +2681,7 @@ const StreamSession = ({
       }
 
       const previousThreadId = threadId ?? null;
-      lastStreamOptionsRef.current = {
-        streamMode: options?.streamMode,
-        streamSubgraphs: options?.streamSubgraphs,
-        streamResumable: options?.streamResumable,
-      };
+      lastStreamOptionsRef.current = retainResumeStreamOptions(options);
       const shouldStartNewThread = options?.newThread === true;
       if (shouldStartNewThread) {
         setValues({ messages: [] });
@@ -2488,6 +2700,20 @@ const StreamSession = ({
       const desiredThreadId = options?.threadId ?? null;
       if (shouldStartNewThread) {
         nextThreadId = null;
+      }
+      if (!nextThreadId && isResumeRunInput(input)) {
+        const conversation = await client.conversations.get(
+          input.conversationId,
+        );
+        const resumeThreadId = getConversationThreadId(conversation);
+        if (!resumeThreadId) {
+          throw new Error('Missing thread context for HITL resume');
+        }
+
+        nextThreadId = resumeThreadId;
+        conversationIdRef.current = input.conversationId;
+        activeThreadIdRef.current = resumeThreadId;
+        setThreadId(resumeThreadId);
       }
       if (!nextThreadId && desiredThreadId) {
         const created = await client.threads.create({
@@ -2519,6 +2745,7 @@ const StreamSession = ({
       if (nextThreadId !== previousThreadId) {
         lastEventIdRef.current = null;
       }
+      activeThreadIdRef.current = nextThreadId;
 
       await runStream(nextThreadId, input, options);
     },
@@ -2556,6 +2783,7 @@ const StreamSession = ({
     runtimeActivities,
     pendingFollowUps,
     pendingRequestUserInput,
+    pendingHITLRequest,
     followUpBehavior,
     isLoading,
     isReady,
@@ -2571,6 +2799,7 @@ const StreamSession = ({
     sendPendingFollowUpNow,
     promotePendingFollowUpToSteer,
     submitRequestUserInput,
+    submitHITLDecision,
     stopRuntimeActivityItem,
     setThreadId,
   };

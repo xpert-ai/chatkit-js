@@ -37,3 +37,103 @@ Client tools let the model request that kind of data mid-turn:
 Use client tools when the model needs fresh, local context it cannot safely obtain from server-side state alone.
 
 `InterruptPayload` provides a structured way to define client tool calls and their expected outputs.
+
+## Human-in-the-loop interrupts
+
+Human-in-the-loop (HITL) interrupts pause an agent before a proposed action runs, ask a reviewer for a decision, and then resume the same run with that decision. This is useful for actions that need oversight, such as sending email, writing files, executing SQL, or calling an irreversible business workflow.
+
+When the server emits a LangGraph interrupt with a HITL request, ChatKit shows an action review panel above the composer and disables normal message input until the reviewer resumes or stops the run.
+
+For historical conversations, ChatKit restores an unfinished HITL review from the conversation-level `operation.tasks[].interrupts[]` payload. The host API should keep the pending operation on the interrupted conversation until the reviewer submits a decision; ChatKit does not reconstruct pending approvals from low-level checkpoint state.
+
+ChatKit recognizes the Xpert middleware shape:
+
+```json
+{
+  "actionRequests": [
+    {
+      "name": "send_email",
+      "args": {
+        "to": "user@example.com",
+        "subject": "Hello"
+      },
+      "description": "Review this email before sending."
+    }
+  ],
+  "reviewConfigs": [
+    {
+      "actionName": "send_email",
+      "allowedDecisions": ["approve", "edit", "reject"]
+    }
+  ]
+}
+```
+
+It also normalizes the LangChain documentation shape (`action_requests`, `review_configs`, `arguments`, `action_name`, `allowed_decisions`) into the same client model.
+
+The review panel renders only the decisions allowed by the matching `reviewConfig`:
+
+- `approve` resumes with the original action.
+- `edit` lets the reviewer modify the action arguments and resumes with `editedAction`.
+- `reject` resumes with an optional message explaining why the action should not run.
+- `respond` resumes with a required message for LangChain-compatible HITL flows. Xpert's `HumanInTheLoopMiddleware` currently emits `approve`, `edit`, and `reject`.
+
+When a single review contains both approved and rejected actions, the server should continue executing the approved or edited tool calls and convert each rejected action into a tool response for the model. If every reviewed action is rejected, the server should resume the model directly with those rejection responses.
+
+ChatKit resumes the run with the current Xpert chat request shape:
+
+```json
+{
+  "action": "resume",
+  "conversationId": "conversation-1",
+  "target": {
+    "aiMessageId": "ai-message-1",
+    "executionId": "execution-1"
+  },
+  "decision": {
+    "type": "confirm",
+    "payload": {
+      "decisions": [
+        {
+          "type": "approve"
+        }
+      ]
+    }
+  }
+}
+```
+
+When ChatKit sends this through the runs API, it resolves the current thread's `conversationId` before submitting the resume request. Older payloads such as `{ "input": {}, "command": { "resume": ... } }` are still accepted by server-ai as legacy input and normalized to this shape.
+
+The middleware resume payload inside `decision.payload` is:
+
+```json
+{
+  "decisions": [
+    {
+      "type": "approve"
+    }
+  ]
+}
+```
+
+For edited actions, the resume payload is:
+
+```json
+{
+  "decisions": [
+    {
+      "type": "edit",
+      "editedAction": {
+        "name": "send_email",
+        "args": {
+          "to": "new@example.com",
+          "subject": "Updated"
+        }
+      }
+    }
+  ]
+}
+```
+
+The server should pass that object to the graph resume command so the interrupted middleware can continue from the reviewer decision.
