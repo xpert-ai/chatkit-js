@@ -1,0 +1,260 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color: #172033;
+  color-scheme: light;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 0;
+  background: #f6f7f9;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.ck-popup {
+  width: 320px;
+  min-height: 220px;
+}
+
+.ck-options {
+  min-height: 100vh;
+}
+
+.ck-host-page,
+.ck-host-page #app {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.ck-overlay-page {
+  background: transparent;
+}
+
+.ck-shell {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.ck-options-shell {
+  width: min(760px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0;
+}
+
+.ck-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ck-title {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.ck-options .ck-title {
+  font-size: 24px;
+}
+
+.ck-subtitle,
+.ck-status,
+.ck-field-help {
+  margin: 4px 0 0;
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ck-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid #dde3ea;
+}
+
+.ck-section:first-of-type {
+  border-top: 0;
+}
+
+.ck-section-title {
+  margin: 0;
+  color: #253044;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.ck-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.ck-button {
+  min-height: 36px;
+  border: 1px solid #c6d0dc;
+  border-radius: 7px;
+  background: #fff;
+  color: #172033;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.ck-button:hover:not(:disabled) {
+  border-color: #9ba8ba;
+  background: #fdfefe;
+}
+
+.ck-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.ck-button-primary {
+  border-color: #2362e8;
+  background: #2362e8;
+  color: #fff;
+}
+
+.ck-button-primary:hover:not(:disabled) {
+  border-color: #1b55cf;
+  background: #1b55cf;
+}
+
+.ck-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ck-form {
+  display: grid;
+  gap: 20px;
+}
+
+.ck-field-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.ck-field-grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ck-field {
+  display: grid;
+  gap: 6px;
+}
+
+.ck-field label,
+.ck-checkbox-label {
+  color: #253044;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ck-field input,
+.ck-field select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #c6d0dc;
+  border-radius: 7px;
+  background: #fff;
+  color: #172033;
+  padding: 7px 10px;
+}
+
+.ck-checkbox-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.ck-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ck-checkbox-label input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.ck-alert {
+  border: 1px solid #f0c36a;
+  border-radius: 7px;
+  background: #fff9e8;
+  color: #5d4308;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.ck-alert-success {
+  border-color: #82c99f;
+  background: #eefaf2;
+  color: #205b34;
+}
+
+.ck-empty-state {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  text-align: left;
+}
+
+.ck-empty-state h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.ck-empty-state p {
+  margin: 0;
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ck-chatkit {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 640px) {
+  .ck-field-grid-two {
+    grid-template-columns: 1fr;
+  }
+}
