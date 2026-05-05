@@ -1,10 +1,104 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useChatKit, ChatKit } from '@xpert-ai/chatkit-react';
-import { ChatKitOptions, ClientToolMessageInput, SupportedLocale } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitOptions,
+  ChatKitPetOptions,
+  ClientToolMessageInput,
+  SupportedLocale,
+} from '@xpert-ai/chatkit-types';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from './store/useAppStore';
 import { getLanguage, setLanguage } from './i18n';
+
+type PetPreset =
+  | 'default'
+  | 'boba'
+  | 'bolt'
+  | 'atlas'
+  | 'launcher'
+  | 'off';
+
+type PetPresetOption = {
+  id: PetPreset;
+  label: string;
+};
+
+const DEFAULT_FRAME_URL = 'http://localhost:5173';
+const DEMO_PET_ATLAS_PATH = '/pets/boba/spritesheet.webp';
+
+const PET_PRESETS: PetPresetOption[] = [
+  { id: 'default', label: 'pet: true' },
+  { id: 'boba', label: 'Boba' },
+  { id: 'bolt', label: 'Bolt' },
+  { id: 'atlas', label: 'Spritesheet URL' },
+  { id: 'launcher', label: 'Pet launcher' },
+  { id: 'off', label: 'Off' },
+];
+
+function resolveFrameAssetUrl(frameUrl: string, assetPath: string): string {
+  const nextFrameUrl = frameUrl.trim() || DEFAULT_FRAME_URL;
+
+  try {
+    return new URL(assetPath, nextFrameUrl).toString();
+  } catch {
+    return assetPath;
+  }
+}
+
+function buildSpritesheetPet(src: string): ChatKitPetOptions {
+  return {
+    character: { type: 'sprite-atlas', src },
+    position: {
+      pin: 'bottom-right',
+      draggable: true,
+      scale: 0.25,
+      persist: true,
+    },
+  };
+}
+
+function buildPetOptions(
+  preset: PetPreset,
+  frameUrl: string,
+): boolean | ChatKitPetOptions | undefined {
+  switch (preset) {
+    case 'default':
+      return true;
+    case 'boba':
+      return buildSpritesheetPet(
+        resolveFrameAssetUrl(frameUrl, '/pets/boba/spritesheet.webp'),
+      );
+    case 'bolt':
+      return buildSpritesheetPet(
+        resolveFrameAssetUrl(frameUrl, '/pets/bolt/spritesheet.webp'),
+      );
+    case 'atlas':
+      return buildSpritesheetPet(
+        resolveFrameAssetUrl(frameUrl, DEMO_PET_ATLAS_PATH),
+      );
+    case 'launcher':
+      return true;
+    case 'off':
+      return undefined;
+  }
+}
+
+function getPetPresetDescription(preset: PetPreset): string {
+  switch (preset) {
+    case 'default':
+      return 'Enable pet: true with the default file-backed Boba pet.';
+    case 'boba':
+    case 'bolt':
+      return 'Use one of the file-backed pets bundled with chatkit-ui.';
+    case 'atlas':
+      return 'Use a locally hosted spritesheet URL directly.';
+    case 'launcher':
+      return 'Show only the pet at first; clicking it opens the ChatKit panel.';
+    case 'off':
+      return 'Disable the pet and keep the default ChatKit behavior.';
+  }
+}
 
 // Final config
 export default function App() {
@@ -13,10 +107,14 @@ export default function App() {
   const xpertApiUrl = (import.meta.env.VITE_XPERTAI_API_URL as string | undefined) ?? '';
   const backendOrigin = (import.meta.env.VITE_CHATKIT_BACKEND as string | undefined) ?? '';
   const assistantId = (import.meta.env.VITE_CHATKIT_XPERT_ID as string | undefined) ?? '';
-  const frameUrl = (import.meta.env.VITE_CHATKIT_TARGET as string | undefined) ?? '';
+  const frameUrl =
+    (import.meta.env.VITE_CHATKIT_TARGET as string | undefined)?.trim() ||
+    DEFAULT_FRAME_URL;
 
   const setChatkit = useAppStore((state) => state.setChatkit);
   const [threads, setThreads] = useState<string[]>([]);
+  const [petPreset, setPetPreset] = useState<PetPreset>('off');
+  const petPresetDescription = getPetPresetDescription(petPreset);
 
   // ============================================================================
   // Playground config - copied from https://chatkit.studio/playground
@@ -73,7 +171,9 @@ export default function App() {
         // ...and 4 more prompts
       ],
     },
-  }), [t, i18n.language]);
+    displayMode: petPreset === 'launcher' ? 'pet' : 'chat',
+    pet: buildPetOptions(petPreset, frameUrl),
+  }), [frameUrl, locale, petPreset, t, i18n.language]);
 
   const chatkit = useChatKit({
     ...playgroundConfig,
@@ -201,6 +301,29 @@ export default function App() {
           </div>
           <div>
             <strong>{t('labels.assistant')}:</strong> {assistantId || t('labels.default')}
+          </div>
+          <div className="pt-2 border-t">
+            <strong>Pet:</strong>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {PET_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={[
+                    'rounded border px-2 py-1 text-[11px] font-medium transition',
+                    petPreset === preset.id
+                      ? 'border-gray-900 bg-gray-900 text-white'
+                      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+                  ].join(' ')}
+                  onClick={() => setPetPreset(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-gray-500">
+              {petPresetDescription}
+            </p>
           </div>
           <div className="pt-2 border-t">
             <strong>{t('labels.themeConfig')}:</strong>

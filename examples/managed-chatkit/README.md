@@ -31,7 +31,7 @@ pnpm install
 pnpm dev
 ```
 
-Frontend runs on http://localhost:5173
+Frontend runs on http://localhost:5174
 
 ### Alternative: Run Both
 
@@ -55,7 +55,7 @@ HOST=0.0.0.0
 ### Frontend (.env)
 
 ```env
-VITE_CHATKIT_TARGET=http://localhost:5176
+VITE_CHATKIT_TARGET=http://localhost:5173
 VITE_CHATKIT_ASSISTANT_ID=your_assistant_id
 VITE_BACKEND_ORIGIN=
 VITE_BACKEND_TARGET=http://localhost:8000
@@ -68,6 +68,7 @@ VITE_BACKEND_TARGET=http://localhost:8000
 - **Session Management**: Backend creates sessions, frontend manages them automatically
 - **Real-time Streaming**: Messages streamed via SSE with live UI updates
 - **Full Integration**: Tool calls, widgets, and actions supported
+- **Pet Presets**: File-backed bundled pets, direct spritesheet URL examples, and pet launcher mode
 - **Hot Reload**: Both frontend and backend support auto-reloading
 
 ## Project Structure
@@ -96,6 +97,7 @@ const { control } = useChatKit({
   composer: {
     placeholder: 'Type your message...',
   },
+  pet: true,
   onClientTool: async ({ name, params }) => {
     // Handle client-side tools
     return { result: 'success' };
@@ -120,7 +122,7 @@ uv run uvicorn app.main:app --reload
 ### ChatKit UI Not Loading
 
 Check:
-1. ChatKit UI server running at http://localhost:5176
+1. ChatKit UI server running at http://localhost:5173
 2. Browser console for errors
 3. `VITE_CHATKIT_TARGET` in `.env`
 

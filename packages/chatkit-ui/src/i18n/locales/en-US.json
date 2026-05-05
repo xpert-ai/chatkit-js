@@ -95,6 +95,41 @@
       "toolsets": "Toolsets",
       "knowledge": "Knowledge"
     },
+    "slashCommands": {
+      "commands": {
+        "plan": {
+          "label": "Plan",
+          "description": "Toggle plan mode",
+          "argsHint": "[prompt]"
+        },
+        "skills": {
+          "label": "Skills",
+          "description": "Show runtime skills"
+        },
+        "plugins": {
+          "label": "Plugins",
+          "description": "Show runtime plugins"
+        },
+        "subagents": {
+          "label": "Sub-agents",
+          "description": "Show runtime sub-agents"
+        },
+        "pet": {
+          "label": "Pet",
+          "description": "Toggle pet companion",
+          "argsHint": "[on|off|settings]"
+        }
+      },
+      "empty": {
+        "loadingCapabilities": "Loading runtime capabilities...",
+        "skills": "No skills to add",
+        "plugins": "No plugins to add",
+        "subAgents": "No sub-agents to add",
+        "matchingSkills": "No matching skills to add",
+        "matchingPlugins": "No matching plugins to add",
+        "matchingSubAgents": "No matching sub-agents to add"
+      }
+    },
     "planModeActive": "Plan",
     "disablePlanMode": "Turn off plan mode",
     "removeReference": "Remove reference",
@@ -111,6 +146,61 @@
       "questionProgress": "{{current}} of {{total}}",
       "optionInfo": "Details for {{label}}",
       "submit": "Continue"
+    },
+    "hitl": {
+      "title": "Action review",
+      "actionProgress": "{{current}} of {{total}}",
+      "previousAction": "Previous action",
+      "nextAction": "Next action",
+      "arguments": "Arguments",
+      "approve": "Approve",
+      "edit": "Edit",
+      "reject": "Reject",
+      "respond": "Respond",
+      "rejectMessage": "Feedback for the agent",
+      "respondMessage": "Response to the agent",
+      "rejectPlaceholder": "Explain why this action should not run",
+      "respondPlaceholder": "Tell the agent what to do instead",
+      "invalidJson": "Arguments must be a valid JSON object",
+      "responseRequired": "A response message is required",
+      "dismiss": "Dismiss",
+      "submit": "Confirm"
+    }
+  },
+  "settings": {
+    "open": "Settings",
+    "title": "Settings"
+  },
+  "pet": {
+    "settings": {
+      "title": "Pet",
+      "description": "Stored in this browser.",
+      "enabled": "Enable pet",
+      "requiredHint": "Required in pet launcher mode.",
+      "characterType": "Character",
+      "characterTypes": {
+        "builtin": "Built-in",
+        "atlas": "Spritesheet URL"
+      },
+      "builtin": "Built-in pet",
+      "builtins": {
+        "batmeme": "Batmeme",
+        "boba": "Boba",
+        "bolt": "Bolt",
+        "einstein": "Einstein",
+        "lando-2": "Lando",
+        "mini-sama": "Mini Sama",
+        "miso": "Miso",
+        "noir-webling": "Noir Webling",
+        "nukey": "Nukey",
+        "steve": "Steve"
+      },
+      "atlasUrl": "Spritesheet URL",
+      "scale": "Scale",
+      "draggable": "Draggable",
+      "persistPosition": "Remember position",
+      "cancel": "Cancel",
+      "save": "Save"
     }
   },
   "sheet": {

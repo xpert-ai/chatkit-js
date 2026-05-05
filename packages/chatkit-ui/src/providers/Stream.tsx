@@ -13,6 +13,7 @@ import {
   Client,
   type Checkpoint,
   type Config,
+  type RuntimeCapabilitiesSelection,
   type StreamMode,
   type ChatMessage,
 } from '@xpert-ai/xpert-sdk';
@@ -27,12 +28,14 @@ import {
   REQUEST_USER_INPUT_TOOL_NAME,
   isLangGraphInterruptPayload,
   isClientToolRequest,
-  type ChatKitReference,
   type ChatKitReferenceCompositionMode,
+  type ChatKitReference,
   type ClientToolMessageInput,
   type ClientToolRequest,
   type ClientToolResponse,
   type FollowUpBehavior,
+  type HITLDecision,
+  type HITLResponse,
   type LangGraphInterruptPayload,
   type RequestUserInputAnswer,
   type RequestUserInputToolArgs,
@@ -40,6 +43,7 @@ import {
   type RequestUserInputResult,
   type RequestUserInputResultPurpose,
   type TChatRequest,
+  type TXpertChatResumeRequest,
   type ChatEventEnvelope,
   type TMessageContentComplex,
   type TMessageContentComponent,
@@ -66,11 +70,22 @@ import {
   parseThreadContextUsageEvent,
   type ThreadContextUsageByAgentKey,
 } from '../lib/thread-context-usage';
-import { normalizeReferences } from '../lib/references';
 import {
   parseFollowUpConsumedEvent,
   resolveFollowUpConsumedIds,
 } from '../lib/follow-up-consumed';
+import {
+  extractClientToolCalls,
+  extractMessageExecutionId,
+  extractMessageReferences,
+  extractReferenceComposition,
+  extractRuntimeCapabilities,
+  extractSubmittedInput,
+  isMessageMetadataContainer,
+  normalizeMessageType,
+  normalizeRoleToMessageType,
+  type MessageMetadataContainer,
+} from '../lib/message-metadata';
 import {
   getAutoDrainQueuedFollowUpIds,
   getPendingSteerFollowUpIds,
@@ -99,9 +114,11 @@ import {
   type RuntimeActivityTrigger,
 } from '../lib/runtime-activity';
 import {
-  logRuntimeActivity,
-  useRuntimeActivities,
-} from './runtime-activities';
+  buildHITLResumeRunInput,
+  useHITLInterrupts,
+  type PendingHITLRequest,
+} from '../lib/hitl';
+import { logRuntimeActivity, useRuntimeActivities } from './runtime-activities';
 
 export {
   getAutoDrainQueuedFollowUpIds,
@@ -112,12 +129,14 @@ export {
   mergeFollowUpHumanInputs,
   mergeQueuedFollowUpGroup,
 } from '../lib/follow-ups';
+export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
   executionId?: string;
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
   followUpMode?: FollowUpBehavior;
   followUpStatus?: FollowUpStatus;
   targetExecutionId?: string | null;
@@ -130,6 +149,8 @@ type ChatKitMessageContentPart = NonNullable<
 >[number];
 
 export type StateType = { messages: ChatKitAIMessage[] };
+
+type StreamRunInput = TChatRequest | TXpertChatResumeRequest;
 
 export type PendingRequestUserInput = {
   id: string;
@@ -155,6 +176,23 @@ export type StreamSubmitOptions = {
   onThreadResolved?: (threadId: string) => void | Promise<void>;
 };
 
+type ResumeStreamOptions = Pick<
+  StreamSubmitOptions,
+  'streamMode' | 'streamSubgraphs' | 'streamResumable' | 'context' | 'config'
+>;
+
+export function retainResumeStreamOptions(
+  options?: StreamSubmitOptions,
+): ResumeStreamOptions {
+  return {
+    streamMode: options?.streamMode,
+    streamSubgraphs: options?.streamSubgraphs,
+    streamResumable: options?.streamResumable,
+    ...(options?.context ? { context: options.context } : {}),
+    ...(options?.config ? { config: options.config } : {}),
+  };
+}
+
 export type StreamContextType = {
   client: Client<StateType>;
   apiUrl: string;
@@ -169,6 +207,7 @@ export type StreamContextType = {
   runtimeActivities: RuntimeActivitiesState;
   pendingFollowUps: PendingFollowUp[];
   pendingRequestUserInput: PendingRequestUserInput | null;
+  pendingHITLRequest: PendingHITLRequest | null;
   followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
   isReady: boolean;
@@ -176,7 +215,7 @@ export type StreamContextType = {
   loadThread: (threadId: string) => Promise<void>;
   loadConversationMessages: (recordId: string) => Promise<ChatKitAIMessage[]>;
   submit: (
-    values?: TChatRequest | null,
+    values?: StreamRunInput | null,
     options?: StreamSubmitOptions,
   ) => Promise<void>;
   stop: () => void;
@@ -191,6 +230,7 @@ export type StreamContextType = {
   sendPendingFollowUpNow: (id: string) => Promise<void>;
   promotePendingFollowUpToSteer: (id: string) => Promise<void>;
   submitRequestUserInput: (answers: RequestUserInputAnswer[]) => void;
+  submitHITLDecision: (decisions: HITLDecision[]) => void;
   stopRuntimeActivityItem: (
     providerId: RuntimeActivityProviderId,
     itemId: string,
@@ -355,166 +395,38 @@ function getStreamEventErrorMessage(
   )?.trim();
 }
 
-function normalizeRoleToMessageType(role?: string): Message['type'] {
-  const normalized = (role ?? '').toLowerCase();
-  if (normalized === 'user' || normalized === 'human') return 'human';
-  if (normalized === 'assistant' || normalized === 'ai') return 'ai';
-  if (normalized === 'system') return 'system';
-  if (normalized === 'tool') return 'tool';
-  return 'ai';
-}
-
-type PersistedChatMessage = ChatMessage & {
-  references?: unknown;
-  input?: unknown;
-  metadata?: unknown;
-  state?: unknown;
-  submittedInput?: unknown;
-  referenceComposition?: unknown;
-  followUpMode?: FollowUpBehavior;
-  followUpStatus?: FollowUpStatus;
-  targetExecutionId?: string | null;
-  visibleAt?: string | null;
-  thirdPartyMessage?: unknown;
-};
+type PersistedChatMessage = ChatMessage &
+  MessageMetadataContainer & {
+    followUpMode?: FollowUpBehavior;
+    followUpStatus?: FollowUpStatus;
+    targetExecutionId?: string | null;
+    visibleAt?: string | null;
+    thirdPartyMessage?: unknown;
+  };
 
 function normalizeThreadIdentifier(threadId?: string | null): string | null {
   const normalized = typeof threadId === 'string' ? threadId.trim() : '';
   return normalized ? normalized : null;
 }
 
-type ReferencePayloadContainer = {
-  references?: unknown;
-  input?: unknown;
-  metadata?: unknown;
-  state?: unknown;
-  submittedInput?: unknown;
-  referenceComposition?: unknown;
-};
+function getConversationThreadId(conversation: unknown): string | null {
+  if (!isRecord(conversation)) return null;
 
-type ReferenceStateContainer = {
-  human?: unknown;
-};
-
-function isReferencePayloadContainer(
-  value: unknown,
-): value is ReferencePayloadContainer {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getNestedReferenceCandidate(value: unknown): unknown {
-  return isReferencePayloadContainer(value) ? value.references : undefined;
-}
-
-function getNestedInputCandidate(value: unknown): unknown {
-  return isReferencePayloadContainer(value) ? value.input : undefined;
-}
-
-function extractReferences(value: unknown): ChatKitReference[] | undefined {
-  const direct = normalizeReferences(value);
-  if (direct.length > 0) {
-    return direct;
-  }
-
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
+  const threadId = conversation.threadId ?? conversation.thread_id;
+  return typeof threadId === 'string'
+    ? normalizeThreadIdentifier(threadId)
     : null;
-
-  const candidates = [
-    value.references,
-    getNestedReferenceCandidate(value.input),
-    getNestedReferenceCandidate(value.metadata),
-    getNestedReferenceCandidate(state?.human),
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeReferences(candidate);
-    if (normalized.length > 0) {
-      return normalized;
-    }
-  }
-
-  return undefined;
 }
 
-function extractToolCalls(value: unknown): ToolCall[] | undefined {
-  if (!isClientToolRequest(value) || value.clientToolCalls.length === 0) {
-    return undefined;
-  }
-
-  return value.clientToolCalls;
-}
-
-function extractSubmittedInput(value: unknown): string | undefined {
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  if (typeof value.submittedInput === 'string') {
-    return value.submittedInput;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    value.input,
-    getNestedInputCandidate(value.input),
-    getNestedInputCandidate(value.metadata),
-    isReferencePayloadContainer(state?.human) ? state.human.input : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string') {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
-function extractReferenceComposition(
-  value: unknown,
-): ChatKitReferenceCompositionMode | undefined {
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  if (
-    value.referenceComposition === 'compose' ||
-    value.referenceComposition === 'preserve'
-  ) {
-    return value.referenceComposition;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    isReferencePayloadContainer(value.input)
-      ? value.input.referenceComposition
-      : undefined,
-    isReferencePayloadContainer(value.metadata)
-      ? value.metadata.referenceComposition
-      : undefined,
-    isReferencePayloadContainer(state?.human)
-      ? state.human.referenceComposition
-      : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate === 'compose' || candidate === 'preserve') {
-      return candidate;
-    }
-  }
-
-  return undefined;
+function isResumeRunInput(
+  input?: StreamRunInput | null,
+): input is TXpertChatResumeRequest {
+  return Boolean(
+    input &&
+      typeof input === 'object' &&
+      'action' in input &&
+      input.action === 'resume',
+  );
 }
 
 export function shouldBroadcastThreadChange({
@@ -531,13 +443,16 @@ export function shouldBroadcastThreadChange({
 function mapChatMessageToUiMessage(
   message: PersistedChatMessage,
 ): ChatKitAIMessage {
-  const references = extractReferences(message);
+  const references = extractMessageReferences(message);
   const content = message.content ?? '';
-  const type = normalizeRoleToMessageType(message.role);
+  const type = normalizeRoleToMessageType(
+    typeof message.role === 'string' ? message.role : undefined,
+  );
   const submittedInput =
     extractSubmittedInput(message) ??
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(message);
+  const runtimeCapabilities = extractRuntimeCapabilities(message);
 
   return {
     id: message.id ?? createMessageId(),
@@ -545,9 +460,10 @@ function mapChatMessageToUiMessage(
     content,
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
-    ...(references ? { references } : {}),
+    ...(references.length > 0 ? { references } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
+    ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
     ...(message.followUpMode ? { followUpMode: message.followUpMode } : {}),
     ...(message.followUpStatus
       ? { followUpStatus: message.followUpStatus }
@@ -561,7 +477,7 @@ function mapChatMessageToUiMessage(
   } as ChatKitAIMessage;
 }
 
-function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
+function sortMessagesByCreatedAt<T extends ChatMessage>(items: T[]): T[] {
   return [...items].sort((a, b) => {
     const aTime = Date.parse(a.createdAt ?? '');
     const bTime = Date.parse(b.createdAt ?? '');
@@ -570,27 +486,6 @@ function sortMessagesByCreatedAt(items: ChatMessage[]): ChatMessage[] {
     if (Number.isNaN(bTime)) return 1;
     return aTime - bTime;
   });
-}
-
-function normalizeMessageType(
-  value: unknown,
-): ChatKitAIMessage['type'] | undefined {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.toLowerCase();
-  switch (normalized) {
-    case 'user':
-    case 'human':
-      return 'human';
-    case 'assistant':
-    case 'ai':
-      return 'ai';
-    case 'system':
-      return 'system';
-    case 'tool':
-      return 'tool';
-    default:
-      return value as ChatKitAIMessage['type'];
-  }
 }
 
 function isAssistantMessage(message: ChatKitAIMessage | undefined) {
@@ -609,6 +504,35 @@ function findLatestAssistantMessageIndex(messages: ChatKitAIMessage[]) {
   }
 
   return -1;
+}
+
+function getLatestExecutionIdFromMessages(messages: ChatKitAIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const executionId = messages[index]?.executionId?.trim();
+    if (executionId) return executionId;
+  }
+
+  return null;
+}
+
+function getLatestAssistantMessageTarget(messages: ChatKitAIMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!isAssistantMessage(message)) continue;
+
+    const aiMessageId =
+      typeof message?.id === 'string' && message.id.trim()
+        ? message.id.trim()
+        : undefined;
+    const executionId = message?.executionId?.trim() || undefined;
+
+    return {
+      ...(aiMessageId ? { aiMessageId } : {}),
+      ...(executionId ? { executionId } : {}),
+    };
+  }
+
+  return {};
 }
 
 function appendMessages(
@@ -760,9 +684,9 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   if (typeof data === 'string') {
     return { id: createMessageId(), type: 'ai', content: data };
   }
-  if (Array.isArray(data) || typeof data !== 'object') return null;
+  if (!isMessageMetadataContainer(data)) return null;
 
-  const raw = data as Record<string, unknown>;
+  const raw = data;
   const content: ChatKitAIMessage['content'] = (() => {
     if ('content' in raw) {
       const rawContent = (raw as { content?: Message['content'] }).content;
@@ -791,12 +715,13 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const id = typeof raw.id === 'string' ? raw.id : createMessageId();
   const executionId =
     typeof raw.executionId === 'string' ? raw.executionId : undefined;
-  const references = extractReferences(raw);
+  const references = extractMessageReferences(raw);
   const submittedInput =
     extractSubmittedInput(raw) ??
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(raw);
-  const toolCalls = extractToolCalls(raw);
+  const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const toolCalls = extractClientToolCalls(raw);
 
   return {
     id,
@@ -804,15 +729,14 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     content,
     executionId,
     ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
-    ...(references ? { references } : {}),
+    ...(references.length > 0 ? { references } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
+    ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
   };
 }
 
-function extractMessageMeta(data: unknown) {
-  if (!data || typeof data !== 'object') return {};
-  const raw = data as Record<string, unknown>;
+function extractMessageMeta(raw: MessageMetadataContainer) {
   const meta: {
     id?: string;
     type?: ChatKitAIMessage['type'];
@@ -820,6 +744,7 @@ function extractMessageMeta(data: unknown) {
     references?: ChatKitReference[];
     submittedInput?: string;
     referenceComposition?: ChatKitReferenceCompositionMode;
+    runtimeCapabilities?: RuntimeCapabilitiesSelection;
     clientToolCalls?: ToolCall[];
   } = {};
 
@@ -828,11 +753,12 @@ function extractMessageMeta(data: unknown) {
   if ('content' in raw) {
     meta.content = (raw as { content?: Message['content'] }).content;
   }
-  const references = extractReferences(raw);
+  const references = extractMessageReferences(raw);
   const submittedInput = extractSubmittedInput(raw);
   const referenceComposition = extractReferenceComposition(raw);
-  const clientToolCalls = extractToolCalls(raw);
-  if (references) {
+  const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const clientToolCalls = extractClientToolCalls(raw);
+  if (references.length > 0) {
     meta.references = references;
   }
   if (submittedInput !== undefined) {
@@ -841,18 +767,14 @@ function extractMessageMeta(data: unknown) {
   if (referenceComposition) {
     meta.referenceComposition = referenceComposition;
   }
+  if (runtimeCapabilities) {
+    meta.runtimeCapabilities = runtimeCapabilities;
+  }
   if (clientToolCalls) {
     meta.clientToolCalls = clientToolCalls;
   }
 
   return meta;
-}
-
-function extractExecutionId(data: unknown) {
-  if (!data || typeof data !== 'object') return undefined;
-  const raw = data as Record<string, unknown>;
-  const value = raw.executionId ?? raw.execution_id;
-  return typeof value === 'string' ? value : undefined;
 }
 
 function updateLatestMessage(
@@ -1182,14 +1104,11 @@ export function applyStreamEvent(
     return;
   }
 
-  if (typeof parsed === 'object' && parsed !== null && 'messages' in parsed) {
-    const nextMessages = (parsed as { messages?: unknown[] }).messages;
-    if (Array.isArray(nextMessages)) {
-      const normalizedMessages = nextMessages
-        .map((item) => createMessageFromData(item))
-        .filter((item): item is ChatKitAIMessage => Boolean(item));
-      setValues((prev) => ({ ...prev, messages: normalizedMessages }));
-    }
+  if (isMessageMetadataContainer(parsed) && Array.isArray(parsed.messages)) {
+    const normalizedMessages = parsed.messages
+      .map((item) => createMessageFromData(item))
+      .filter((item): item is ChatKitAIMessage => Boolean(item));
+    setValues((prev) => ({ ...prev, messages: normalizedMessages }));
     return;
   }
 
@@ -1253,12 +1172,18 @@ export function applyStreamEvent(
     const eventType = (
       typeof payload.event === 'string' ? payload.event.toLowerCase() : ''
     ) as ChatMessageEventTypeEnum;
-    const meta = extractMessageMeta(payload.data);
-    const executionId = extractExecutionId(payload.data);
+    const eventPayloadData: unknown = payload.data;
+    const eventData = isMessageMetadataContainer(eventPayloadData)
+      ? eventPayloadData
+      : null;
+    const meta = eventData ? extractMessageMeta(eventData) : {};
+    const executionId = eventData
+      ? extractMessageExecutionId(eventData)
+      : undefined;
 
     mapLangGraphEventToChatKit({
       eventType,
-      data: payload.data,
+      data: eventPayloadData,
       tags: payload.tags,
       messageType: typeof meta.type === 'string' ? meta.type : undefined,
       executionId,
@@ -1269,7 +1194,7 @@ export function applyStreamEvent(
 
     const eventErrorMessage = getStreamEventErrorMessage(
       eventType,
-      payload.data,
+      eventPayloadData,
     );
     if (eventErrorMessage) {
       setError(new Error(eventErrorMessage));
@@ -1278,7 +1203,6 @@ export function applyStreamEvent(
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
       case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
-        const eventData = payload.data as { messages?: unknown[] } | null;
         if (eventData && Array.isArray(eventData.messages)) {
           const normalizedMessages = eventData.messages
             .map((item) => createMessageFromData(item))
@@ -1306,6 +1230,9 @@ export function applyStreamEvent(
           ...(meta.referenceComposition
             ? { referenceComposition: meta.referenceComposition }
             : {}),
+          ...(meta.runtimeCapabilities
+            ? { runtimeCapabilities: meta.runtimeCapabilities }
+            : {}),
           ...(meta.clientToolCalls
             ? { clientToolCalls: meta.clientToolCalls }
             : {}),
@@ -1331,6 +1258,9 @@ export function applyStreamEvent(
                   : {}),
                 ...(meta.referenceComposition
                   ? { referenceComposition: meta.referenceComposition }
+                  : {}),
+                ...(meta.runtimeCapabilities
+                  ? { runtimeCapabilities: meta.runtimeCapabilities }
                   : {}),
                 ...(meta.clientToolCalls
                   ? { clientToolCalls: meta.clientToolCalls }
@@ -1361,7 +1291,8 @@ export function applyStreamEvent(
         if (
           meta.content === undefined &&
           meta.id === undefined &&
-          meta.type === undefined
+          meta.type === undefined &&
+          !meta.runtimeCapabilities
         ) {
           break;
         }
@@ -1377,6 +1308,9 @@ export function applyStreamEvent(
               : {}),
             ...(meta.referenceComposition
               ? { referenceComposition: meta.referenceComposition }
+              : {}),
+            ...(meta.runtimeCapabilities
+              ? { runtimeCapabilities: meta.runtimeCapabilities }
               : {}),
             ...(meta.clientToolCalls
               ? { clientToolCalls: meta.clientToolCalls }
@@ -1499,15 +1433,12 @@ const StreamSession = ({
     threadId: null,
     promise: null,
   });
-  const lastStreamOptionsRef = useRef<
-    Pick<
-      StreamSubmitOptions,
-      'streamMode' | 'streamSubgraphs' | 'streamResumable'
-    >
-  >({});
+  const lastStreamOptionsRef = useRef<ResumeStreamOptions>({});
   const lastExecutionIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const activeThreadIdRef = useRef<string | null>(threadId ?? null);
+  const clientRef = useRef<Client<StateType> | null>(null);
   const shouldStartFreshAssistantMessageAfterSteerRef = useRef(false);
   // Track the previous threadId so we only reset SSE state on actual thread changes.
   const lastThreadIdRef = useRef<string | null>(threadId ?? null);
@@ -1520,6 +1451,10 @@ const StreamSession = ({
     () => runtimeOrganizationIdRef.current,
     [],
   );
+
+  useEffect(() => {
+    activeThreadIdRef.current = threadId ?? null;
+  }, [threadId]);
   const updateTodos = useCallback((nextTodos: TodoListSnapshot | null) => {
     todosRef.current = nextTodos;
     setTodos(nextTodos);
@@ -1595,14 +1530,75 @@ const StreamSession = ({
     },
     [updatePendingRequestUserInput],
   );
+  const submitHITLResponse = useCallback(
+    async (response: HITLResponse, executionId?: string) => {
+      let conversationId = conversationIdRef.current?.trim() || null;
+      if (!conversationId) {
+        const activeThreadId = activeThreadIdRef.current?.trim() || null;
+        if (activeThreadId) {
+          const activeClient = clientRef.current;
+          if (!activeClient) {
+            throw new Error('Missing Xpert client for HITL resume');
+          }
+          const conversationResult = await activeClient.conversations.search({
+            where: { threadId: activeThreadId },
+            limit: 1,
+          });
+          conversationId =
+            conversationResult.items?.[0]?.id?.trim() ?? null;
+          conversationIdRef.current = conversationId;
+        }
+      }
+      if (!conversationId) {
+        throw new Error('Missing conversation context for HITL resume');
+      }
+
+      const latestTarget = getLatestAssistantMessageTarget(
+        valuesRef.current.messages ?? [],
+      );
+      const resumeInput = buildHITLResumeRunInput({
+        response,
+        conversationId,
+        executionId:
+          executionId ??
+          latestTarget.executionId ??
+          lastExecutionIdRef.current ??
+          undefined,
+        aiMessageId: latestTarget.aiMessageId,
+      });
+
+      return (
+        submitRef.current?.(resumeInput, lastStreamOptionsRef.current) ??
+        Promise.resolve()
+      );
+    },
+    [],
+  );
+  const rememberHITLExecutionId = useCallback((executionId: string) => {
+    lastExecutionIdRef.current = executionId;
+  }, []);
+  const {
+    pendingHITLRequest,
+    clearPendingHITLRequest,
+    submitHITLDecision,
+    hydratePendingHITLRequestFromOperation,
+    handleHITLInterrupt,
+  } = useHITLInterrupts({
+    submitResponse: submitHITLResponse,
+    setError,
+    onExecutionId: rememberHITLExecutionId,
+  });
 
   useEffect(() => {
     return () => {
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
       );
+      clearPendingHITLRequest(
+        createAbortError('The HITL request was cancelled.'),
+      );
     };
-  }, [clearPendingRequestUserInput]);
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput]);
 
   useEffect(() => {
     const nextOrganizationId = organizationId?.trim();
@@ -1750,6 +1746,7 @@ const StreamSession = ({
       }),
     [apiUrl, fetchWithClientSecretRefresh],
   );
+  clientRef.current = client;
   const runtimeActivitiesEnabled =
     createMissingApiConfigurationError({
       apiUrl,
@@ -1795,8 +1792,11 @@ const StreamSession = ({
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
       );
+      clearPendingHITLRequest(
+        createAbortError('The HITL request was cancelled.'),
+      );
     }
-  }, [clearPendingRequestUserInput, threadId]);
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput, threadId]);
 
   const stop = useCallback(() => {
     const activeThreadId = threadId ?? null;
@@ -1806,13 +1806,16 @@ const StreamSession = ({
     clearPendingRequestUserInput(
       createAbortError('The user input request was cancelled.'),
     );
+    clearPendingHITLRequest(
+      createAbortError('The HITL request was cancelled.'),
+    );
     setIsLoading(false);
     if (activeThreadId && activeRunId) {
       client.runs
         .cancel(activeThreadId, activeRunId, false)
         .catch(() => undefined);
     }
-  }, [clearPendingRequestUserInput, client, threadId]);
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput, client, threadId]);
 
   const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
@@ -1951,12 +1954,22 @@ const StreamSession = ({
         // ignore stop errors from an already-idle stream
       }
       updateTodos(null);
+      activeThreadIdRef.current = null;
       clearRuntimeActivities();
       conversationIdRef.current = recordId;
-      const response = await client.conversations.listMessages(recordId, {
-        limit: DEFAULT_HISTORY_LIMIT,
-        offset: 0,
-      });
+      const [conversationDetail, response] = await Promise.all([
+        client.conversations.get(recordId).catch((detailError) => {
+          console.warn(
+            '[chatkit-ui] Failed to load conversation detail for pending HITL',
+            detailError,
+          );
+          return null;
+        }),
+        client.conversations.listMessages(recordId, {
+          limit: DEFAULT_HISTORY_LIMIT,
+          offset: 0,
+        }),
+      ]);
       const persistedMessages =
         (response.items as PersistedChatMessage[] | undefined) ?? [];
       const persistedPendingFollowUps = persistedMessages
@@ -1973,13 +1986,25 @@ const StreamSession = ({
         ),
       );
       const mapped = sorted.map(mapChatMessageToUiMessage);
+      const latestExecutionId = getLatestExecutionIdFromMessages(mapped);
+      lastExecutionIdRef.current = latestExecutionId;
+      const loadedThreadId = getConversationThreadId(conversationDetail);
+      if (loadedThreadId) {
+        activeThreadIdRef.current = loadedThreadId;
+        setThreadId(loadedThreadId);
+      }
       setValues({ messages: mapped ?? [] });
+      hydratePendingHITLRequestFromOperation(
+        (conversationDetail as { operation?: unknown } | null)?.operation,
+        latestExecutionId,
+      );
       return mapped as ChatKitAIMessage[];
     },
     [
       apiUrl,
       clearRuntimeActivities,
       client,
+      hydratePendingHITLRequestFromOperation,
       runtimeClientSecret,
       stop,
       updateTodos,
@@ -1999,6 +2024,9 @@ const StreamSession = ({
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
       );
+      clearPendingHITLRequest(
+        createAbortError('The HITL request was cancelled.'),
+      );
       setPendingFollowUps([]);
       setAutoQueuedFollowUpIds([]);
       updateTodos(null);
@@ -2006,6 +2034,7 @@ const StreamSession = ({
       setContextUsageByAgentKey({});
       setValues({ messages: initialMessages ?? [] });
       conversationIdRef.current = null;
+      activeThreadIdRef.current = newThreadId ?? null;
       shouldStartFreshAssistantMessageAfterSteerRef.current = false;
       lastExecutionIdRef.current = null;
       lastEventIdRef.current = null;
@@ -2017,6 +2046,7 @@ const StreamSession = ({
       }
     },
     [
+      clearPendingHITLRequest,
       clearPendingRequestUserInput,
       clearRuntimeActivities,
       setThreadId,
@@ -2028,7 +2058,6 @@ const StreamSession = ({
   const handleInterrupt = useCallback(
     async (data: unknown) => {
       const requests = collectClientToolRequests(data);
-      if (requests.length === 0) return;
 
       const toolMessages: ClientToolMessageInput[] = [];
       for (const request of requests) {
@@ -2073,8 +2102,16 @@ const StreamSession = ({
           lastStreamOptionsRef.current,
         );
       }
+
+      await handleHITLInterrupt(data);
     },
-    [isParentAvailable, sendCommand, setError, waitForRequestUserInput],
+    [
+      handleHITLInterrupt,
+      isParentAvailable,
+      sendCommand,
+      setError,
+      waitForRequestUserInput,
+    ],
   );
 
   const resolveConversationId = useCallback(
@@ -2305,7 +2342,7 @@ const StreamSession = ({
   const runStream = useCallback(
     async (
       nextThreadId: string,
-      input?: TChatRequest | null,
+      input?: StreamRunInput | null,
       options?: StreamSubmitOptions,
       runId?: string,
     ) => {
@@ -2453,6 +2490,7 @@ const StreamSession = ({
       }
 
       setThreadId(threadId);
+      activeThreadIdRef.current = threadId;
       lastEventIdRef.current = null;
 
       const conversationResult = await client.conversations.search({
@@ -2468,14 +2506,43 @@ const StreamSession = ({
         return;
       }
 
+      let conversationDetail = conversation;
+      if (
+        String(conversation.status ?? '').toLowerCase() === 'interrupted' &&
+        (conversation as { operation?: unknown }).operation == null
+      ) {
+        try {
+          conversationDetail = await client.conversations.get(conversation.id);
+        } catch (detailError) {
+          console.warn(
+            '[chatkit-ui] Failed to load conversation detail for pending HITL',
+            detailError,
+          );
+        }
+      }
+
       conversationIdRef.current = conversation.id;
-      await loadConversationMessages(conversation.id);
+      const loadedMessages = await loadConversationMessages(conversation.id);
       await refreshSandboxServices({
         targetThreadId: threadId,
         force: true,
       });
+      const latestExecutionId = getLatestExecutionIdFromMessages(
+        loadedMessages as ChatKitAIMessage[],
+      );
+      if (latestExecutionId) {
+        lastExecutionIdRef.current = latestExecutionId;
+      }
+      const hasPendingHITL = hydratePendingHITLRequestFromOperation(
+        (conversationDetail as { operation?: unknown }).operation,
+        latestExecutionId,
+      );
+      if (hasPendingHITL) return;
 
-      const status = String(conversation.status ?? '').toLowerCase();
+      const status = String(
+        conversationDetail.status ?? conversation.status ?? '',
+      ).toLowerCase();
+      if (status === 'interrupted') return;
       const shouldJoinStream =
         !status || status === 'running' || status === 'busy';
       if (!shouldJoinStream) return;
@@ -2499,6 +2566,7 @@ const StreamSession = ({
       runStream,
       stop,
       loadConversationMessages,
+      hydratePendingHITLRequestFromOperation,
       clearRuntimeActivities,
       refreshSandboxServices,
       setThreadId,
@@ -2567,18 +2635,21 @@ const StreamSession = ({
   ]);
 
   const submit = useCallback(
-    async (input?: TChatRequest | null, options?: StreamSubmitOptions) => {
+    async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
       setError(null);
       const followUpMode = isLoadingRef.current
         ? options?.followUpMode
         : undefined;
-      if (input && followUpMode) {
+      const humanInput = input && 'input' in input ? input : null;
+      if (humanInput && followUpMode) {
         const pending = createPendingFollowUp(
           {
-            ...input,
-            id: input.id ?? createMessageId(),
+            ...humanInput,
+            id: humanInput.id ?? createMessageId(),
             executionId:
-              input.executionId ?? lastExecutionIdRef.current ?? undefined,
+              humanInput.executionId ??
+              lastExecutionIdRef.current ??
+              undefined,
             followUpMode,
           },
           followUpMode,
@@ -2610,11 +2681,7 @@ const StreamSession = ({
       }
 
       const previousThreadId = threadId ?? null;
-      lastStreamOptionsRef.current = {
-        streamMode: options?.streamMode,
-        streamSubgraphs: options?.streamSubgraphs,
-        streamResumable: options?.streamResumable,
-      };
+      lastStreamOptionsRef.current = retainResumeStreamOptions(options);
       const shouldStartNewThread = options?.newThread === true;
       if (shouldStartNewThread) {
         setValues({ messages: [] });
@@ -2633,6 +2700,20 @@ const StreamSession = ({
       const desiredThreadId = options?.threadId ?? null;
       if (shouldStartNewThread) {
         nextThreadId = null;
+      }
+      if (!nextThreadId && isResumeRunInput(input)) {
+        const conversation = await client.conversations.get(
+          input.conversationId,
+        );
+        const resumeThreadId = getConversationThreadId(conversation);
+        if (!resumeThreadId) {
+          throw new Error('Missing thread context for HITL resume');
+        }
+
+        nextThreadId = resumeThreadId;
+        conversationIdRef.current = input.conversationId;
+        activeThreadIdRef.current = resumeThreadId;
+        setThreadId(resumeThreadId);
       }
       if (!nextThreadId && desiredThreadId) {
         const created = await client.threads.create({
@@ -2664,6 +2745,7 @@ const StreamSession = ({
       if (nextThreadId !== previousThreadId) {
         lastEventIdRef.current = null;
       }
+      activeThreadIdRef.current = nextThreadId;
 
       await runStream(nextThreadId, input, options);
     },
@@ -2701,6 +2783,7 @@ const StreamSession = ({
     runtimeActivities,
     pendingFollowUps,
     pendingRequestUserInput,
+    pendingHITLRequest,
     followUpBehavior,
     isLoading,
     isReady,
@@ -2716,6 +2799,7 @@ const StreamSession = ({
     sendPendingFollowUpNow,
     promotePendingFollowUpToSteer,
     submitRequestUserInput,
+    submitHITLDecision,
     stopRuntimeActivityItem,
     setThreadId,
   };

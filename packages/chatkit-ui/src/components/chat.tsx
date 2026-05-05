@@ -1,20 +1,18 @@
 import * as React from 'react';
 import {
   ArrowDown,
-  Brain,
   FileText,
   ImageIcon,
   Loader2,
   Pencil,
-  Plug,
   Quote,
   RefreshCw,
+  Settings,
   X,
 } from 'lucide-react';
 
 import type {
   Message,
-  RuntimeCapabilitiesResponse,
   RuntimeCapabilitiesSelection,
 } from '@xpert-ai/xpert-sdk';
 import type {
@@ -23,11 +21,18 @@ import type {
   ChatKitOptions,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
+  ChatKitCommandSource,
   FollowUpBehavior,
   ToolOption,
 } from '@xpert-ai/chatkit-types';
 
-import { cn, createMessageId, getRoundedClass } from '../lib/utils';
+import {
+  cn,
+  createMessageId,
+  getMenuItemRoundedClass,
+  getPanelRoundedClass,
+  getRoundedClass,
+} from '../lib/utils';
 import {
   getAssistantStreamingStatus,
   hasRenderableAssistantMessage,
@@ -37,11 +42,16 @@ import { type StorageFile, type UploadingFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
+import { SlashPalette } from './composer/SlashPalette';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
+import { HITLApprovalPanel } from './composer/hitl-approval-panel';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
+import { useConversationSummaryEvent } from './chat/useConversationSummaryEvent';
+import { usePetAutoState } from './chat/usePetAutoState';
+import { useSlashCommands } from './chat/useSlashCommands';
 import {
   AssistantMessage,
   AssistantStreamingIndicator,
@@ -52,8 +62,8 @@ import {
   ChatkitAvatar,
   type ChatkitAvatarData,
   extractAssistantAvatar,
-  normalizeChatkitAvatar,
 } from './ui/chatkit-avatar';
+import { RuntimeCapabilityIcon } from './runtime-capability-icon';
 import { useStreamManager } from '../hooks/useStream';
 import { useThreads } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
@@ -78,6 +88,17 @@ import {
 } from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
+import { PetBridge } from './pet/PetBridge';
+import { SettingsSheet } from './settings/SettingsSheet';
+import {
+  buildPetOptionsFromLocalSettings,
+  derivePetLocalSettings,
+  isPetEnabled,
+  readPetLocalSettings,
+  writePetLocalSettings,
+  type PetCommandMode,
+  type PetLocalSettings,
+} from './pet/pet-local-settings';
 import {
   createEmptyRuntimeCapabilitiesSelection,
   createDefaultRuntimeCapabilitiesSelection,
@@ -93,6 +114,32 @@ import {
   persistConversationRuntimeCapabilities as persistRuntimeCapabilitiesToConversation,
   type MissingRuntimeCapabilityReferences,
 } from '../lib/conversation-runtime-capabilities';
+import {
+  createComposerCapabilityPart,
+  createComposerTextParts,
+  findAdjacentComposerCapability,
+  getComposerCapabilityKeys,
+  getComposerCapabilityPartMap,
+  getComposerCapabilitySelectionKeys,
+  getComposerEditingLength,
+  getComposerEditingText,
+  getComposerPlainText,
+  getComposerSelectionOffset,
+  getComposerSelectionOffsets,
+  getRuntimeCapabilityOptionKey,
+  normalizeComposerParts,
+  readComposerPartsFromElement,
+  removeComposerCapabilityTokens,
+  replaceComposerRange,
+  setComposerSelectionOffset,
+  type ComposerCapabilityPart,
+  type ComposerPart,
+} from '../lib/composer-parts';
+import {
+  resolveRuntimeCapabilityPalette,
+  type RuntimeCapabilitiesWithCommands,
+  type RuntimeCapabilityPaletteState,
+} from '../lib/slash-commands';
 
 export type ChatProps = {
   className?: string;
@@ -102,34 +149,6 @@ export type ChatProps = {
   options?: ChatKitOptions | null;
   isClientSecretInitializing?: boolean;
 };
-
-function RuntimeCapabilityIcon({
-  option,
-  variant,
-}: {
-  option: RuntimeCapabilityOption;
-  variant: 'chip' | 'list';
-}) {
-  const iconSize = variant === 'chip' ? 12 : 16;
-  if (option.type === 'skill') {
-    return <Brain size={iconSize} />;
-  }
-
-  if (option.type === 'plugin') {
-    return <Plug size={iconSize} />;
-  }
-
-  return (
-    <ChatkitAvatar
-      avatar={normalizeChatkitAvatar(option.capability.avatar)}
-      label={option.label}
-      className={variant === 'chip' ? 'h-4 w-4' : 'h-6 w-6'}
-      fallbackClassName={variant === 'chip' ? 'text-[9px]' : 'text-[10px]'}
-      imageClassName="object-cover"
-      data-slot="runtime-sub-agent-avatar"
-    />
-  );
-}
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | string
@@ -147,7 +166,40 @@ type HumanMessageWithMeta = Message & {
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
+  runtimeCapabilityOptions?: RuntimeCapabilityOption[];
 };
+
+function getSlashPaletteEmptyLabelKey(
+  palette: RuntimeCapabilityPaletteState,
+  runtimeCapabilitiesReady: boolean,
+): string {
+  if (!palette.capabilityTypes || palette.capabilityTypes.length !== 1) {
+    return 'composer.capabilities.emptySearch';
+  }
+
+  if (!runtimeCapabilitiesReady) {
+    return 'composer.slashCommands.empty.loadingCapabilities';
+  }
+
+  const hasQuery = palette.query.trim().length > 0;
+  const capabilityType = palette.capabilityTypes[0];
+  if (capabilityType === 'skill') {
+    return hasQuery
+      ? 'composer.slashCommands.empty.matchingSkills'
+      : 'composer.slashCommands.empty.skills';
+  }
+
+  if (capabilityType === 'plugin') {
+    return hasQuery
+      ? 'composer.slashCommands.empty.matchingPlugins'
+      : 'composer.slashCommands.empty.plugins';
+  }
+
+  return hasQuery
+    ? 'composer.slashCommands.empty.matchingSubAgents'
+    : 'composer.slashCommands.empty.subAgents';
+}
 
 type QuoteSelectionState = {
   reference: ChatKitReference;
@@ -155,49 +207,14 @@ type QuoteSelectionState = {
   left: number;
 };
 
-type RuntimeCapabilityPaletteState = {
-  query: string;
-  start: number;
-  end: number;
-  activeIndex: number;
+type SubmitDraftOptions = {
+  followUpOverride?: FollowUpBehavior;
+  inputText?: string;
+  displayText?: string;
+  commandSource?: ChatKitCommandSource;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
+  planMode?: boolean;
 };
-
-function resolveRuntimeCapabilityPalette(
-  value: string,
-  selectionStart: number | null | undefined,
-): RuntimeCapabilityPaletteState | null {
-  if (typeof selectionStart !== 'number') {
-    return null;
-  }
-
-  const beforeCaret = value.slice(0, selectionStart);
-  const match = /(^|\s)\/([^\s/]*)$/.exec(beforeCaret);
-  if (!match) {
-    return null;
-  }
-
-  const query = match[2] ?? '';
-  return {
-    query,
-    start: beforeCaret.length - query.length - 1,
-    end: selectionStart,
-    activeIndex: 0,
-  };
-}
-
-function removeRuntimeCapabilityTrigger(
-  value: string,
-  palette: RuntimeCapabilityPaletteState,
-): { value: string; caret: number } {
-  const before = value.slice(0, palette.start);
-  const after = value.slice(palette.end);
-  const needsSpace =
-    before.length > 0 && after.length > 0 && !/^\s/.test(after);
-  return {
-    value: `${before}${needsSpace ? ' ' : ''}${after}`.replace(/\s{2,}/g, ' '),
-    caret: palette.start + (needsSpace ? 1 : 0),
-  };
-}
 
 function getHttpStatus(error: unknown): number | null {
   if (!error || typeof error !== 'object' || !('status' in error)) {
@@ -219,6 +236,19 @@ function warnMissingRuntimeCapabilityReferences(
   console.warn(
     `[Chat] Runtime capabilities ${action} include unavailable references:`,
     missing,
+  );
+}
+
+function getSelectedRuntimeCapabilityOptions(
+  selection: RuntimeCapabilitiesSelection | null | undefined,
+  options: RuntimeCapabilityOption[],
+): RuntimeCapabilityOption[] {
+  if (!selection) {
+    return [];
+  }
+
+  return options.filter((option) =>
+    isRuntimeCapabilitySelected(selection, option.type, option.id),
   );
 }
 
@@ -500,13 +530,20 @@ export function Chat({
     return () => window.clearInterval(timer);
   }, [stream.isLoading]);
 
-  const [draft, setDraft] = React.useState('');
+  const [composerParts, setComposerParts] = React.useState<ComposerPart[]>([]);
+  const [renderedComposerParts, setRenderedComposerParts] = React.useState<
+    ComposerPart[]
+  >([]);
+  const [composerDomVersion, setComposerDomVersion] = React.useState(0);
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
     null,
   );
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
+  const [petSettingsOpen, setPetSettingsOpen] = React.useState(false);
+  const [petLocalSettings, setPetLocalSettings] =
+    React.useState<PetLocalSettings | null>(() => readPetLocalSettings());
   const [runtimeCapabilities, setRuntimeCapabilities] =
-    React.useState<RuntimeCapabilitiesResponse | null>(null);
+    React.useState<RuntimeCapabilitiesWithCommands | null>(null);
   const [runtimeCapabilitiesReady, setRuntimeCapabilitiesReady] =
     React.useState(false);
   const [sessionRuntimeCapabilities, setSessionRuntimeCapabilities] =
@@ -535,7 +572,13 @@ export function Chat({
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const composerInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const composerInputRef = React.useRef<HTMLDivElement>(null);
+  const slashPaletteRef = React.useRef<HTMLDivElement>(null);
+  const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
+    [],
+  );
+  const composerPartsRef = React.useRef<ComposerPart[]>([]);
+  const pendingComposerCaretOffsetRef = React.useRef<number | null>(null);
   const shouldAutoScrollRef = React.useRef(true);
   const forceFollowRef = React.useRef(false);
   const previousMessageCountRef = React.useRef(0);
@@ -547,6 +590,62 @@ export function Chat({
 
   const resolvedTitle = title ?? t('chat.title');
   const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
+  const petRequired = options?.displayMode === 'pet';
+  const basePetSettings = React.useMemo(
+    () => derivePetLocalSettings(options?.pet),
+    [options?.pet],
+  );
+  const displayedPetSettings = React.useMemo(
+    () => ({
+      ...(petLocalSettings ?? basePetSettings),
+      ...(petRequired ? { enabled: true } : {}),
+    }),
+    [basePetSettings, petLocalSettings, petRequired],
+  );
+  const effectivePet = React.useMemo(
+    () => {
+      if (petRequired || petLocalSettings) {
+        return buildPetOptionsFromLocalSettings(displayedPetSettings);
+      }
+
+      return options?.pet ?? null;
+    },
+    [displayedPetSettings, options?.pet, petLocalSettings, petRequired],
+  );
+  const savePetLocalSettings = React.useCallback(
+    (settings: PetLocalSettings) => {
+      const nextSettings = petRequired
+        ? { ...settings, enabled: true }
+        : settings;
+      setPetLocalSettings(nextSettings);
+      writePetLocalSettings(nextSettings);
+    },
+    [petRequired],
+  );
+  const handlePetCommand = React.useCallback(
+    (mode: PetCommandMode) => {
+      if (mode === 'settings') {
+        setPetSettingsOpen(true);
+        return;
+      }
+
+      if (petRequired) {
+        savePetLocalSettings({
+          ...displayedPetSettings,
+          enabled: true,
+        });
+        return;
+      }
+
+      const enabled =
+        mode === 'toggle' ? !isPetEnabled(effectivePet) : mode === 'on';
+      savePetLocalSettings({
+        ...displayedPetSettings,
+        enabled,
+      });
+    },
+    [displayedPetSettings, effectivePet, petRequired, savePetLocalSettings],
+  );
 
   // Use placeholder from composer options or fallback to prop/i18n
   const inputPlaceholder =
@@ -557,6 +656,10 @@ export function Chat({
   const messages = React.useMemo(
     () => stream.messages ?? [],
     [stream.messages],
+  );
+  const draft = React.useMemo(
+    () => getComposerPlainText(composerParts),
+    [composerParts],
   );
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
@@ -570,6 +673,9 @@ export function Chat({
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
   const hasPendingRequestUserInput = Boolean(stream.pendingRequestUserInput);
+  const hasPendingHITLRequest = Boolean(stream.pendingHITLRequest);
+  const hasPendingInteractiveRequest =
+    hasPendingRequestUserInput || hasPendingHITLRequest;
   const hasPendingTodos = Boolean(stream.todos?.items.length);
   const runtimeCapabilityOptions = React.useMemo(
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
@@ -612,38 +718,20 @@ export function Chat({
       ),
     [runRuntimeCapabilities, runtimeCapabilityOptions],
   );
-  const paletteRuntimeCapabilityOptions = React.useMemo(() => {
-    if (!runtimeCapabilityPalette || !runtimeCapabilitiesReady) {
-      return [];
-    }
-
-    const query = runtimeCapabilityPalette.query.trim().toLowerCase();
-    return runtimeCapabilityOptions
-      .filter(
+  const composerRuntimeCapabilitySelectionKeys = React.useMemo(
+    () => getComposerCapabilitySelectionKeys(composerParts),
+    [composerParts],
+  );
+  const detachedRunRuntimeCapabilityOptions = React.useMemo(
+    () =>
+      runRuntimeCapabilityOptions.filter(
         (option) =>
-          !isRuntimeCapabilitySelected(
-            effectiveRuntimeCapabilitiesForSubmit ??
-              createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
-            option.type,
-            option.id,
+          !composerRuntimeCapabilitySelectionKeys.has(
+            getRuntimeCapabilityOptionKey(option),
           ),
-      )
-      .filter((option) => {
-        if (!query) {
-          return true;
-        }
-        return [option.label, option.description, option.type]
-          .filter(Boolean)
-          .some((value) => value?.toLowerCase().includes(query));
-      })
-      .slice(0, 8);
-  }, [
-    effectiveRuntimeCapabilitiesForSubmit,
-    runtimeCapabilities,
-    runtimeCapabilitiesReady,
-    runtimeCapabilityOptions,
-    runtimeCapabilityPalette,
-  ]);
+      ),
+    [composerRuntimeCapabilitySelectionKeys, runRuntimeCapabilityOptions],
+  );
 
   const persistSessionRuntimeCapabilities = React.useCallback(
     async (
@@ -679,7 +767,80 @@ export function Chat({
     setQuoteSelection(null);
   }, []);
 
-  useParentMessenger({
+  const commitComposerParts = React.useCallback(
+    (
+      nextParts: ComposerPart[],
+      options?: {
+        caretOffset?: number | null;
+        resetDom?: boolean;
+        syncRemovedCapabilityTokens?: boolean;
+      },
+    ) => {
+      const normalized = normalizeComposerParts(nextParts);
+      const previous = composerPartsRef.current;
+      composerPartsRef.current = normalized;
+
+      if (typeof options?.caretOffset === 'number') {
+        pendingComposerCaretOffsetRef.current = options.caretOffset;
+      }
+
+      if (options?.syncRemovedCapabilityTokens ?? true) {
+        const nextKeys = getComposerCapabilityKeys(normalized);
+        const removedCapabilities = previous.filter(
+          (part): part is ComposerCapabilityPart =>
+            part.type === 'capability' && !nextKeys.has(part.key),
+        );
+
+        if (removedCapabilities.length > 0) {
+          setRunRuntimeCapabilities((selection) => {
+            let nextSelection = selection;
+            for (const part of removedCapabilities) {
+              nextSelection = toggleRuntimeCapabilitySelection(
+                nextSelection,
+                part.capability.type,
+                part.capability.id,
+                false,
+              );
+            }
+            return nextSelection;
+          });
+        }
+      }
+
+      setComposerParts(normalized);
+      if (options?.resetDom) {
+        setRenderedComposerParts(normalized);
+        setComposerDomVersion((version) => version + 1);
+      }
+    },
+    [],
+  );
+
+  const setComposerText = React.useCallback(
+    (text: string, caretOffset = text.length) => {
+      commitComposerParts(createComposerTextParts(text), {
+        caretOffset,
+        resetDom: true,
+        syncRemovedCapabilityTokens: true,
+      });
+    },
+    [commitComposerParts],
+  );
+
+  const focusComposerAt = React.useCallback((position?: number) => {
+    const nextPosition =
+      position ?? getComposerEditingLength(composerPartsRef.current);
+    pendingComposerCaretOffsetRef.current = nextPosition;
+    requestAnimationFrame(() => {
+      const input = composerInputRef.current;
+      if (!input) {
+        return;
+      }
+      setComposerSelectionOffset(input, nextPosition);
+    });
+  }, []);
+
+  const parentMessenger = useParentMessenger({
     onSetComposerValue: React.useCallback(
       (payload: ComposerValuePayload | null) => {
         if (!payload) {
@@ -687,7 +848,7 @@ export function Chat({
         }
 
         if (typeof payload.text === 'string') {
-          setDraft(payload.text);
+          setComposerText(payload.text);
         }
 
         if (Array.isArray(payload.references)) {
@@ -709,7 +870,7 @@ export function Chat({
           setSelectedTool(nextTool);
         }
       },
-      [composer?.tools],
+      [composer?.tools, setComposerText],
     ),
     onFocusComposer: React.useCallback(() => {
       composerInputRef.current?.focus();
@@ -992,30 +1153,34 @@ export function Chat({
   const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
   const isSendDisabled =
     (!trimmedDraft && !hasReferences) ||
-    hasPendingRequestUserInput ||
+    hasPendingInteractiveRequest ||
     missingConfig ||
     isHistoryLoading ||
     hasUploadingFiles ||
     isUploadingReferenceImages;
 
   const resizeComposerInput = React.useCallback(() => {
-    const textarea = composerInputRef.current;
-    if (!textarea) {
+    const input = composerInputRef.current;
+    if (!input) {
       return;
     }
-    textarea.style.height = 'auto';
-    const nextHeight = Math.min(
-      textarea.scrollHeight,
-      COMPOSER_INPUT_MAX_HEIGHT,
-    );
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+    input.style.maxHeight = `${COMPOSER_INPUT_MAX_HEIGHT}px`;
+    input.style.overflowY =
+      input.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
   }, []);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
+    composerPartsRef.current = composerParts;
     resizeComposerInput();
-  }, [draft, resizeComposerInput]);
+    const caretOffset = pendingComposerCaretOffsetRef.current;
+    if (typeof caretOffset === 'number') {
+      pendingComposerCaretOffsetRef.current = null;
+      const input = composerInputRef.current;
+      if (input) {
+        setComposerSelectionOffset(input, caretOffset);
+      }
+    }
+  }, [composerDomVersion, composerParts, resizeComposerInput]);
 
   React.useEffect(() => {
     document.addEventListener('selectionchange', syncQuoteSelection);
@@ -1149,7 +1314,6 @@ export function Chat({
     setRunRuntimeCapabilities(
       createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
     );
-    setRuntimeCapabilityPalette(null);
 
     if (!runtimeCapabilitiesReady || !runtimeCapabilities) {
       setSessionRuntimeCapabilities(
@@ -1211,33 +1375,6 @@ export function Chat({
     stream.threadId,
   ]);
 
-  React.useEffect(() => {
-    if (!runtimeCapabilityPalette) {
-      return;
-    }
-    if (paletteRuntimeCapabilityOptions.length === 0) {
-      setRuntimeCapabilityPalette((previous) =>
-        previous && previous.activeIndex !== 0
-          ? { ...previous, activeIndex: 0 }
-          : previous,
-      );
-      return;
-    }
-    if (
-      runtimeCapabilityPalette.activeIndex >=
-      paletteRuntimeCapabilityOptions.length
-    ) {
-      setRuntimeCapabilityPalette((previous) =>
-        previous
-          ? {
-              ...previous,
-              activeIndex: paletteRuntimeCapabilityOptions.length - 1,
-            }
-          : previous,
-      );
-    }
-  }, [paletteRuntimeCapabilityOptions.length, runtimeCapabilityPalette]);
-
   // Get successfully uploaded files (matching IStorageFile interface)
   const uploadedFiles = attachments
     .filter((a) => a.status === 'success' && a.storageFile)
@@ -1272,66 +1409,65 @@ export function Chat({
   );
 
   const updateRuntimeCapabilityPalette = React.useCallback(
-    (value: string, selectionStart?: number | null) => {
+    (parts: ComposerPart[], selectionStart?: number | null) => {
       const input = composerInputRef.current;
+      const editingText = getComposerEditingText(parts);
       const nextPalette = resolveRuntimeCapabilityPalette(
-        value,
+        editingText,
         typeof selectionStart === 'number'
           ? selectionStart
-          : input?.selectionStart,
+          : input
+            ? getComposerSelectionOffset(input)
+            : getComposerEditingLength(parts),
       );
       setRuntimeCapabilityPalette(nextPalette);
     },
     [],
   );
 
-  const handleComposerChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const nextValue = event.target.value;
-      setDraft(nextValue);
-      updateRuntimeCapabilityPalette(nextValue, event.target.selectionStart);
+  const syncComposerInputFromElement = React.useCallback(
+    (input: HTMLDivElement) => {
+      const previousCapabilities = getComposerCapabilityPartMap(
+        composerPartsRef.current,
+      );
+      const nextParts = readComposerPartsFromElement(
+        input,
+        previousCapabilities,
+      );
+      const selectionOffset =
+        getComposerSelectionOffsets(input)?.end ??
+        getComposerEditingLength(nextParts);
+      commitComposerParts(nextParts, {
+        caretOffset: selectionOffset,
+        resetDom: false,
+      });
+      updateRuntimeCapabilityPalette(nextParts, selectionOffset);
     },
-    [updateRuntimeCapabilityPalette],
+    [commitComposerParts, updateRuntimeCapabilityPalette],
+  );
+
+  const handleComposerInput = React.useCallback(
+    (event: React.FormEvent<HTMLDivElement>) => {
+      syncComposerInputFromElement(event.currentTarget);
+    },
+    [syncComposerInputFromElement],
+  );
+
+  const handleComposerCompositionEnd = React.useCallback(
+    (event: React.CompositionEvent<HTMLDivElement>) => {
+      syncComposerInputFromElement(event.currentTarget);
+    },
+    [syncComposerInputFromElement],
   );
 
   const handleComposerSelect = React.useCallback(() => {
     updateRuntimeCapabilityPalette(
-      draft,
-      composerInputRef.current?.selectionStart,
+      composerPartsRef.current,
+      composerInputRef.current
+        ? getComposerSelectionOffset(composerInputRef.current)
+        : undefined,
     );
-  }, [draft, updateRuntimeCapabilityPalette]);
-
-  const selectRunRuntimeCapability = React.useCallback(
-    (option: RuntimeCapabilityOption) => {
-      const palette = runtimeCapabilityPalette;
-      if (!palette) {
-        return;
-      }
-
-      const nextDraft = removeRuntimeCapabilityTrigger(draft, palette);
-      setDraft(nextDraft.value);
-      setRunRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(
-          previous,
-          option.type,
-          option.id,
-          true,
-        ),
-      );
-      setRuntimeCapabilityPalette(null);
-
-      requestAnimationFrame(() => {
-        const input = composerInputRef.current;
-        if (!input) {
-          return;
-        }
-        input.focus();
-        input.setSelectionRange(nextDraft.caret, nextDraft.caret);
-        resizeComposerInput();
-      });
-    },
-    [draft, resizeComposerInput, runtimeCapabilityPalette],
-  );
+  }, [updateRuntimeCapabilityPalette]);
 
   const removeRunRuntimeCapability = React.useCallback(
     (option: RuntimeCapabilityOption) => {
@@ -1343,23 +1479,36 @@ export function Chat({
           false,
         ),
       );
+      commitComposerParts(
+        removeComposerCapabilityTokens(composerPartsRef.current, option),
+        {
+          resetDom: true,
+          syncRemovedCapabilityTokens: false,
+        },
+      );
     },
-    [],
+    [commitComposerParts],
   );
 
   const submitDraft = React.useCallback(
-    (followUpOverride?: FollowUpBehavior) => {
+    (optionsOrFollowUp?: FollowUpBehavior | SubmitDraftOptions) => {
       if (isSendDisabled) return;
 
+      const submitOptions =
+        typeof optionsOrFollowUp === 'string'
+          ? { followUpOverride: optionsOrFollowUp }
+          : (optionsOrFollowUp ?? {});
+      const contentToSubmit = (submitOptions.inputText ?? trimmedDraft).trim();
       const filesToSend =
         uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
       const referencesToSend =
         references.length > 0 ? [...references] : undefined;
       const nextFollowUpMode = stream.isLoading
-        ? (followUpOverride ?? stream.followUpBehavior)
+        ? (submitOptions.followUpOverride ?? stream.followUpBehavior)
         : undefined;
+      const effectivePlanMode = submitOptions.planMode ?? planModeEnabled;
       const humanInput = buildHumanMessageInputPayload({
-        content: trimmedDraft,
+        content: contentToSubmit,
         references: referencesToSend,
       });
 
@@ -1367,8 +1516,25 @@ export function Chat({
         return;
       }
 
+      const runtimeCapabilitiesForSubmit =
+        submitOptions.runtimeCapabilities &&
+        runtimeCapabilities &&
+        runtimeCapabilitiesReady
+          ? mergeRuntimeCapabilitiesSelections(
+              runtimeCapabilities,
+              effectiveRuntimeCapabilitiesForSubmit,
+              submitOptions.runtimeCapabilities,
+            )
+          : effectiveRuntimeCapabilitiesForSubmit;
+      const runtimeCapabilityOptionsForMessage =
+        getSelectedRuntimeCapabilityOptions(
+          runtimeCapabilitiesForSubmit,
+          runtimeCapabilityOptions,
+        );
+
       const displayContent =
-        trimmedDraft ||
+        submitOptions.displayText ||
+        contentToSubmit ||
         (referencesToSend ? t('chat.referencedContentOnly') : '');
       const newMessage: HumanMessageWithMeta = {
         id: createMessageId(),
@@ -1378,11 +1544,21 @@ export function Chat({
         ...(humanInput.referenceComposition
           ? { referenceComposition: humanInput.referenceComposition }
           : {}),
+        ...(runtimeCapabilitiesForSubmit
+          ? { runtimeCapabilities: runtimeCapabilitiesForSubmit }
+          : {}),
+        ...(runtimeCapabilityOptionsForMessage.length > 0
+          ? { runtimeCapabilityOptions: runtimeCapabilityOptionsForMessage }
+          : {}),
         ...(filesToSend ? { attachments: filesToSend } : {}),
         ...(referencesToSend ? { references: referencesToSend } : {}),
       };
 
-      setDraft('');
+      commitComposerParts([], {
+        caretOffset: 0,
+        resetDom: true,
+        syncRemovedCapabilityTokens: false,
+      });
 
       const inputPayload: {
         input: string;
@@ -1391,18 +1567,21 @@ export function Chat({
         referenceComposition?: ChatKitReferenceCompositionMode;
         planMode?: boolean;
         runtimeCapabilities?: RuntimeCapabilitiesSelection;
+        commandSource?: ChatKitCommandSource;
       } = {
         ...humanInput,
       };
       if (filesToSend) {
         inputPayload.files = filesToSend;
       }
-      if (planModeEnabled) {
+      if (effectivePlanMode) {
         inputPayload.planMode = true;
       }
-      if (effectiveRuntimeCapabilitiesForSubmit) {
-        inputPayload.runtimeCapabilities =
-          effectiveRuntimeCapabilitiesForSubmit;
+      if (runtimeCapabilitiesForSubmit) {
+        inputPayload.runtimeCapabilities = runtimeCapabilitiesForSubmit;
+      }
+      if (submitOptions.commandSource) {
+        inputPayload.commandSource = submitOptions.commandSource;
       }
 
       const requestOptions = buildInjectedRequestOptions({
@@ -1467,8 +1646,11 @@ export function Chat({
       persistSessionRuntimeCapabilities,
       references,
       runtimeCapabilities,
+      runtimeCapabilitiesReady,
+      runtimeCapabilityOptions,
       scrollToBottom,
       selectedTool,
+      commitComposerParts,
       planModeEnabled,
       stream,
       trimmedDraft,
@@ -1477,8 +1659,152 @@ export function Chat({
     ],
   );
 
+  const addRunRuntimeCapabilities = React.useCallback(
+    (selection: RuntimeCapabilitiesSelection) => {
+      setRunRuntimeCapabilities((previous) =>
+        runtimeCapabilities
+          ? mergeRuntimeCapabilitiesSelections(
+              runtimeCapabilities,
+              previous,
+              selection,
+            )
+          : previous,
+      );
+    },
+    [runtimeCapabilities],
+  );
+
+  const insertComposerCapabilityToken = React.useCallback(
+    (
+      capability: RuntimeCapabilityOption,
+      range?: { start: number; end: number },
+    ) => {
+      const token = createComposerCapabilityPart(capability, createMessageId());
+      const currentParts = composerPartsRef.current;
+      const replaceRange = range ?? {
+        start: getComposerEditingLength(currentParts),
+        end: getComposerEditingLength(currentParts),
+      };
+      const nextParts = replaceComposerRange(
+        currentParts,
+        replaceRange.start,
+        replaceRange.end,
+        [token],
+      );
+      commitComposerParts(nextParts, {
+        caretOffset: replaceRange.start + 1,
+        resetDom: true,
+        syncRemovedCapabilityTokens: true,
+      });
+      setRunRuntimeCapabilities((previous) =>
+        toggleRuntimeCapabilitySelection(
+          previous,
+          capability.type,
+          capability.id,
+          true,
+        ),
+      );
+      setRuntimeCapabilityPalette(null);
+      focusComposerAt(replaceRange.start + 1);
+    },
+    [commitComposerParts, focusComposerAt],
+  );
+
+  const {
+    slashPaletteOptions,
+    executeSlashCommandFromDraft,
+    selectSlashPaletteOption,
+  } = useSlashCommands({
+    hostCommands: composer?.slashCommands,
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    runtimeCapabilityOptions,
+    effectiveRuntimeCapabilitiesForSubmit,
+    draft,
+    palette: runtimeCapabilityPalette,
+    setPalette: setRuntimeCapabilityPalette,
+    parentMessenger,
+    getComposerEditingLength: () =>
+      getComposerEditingLength(composerPartsRef.current),
+    setComposerText,
+    focusComposerAt,
+    setPlanModeEnabled,
+    onPetCommand: handlePetCommand,
+    addRunRuntimeCapabilities,
+    setRunRuntimeCapabilities,
+    insertComposerCapabilityToken,
+    submitPrompt: submitDraft,
+  });
+  const slashPaletteEmptyLabel = runtimeCapabilityPalette
+    ? t(
+        getSlashPaletteEmptyLabelKey(
+          runtimeCapabilityPalette,
+          runtimeCapabilitiesReady,
+        ),
+      )
+    : t('composer.capabilities.emptySearch');
+  const slashPaletteCapabilityEmptyLabels = runtimeCapabilitiesReady
+    ? {
+        skill: t('composer.slashCommands.empty.skills'),
+        plugin: t('composer.slashCommands.empty.plugins'),
+        subAgent: t('composer.slashCommands.empty.subAgents'),
+      }
+    : {
+        skill: t('composer.slashCommands.empty.loadingCapabilities'),
+        plugin: t('composer.slashCommands.empty.loadingCapabilities'),
+        subAgent: t('composer.slashCommands.empty.loadingCapabilities'),
+      };
+
+  React.useEffect(() => {
+    if (!runtimeCapabilityPalette) {
+      return;
+    }
+    if (slashPaletteOptions.length === 0) {
+      setRuntimeCapabilityPalette((previous) =>
+        previous && previous.activeIndex !== 0
+          ? { ...previous, activeIndex: 0 }
+          : previous,
+      );
+      return;
+    }
+    if (runtimeCapabilityPalette.activeIndex >= slashPaletteOptions.length) {
+      setRuntimeCapabilityPalette((previous) =>
+        previous
+          ? {
+              ...previous,
+              activeIndex: slashPaletteOptions.length - 1,
+            }
+          : previous,
+      );
+    }
+  }, [slashPaletteOptions.length, runtimeCapabilityPalette]);
+
+  React.useLayoutEffect(() => {
+    if (!runtimeCapabilityPalette) {
+      return;
+    }
+
+    const container = slashPaletteRef.current;
+    const option =
+      slashPaletteOptionRefs.current[runtimeCapabilityPalette.activeIndex];
+    if (!container || !option) {
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const optionRect = option.getBoundingClientRect();
+    if (optionRect.top < containerRect.top) {
+      container.scrollTop -= containerRect.top - optionRect.top;
+    } else if (optionRect.bottom > containerRect.bottom) {
+      container.scrollTop += optionRect.bottom - containerRect.bottom;
+    }
+  }, [runtimeCapabilityPalette, slashPaletteOptions.length]);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (executeSlashCommandFromDraft()) {
+      return;
+    }
     submitDraft();
   };
 
@@ -1496,7 +1822,7 @@ export function Chat({
         item.request?.input?.references,
       );
       stream.removePendingFollowUp(id);
-      setDraft(text);
+      setComposerText(text);
       setReferences(nextReferences);
 
       requestAnimationFrame(() => {
@@ -1507,10 +1833,10 @@ export function Chat({
 
         input.focus();
         const position = text.length;
-        input.setSelectionRange(position, position);
+        setComposerSelectionOffset(input, position);
       });
     },
-    [pendingFollowUps, stream],
+    [pendingFollowUps, setComposerText, stream],
   );
 
   const handleQuoteSelection = React.useCallback(() => {
@@ -1538,7 +1864,7 @@ export function Chat({
   );
 
   const handleComposerKeyDown = (
-    event: React.KeyboardEvent<HTMLTextAreaElement>,
+    event: React.KeyboardEvent<HTMLDivElement>,
   ) => {
     if (runtimeCapabilityPalette) {
       if (event.key === 'Escape') {
@@ -1553,7 +1879,7 @@ export function Chat({
         event.key === 'Tab'
       ) {
         event.preventDefault();
-        if (paletteRuntimeCapabilityOptions.length === 0) {
+        if (slashPaletteOptions.length === 0) {
           return;
         }
         setRuntimeCapabilityPalette((previous) => {
@@ -1562,10 +1888,8 @@ export function Chat({
           }
           const direction = event.key === 'ArrowUp' ? -1 : 1;
           const nextIndex =
-            (previous.activeIndex +
-              direction +
-              paletteRuntimeCapabilityOptions.length) %
-            paletteRuntimeCapabilityOptions.length;
+            (previous.activeIndex + direction + slashPaletteOptions.length) %
+            slashPaletteOptions.length;
           return { ...previous, activeIndex: nextIndex };
         });
         return;
@@ -1573,10 +1897,39 @@ export function Chat({
 
       if (event.key === 'Enter') {
         const option =
-          paletteRuntimeCapabilityOptions[runtimeCapabilityPalette.activeIndex];
+          slashPaletteOptions[runtimeCapabilityPalette.activeIndex];
         if (option) {
           event.preventDefault();
-          selectRunRuntimeCapability(option);
+          selectSlashPaletteOption(option);
+          return;
+        }
+      }
+    }
+
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      const input = composerInputRef.current;
+      const selection = input ? getComposerSelectionOffsets(input) : null;
+      if (selection && selection.start === selection.end) {
+        const adjacentCapability = findAdjacentComposerCapability(
+          composerPartsRef.current,
+          selection.start,
+          event.key === 'Backspace' ? 'before' : 'after',
+        );
+        if (adjacentCapability) {
+          event.preventDefault();
+          const nextCaret =
+            event.key === 'Backspace'
+              ? Math.max(0, selection.start - 1)
+              : selection.start;
+          commitComposerParts(
+            composerPartsRef.current.filter(
+              (part) =>
+                part.type !== 'capability' ||
+                part.key !== adjacentCapability.key,
+            ),
+            { caretOffset: nextCaret, resetDom: true },
+          );
+          setRuntimeCapabilityPalette(null);
           return;
         }
       }
@@ -1586,6 +1939,29 @@ export function Chat({
       return;
     }
     if (event.shiftKey) {
+      event.preventDefault();
+      const input = composerInputRef.current;
+      const selection = input
+        ? getComposerSelectionOffsets(input)
+        : {
+            start: getComposerEditingLength(composerPartsRef.current),
+            end: getComposerEditingLength(composerPartsRef.current),
+          };
+      const start =
+        selection?.start ?? getComposerEditingLength(composerPartsRef.current);
+      const end =
+        selection?.end ?? getComposerEditingLength(composerPartsRef.current);
+      const nextParts = replaceComposerRange(
+        composerPartsRef.current,
+        start,
+        end,
+        createComposerTextParts('\n'),
+      );
+      commitComposerParts(nextParts, {
+        caretOffset: start + 1,
+        resetDom: true,
+      });
+      updateRuntimeCapabilityPalette(nextParts, start + 1);
       return;
     }
     if (event.nativeEvent.isComposing) {
@@ -1597,17 +1973,23 @@ export function Chat({
     }
 
     if (stream.isLoading) {
+      if (executeSlashCommandFromDraft()) {
+        return;
+      }
       submitDraft(
         getBusyComposerShortcutFollowUpMode(event.metaKey || event.ctrlKey),
       );
       return;
     }
 
+    if (executeSlashCommandFromDraft()) {
+      return;
+    }
     submitDraft();
   };
 
   const handleComposerPaste = React.useCallback(
-    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    (event: React.ClipboardEvent<HTMLDivElement>) => {
       const clipboardData = event.clipboardData;
       if (!clipboardData) {
         return;
@@ -1689,6 +2071,30 @@ export function Chat({
 
       const pastedText = clipboardData.getData('text/plain');
       if (pastedText.trim().length <= LONG_TEXT_REFERENCE_THRESHOLD) {
+        if (!pastedText) {
+          return;
+        }
+        event.preventDefault();
+        const input = composerInputRef.current;
+        const selection = input
+          ? getComposerSelectionOffsets(input)
+          : {
+              start: getComposerEditingLength(composerPartsRef.current),
+              end: getComposerEditingLength(composerPartsRef.current),
+            };
+        const nextParts = replaceComposerRange(
+          composerPartsRef.current,
+          selection?.start ??
+            getComposerEditingLength(composerPartsRef.current),
+          selection?.end ?? getComposerEditingLength(composerPartsRef.current),
+          createComposerTextParts(pastedText),
+        );
+        const caretOffset =
+          (selection?.start ??
+            getComposerEditingLength(composerPartsRef.current)) +
+          pastedText.length;
+        commitComposerParts(nextParts, { caretOffset, resetDom: true });
+        updateRuntimeCapabilityPalette(nextParts, caretOffset);
         return;
       }
 
@@ -1707,7 +2113,9 @@ export function Chat({
     [
       composer?.attachments?.maxCount,
       composer?.attachments?.maxSize,
+      commitComposerParts,
       references,
+      updateRuntimeCapabilityPalette,
       uploadContextFile,
     ],
   );
@@ -1944,7 +2352,16 @@ export function Chat({
     setHistoryError(null);
     const thread = threads.find((item) => item.id === id);
     if (!thread) return;
-    if (id === stream.threadId) return;
+    if (id === stream.threadId) {
+      if (
+        thread.status === 'interrupted' &&
+        thread.recordId &&
+        !stream.pendingHITLRequest
+      ) {
+        void loadConversationMessages(thread.recordId);
+      }
+      return;
+    }
     stream.reset(id, []);
     if (thread.recordId) {
       void loadConversationMessages(thread.recordId);
@@ -1990,8 +2407,14 @@ export function Chat({
     });
 
     if (humanInput) {
+      const retryInput = {
+        ...humanInput,
+        ...(lastHumanMessage?.runtimeCapabilities
+          ? { runtimeCapabilities: lastHumanMessage.runtimeCapabilities }
+          : {}),
+      };
       stream.submit(
-        { input: humanInput },
+        { input: retryInput },
         {
           optimisticValues: (prev) => {
             // Remove the AI message that we're retrying
@@ -2033,6 +2456,27 @@ export function Chat({
     stream.isLoading ||
     currentThread?.status === 'busy' ||
     String(currentThread?.status ?? '').toLowerCase() === 'running';
+  const petAutoState = usePetAutoState({
+    currentThreadStatus: currentThread?.status,
+    currentThreadIsRunning,
+    isClientSecretInitializing,
+    isHistoryLoading,
+    isStreamLoading: stream.isLoading,
+    isStreamReady: stream.isReady,
+    lastStreamOutputAt: lastStreamOutputAtRef.current,
+    messages,
+    now: streamingNow,
+    threadErrorMessage,
+  });
+  useConversationSummaryEvent({
+    parentMessenger,
+    threadId: stream.threadId,
+    currentThread,
+    currentThreadIsRunning,
+    threadErrorMessage,
+    messages,
+    fallbackTitle: t('history.threadFallback'),
+  });
 
   const assistantTitle = assistantName || resolvedTitle;
 
@@ -2067,44 +2511,68 @@ export function Chat({
             </p>
           </div>
         </div>
-        {/* History controls - only shown when history.enabled is true (default) */}
-        {history?.enabled !== false && (
-          <div className="flex items-center gap-1">
-            {/* New thread button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex h-8 w-8">
-                  <button
-                    type="button"
-                    onClick={handleNewThread}
-                    disabled={missingConfig || isHistoryLoading}
-                    className={cn(
-                      'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                      'text-muted-foreground hover:text-foreground hover:bg-muted',
-                      'transition-colors duration-150',
-                      'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
-                    )}
-                    aria-label={t('history.newThread')}
-                  >
-                    <Pencil size={16} />
-                  </button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t('history.newThread')}
-              </TooltipContent>
-            </Tooltip>
-            <HistorySidebar
-              threads={threads}
-              currentThreadId={stream.threadId ?? undefined}
-              onNewThread={handleNewThread}
-              onSelectThread={handleSelectThread}
-              onDeleteThread={handleDeleteThread}
-              showDelete={history?.showDelete !== false}
-              disabled={missingConfig || isThreadsLoading || isHistoryLoading}
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex h-8 w-8">
+                <button
+                  type="button"
+                  onClick={() => setPetSettingsOpen(true)}
+                  className={cn(
+                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                    'text-muted-foreground hover:text-foreground hover:bg-muted',
+                    'transition-colors duration-150',
+                  )}
+                  aria-label={t('settings.open')}
+                >
+                  <Settings size={16} />
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t('settings.open')}
+            </TooltipContent>
+          </Tooltip>
+
+          {/* History controls - only shown when history.enabled is true (default) */}
+          {history?.enabled !== false && (
+            <>
+              {/* New thread button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex h-8 w-8">
+                    <button
+                      type="button"
+                      onClick={handleNewThread}
+                      disabled={missingConfig || isHistoryLoading}
+                      className={cn(
+                        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                        'text-muted-foreground hover:text-foreground hover:bg-muted',
+                        'transition-colors duration-150',
+                        'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
+                      )}
+                      aria-label={t('history.newThread')}
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t('history.newThread')}
+                </TooltipContent>
+              </Tooltip>
+              <HistorySidebar
+                threads={threads}
+                currentThreadId={stream.threadId ?? undefined}
+                onNewThread={handleNewThread}
+                onSelectThread={handleSelectThread}
+                onDeleteThread={handleDeleteThread}
+                showDelete={history?.showDelete !== false}
+                disabled={missingConfig || isThreadsLoading || isHistoryLoading}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 p-4">
@@ -2173,6 +2641,14 @@ export function Chat({
               const humanMessage = message as HumanMessageWithMeta;
               const humanReferences = humanMessage.references ?? [];
               const humanAttachments = humanMessage.attachments ?? [];
+              const humanRuntimeCapabilityOptions =
+                message.type === 'human'
+                  ? (humanMessage.runtimeCapabilityOptions ??
+                    getSelectedRuntimeCapabilityOptions(
+                      humanMessage.runtimeCapabilities,
+                      runtimeCapabilityOptions,
+                    ))
+                  : [];
               const hasHumanAttachments =
                 message.type === 'human' && humanAttachments.length > 0;
               const canQuoteMessage =
@@ -2184,6 +2660,7 @@ export function Chat({
                 !isAssistantMessage &&
                 !hasPlainRenderableContent &&
                 !hasHumanAttachments &&
+                humanRuntimeCapabilityOptions.length === 0 &&
                 humanReferences.length === 0
               ) {
                 return null;
@@ -2240,6 +2717,25 @@ export function Chat({
                         />
                       ) : (
                         <>
+                          {message.type === 'human' &&
+                            humanRuntimeCapabilityOptions.length > 0 && (
+                              <div className="mb-2 flex flex-wrap gap-1.5">
+                                {humanRuntimeCapabilityOptions.map((option) => (
+                                  <span
+                                    key={`${option.type}:${option.id}`}
+                                    className="inline-flex max-w-full items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs font-medium text-primary-foreground"
+                                  >
+                                    <RuntimeCapabilityIcon
+                                      option={option}
+                                      variant="chip"
+                                    />
+                                    <span className="max-w-[9rem] truncate">
+                                      {option.label}
+                                    </span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           {message.type === 'human' &&
                             humanReferences.length > 0 && (
                               <div className="mb-2 flex flex-wrap gap-1.5">
@@ -2494,12 +2990,12 @@ export function Chat({
           </div>
         )}
 
-        {runRuntimeCapabilityOptions.length > 0 && (
+        {detachedRunRuntimeCapabilityOptions.length > 0 && (
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">
               {t('composer.capabilities.runOnly')}
             </span>
-            {runRuntimeCapabilityOptions.map((option) => (
+            {detachedRunRuntimeCapabilityOptions.map((option) => (
               <span
                 key={`${option.type}:${option.id}`}
                 className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
@@ -2526,7 +3022,9 @@ export function Chat({
             stream.stopRuntimeActivityItem('sandbox-services', serviceId)
           }
           attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
-          className={hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined}
+          className={
+            hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined
+          }
         />
 
         <PendingTodos
@@ -2555,47 +3053,25 @@ export function Chat({
           attachToComposer
         />
 
-        {runtimeCapabilityPalette && runtimeCapabilitiesReady && (
-          <div
-            className={cn(
-              'mb-2 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md',
-              getRoundedClass(theme.radius),
-            )}
-          >
-            {paletteRuntimeCapabilityOptions.length > 0 ? (
-              paletteRuntimeCapabilityOptions.map((option, index) => (
-                <button
-                  key={`${option.type}:${option.id}`}
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    selectRunRuntimeCapability(option);
-                  }}
-                  className={cn(
-                    'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-muted',
-                    index === runtimeCapabilityPalette.activeIndex &&
-                      'bg-muted',
-                  )}
-                >
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
-                    <RuntimeCapabilityIcon option={option} variant="list" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{option.label}</span>
-                    {option.description && (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {option.description}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                {t('composer.capabilities.emptySearch')}
-              </div>
-            )}
-          </div>
+        <HITLApprovalPanel
+          request={stream.pendingHITLRequest}
+          onSubmit={stream.submitHITLDecision}
+          onDismiss={stream.stop}
+          attachToComposer
+        />
+
+        {runtimeCapabilityPalette && (
+          <SlashPalette
+            palette={runtimeCapabilityPalette}
+            options={slashPaletteOptions}
+            paletteRef={slashPaletteRef}
+            optionRefs={slashPaletteOptionRefs}
+            panelRoundedClass={getPanelRoundedClass(theme.radius)}
+            itemRoundedClass={getMenuItemRoundedClass(theme.radius)}
+            emptyLabel={slashPaletteEmptyLabel}
+            capabilityEmptyLabels={slashPaletteCapabilityEmptyLabels}
+            onSelect={selectSlashPaletteOption}
+          />
         )}
 
         <form className="flex items-end" onSubmit={handleSubmit}>
@@ -2614,25 +3090,63 @@ export function Chat({
               getRoundedClass(theme.radius),
             )}
           >
-            <textarea
+            <div
+              key={composerDomVersion}
               ref={composerInputRef}
-              value={draft}
-              onChange={handleComposerChange}
+              role="textbox"
+              aria-multiline="true"
+              aria-disabled={
+                missingConfig ||
+                isHistoryLoading ||
+                hasPendingInteractiveRequest
+              }
+              contentEditable={
+                !(
+                  missingConfig ||
+                  isHistoryLoading ||
+                  hasPendingInteractiveRequest
+                )
+              }
+              suppressContentEditableWarning
+              onInput={handleComposerInput}
+              onCompositionEnd={handleComposerCompositionEnd}
               onSelect={handleComposerSelect}
               onPaste={handleComposerPaste}
               onKeyDown={handleComposerKeyDown}
-              rows={1}
-              placeholder={inputPlaceholder}
-              disabled={
-                missingConfig || isHistoryLoading || hasPendingRequestUserInput
-              }
+              data-placeholder={inputPlaceholder}
               className={cn(
-                'min-h-8 max-h-32 w-full resize-none bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                'min-h-8 max-h-32 w-full overflow-hidden whitespace-pre-wrap break-words bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
                 isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11 mt-1',
-                'placeholder:text-muted-foreground',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
+                (missingConfig ||
+                  isHistoryLoading ||
+                  hasPendingInteractiveRequest) &&
+                  'cursor-not-allowed opacity-50',
               )}
-            />
+            >
+              {renderedComposerParts.map((part, index) =>
+                part.type === 'text' ? (
+                  <React.Fragment key={`text-${index}`}>
+                    {part.text}
+                  </React.Fragment>
+                ) : (
+                  <span
+                    key={part.key}
+                    data-composer-capability-key={part.key}
+                    data-capability-type={part.capability.type}
+                    data-capability-id={part.capability.id}
+                    contentEditable={false}
+                    className="mx-0.5 inline-flex max-w-[14rem] select-none items-center gap-1 text-sm font-semibold text-primary align-baseline"
+                  >
+                    <RuntimeCapabilityIcon
+                      option={part.capability}
+                      variant="chip"
+                    />
+                    <span className="truncate">{part.capability.label}</span>
+                  </span>
+                ),
+              )}
+            </div>
             <div
               data-slot="composer-action-bar"
               className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"
@@ -2659,7 +3173,7 @@ export function Chat({
                     disabled={
                       missingConfig ||
                       isHistoryLoading ||
-                      hasPendingRequestUserInput
+                      hasPendingInteractiveRequest
                     }
                   />
                 </div>
@@ -2686,7 +3200,7 @@ export function Chat({
                   isLoading={stream.isLoading}
                   showStop={
                     stream.isLoading &&
-                    (!trimmedDraft || hasPendingRequestUserInput)
+                    (!trimmedDraft || hasPendingInteractiveRequest)
                   }
                   onStop={() => stream.stop()}
                   stopLabel={t('chat.stop')}
@@ -2730,6 +3244,14 @@ export function Chat({
           <ContextUsageIndicator className="absolute right-4" />
         </div>
       </div>
+      <SettingsSheet
+        open={petSettingsOpen}
+        settings={displayedPetSettings}
+        petRequired={petRequired}
+        onOpenChange={setPetSettingsOpen}
+        onSave={savePetLocalSettings}
+      />
+      <PetBridge pet={effectivePet} state={petAutoState} />
     </div>
   );
 }

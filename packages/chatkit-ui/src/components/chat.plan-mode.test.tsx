@@ -1,5 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -39,6 +45,7 @@ const mocks = vi.hoisted(() => {
       },
       pendingFollowUps: [],
       pendingRequestUserInput: null,
+      pendingHITLRequest: null,
       followUpBehavior: 'queue',
       isLoading: false,
       isReady: true,
@@ -54,6 +61,7 @@ const mocks = vi.hoisted(() => {
       sendPendingFollowUpNow: vi.fn(),
       promotePendingFollowUpToSteer: vi.fn(),
       submitRequestUserInput: vi.fn(),
+      submitHITLDecision: vi.fn(),
       stopRuntimeActivityItem: vi.fn(),
       setThreadId: vi.fn(),
     },
@@ -83,7 +91,21 @@ vi.mock('../hooks/useThreads', () => ({
 
 vi.mock('../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { defaultValue?: string }) => {
+      const labels: Record<string, string> = {
+        'composer.slashCommands.commands.plan.label': 'Localized Plan',
+        'composer.slashCommands.commands.plan.description':
+          'Localized plan mode',
+        'composer.slashCommands.commands.plugins.label': 'Localized Plugins',
+        'composer.slashCommands.commands.plugins.description':
+          'Localized runtime plugins',
+        'composer.slashCommands.empty.plugins': 'No localized plugins to add',
+      };
+      return labels[key] ?? options?.defaultValue ?? key;
+    },
+    i18n: {
+      language: 'en-US',
+    },
   }),
 }));
 
@@ -231,9 +253,10 @@ vi.mock('./ui/button', () => ({
   ),
 }));
 
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { Chat } from './chat';
 
-function renderChat() {
+function renderChat(extraOptions: Partial<ChatKitOptions> = {}) {
   return render(
     <Chat
       clientSecret="secret"
@@ -242,9 +265,49 @@ function renderChat() {
           apiUrl: 'https://api.example.com',
           getClientSecret: vi.fn(async () => ({ secret: 'secret' })),
         },
+        ...extraOptions,
       }}
     />,
   );
+}
+
+function setComposerText(element: HTMLElement, value: string) {
+  element.textContent = value;
+  placeComposerCaretAtEnd(element);
+  fireEvent.input(element);
+  return screen.getByRole('textbox');
+}
+
+function insertComposerText(element: HTMLElement, value: string) {
+  const selection = window.getSelection();
+  const range =
+    selection && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : document.createRange();
+
+  if (!selection || selection.rangeCount === 0) {
+    range.selectNodeContents(element);
+    range.collapse(false);
+  }
+
+  range.deleteContents();
+  const text = document.createTextNode(value);
+  range.insertNode(text);
+  range.setStartAfter(text);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.input(element);
+  return screen.getByRole('textbox');
+}
+
+function placeComposerCaretAtEnd(element: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }
 
 describe('Chat plan mode payload', () => {
@@ -278,7 +341,7 @@ describe('Chat plan mode payload', () => {
     expect(composerShell).toHaveAttribute('data-layout', 'inline');
 
     const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'hello' } });
+    setComposerText(textarea, 'hello');
     expect(composerShell).toHaveAttribute('data-layout', 'inline');
 
     const send = screen.getByRole('button', { name: 'send' });
@@ -332,6 +395,13 @@ describe('Chat plan mode payload', () => {
             nodeKey: 'middleware-1',
             provider: 'sandbox',
             label: 'Sandbox',
+            meta: {
+              icon: {
+                type: 'svg',
+                value:
+                  '<svg viewBox="0 0 16 16"><path d="M2 2h12v12H2z" /></svg>',
+              },
+            },
           },
         ],
       },
@@ -350,7 +420,7 @@ describe('Chat plan mode payload', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
 
     const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'hello' } });
+    setComposerText(textarea, 'hello');
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);
@@ -394,6 +464,315 @@ describe('Chat plan mode payload', () => {
         },
       }),
       expect.any(Object),
+    );
+  });
+
+  it('executes host slash commands with args as submitted prompts', async () => {
+    renderChat({
+      composer: {
+        slashCommands: [
+          {
+            name: 'review',
+            label: 'Review',
+            description: 'Review the current target',
+            action: {
+              type: 'submit_prompt',
+              template: 'Review this: {{args}}',
+            },
+          },
+        ],
+      },
+    });
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/review src/app.ts');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          input: 'Review this: src/app.ts',
+          commandSource: {
+            type: 'slash_command',
+            name: 'review',
+            source: 'host',
+            executionType: 'submit_prompt',
+          },
+        },
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('executes /plan with args as a plan-mode prompt', async () => {
+    renderChat();
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/plan investigate the bug');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          input: 'investigate the bug',
+          planMode: true,
+          commandSource: {
+            type: 'slash_command',
+            name: 'plan',
+            source: 'builtin',
+            executionType: 'client_action',
+          },
+        },
+        state: {
+          human: {
+            input: 'investigate the bug',
+            planMode: true,
+            commandSource: {
+              type: 'slash_command',
+              name: 'plan',
+              source: 'builtin',
+              executionType: 'client_action',
+            },
+          },
+        },
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('localizes remaining built-in slash command labels and descriptions', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/plan');
+
+    expect(screen.getByText('Localized Plan')).toBeInTheDocument();
+    expect(
+      screen.getByText('[prompt] Localized plan mode'),
+    ).toBeInTheDocument();
+  });
+
+  it('merges runtime command capability selections into submitted prompts', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [],
+        subAgents: [],
+        commands: [
+          {
+            name: 'review',
+            label: 'Review',
+            kind: 'prompt_workflow',
+            workflow: {
+              type: 'prompt_workflow',
+              name: 'review',
+              label: 'Review',
+              description: 'Review the current target',
+              tags: ['quality'],
+            },
+            action: {
+              type: 'submit_prompt',
+              template: 'Review this: {{args}}',
+              runtimeCapabilities: {
+                mode: 'allowlist',
+                skills: { workspaceId: 'workspace-1', ids: ['skill-review'] },
+                plugins: { nodeKeys: [] },
+                subAgents: { nodeKeys: [] },
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/review src/app.ts');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input).toEqual({
+      input: 'Review this: src/app.ts',
+      runtimeCapabilities: {
+        mode: 'allowlist',
+        skills: { workspaceId: 'workspace-1', ids: ['skill-review'] },
+        plugins: { nodeKeys: [] },
+        subAgents: { nodeKeys: [] },
+      },
+      commandSource: {
+        type: 'slash_command',
+        name: 'review',
+        source: 'runtime',
+        executionType: 'submit_prompt',
+        kind: 'prompt_workflow',
+        workflow: {
+          type: 'prompt_workflow',
+          name: 'review',
+          label: 'Review',
+          description: 'Review the current target',
+          tags: ['quality'],
+        },
+      },
+    });
+  });
+
+  it('opens a skill-only selector from the /skills command', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [
+          {
+            nodeKey: 'plugin-search',
+            provider: 'search',
+            label: 'Search Plugin',
+          },
+        ],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/skills');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(screen.getByText('Review Skill')).toBeInTheDocument();
+    expect(screen.queryByText('Search Plugin')).not.toBeInTheDocument();
+  });
+
+  it('opens a plugin-only selector from the localized slash palette item', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [
+          {
+            nodeKey: 'plugin-search',
+            provider: 'search',
+            label: 'Search Plugin',
+          },
+        ],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/');
+    fireEvent.mouseDown(screen.getByText('Localized Plugins'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Search Plugin')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Review Skill')).not.toBeInTheDocument();
+    expect(screen.getByText('Localized Plan')).toBeInTheDocument();
+    expect(
+      screen.getByText('Localized Plugins').closest('button'),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Search Plugin').closest('button')).toHaveAttribute(
+      'data-depth',
+      '1',
+    );
+  });
+
+  it('shows a specific empty state for slash capability panels', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-review',
+            workspaceId: 'workspace-1',
+            label: 'Review Skill',
+          },
+        ],
+        plugins: [],
+        subAgents: [],
+        commands: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/');
+    fireEvent.mouseDown(screen.getByText('Localized Plugins'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('No localized plugins to add'),
+      ).toBeInTheDocument(),
     );
   });
 
@@ -551,6 +930,13 @@ describe('Chat plan mode payload', () => {
             nodeKey: 'middleware-1',
             provider: 'sandbox',
             label: 'Sandbox',
+            meta: {
+              icon: {
+                type: 'svg',
+                value:
+                  '<svg viewBox="0 0 16 16"><path d="M2 2h12v12H2z" /></svg>',
+              },
+            },
           },
         ],
         subAgents: [],
@@ -581,22 +967,12 @@ describe('Chat plan mode payload', () => {
       ).toHaveTextContent('ready'),
     );
 
-    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
-    Object.defineProperty(textarea, 'selectionStart', {
-      configurable: true,
-      writable: true,
-      value: 5,
-    });
-    Object.defineProperty(textarea, 'selectionEnd', {
-      configurable: true,
-      writable: true,
-      value: 5,
-    });
-    fireEvent.change(textarea, {
-      target: { value: '/sand', selectionStart: 5, selectionEnd: 5 },
-    });
+    let textarea = screen.getByRole('textbox');
+    textarea = setComposerText(textarea, '/sand');
     fireEvent.mouseDown(await screen.findByText('Sandbox'));
-    fireEvent.change(textarea, { target: { value: 'run it' } });
+    textarea = screen.getByRole('textbox');
+    placeComposerCaretAtEnd(textarea);
+    textarea = insertComposerText(textarea, 'run it');
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);
@@ -610,6 +986,23 @@ describe('Chat plan mode payload', () => {
       plugins: { nodeKeys: ['middleware-1'] },
       subAgents: { nodeKeys: [] },
     });
+    const optimisticValues =
+      mocks.stream.submit.mock.calls[0][1].optimisticValues?.({
+        messages: [],
+      });
+    expect(optimisticValues?.messages[0].runtimeCapabilities).toEqual({
+      mode: 'allowlist',
+      skills: { ids: [] },
+      plugins: { nodeKeys: ['middleware-1'] },
+      subAgents: { nodeKeys: [] },
+    });
+    expect(optimisticValues?.messages[0].runtimeCapabilityOptions).toEqual([
+      expect.objectContaining({
+        id: 'middleware-1',
+        label: 'Sandbox',
+        type: 'plugin',
+      }),
+    ]);
     await waitFor(() =>
       expect(mocks.stream.client.conversations.update).toHaveBeenCalledWith(
         'conversation-1',
@@ -628,6 +1021,203 @@ describe('Chat plan mode payload', () => {
     );
   });
 
+  it('renders selected runtime capabilities on human messages', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+        subAgents: [],
+      },
+    );
+    mocks.stream.messages = [
+      {
+        id: 'human-1',
+        type: 'human',
+        content: 'run it',
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: { ids: [] },
+          plugins: { nodeKeys: ['middleware-1'] },
+          subAgents: { nodeKeys: [] },
+        },
+      },
+    ] as any;
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    expect(screen.getByText('Sandbox')).toBeInTheDocument();
+    expect(screen.getByText('run it')).toBeInTheDocument();
+  });
+
+  it('inserts slash-selected runtime capabilities as atomic composer tokens', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+            meta: {
+              icon: {
+                type: 'svg',
+                value:
+                  '<svg viewBox="0 0 16 16"><path d="M2 2h12v12H2z" /></svg>',
+              },
+            },
+          },
+        ],
+        subAgents: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    let textbox = screen.getByRole('textbox');
+    textbox = setComposerText(textbox, '/sand');
+    fireEvent.mouseDown(await screen.findByText('Sandbox'));
+    textbox = screen.getByRole('textbox');
+
+    await waitFor(() =>
+      expect(within(textbox).getByText('Sandbox')).toBeInTheDocument(),
+    );
+    expect(
+      textbox.querySelector('[data-slot="runtime-capability-meta-icon"] svg'),
+    ).toBeInTheDocument();
+
+    placeComposerCaretAtEnd(textbox);
+    fireEvent.keyDown(textbox, { key: 'Backspace' });
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox')).not.toHaveTextContent('Sandbox'),
+    );
+
+    setComposerText(screen.getByRole('textbox'), 'run it');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.stream.submit.mock.calls[0][0].input.runtimeCapabilities,
+    ).toEqual({
+      mode: 'allowlist',
+      skills: { ids: [] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+    });
+  });
+
+  it('keeps the contenteditable node stable during IME composition', async () => {
+    renderChat();
+
+    const textbox = screen.getByRole('textbox');
+    fireEvent.compositionStart(textbox);
+    textbox.textContent = 'pin';
+    fireEvent.input(textbox);
+    expect(screen.getByRole('textbox')).toBe(textbox);
+
+    textbox.textContent = '拼';
+    fireEvent.compositionEnd(textbox);
+    expect(screen.getByRole('textbox')).toBe(textbox);
+
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input).toEqual({
+      input: '拼',
+    });
+  });
+
+  it('scrolls the slash palette active item into view during keyboard navigation', async () => {
+    renderChat({
+      composer: {
+        slashCommands: Array.from({ length: 6 }, (_, index) => ({
+          name: `cmd-${index}`,
+          label: `Command ${index}`,
+          action: {
+            type: 'insert_text',
+            template: `Command ${index}`,
+          },
+        })),
+      },
+    });
+
+    let textbox = screen.getByRole('textbox');
+    textbox = setComposerText(textbox, '/');
+
+    const palette = document.querySelector(
+      '[data-slot="slash-palette"]',
+    ) as HTMLDivElement | null;
+    if (!palette) {
+      throw new Error('Expected slash palette to be rendered.');
+    }
+    const options = Array.from(
+      document.querySelectorAll('[data-slot="slash-palette-option"]'),
+    ) as HTMLButtonElement[];
+    expect(options.length).toBeGreaterThan(3);
+
+    let scrollTop = 0;
+    Object.defineProperty(palette, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = value;
+      },
+    });
+    palette.getBoundingClientRect = () =>
+      ({
+        top: 0,
+        bottom: 100,
+        left: 0,
+        right: 300,
+        width: 300,
+        height: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    options.forEach((option, index) => {
+      option.getBoundingClientRect = () =>
+        ({
+          top: index * 40 - scrollTop,
+          bottom: index * 40 + 40 - scrollTop,
+          left: 0,
+          right: 300,
+          width: 300,
+          height: 40,
+          x: 0,
+          y: index * 40 - scrollTop,
+          toJSON: () => ({}),
+        }) as DOMRect;
+    });
+
+    fireEvent.keyDown(textbox, { key: 'ArrowDown' });
+    fireEvent.keyDown(textbox, { key: 'ArrowDown' });
+
+    await waitFor(() => expect(scrollTop).toBeGreaterThan(0));
+  });
+
   it('adds planMode to input and state.human when enabled', async () => {
     renderChat();
 
@@ -640,7 +1230,7 @@ describe('Chat plan mode payload', () => {
     expect(composerShell).toHaveAttribute('data-layout', 'stacked');
 
     const textarea = screen.getByRole('textbox');
-    fireEvent.change(textarea, { target: { value: 'plan this' } });
+    setComposerText(textarea, 'plan this');
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);

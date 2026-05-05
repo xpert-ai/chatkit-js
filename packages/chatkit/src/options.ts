@@ -1,5 +1,5 @@
-
 import type { ClientToolMessageInput } from './interrupt';
+import type { ChatKitSlashCommand } from './commands';
 import type * as Widgets from './widgets';
 
 export * from './widgets';
@@ -204,6 +204,77 @@ export type ModelOption = {
 
 export type FollowUpBehavior = 'queue' | 'steer';
 
+export type ChatKitPetAnimationName =
+  | 'idle'
+  | 'running-right'
+  | 'running-left'
+  | 'waving'
+  | 'jumping'
+  | 'failed'
+  | 'waiting'
+  | 'running'
+  | 'review';
+
+export type ChatKitPetAnimationMode = 'loop' | 'once';
+
+export type ChatKitPetPin =
+  | 'top-left'
+  | 'top'
+  | 'top-right'
+  | 'left'
+  | 'center'
+  | 'right'
+  | 'bottom-left'
+  | 'bottom'
+  | 'bottom-right';
+
+export type ChatKitPetFrameAnimation = {
+  row?: number;
+  frames?: number;
+  frameDurations?: readonly number[];
+};
+
+export type ChatKitPetSpriteAtlas = {
+  columns?: number;
+  rows?: number;
+  cellWidth?: number;
+  cellHeight?: number;
+  animations?: Partial<
+    Record<ChatKitPetAnimationName, ChatKitPetFrameAnimation>
+  >;
+};
+
+export type ChatKitPetCharacter = {
+  type: 'sprite-atlas';
+  src: string;
+  atlas?: ChatKitPetSpriteAtlas;
+};
+
+export type ChatKitPetBoundsPadding = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+export type ChatKitPetPositionOptions = {
+  pin?: ChatKitPetPin | null;
+  draggable?: boolean;
+  scale?: number;
+  persist?: boolean;
+  boundsPadding?: number | Partial<ChatKitPetBoundsPadding>;
+  zIndex?: number;
+};
+
+export type ChatKitPetOptions = {
+  enabled?: boolean;
+  character?: ChatKitPetCharacter;
+  position?: ChatKitPetPositionOptions;
+  behavior?: 'auto' | 'manual';
+  ariaLabel?: string;
+  imageRendering?: 'auto' | 'pixelated' | 'crisp-edges';
+};
+
 export type ChatKitTheme = {
   /**
    * The color scheme to use for the ChatKit UI.
@@ -306,9 +377,7 @@ export type ChatKitClientSecretObject = {
   organizationId?: string;
 };
 
-export type ChatKitClientSecretResult =
-  | string
-  | ChatKitClientSecretObject;
+export type ChatKitClientSecretResult = string | ChatKitClientSecretObject;
 
 export type ChatKitRequestContext = {
   /**
@@ -354,6 +423,15 @@ export type ChatKitOptions = {
    */
   frameUrl?: string;
 
+  /**
+   * Controls how the ChatKit web component is presented.
+   * - `chat`: render the ChatKit iframe in the host layout.
+   * - `pet`: render only the pet launcher until the user clicks the pet.
+   *
+   * @default "chat"
+   */
+  displayMode?: 'chat' | 'pet';
+
   api: CustomApiConfig | HostedApiConfig;
 
   /**
@@ -375,6 +453,15 @@ export type ChatKitOptions = {
    * * @default "light"
    */
   theme?: ColorScheme | ChatKitTheme;
+
+  /**
+   * Optional animated pet companion rendered by the ChatKit web component over
+   * the host page viewport.
+   * Passing `true` enables the default built-in pet.
+   *
+   * @default false
+   */
+  pet?: boolean | ChatKitPetOptions;
 
   /**
    * The ID of the thread to show when ChatKit is mounted or opened for the first time.
@@ -534,6 +621,12 @@ export type ChatKitOptions = {
 
     /** A list of models that users can choose from before sending a message. */
     models?: ModelOption[];
+
+    /**
+     * Slash commands shown when users type `/` at the start of the composer.
+     * Command names should not include the leading slash.
+     */
+    slashCommands?: ChatKitSlashCommand[];
   };
 
   /**

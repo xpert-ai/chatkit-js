@@ -8,6 +8,12 @@ import type {
 } from '@xpert-ai/chatkit-types';
 
 import { normalizeReferences } from './references';
+import {
+  extractMessageReferences,
+  extractReferenceComposition,
+  extractSubmittedInput,
+  type MessageMetadataContainer,
+} from './message-metadata';
 import { createMessageId } from './utils';
 
 export type FollowUpStatus = 'pending' | 'consumed' | 'canceled';
@@ -41,19 +47,14 @@ export type PendingFollowUp = {
 
 const FOLLOW_UP_BEHAVIOR_STORAGE_PREFIX = 'xpert:chatkit:follow-up-behavior';
 
-type PersistedChatMessage = ChatMessage & {
-  references?: unknown;
-  input?: unknown;
-  metadata?: unknown;
-  state?: unknown;
-  submittedInput?: unknown;
-  referenceComposition?: unknown;
-  followUpMode?: FollowUpBehavior;
-  followUpStatus?: FollowUpStatus;
-  targetExecutionId?: string | null;
-  visibleAt?: string | null;
-  thirdPartyMessage?: unknown;
-};
+type PersistedChatMessage = ChatMessage &
+  MessageMetadataContainer & {
+    followUpMode?: FollowUpBehavior;
+    followUpStatus?: FollowUpStatus;
+    targetExecutionId?: string | null;
+    visibleAt?: string | null;
+    thirdPartyMessage?: unknown;
+  };
 
 type AssistantLikeMessage = {
   id?: string;
@@ -71,19 +72,6 @@ type FollowUpUiMessage = {
   followUpStatus: 'consumed';
   targetExecutionId?: string | null;
   visibleAt?: string | null;
-};
-
-type ReferencePayloadContainer = {
-  references?: unknown;
-  input?: unknown;
-  metadata?: unknown;
-  state?: unknown;
-  submittedInput?: unknown;
-  referenceComposition?: unknown;
-};
-
-type ReferenceStateContainer = {
-  human?: unknown;
 };
 
 export type MergedQueuedFollowUpGroup = {
@@ -177,119 +165,6 @@ export function extractRequestHumanInput(
 
   const raw = input as { input?: TChatRequestHuman };
   return raw.input ?? null;
-}
-
-function isReferencePayloadContainer(
-  value: unknown,
-): value is ReferencePayloadContainer {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getNestedReferenceCandidate(value: unknown): unknown {
-  return isReferencePayloadContainer(value) ? value.references : undefined;
-}
-
-function getNestedInputCandidate(value: unknown): unknown {
-  return isReferencePayloadContainer(value) ? value.input : undefined;
-}
-
-function extractPersistedReferences(value: unknown): ChatKitReference[] {
-  const direct = normalizeReferences(value);
-  if (direct.length > 0) {
-    return direct;
-  }
-
-  if (!isReferencePayloadContainer(value)) {
-    return [];
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    value.references,
-    getNestedReferenceCandidate(value.input),
-    getNestedReferenceCandidate(value.metadata),
-    getNestedReferenceCandidate(state?.human),
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeReferences(candidate);
-    if (normalized.length > 0) {
-      return normalized;
-    }
-  }
-
-  return [];
-}
-
-function extractPersistedSubmittedInput(value: unknown): string | undefined {
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  if (typeof value.submittedInput === 'string') {
-    return value.submittedInput;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    value.input,
-    getNestedInputCandidate(value.input),
-    getNestedInputCandidate(value.metadata),
-    isReferencePayloadContainer(state?.human) ? state.human.input : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (typeof candidate === 'string') {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
-
-function extractPersistedReferenceComposition(
-  value: unknown,
-): ChatKitReferenceCompositionMode | undefined {
-  if (!isReferencePayloadContainer(value)) {
-    return undefined;
-  }
-
-  if (
-    value.referenceComposition === 'compose' ||
-    value.referenceComposition === 'preserve'
-  ) {
-    return value.referenceComposition;
-  }
-
-  const state = isReferencePayloadContainer(value.state)
-    ? (value.state as ReferenceStateContainer)
-    : null;
-
-  const candidates = [
-    isReferencePayloadContainer(value.input)
-      ? value.input.referenceComposition
-      : undefined,
-    isReferencePayloadContainer(value.metadata)
-      ? value.metadata.referenceComposition
-      : undefined,
-    isReferencePayloadContainer(state?.human)
-      ? state.human.referenceComposition
-      : undefined,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate === 'compose' || candidate === 'preserve') {
-      return candidate;
-    }
-  }
-
-  return undefined;
 }
 
 function hasSubmittableHumanInput(humanInput?: TChatRequestHuman | null) {
@@ -555,9 +430,9 @@ export function mapPersistedPendingFollowUp(
       : null;
   const text =
     typeof message.content === 'string' ? message.content.trim() : '';
-  const references = extractPersistedReferences(message);
-  const submittedInput = extractPersistedSubmittedInput(message);
-  const referenceComposition = extractPersistedReferenceComposition(message);
+  const references = extractMessageReferences(message);
+  const submittedInput = extractSubmittedInput(message);
+  const referenceComposition = extractReferenceComposition(message);
   const mode = message.followUpMode ?? 'queue';
 
   if (!text && references.length === 0) {

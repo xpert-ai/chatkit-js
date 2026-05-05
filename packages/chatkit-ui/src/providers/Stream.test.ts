@@ -24,6 +24,7 @@ import {
   mergeQueuedFollowUpGroup,
   normalizeRequestUserInputParams,
   normalizeRequestUserInputToolCall,
+  retainResumeStreamOptions,
   resolveClientToolCallResponse,
   shouldBroadcastThreadChange,
 } from './Stream';
@@ -359,6 +360,44 @@ describe('request_user_input normalization', () => {
         id: 'call-2',
       }),
     ).toBeNull();
+  });
+});
+
+describe('retainResumeStreamOptions', () => {
+  it('keeps request context for HITL and client-tool resume submissions', () => {
+    expect(
+      retainResumeStreamOptions({
+        context: {
+          env: {
+            workspaceId: 'workspace-1',
+          },
+          targetXpertId: 'xpert-1',
+        },
+        config: {
+          tags: ['authoring'],
+        },
+        streamMode: ['messages', 'events'],
+        streamSubgraphs: true,
+        streamResumable: true,
+        optimisticValues: {
+          messages: [],
+        },
+        newThread: true,
+      }),
+    ).toEqual({
+      context: {
+        env: {
+          workspaceId: 'workspace-1',
+        },
+        targetXpertId: 'xpert-1',
+      },
+      config: {
+        tags: ['authoring'],
+      },
+      streamMode: ['messages', 'events'],
+      streamSubgraphs: true,
+      streamResumable: true,
+    });
   });
 });
 

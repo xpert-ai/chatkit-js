@@ -20,7 +20,6 @@ import {
   X,
 } from 'lucide-react';
 import type {
-  IconDefinition,
   RuntimeCapabilitiesResponse,
   RuntimeCapabilitiesSelection,
   RuntimeCapabilitySubAgent,
@@ -30,9 +29,13 @@ import type {
   ChatKitOptions,
   IconName,
 } from '@xpert-ai/chatkit-types';
-import { cn, getRoundedClass } from '../../lib/utils';
+import {
+  cn,
+  getMenuItemRoundedClass,
+  getPanelRoundedClass,
+  getRoundedClass,
+} from '../../lib/utils';
 import { Button } from '../ui/button';
-import { IconDefinitionRenderer } from '../ui/icon-definition';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -49,6 +52,7 @@ import {
 } from '../../lib/runtime-capabilities';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ChatkitAvatar, normalizeChatkitAvatar } from '../ui/chatkit-avatar';
+import { RuntimeCapabilityIcon } from '../runtime-capability-icon';
 
 type CapabilityPanel = 'skills' | 'plugins' | 'subAgents';
 
@@ -109,6 +113,8 @@ export function ComposerMenu({
   const { theme } = useTheme();
 
   const roundedClass = getRoundedClass(theme.radius);
+  const panelRoundedClass = getPanelRoundedClass(theme.radius);
+  const menuItemRoundedClass = getMenuItemRoundedClass(theme.radius);
 
   const attachmentsEnabled = composer?.attachments?.enabled ?? false;
   const tools = composer?.tools ?? [];
@@ -153,12 +159,6 @@ export function ComposerMenu({
   const collisionProps = {
     collisionBoundary,
     collisionPadding: 8,
-  };
-
-  const getCapabilityFallbackIcon = (type: RuntimeCapabilityOption['type']) => {
-    if (type === 'skill') return Brain;
-    if (type === 'plugin') return Plug;
-    return Bot;
   };
 
   const getParameterLabels = (subAgent: RuntimeCapabilitySubAgent) =>
@@ -237,7 +237,10 @@ export function ComposerMenu({
     return (
       <div
         data-slot="runtime-sub-agent-detail-card"
-        className="pointer-events-none w-80 space-y-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+        className={cn(
+          'pointer-events-none w-80 space-y-3 border border-border bg-popover p-3 text-popover-foreground shadow-lg',
+          panelRoundedClass,
+        )}
       >
         <div className="flex items-start gap-3">
           <ChatkitAvatar
@@ -303,34 +306,16 @@ export function ComposerMenu({
       label: string;
       description?: string;
       fallbackDescription?: string;
-      icon?: IconDefinition;
+      capability: RuntimeCapabilityOption;
       subAgent?: RuntimeCapabilitySubAgent;
     },
   ) => {
     const selected = selectedRuntimeCapabilities
       ? isRuntimeCapabilitySelected(selectedRuntimeCapabilities, type, item.id)
       : false;
-    const Icon = getCapabilityFallbackIcon(type);
-    const icon =
-      type === 'subAgent' && item.subAgent ? (
-        <ChatkitAvatar
-          avatar={normalizeChatkitAvatar(item.subAgent.avatar)}
-          label={item.subAgent.label}
-          className="h-6 w-6"
-          fallbackClassName="text-[10px]"
-          imageClassName="object-cover"
-          data-slot="runtime-sub-agent-avatar"
-        />
-      ) : item.icon ? (
-        <IconDefinitionRenderer
-          icon={item.icon}
-          size={24}
-          dataSlot="runtime-capability-meta-icon"
-          fallback={<Icon size={16} />}
-        />
-      ) : (
-        <Icon size={16} />
-      );
+    const icon = (
+      <RuntimeCapabilityIcon option={item.capability} variant="list" />
+    );
 
     const row = (
       <DropdownMenuCheckboxItem
@@ -342,7 +327,7 @@ export function ComposerMenu({
         onSelect={(event) => event.preventDefault()}
         className={cn(
           'items-start gap-3 px-3 py-2 pr-8',
-          roundedClass,
+          menuItemRoundedClass,
           selected && 'bg-muted',
         )}
       >
@@ -382,7 +367,13 @@ export function ComposerMenu({
               label: skill.label,
               description: skill.description,
               fallbackDescription: skill.repositoryName,
-              icon: skill.meta?.icon,
+              capability: {
+                type: 'skill',
+                id: skill.id,
+                label: skill.label,
+                description: skill.description ?? skill.repositoryName,
+                capability: skill,
+              },
             }),
           )
         : panel === 'plugins'
@@ -392,7 +383,13 @@ export function ComposerMenu({
                 label: plugin.label,
                 description: plugin.description,
                 fallbackDescription: plugin.provider,
-                icon: plugin.meta?.icon,
+                capability: {
+                  type: 'plugin',
+                  id: plugin.nodeKey,
+                  label: plugin.label,
+                  description: plugin.description ?? plugin.provider,
+                  capability: plugin,
+                },
               }),
             )
           : subAgents.map((subAgent) =>
@@ -401,6 +398,13 @@ export function ComposerMenu({
                 label: subAgent.label,
                 description: subAgent.description,
                 fallbackDescription: subAgent.name,
+                capability: {
+                  type: 'subAgent',
+                  id: subAgent.nodeKey,
+                  label: subAgent.label,
+                  description: subAgent.description ?? subAgent.name,
+                  capability: subAgent,
+                },
                 subAgent,
               }),
             );
@@ -412,7 +416,7 @@ export function ComposerMenu({
             event.preventDefault();
             setActivePanel(null);
           }}
-          className={cn('gap-3 px-3 py-2', roundedClass)}
+          className={cn('gap-3 px-3 py-2', menuItemRoundedClass)}
         >
           <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
             <ArrowLeft size={16} />
@@ -451,7 +455,7 @@ export function ComposerMenu({
         className={cn(
           'max-h-[70vh] max-w-[calc(100vw-1rem)] overflow-y-auto p-1',
           activePanel ? 'w-80 min-w-72' : 'w-72',
-          roundedClass,
+          panelRoundedClass,
         )}
       >
         {activePanel ? (
@@ -463,7 +467,7 @@ export function ComposerMenu({
               <>
                 <DropdownMenuItem
                   onSelect={handleAttachmentClick}
-                  className={cn('gap-3 px-3 py-2', roundedClass)}
+                  className={cn('gap-3 px-3 py-2', menuItemRoundedClass)}
                 >
                   <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
                     <Paperclip size={16} />
@@ -483,7 +487,7 @@ export function ComposerMenu({
               }}
               className={cn(
                 'gap-3 px-3 py-2',
-                roundedClass,
+                menuItemRoundedClass,
                 planModeEnabled && 'bg-muted',
               )}
             >
@@ -518,7 +522,7 @@ export function ComposerMenu({
                       event.preventDefault();
                       setActivePanel('skills');
                     }}
-                    className={cn('gap-3 px-3 py-2', roundedClass)}
+                    className={cn('gap-3 px-3 py-2', menuItemRoundedClass)}
                   >
                     <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
                       <Brain size={16} />
@@ -541,7 +545,7 @@ export function ComposerMenu({
                       event.preventDefault();
                       setActivePanel('plugins');
                     }}
-                    className={cn('gap-3 px-3 py-2', roundedClass)}
+                    className={cn('gap-3 px-3 py-2', menuItemRoundedClass)}
                   >
                     <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
                       <Plug size={16} />
@@ -564,7 +568,7 @@ export function ComposerMenu({
                       event.preventDefault();
                       setActivePanel('subAgents');
                     }}
-                    className={cn('gap-3 px-3 py-2', roundedClass)}
+                    className={cn('gap-3 px-3 py-2', menuItemRoundedClass)}
                   >
                     <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
                       <Bot size={16} />
@@ -592,7 +596,7 @@ export function ComposerMenu({
                 onSelect={() => handleToolSelect(tool)}
                 className={cn(
                   'gap-3 px-3 py-2',
-                  roundedClass,
+                  menuItemRoundedClass,
                   selectedTool?.id === tool.id && 'bg-muted',
                 )}
               >

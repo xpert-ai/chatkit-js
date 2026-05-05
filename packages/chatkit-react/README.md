@@ -35,6 +35,7 @@ function App() {
         };
       }
     },
+    pet: true,
     onReady: () => {
       console.log('ChatKit is ready');
     }
@@ -70,6 +71,7 @@ interface UseChatKitOptions extends Partial<ChatKitOptions> {
   theme?: ThemeOptions;
   composer?: ComposerOptions;
   startScreen?: StartScreenOptions;
+  pet?: boolean | ChatKitPetOptions;
   onClientTool?: (params: ClientToolParams) => Promise<ClientToolMessageInput>;
   onError?: (error: Error) => void;
   onReady?: () => void;
@@ -183,6 +185,67 @@ const chatkit = useChatKit({
       }
     ]
   }
+});
+```
+
+### Pet
+
+Pet is disabled by default. Users can enable or disable it from the built-in
+Settings panel or with `/pet`, `/pet on`, `/pet off`, and `/pet settings`;
+v1 stores those preferences in browser `localStorage`.
+
+`pet: true` enables the default file-backed animated pet from configuration. The
+web component renders the pet over the host page viewport, so dragging is not
+limited by the ChatKit iframe bounds while the chat panel itself stays in place.
+The same `pet` option is part of the shared ChatKit options contract, so this
+configuration shape also works in Angular and future Vue bindings.
+
+```tsx
+const chatkit = useChatKit({
+  frameUrl: '<url-to-chatkit-frame>',
+  api: { /* ... */ },
+  pet: {
+    character: { type: 'sprite-atlas', src: '/pets/boba/spritesheet.webp' },
+    position: {
+      pin: 'bottom-right',
+      draggable: true,
+      persist: true,
+      scale: 0.25,
+    },
+  },
+});
+```
+
+Use `displayMode: 'pet'` to render only the pet launcher at first. Clicking the
+pet opens the ChatKit iframe panel; the iframe is not placed in the host layout.
+In this launcher mode, the pet cannot be hidden because it is the chat entry
+point.
+
+```tsx
+const chatkit = useChatKit({
+  frameUrl: '<url-to-chatkit-frame>',
+  api: { /* ... */ },
+  displayMode: 'pet',
+  pet: true,
+});
+```
+
+The settings UI exposes the file-backed pets bundled in
+`chatkit-ui/public/pets` as built-in choices. You can also point directly at a
+spritesheet-compatible image. Relative `src` values are resolved against the
+ChatKit frame URL, not the host page URL, because the pet overlay renders in
+the host document.
+
+```tsx
+const chatkit = useChatKit({
+  frameUrl: '<url-to-chatkit-frame>',
+  api: { /* ... */ },
+  pet: {
+    character: {
+      type: 'sprite-atlas',
+      src: 'https://example.com/pets/boba/spritesheet.webp',
+    },
+  },
 });
 ```
 
@@ -341,14 +404,14 @@ This package is written in TypeScript and includes full type definitions.
 ```typescript
 import type { 
   ChatKitOptions,
+  ChatKitPetOptions,
   ClientToolMessageInput,
   SupportedLocale 
 } from '@xpert-ai/chatkit-types';
 ```
 
 ## Requirements
-
-- React >= 18
+React >= 18
 - React DOM >= 18
 
 ## Related Packages

@@ -1,7 +1,8 @@
 export {
   useChatKit,
+  type UseChatKitOptions,
   type UseChatKitReturn,
   type ToEventHandlerKey,
   type ChatKitEventHandlers,
 } from './useChatKit.js';
-export { ChatKit } from './chatkit.js';
+export { ChatKit, type ChatKitProps } from './chatkit.js';

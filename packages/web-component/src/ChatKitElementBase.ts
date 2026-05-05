@@ -9,6 +9,7 @@ import type {
   Entity,
   ListView,
 } from '@xpert-ai/chatkit-types';
+import { normalizePetOptions } from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import type { SendUserMessageParams } from '@xpert-ai/chatkit-types';
 import { removeMethods } from './helpers';
@@ -27,6 +28,13 @@ import {
   IntegrationError,
   fromPossibleFrameSafeError,
 } from '@xpert-ai/chatkit-web-shared';
+import {
+  PetOverlay,
+  parsePetOptionsChangePayload,
+  parsePetStateChangePayload,
+  parseThreadSummaryLogPayload,
+  type ThreadSummary,
+} from './PetOverlay';
 
 // Compute inner options by removing methods (to make options serializable)
 function getInnerOptions(options: ChatKitOptions): ChatKitInnerOptions {
@@ -82,8 +90,17 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #frameUrl?: string;
   #frame?: HTMLIFrameElement;
   #wrapper?: HTMLDivElement;
+  #launcherCloseButton?: HTMLButtonElement;
+  #launcherOpen = false;
+  #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
 
   #shadow = this.attachShadow({ mode: 'open' });
+  #petOverlay = new PetOverlay(this.#shadow, {
+    onActivate: () => this.#handlePetActivate(),
+    onReply: (text) => this.#handlePetReply(text),
+    onThreadSummaryActivate: (threadId) =>
+      void this.#handlePetThreadSummaryActivate(threadId),
+  });
 
   #resolveLoaded?: () => void;
   #loaded = new Promise<void>((resolve) => {
@@ -239,7 +256,129 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       typeof options.theme === 'string'
         ? options.theme
         : (options.theme?.colorScheme ?? 'light');
+    this.dataset.displayMode = this.#getDisplayMode(options);
+    if (this.#getDisplayMode(options) !== 'pet') {
+      this.#setLauncherOpen(false);
+    }
   }
+
+  #getDisplayMode(options = this.#opts) {
+    return options?.displayMode === 'pet' ? 'pet' : 'chat';
+  }
+
+  #getConfiguredPetOptions(
+    options = this.#opts,
+  ): ChatKitOptions['pet'] | null {
+    if (!options) {
+      return null;
+    }
+
+    if (
+      this.#getDisplayMode(options) === 'pet' &&
+      !normalizePetOptions(options.pet ?? null)
+    ) {
+      return true;
+    }
+
+    return options.pet ?? null;
+  }
+
+  #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
+    let pet =
+      this.#framePetOptionsOverride !== undefined
+        ? this.#framePetOptionsOverride
+        : this.#getConfiguredPetOptions();
+
+    if (this.#getDisplayMode() === 'pet' && !normalizePetOptions(pet ?? null)) {
+      pet = true;
+    }
+
+    return this.#resolveOverlayPetOptions(pet);
+  }
+
+  #resolvePetAssetUrl(src: string): string {
+    try {
+      const base = new URL(
+        this.#frameUrl ?? window.location.href,
+        window.location.origin,
+      );
+      return new URL(src, base).toString();
+    } catch {
+      return src;
+    }
+  }
+
+  #resolveOverlayPetOptions(
+    pet: ChatKitOptions['pet'] | null,
+  ): ChatKitOptions['pet'] | null {
+    const normalized = normalizePetOptions(pet ?? null);
+    if (!normalized) {
+      return null;
+    }
+
+    return {
+      character: {
+        ...normalized.character,
+        src: this.#resolvePetAssetUrl(normalized.character.src),
+      },
+      position: normalized.position,
+      behavior: normalized.behavior,
+      ariaLabel: normalized.ariaLabel,
+      imageRendering: normalized.imageRendering,
+    };
+  }
+
+  #getFrameOptions(options: ChatKitOptions): ChatKitOptions {
+    const pet = this.#getConfiguredPetOptions(options);
+    if (pet === (options.pet ?? null)) {
+      return options;
+    }
+
+    const nextOptions = { ...options };
+    if (pet === null) {
+      delete nextOptions.pet;
+    } else {
+      nextOptions.pet = pet;
+    }
+    return nextOptions;
+  }
+
+  #setLauncherOpen(open: boolean) {
+    this.#launcherOpen = open;
+    if (open) {
+      this.dataset.chatOpen = 'true';
+    } else {
+      delete this.dataset.chatOpen;
+    }
+  }
+
+  #handlePetActivate() {
+    if (this.#getDisplayMode() !== 'pet') {
+      return;
+    }
+
+    this.#setLauncherOpen(true);
+    this.#loaded
+      .then(() => this.focusComposer())
+      .catch(() => undefined);
+  }
+
+  async #handlePetReply(text: string) {
+    await this.sendUserMessage({ text });
+  }
+
+  async #handlePetThreadSummaryActivate(threadId: string) {
+    if (this.#getDisplayMode() === 'pet') {
+      this.#setLauncherOpen(true);
+    }
+
+    await this.setThreadId(threadId);
+    await this.focusComposer();
+  }
+
+  #handleLauncherClose = () => {
+    this.#setLauncherOpen(false);
+  };
 
   #getFrameUrl() {
     if (!this.#frameUrl) {
@@ -281,6 +420,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   };
 
   connectedCallback() {
+    this.#petOverlay.connect();
     const style = document.createElement('style');
     style.textContent = `
       :host {
@@ -288,6 +428,10 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
         position: relative;
         height: 100%;
         width: 100%;
+        overflow: visible;
+      }
+      :host([data-display-mode="pet"]) {
+        display: contents;
       }
       .ck-iframe {
         border: none;
@@ -306,11 +450,114 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
         overflow: hidden;
         opacity: 0;
       }
+      .ck-launcher-close {
+        display: none;
+      }
+      :host([data-display-mode="pet"]) .ck-wrapper {
+        position: fixed;
+        inset: auto 16px 16px auto;
+        width: min(420px, calc(100vw - 32px));
+        height: min(720px, calc(100vh - 32px));
+        max-height: calc(100vh - 32px);
+        overflow: visible;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 18px;
+        background: Canvas;
+        box-shadow:
+          0 24px 80px rgba(15, 23, 42, 0.22),
+          0 0 0 1px rgba(15, 23, 42, 0.04);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(12px) scale(0.98);
+        transition:
+          opacity 160ms ease,
+          transform 160ms ease;
+        z-index: 39;
+      }
+      :host([data-display-mode="pet"][data-chat-open="true"]) .ck-wrapper {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+      }
+      :host([data-display-mode="pet"]) .ck-iframe {
+        border-radius: inherit;
+      }
+      :host([data-display-mode="pet"]) .ck-launcher-close {
+        display: inline-flex;
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        z-index: 2;
+        width: 28px;
+        height: 28px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.96);
+        color: #475569;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0;
+        line-height: 1;
+      }
+      :host([data-display-mode="pet"]) .ck-launcher-close::before,
+      :host([data-display-mode="pet"]) .ck-launcher-close::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 14px;
+        height: 2px;
+        border-radius: 999px;
+        background: currentColor;
+        transform: translate(-50%, -50%) rotate(45deg);
+      }
+      :host([data-display-mode="pet"]) .ck-launcher-close::after {
+        transform: translate(-50%, -50%) rotate(-45deg);
+      }
+      :host([data-display-mode="pet"]) .ck-launcher-close:hover {
+        background: #fff;
+        color: #0f172a;
+      }
       :host([data-color-scheme="dark"]) .ck-iframe {
         color-scheme: dark only;
       }
+      :host([data-color-scheme="dark"][data-display-mode="pet"]) .ck-wrapper {
+        border-color: rgba(148, 163, 184, 0.28);
+        background: #020617;
+        box-shadow:
+          0 24px 80px rgba(0, 0, 0, 0.5),
+          0 0 0 1px rgba(255, 255, 255, 0.06);
+      }
+      :host([data-color-scheme="dark"][data-display-mode="pet"]) .ck-launcher-close {
+        background: rgba(15, 23, 42, 0.88);
+        border-color: rgba(148, 163, 184, 0.32);
+        color: #cbd5e1;
+      }
+      :host([data-color-scheme="dark"][data-display-mode="pet"]) .ck-launcher-close:hover {
+        background: #1e293b;
+        color: #f8fafc;
+      }
       :host([data-loaded="true"]) .ck-wrapper {
         opacity: 1;
+      }
+      :host([data-display-mode="pet"]:not([data-chat-open="true"])) .ck-wrapper {
+        opacity: 0;
+      }
+      @media (max-width: 520px) {
+        :host([data-display-mode="pet"]) .ck-wrapper {
+          inset: auto 8px 8px 8px;
+          width: auto;
+          height: min(680px, calc(100vh - 16px));
+          max-height: calc(100vh - 16px);
+          border-radius: 16px;
+        }
+        :host([data-display-mode="pet"]) .ck-launcher-close {
+          top: -8px;
+          right: 8px;
+        }
       }
     `;
 
@@ -331,6 +578,14 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     wrapper.appendChild(frame);
     this.#wrapper = wrapper;
 
+    const closeButton = document.createElement('button');
+    closeButton.className = 'ck-launcher-close';
+    closeButton.type = 'button';
+    closeButton.setAttribute('aria-label', 'Close chat');
+    closeButton.addEventListener('click', this.#handleLauncherClose);
+    wrapper.appendChild(closeButton);
+    this.#launcherCloseButton = closeButton;
+
     this.#shadow.append(style);
 
     if (import.meta.env.DEV) {
@@ -345,6 +600,19 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       this.#opts?.header?.rightAction?.onClick();
     });
     this.#messenger.on('public_event', ([event, data]) => {
+      if (event === 'log') {
+        const payload = parseThreadSummaryLogPayload(data);
+        if (payload) {
+          this.#petOverlay.setThreadSummary(payload.summary);
+        }
+      } else if (event === 'response.start') {
+        this.#petOverlay.setThreadSummaryStatus('running');
+      } else if (event === 'response.end') {
+        this.#petOverlay.setThreadSummaryStatus('completed');
+      } else if (event === 'response.stop') {
+        this.#petOverlay.setThreadSummaryStatus('completed');
+      }
+
       if (!this.capabilities.events.has(event)) return;
       if (event === 'error' && 'error' in data) {
         // Custom error handling to convert frame-safe errors back into real Errors
@@ -360,6 +628,19 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       }
 
       this.dispatchEvent(new CustomEvent(`chatkit.${event}`, { detail: data }));
+    });
+    this.#messenger.on('pet_state_change', (data) => {
+      const payload = parsePetStateChangePayload(data);
+      if (payload) {
+        this.#petOverlay.setState(payload.state);
+      }
+    });
+    this.#messenger.on('pet_options_change', (data) => {
+      const payload = parsePetOptionsChangePayload(data);
+      if (payload) {
+        this.#framePetOptionsOverride = payload.pet;
+        this.#petOverlay.setOptions(this.#getOverlayPetOptions());
+      }
     });
     this.#messenger.on('unmount', () => {
       // Remove the iframe and wrapper from the shadow DOM if they exist
@@ -400,7 +681,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     const frameURL = new URL(this.#getFrameUrl(), window.location.origin);
     this.#messenger.setTargetOrigin(frameURL.origin);
     frameURL.hash = encodeBase64({
-      options: getInnerOptions(this.#opts),
+      options: getInnerOptions(this.#getFrameOptions(this.#opts)),
       referrer: window.location.origin,
       profile: this.profile,
     } satisfies ChatKitFrameParams);
@@ -414,15 +695,24 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   disconnectedCallback() {
     this.#frame?.removeEventListener('load', this.#handleFrameLoad);
+    this.#launcherCloseButton?.removeEventListener(
+      'click',
+      this.#handleLauncherClose,
+    );
     this.#messenger.disconnect();
+    this.#petOverlay.destroy();
   }
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
     this.#opts = newOptions;
+    this.#petOverlay.setLocale(newOptions.locale);
+    this.#petOverlay.setOptions(this.#getOverlayPetOptions());
     if (this.#initialized) {
       this.#setOptionsDataAttributes(this.#opts);
       this.#loaded.then(() => {
-        this.#messenger.commands.setOptions(getInnerOptions(newOptions));
+        this.#messenger.commands.setOptions(
+          getInnerOptions(this.#getFrameOptions(newOptions)),
+        );
       });
     } else {
       this.#maybeInit();

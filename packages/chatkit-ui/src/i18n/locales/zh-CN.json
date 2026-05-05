@@ -95,6 +95,41 @@
       "toolsets": "工具集",
       "knowledge": "知识库"
     },
+    "slashCommands": {
+      "commands": {
+        "plan": {
+          "label": "计划",
+          "description": "切换计划模式",
+          "argsHint": "[提示词]"
+        },
+        "skills": {
+          "label": "技能",
+          "description": "显示运行时技能"
+        },
+        "plugins": {
+          "label": "插件",
+          "description": "显示运行时插件"
+        },
+        "subagents": {
+          "label": "子智能体",
+          "description": "显示运行时子智能体"
+        },
+        "pet": {
+          "label": "Pet",
+          "description": "切换 Pet",
+          "argsHint": "[on|off|settings]"
+        }
+      },
+      "empty": {
+        "loadingCapabilities": "正在加载运行时能力...",
+        "skills": "没有可添加的技能",
+        "plugins": "没有可添加的插件",
+        "subAgents": "没有可添加的子智能体",
+        "matchingSkills": "没有匹配的可添加技能",
+        "matchingPlugins": "没有匹配的可添加插件",
+        "matchingSubAgents": "没有匹配的可添加子智能体"
+      }
+    },
     "planModeActive": "计划",
     "disablePlanMode": "关闭计划模式",
     "removeReference": "移除引用",
@@ -111,6 +146,61 @@
       "questionProgress": "{{current}} / {{total}}",
       "optionInfo": "{{label}} 的说明",
       "submit": "继续"
+    },
+    "hitl": {
+      "title": "操作审核",
+      "actionProgress": "{{current}} / {{total}}",
+      "previousAction": "上一个操作",
+      "nextAction": "下一个操作",
+      "arguments": "参数",
+      "approve": "批准",
+      "edit": "编辑",
+      "reject": "拒绝",
+      "respond": "回复",
+      "rejectMessage": "给智能体的反馈",
+      "respondMessage": "回复智能体",
+      "rejectPlaceholder": "说明为什么不应执行此操作",
+      "respondPlaceholder": "告诉智能体下一步该怎么做",
+      "invalidJson": "参数必须是有效的 JSON 对象",
+      "responseRequired": "需要填写回复内容",
+      "dismiss": "关闭",
+      "submit": "确认"
+    }
+  },
+  "settings": {
+    "open": "设置",
+    "title": "设置"
+  },
+  "pet": {
+    "settings": {
+      "title": "Pet",
+      "description": "仅保存在当前浏览器。",
+      "enabled": "启用 Pet",
+      "requiredHint": "Pet launcher 模式下必须开启。",
+      "characterType": "形象",
+      "characterTypes": {
+        "builtin": "内置",
+        "atlas": "Spritesheet URL"
+      },
+      "builtin": "内置 Pet",
+      "builtins": {
+        "batmeme": "Batmeme",
+        "boba": "Boba",
+        "bolt": "Bolt",
+        "einstein": "Einstein",
+        "lando-2": "Lando",
+        "mini-sama": "Mini Sama",
+        "miso": "Miso",
+        "noir-webling": "Noir Webling",
+        "nukey": "Nukey",
+        "steve": "Steve"
+      },
+      "atlasUrl": "Spritesheet URL",
+      "scale": "缩放",
+      "draggable": "允许拖拽",
+      "persistPosition": "记住位置",
+      "cancel": "取消",
+      "save": "保存"
     }
   },
   "sheet": {

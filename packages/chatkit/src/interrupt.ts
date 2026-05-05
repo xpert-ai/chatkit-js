@@ -62,7 +62,68 @@ export interface ToolCallRequest {
   toolCalls: ToolCall[];
 }
 
-export type InterruptRequest = ToolCallRequest | ClientToolRequest;
+export const HITL_DECISION_TYPES = [
+  'approve',
+  'edit',
+  'reject',
+  'respond',
+] as const;
+
+export type HITLDecisionType = (typeof HITL_DECISION_TYPES)[number];
+
+export interface HITLAction {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface HITLActionRequest extends HITLAction {
+  description?: string;
+}
+
+export interface HITLReviewConfig {
+  actionName: string;
+  allowedDecisions: HITLDecisionType[];
+  argsSchema?: Record<string, unknown>;
+}
+
+export interface HITLRequest {
+  actionRequests: HITLActionRequest[];
+  reviewConfigs: HITLReviewConfig[];
+}
+
+export interface HITLApproveDecision {
+  type: 'approve';
+}
+
+export interface HITLEditDecision {
+  type: 'edit';
+  editedAction: HITLAction;
+}
+
+export interface HITLRejectDecision {
+  type: 'reject';
+  message?: string;
+}
+
+export interface HITLRespondDecision {
+  type: 'respond';
+  message: string;
+}
+
+export type HITLDecision =
+  | HITLApproveDecision
+  | HITLEditDecision
+  | HITLRejectDecision
+  | HITLRespondDecision;
+
+export interface HITLResponse {
+  decisions: HITLDecision[];
+}
+
+export type InterruptRequest =
+  | ToolCallRequest
+  | ClientToolRequest
+  | HITLRequest;
 
 export interface LangGraphInterrupt<TValue = unknown> {
   id: string;
@@ -107,11 +168,22 @@ export type ToolCallInterruptPayload<
   TRequest extends ToolCallRequest = ToolCallRequest,
 > = LangGraphInterruptPayload<TRequest>;
 
+export type HITLInterrupt<TRequest extends HITLRequest = HITLRequest> =
+  LangGraphInterrupt<TRequest>;
+
+export type HITLInterruptTask<TRequest extends HITLRequest = HITLRequest> =
+  LangGraphInterruptTask<TRequest>;
+
+export type HITLInterruptPayload<TRequest extends HITLRequest = HITLRequest> =
+  LangGraphInterruptPayload<TRequest>;
+
 /**
  * When an interrupt occurs during task execution, the system generates an InterruptPayload.
  *
  * Ordinary tool-call interrupts use `toolCalls`; ChatKit client-tool middleware
  * uses `clientToolCalls` so the UI can route those calls to the client.
+ * Human-in-the-loop interrupts use `actionRequests` and `reviewConfigs` so
+ * ChatKit can collect reviewer decisions and resume with `{ decisions }`.
 ```json
 {
   "type": "event",
@@ -163,6 +235,133 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function readRecordField(
+  value: Record<string, unknown>,
+  ...keys: string[]
+): Record<string, unknown> | null {
+  for (const key of keys) {
+    const field = value[key];
+    if (isRecord(field)) return field;
+  }
+
+  return null;
+}
+
+function readArrayField(value: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const field = value[key];
+    if (Array.isArray(field)) return field;
+  }
+
+  return null;
+}
+
+function readStringField(
+  value: Record<string, unknown>,
+  ...keys: string[]
+): string | null {
+  for (const key of keys) {
+    const field = value[key];
+    if (typeof field === 'string' && field.trim()) return field;
+  }
+
+  return null;
+}
+
+export function isHITLDecisionType(
+  value: unknown,
+): value is HITLDecisionType {
+  return (
+    typeof value === 'string' &&
+    (HITL_DECISION_TYPES as readonly string[]).includes(value)
+  );
+}
+
+function normalizeHITLActionRequest(
+  value: unknown,
+): HITLActionRequest | null {
+  if (!isRecord(value)) return null;
+
+  const name = readStringField(value, 'name');
+  const args = readRecordField(value, 'args', 'arguments');
+  if (!name || !args) return null;
+
+  const description =
+    typeof value.description === 'string' ? value.description : undefined;
+
+  return {
+    name,
+    args,
+    ...(description !== undefined ? { description } : {}),
+  };
+}
+
+function normalizeHITLReviewConfig(
+  value: unknown,
+): HITLReviewConfig | null {
+  if (!isRecord(value)) return null;
+
+  const actionName = readStringField(value, 'actionName', 'action_name');
+  const allowedDecisions = readArrayField(
+    value,
+    'allowedDecisions',
+    'allowed_decisions',
+  );
+  if (!actionName || !allowedDecisions) return null;
+
+  const normalizedDecisions = allowedDecisions.filter(isHITLDecisionType);
+  if (normalizedDecisions.length !== allowedDecisions.length) return null;
+
+  const argsSchema = readRecordField(value, 'argsSchema', 'args_schema');
+
+  return {
+    actionName,
+    allowedDecisions: normalizedDecisions,
+    ...(argsSchema ? { argsSchema } : {}),
+  };
+}
+
+export function normalizeHITLRequest(value: unknown): HITLRequest | null {
+  if (!isRecord(value)) return null;
+
+  const actionRequests = readArrayField(
+    value,
+    'actionRequests',
+    'action_requests',
+  );
+  const reviewConfigs = readArrayField(
+    value,
+    'reviewConfigs',
+    'review_configs',
+  );
+  if (
+    !actionRequests ||
+    !reviewConfigs ||
+    actionRequests.length === 0 ||
+    reviewConfigs.length === 0
+  ) {
+    return null;
+  }
+
+  const normalizedActionRequests = actionRequests.map(
+    normalizeHITLActionRequest,
+  );
+  const normalizedReviewConfigs = reviewConfigs.map(
+    normalizeHITLReviewConfig,
+  );
+  if (
+    normalizedActionRequests.some((request) => request === null) ||
+    normalizedReviewConfigs.some((config) => config === null)
+  ) {
+    return null;
+  }
+
+  return {
+    actionRequests: normalizedActionRequests as HITLActionRequest[],
+    reviewConfigs: normalizedReviewConfigs as HITLReviewConfig[],
+  };
+}
+
 export function isClientToolRequest(
   value: unknown,
 ): value is ClientToolRequest {
@@ -173,8 +372,24 @@ export function isToolCallRequest(value: unknown): value is ToolCallRequest {
   return isRecord(value) && Array.isArray(value.toolCalls);
 }
 
+export function isHITLRequest(value: unknown): value is HITLRequest {
+  if (!isRecord(value)) return false;
+  if (
+    !Array.isArray(value.actionRequests) ||
+    !Array.isArray(value.reviewConfigs)
+  ) {
+    return false;
+  }
+
+  return normalizeHITLRequest(value) !== null;
+}
+
 export function isInterruptRequest(value: unknown): value is InterruptRequest {
-  return isToolCallRequest(value) || isClientToolRequest(value);
+  return (
+    isToolCallRequest(value) ||
+    isClientToolRequest(value) ||
+    isHITLRequest(value)
+  );
 }
 
 export function isLangGraphInterrupt(
@@ -262,5 +477,25 @@ export function isToolCallInterruptPayload(
   return (
     isLangGraphInterruptPayload(value) &&
     value.tasks.every(isToolCallInterruptTask)
+  );
+}
+
+export function isHITLInterrupt(value: unknown): value is HITLInterrupt {
+  return isLangGraphInterrupt(value) && isHITLRequest(value.value);
+}
+
+export function isHITLInterruptTask(
+  value: unknown,
+): value is HITLInterruptTask {
+  return (
+    isLangGraphInterruptTask(value) && value.interrupts.every(isHITLInterrupt)
+  );
+}
+
+export function isHITLInterruptPayload(
+  value: unknown,
+): value is HITLInterruptPayload {
+  return (
+    isLangGraphInterruptPayload(value) && value.tasks.every(isHITLInterruptTask)
   );
 }
