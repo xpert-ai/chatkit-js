@@ -6,10 +6,14 @@ export default defineConfig({
   plugins: [dts({ rollupTypes: true })],
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        constants: resolve(__dirname, 'src/constants.ts'),
+      },
       name: 'XpertChatkit',
-      fileName: 'index',
-      formats: ['es'],
+      fileName: (format, entryName) =>
+        format === 'cjs' ? `${entryName}.cjs` : `${entryName}.js`,
+      formats: ['es', 'cjs'],
     },
     rollupOptions: {
       external: (id) =>
