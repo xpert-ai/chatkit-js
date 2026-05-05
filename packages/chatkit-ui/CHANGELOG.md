@@ -1,28 +1,29 @@
 # @xpert-ai/chatkit-ui
 
-## 0.3.0
+## 0.2.5
 
-### Minor Changes
+### Patch Changes
 
-- pet & plugins & skills & prompts
+- 8bf0360: Show active sandbox services above the composer and refresh them from runtime tool messages.
+
+## 0.2.4
 
 ### Patch Changes
 
 - 5c0cab1: sub-agents selection
-- f594038: human in the loop.
-- 361c358: skills & middlewares selection
-- 8bf0360: Show active sandbox services above the composer and refresh them from runtime tool messages.
-- 16e8f37: Load runtime capabilities and delete uploaded files through the Xpert SDK client.
 - 96aac52: Add ChatKit runtime sub-agent selection.
-- 169d5d5: slash commands
 - Updated dependencies [5c0cab1]
-- Updated dependencies [f594038]
-- Updated dependencies [361c358]
-- Updated dependencies
 - Updated dependencies [96aac52]
-- Updated dependencies [169d5d5]
-  - @xpert-ai/chatkit-types@0.3.0
-  - @xpert-ai/chatkit-web-shared@0.2.0
+  - @xpert-ai/chatkit-types@0.2.3
+
+## 0.2.3
+
+### Patch Changes
+
+- 361c358: skills & middlewares selection
+- 16e8f37: Load runtime capabilities and delete uploaded files through the Xpert SDK client.
+- Updated dependencies [361c358]
+  - @xpert-ai/chatkit-types@0.2.2
 
 ## 0.2.2
 
