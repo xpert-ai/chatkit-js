@@ -39,8 +39,19 @@ export function normalizeClientSecretResult(
     const organizationId = normalizeOptionalString(
       (result as Partial<ChatKitClientSecretObject>).organizationId,
     );
+    const xpertId = normalizeOptionalString(
+      (result as Partial<ChatKitClientSecretObject>).xpertId,
+    );
+    const assistantId = normalizeOptionalString(
+      (result as Partial<ChatKitClientSecretObject>).assistantId,
+    );
 
-    return organizationId ? { secret, organizationId } : { secret };
+    return {
+      secret,
+      ...(organizationId ? { organizationId } : {}),
+      ...(xpertId ? { xpertId } : {}),
+      ...(assistantId ? { assistantId } : {}),
+    };
   }
 
   throw new Error('[chatkit-ui] Parent returned an invalid client secret.');

@@ -50,6 +50,7 @@ const initialOptions = decodeOptionsFromUrl();
 const AppContainer = () => {
   const [clientSecret, setClientSecret] = React.useState(initialClientSecret);
   const [organizationId, setOrganizationId] = React.useState<string | undefined>();
+  const [resolvedXpertId, setResolvedXpertId] = React.useState<string | undefined>();
   const [options, setOptions] = React.useState<ChatKitOptions | null>(initialOptions);
   const [isClientSecretInitializing, setIsClientSecretInitializing] = React.useState(() => {
     if (typeof window === 'undefined') return false;
@@ -116,6 +117,7 @@ const AppContainer = () => {
         );
         setClientSecret(resolved.secret);
         setOrganizationId(resolved.organizationId);
+        setResolvedXpertId((current) => resolved.xpertId ?? resolved.assistantId ?? current);
       })
       .catch((error) => {
         if (!isActive) return;
@@ -137,6 +139,7 @@ const AppContainer = () => {
     <App
       clientSecret={clientSecret}
       organizationId={organizationId}
+      resolvedXpertId={resolvedXpertId}
       options={options}
       isClientSecretInitializing={isClientSecretInitializing}
     />

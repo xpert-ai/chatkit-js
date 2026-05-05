@@ -11,12 +11,14 @@ export type AppProps = {
   options?: ChatKitOptions | null;
   clientSecret: string;
   organizationId?: string;
+  resolvedXpertId?: string;
   isClientSecretInitializing?: boolean;
 };
 
 export function App({
   clientSecret,
   organizationId,
+  resolvedXpertId,
   options,
   isClientSecretInitializing = false,
 }: AppProps) {
@@ -44,7 +46,7 @@ export function App({
             apiKey={apiKey}
             organizationId={organizationId}
             apiUrl={options?.api.apiUrl || apiUrl}
-            xpertId={options?.api.xpertId || xpertId}
+            xpertId={options?.api.xpertId || resolvedXpertId || xpertId}
             initialThread={options?.initialThread ?? null}
           >
             <Chat

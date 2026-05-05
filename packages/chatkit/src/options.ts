@@ -375,6 +375,8 @@ type HostedApiConfig = {
 export type ChatKitClientSecretObject = {
   secret: string;
   organizationId?: string;
+  xpertId?: string;
+  assistantId?: string;
 };
 
 export type ChatKitClientSecretResult = string | ChatKitClientSecretObject;
