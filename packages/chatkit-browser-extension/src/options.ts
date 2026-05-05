@@ -30,6 +30,7 @@ type FormFields = {
   sidePanel: HTMLInputElement;
   pageOverlay: HTMLInputElement;
   autoPageOverlay: HTMLInputElement;
+  hostAutomation: HTMLInputElement;
   overlayWidth: HTMLInputElement;
   overlayHeight: HTMLInputElement;
   overlayPosition: HTMLSelectElement;
@@ -99,6 +100,7 @@ function collectFields(form: HTMLFormElement): FormFields {
     sidePanel: getField<HTMLInputElement>(form, 'sidePanel'),
     pageOverlay: getField<HTMLInputElement>(form, 'pageOverlay'),
     autoPageOverlay: getField<HTMLInputElement>(form, 'autoPageOverlay'),
+    hostAutomation: getField<HTMLInputElement>(form, 'hostAutomation'),
     overlayWidth: getField<HTMLInputElement>(form, 'overlayWidth'),
     overlayHeight: getField<HTMLInputElement>(form, 'overlayHeight'),
     overlayPosition: getField<HTMLSelectElement>(form, 'overlayPosition'),
@@ -125,6 +127,9 @@ function readForm(fields: FormFields): ChatKitExtensionConfig {
       width: fields.overlayWidth.value,
       height: fields.overlayHeight.value,
       position: fields.overlayPosition.value,
+    },
+    hostAutomation: {
+      enabled: fields.hostAutomation.checked,
     },
   });
 }
@@ -240,6 +245,15 @@ function renderOptions(config: ChatKitExtensionConfig) {
             <label for="overlayPosition">${i18n.t('position')}</label>
             <select id="overlayPosition" name="overlayPosition">${createPositionOptions(config.overlay.position, i18n)}</select>
           </div>
+        </div>
+      </section>
+      <section class="ck-section">
+        <h2 class="ck-section-title">${i18n.t('hostAutomation')}</h2>
+        <div class="ck-checkbox-grid">
+          <label class="ck-checkbox-label">
+            <input name="hostAutomation" type="checkbox"${config.hostAutomation.enabled ? ' checked' : ''} />
+            ${i18n.t('enableHostAutomation')}
+          </label>
         </div>
       </section>
       <section class="ck-section">

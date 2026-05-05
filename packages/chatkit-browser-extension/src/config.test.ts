@@ -27,6 +27,7 @@ describe('extension config', () => {
           autoPageOverlay: true,
         },
         overlay: { width: 1200, height: 20, position: 'top-left' },
+        hostAutomation: { enabled: false },
       }),
     ).toMatchObject({
       frameUrl: 'https://chat.example/frame',
@@ -42,6 +43,7 @@ describe('extension config', () => {
         autoPageOverlay: true,
       },
       overlay: { width: 900, height: 360, position: 'top-left' },
+      hostAutomation: { enabled: false },
     });
   });
 

@@ -26,6 +26,9 @@ export type ChatKitExtensionConfig = {
     height: number;
     position: OverlayPosition;
   };
+  hostAutomation: {
+    enabled: boolean;
+  };
 };
 
 export type ConfigValidationIssue = {

@@ -65,4 +65,33 @@ describe('createChatKitOptions', () => {
     expect(options.displayMode).toBe('chat');
     expect(options.pet).toBeUndefined();
   });
+
+  it('passes the host automation client tool handler when enabled', () => {
+    const onClientTool = async () => ({ content: '{}' });
+    const options = createChatKitOptions(
+      normalizeConfig({
+        frameUrl: 'https://chat.example/frame',
+        apiUrl: 'https://api.example/api/ai',
+        clientSecret: 'secret',
+      }),
+      { onClientTool },
+    );
+
+    expect(options.onClientTool).toBe(onClientTool);
+  });
+
+  it('omits the host automation client tool handler when disabled', () => {
+    const onClientTool = async () => ({ content: '{}' });
+    const options = createChatKitOptions(
+      normalizeConfig({
+        frameUrl: 'https://chat.example/frame',
+        apiUrl: 'https://api.example/api/ai',
+        clientSecret: 'secret',
+        hostAutomation: { enabled: false },
+      }),
+      { onClientTool },
+    );
+
+    expect(options.onClientTool).toBeUndefined();
+  });
 });

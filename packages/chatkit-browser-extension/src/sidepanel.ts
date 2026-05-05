@@ -17,6 +17,7 @@ async function main() {
   const config = await readConfig(platform.storage);
   const host = mountChatKitHost(appRoot, config, 'sidePanel', {
     openOptionsPage: platform.openOptionsPage,
+    onClientTool: platform.runHostAutomationForActiveTab,
   });
 
   platform.onStorageChanged?.addListener((changes, areaName) => {

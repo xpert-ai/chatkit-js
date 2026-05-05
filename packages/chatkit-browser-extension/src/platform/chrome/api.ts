@@ -1,5 +1,15 @@
+import type {
+  HostPageAutomationClientToolCall,
+  HostPageAutomationClientToolHandler,
+} from '@xpert-ai/chatkit-host-automation';
+import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+
 import { validateConfig } from '../../config';
-import { OPEN_OVERLAY_MESSAGE, TOGGLE_OVERLAY_MESSAGE } from '../../messages';
+import {
+  OPEN_OVERLAY_MESSAGE,
+  RUN_HOST_AUTOMATION_MESSAGE,
+  TOGGLE_OVERLAY_MESSAGE,
+} from '../../messages';
 import { readConfig } from '../../storage';
 import type { ChatKitExtensionConfig } from '../../types';
 
@@ -114,30 +124,49 @@ async function queryActiveTab(api: ChromeApi): Promise<ActiveChromeTab> {
   return { ...tab, id: tab.id };
 }
 
-async function sendOverlayMessage(
-  api: ChromeApi,
-  tabId: number,
-  type: typeof OPEN_OVERLAY_MESSAGE | typeof TOGGLE_OVERLAY_MESSAGE,
-) {
-  return api.tabs.sendMessage(tabId, {
-    type,
-  });
-}
-
 async function sendOverlayMessageWithInjection(
   api: ChromeApi,
   tabId: number,
   type: typeof OPEN_OVERLAY_MESSAGE | typeof TOGGLE_OVERLAY_MESSAGE,
 ) {
+  return sendMessageWithInjection(api, tabId, { type });
+}
+
+async function sendMessageWithInjection(
+  api: ChromeApi,
+  tabId: number,
+  message: Record<string, unknown>,
+) {
   try {
-    return await sendOverlayMessage(api, tabId, type);
+    return await api.tabs.sendMessage(tabId, message);
   } catch {
     await api.scripting.executeScript({
       target: { tabId },
       files: [CONTENT_SCRIPT_FILE],
     });
-    return sendOverlayMessage(api, tabId, type);
+    return api.tabs.sendMessage(tabId, message);
   }
+}
+
+function unwrapHostAutomationResponse(value: unknown): ClientToolMessageInput {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Invalid host automation response.');
+  }
+
+  const response = value as {
+    ok?: unknown;
+    response?: unknown;
+    error?: unknown;
+  };
+  if (response.ok !== true) {
+    throw new Error(
+      typeof response.error === 'string'
+        ? response.error
+        : 'Host automation failed.',
+    );
+  }
+
+  return response.response as ClientToolMessageInput;
 }
 
 export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
@@ -179,6 +208,25 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
     return true;
   };
 
+  const runHostAutomationForActiveTab: HostPageAutomationClientToolHandler =
+    async (call: HostPageAutomationClientToolCall) => {
+      const config = await readConfig(api.storage.local);
+      if (!config.hostAutomation.enabled) {
+        throw new Error('Host page automation is disabled.');
+      }
+
+      const tab = await queryActiveTab(api);
+      if (!isInjectableTabUrl(tab.url)) {
+        throw new Error('Host page automation can only run on HTTP(S) pages.');
+      }
+
+      const response = await sendMessageWithInjection(api, tab.id, {
+        type: RUN_HOST_AUTOMATION_MESSAGE,
+        call,
+      });
+      return unwrapHostAutomationResponse(response);
+    };
+
   const restrictStorageAccess = async () => {
     if (!api.storage.local.setAccessLevel) {
       return;
@@ -216,6 +264,7 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
     openSidePanelForActiveTab,
     togglePageOverlayForActiveTab,
     openPageOverlayForTab,
+    runHostAutomationForActiveTab,
     restrictStorageAccess,
     initializeBackground,
   };

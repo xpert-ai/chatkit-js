@@ -1,5 +1,23 @@
+import {
+  createHostPageAutomationClientToolHandler,
+  type HostPageAutomationClientToolCall,
+} from '@xpert-ai/chatkit-host-automation';
+import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+
+import {
+  EXTENSION_MESSAGE_SOURCE,
+  HOST_AUTOMATION_REQUEST_MESSAGE,
+  HOST_AUTOMATION_RESPONSE_MESSAGE,
+  OPEN_OVERLAY_MESSAGE,
+  OVERLAY_HIT_REGIONS_MESSAGE,
+  OVERLAY_STYLE_MESSAGE,
+  RUN_HOST_AUTOMATION_MESSAGE,
+  TOGGLE_OVERLAY_MESSAGE,
+} from './messages';
+
 type ChromeRuntimeMessage = {
   type?: unknown;
+  call?: unknown;
 };
 
 type OverlayStyleMessage = {
@@ -39,6 +57,13 @@ type OverlayHitRegionsMessage = {
   };
 };
 
+type ExtensionWindowMessage = {
+  source?: unknown;
+  type?: unknown;
+  nonce?: unknown;
+  call?: unknown;
+};
+
 declare const chrome: {
   runtime: {
     getURL: (path: string) => string;
@@ -55,12 +80,10 @@ declare const chrome: {
 };
 
 const FRAME_ID = 'xpertai-chatkit-extension-overlay-frame';
-const OPEN_OVERLAY_MESSAGE = 'xpertai.chatkit.openOverlay';
-const TOGGLE_OVERLAY_MESSAGE = 'xpertai.chatkit.toggleOverlay';
-const OVERLAY_STYLE_MESSAGE = 'xpertai.chatkit.overlayStyle';
-const OVERLAY_HIT_REGIONS_MESSAGE = 'xpertai.chatkit.overlayHitRegions';
-const EXTENSION_MESSAGE_SOURCE = 'xpertai.chatkit.browserExtension';
 const HIT_REGION_PADDING = 8;
+const hostAutomationHandler = createHostPageAutomationClientToolHandler({
+  allowNavigation: true,
+});
 
 let currentDisplayMode: unknown = 'pet';
 let hitRegions: NormalizedHitRegion[] = [];
@@ -79,6 +102,35 @@ function isOverlayHitRegionsMessage(
   value: unknown,
 ): value is OverlayHitRegionsMessage {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isExtensionWindowMessage(
+  value: unknown,
+): value is ExtensionWindowMessage {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isHostAutomationCall(
+  value: unknown,
+): value is HostPageAutomationClientToolCall {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const call = value as HostPageAutomationClientToolCall;
+  const hasParams =
+    typeof call.params === 'undefined' ||
+    (typeof call.params === 'object' &&
+      call.params !== null &&
+      !Array.isArray(call.params));
+
+  return typeof call.name === 'string' && hasParams;
+}
+
+async function runHostAutomation(
+  call: HostPageAutomationClientToolCall,
+): Promise<ClientToolMessageInput> {
+  return hostAutomationHandler(call);
 }
 
 function normalizeHitRegion(value: unknown): NormalizedHitRegion | null {
@@ -242,15 +294,53 @@ window.addEventListener('message', (event) => {
 
   const message = event.data;
   if (
-    !isOverlayStyleMessage(message) ||
+    !isExtensionWindowMessage(message) ||
     message.source !== EXTENSION_MESSAGE_SOURCE
   ) {
     return;
   }
 
+  if (message.type === HOST_AUTOMATION_REQUEST_MESSAGE) {
+    const nonce = typeof message.nonce === 'string' ? message.nonce : '';
+    const target = frame.contentWindow;
+    const postResponse = (payload: {
+      response?: ClientToolMessageInput;
+      error?: string;
+    }) => {
+      target?.postMessage(
+        {
+          source: EXTENSION_MESSAGE_SOURCE,
+          type: HOST_AUTOMATION_RESPONSE_MESSAGE,
+          nonce,
+          ...payload,
+        },
+        '*',
+      );
+    };
+
+    if (!nonce || !isHostAutomationCall(message.call)) {
+      postResponse({ error: 'Invalid host automation request.' });
+      return;
+    }
+
+    void runHostAutomation(message.call).then(
+      (response) => postResponse({ response }),
+      (error) =>
+        postResponse({
+          error:
+            error instanceof Error ? error.message : 'Host automation failed.',
+        }),
+    );
+    return;
+  }
+
   if (message.type === OVERLAY_STYLE_MESSAGE) {
-    currentDisplayMode = message.displayMode;
-    applyOverlayStyle(frame, message.overlay, message.displayMode);
+    if (!isOverlayStyleMessage(message)) {
+      return;
+    }
+    const styleMessage = message as OverlayStyleMessage;
+    currentDisplayMode = styleMessage.displayMode;
+    applyOverlayStyle(frame, styleMessage.overlay, styleMessage.displayMode);
     return;
   }
 
@@ -287,6 +377,24 @@ window.addEventListener(
 );
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === RUN_HOST_AUTOMATION_MESSAGE) {
+    if (!isHostAutomationCall(message.call)) {
+      sendResponse({ ok: false, error: 'Invalid host automation request.' });
+      return false;
+    }
+
+    void runHostAutomation(message.call).then(
+      (response) => sendResponse({ ok: true, response }),
+      (error) =>
+        sendResponse({
+          ok: false,
+          error:
+            error instanceof Error ? error.message : 'Host automation failed.',
+        }),
+    );
+    return true;
+  }
+
   if (
     message.type !== TOGGLE_OVERLAY_MESSAGE &&
     message.type !== OPEN_OVERLAY_MESSAGE

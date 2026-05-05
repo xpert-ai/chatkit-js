@@ -6,7 +6,11 @@ import {
   shouldAutoOpenPagePet,
   type ChromeApi,
 } from './api';
-import { OPEN_OVERLAY_MESSAGE, TOGGLE_OVERLAY_MESSAGE } from '../../messages';
+import {
+  OPEN_OVERLAY_MESSAGE,
+  RUN_HOST_AUTOMATION_MESSAGE,
+  TOGGLE_OVERLAY_MESSAGE,
+} from '../../messages';
 import { STORAGE_KEY, normalizeConfig } from '../../config';
 
 function createChromeApi(overrides: Partial<ChromeApi> = {}): ChromeApi {
@@ -155,6 +159,67 @@ describe('chrome extension platform', () => {
       createChromeExtensionPlatform(api).togglePageOverlayForActiveTab(),
     ).rejects.toThrow('HTTP(S) pages');
     expect(api.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  it('routes host automation calls to the active tab content script', async () => {
+    const api = createChromeApi();
+    api.storage.local.get = vi.fn(async () => ({
+      [STORAGE_KEY]: {
+        frameUrl: 'https://chat.example/frame',
+        apiUrl: 'https://api.example/api/ai',
+        clientSecret: 'secret',
+        hostAutomation: { enabled: true },
+      },
+    }));
+    api.tabs.sendMessage = vi.fn(async () => ({
+      ok: true,
+      response: {
+        tool_call_id: 'call-1',
+        name: 'host_page_snapshot',
+        status: 'success',
+        content: '{}',
+      },
+    }));
+
+    await expect(
+      createChromeExtensionPlatform(api).runHostAutomationForActiveTab({
+        name: 'host_page_snapshot',
+        params: {},
+        id: 'call-1',
+      }),
+    ).resolves.toMatchObject({
+      tool_call_id: 'call-1',
+      status: 'success',
+    });
+
+    expect(api.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: RUN_HOST_AUTOMATION_MESSAGE,
+      call: {
+        name: 'host_page_snapshot',
+        params: {},
+        id: 'call-1',
+      },
+    });
+  });
+
+  it('blocks host automation when disabled in extension config', async () => {
+    const api = createChromeApi();
+    api.storage.local.get = vi.fn(async () => ({
+      [STORAGE_KEY]: {
+        frameUrl: 'https://chat.example/frame',
+        apiUrl: 'https://api.example/api/ai',
+        clientSecret: 'secret',
+        hostAutomation: { enabled: false },
+      },
+    }));
+
+    await expect(
+      createChromeExtensionPlatform(api).runHostAutomationForActiveTab({
+        name: 'host_page_snapshot',
+        params: {},
+      }),
+    ).rejects.toThrow('disabled');
+    expect(api.tabs.sendMessage).not.toHaveBeenCalled();
   });
 
   it('restricts storage access when Chrome supports it', async () => {

@@ -1,6 +1,6 @@
 import '@xpert-ai/chatkit-web-component';
 
-import type { XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
 
 import { createChatKitOptions } from './chatkit-options';
 import { validateConfig } from './config';
@@ -11,6 +11,7 @@ type HostSurface = 'sidePanel' | 'pageOverlay';
 
 type HostActions = {
   openOptionsPage: () => Promise<void> | void;
+  onClientTool?: ChatKitOptions['onClientTool'];
 };
 
 type HostController = {
@@ -124,6 +125,7 @@ export function mountChatKitHost(
       element.setOptions(
         createChatKitOptions(config, {
           displayMode: resolveSurfaceDisplayMode(surface, config),
+          onClientTool: actions.onClientTool,
         }),
       );
     };

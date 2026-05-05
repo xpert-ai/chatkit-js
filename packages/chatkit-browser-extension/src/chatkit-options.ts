@@ -5,6 +5,7 @@ import type { ChatKitDisplayMode } from './types';
 
 type ChatKitOptionsBuildOptions = {
   displayMode?: ChatKitDisplayMode;
+  onClientTool?: ChatKitOptions['onClientTool'];
 };
 
 export function createChatKitOptions(
@@ -30,5 +31,8 @@ export function createChatKitOptions(
     displayMode,
     pet: displayMode === 'pet' ? true : undefined,
     theme: config.theme,
+    onClientTool: config.hostAutomation.enabled
+      ? options.onClientTool
+      : undefined,
   };
 }

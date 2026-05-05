@@ -24,6 +24,10 @@ type OverlayInput = {
   position?: unknown;
 };
 
+type HostAutomationInput = {
+  enabled?: unknown;
+};
+
 type ConfigInput = {
   frameUrl?: unknown;
   apiUrl?: unknown;
@@ -34,6 +38,7 @@ type ConfigInput = {
   theme?: ThemeInput | null;
   surfaces?: SurfacesInput | null;
   overlay?: OverlayInput | null;
+  hostAutomation?: HostAutomationInput | null;
 };
 
 export const STORAGE_KEY = 'chatkitExtensionConfig';
@@ -55,6 +60,9 @@ export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
     width: 420,
     height: 720,
     position: 'bottom-right',
+  },
+  hostAutomation: {
+    enabled: true,
   },
 };
 
@@ -86,6 +94,10 @@ function isSurfacesInput(value: unknown): value is SurfacesInput {
 }
 
 function isOverlayInput(value: unknown): value is OverlayInput {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isHostAutomationInput(value: unknown): value is HostAutomationInput {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -173,6 +185,9 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
     ? source.surfaces
     : {};
   const sourceOverlay = isOverlayInput(source.overlay) ? source.overlay : {};
+  const sourceHostAutomation = isHostAutomationInput(source.hostAutomation)
+    ? source.hostAutomation
+    : {};
   const colorScheme = normalizeColorScheme(sourceTheme.colorScheme);
 
   return {
@@ -214,6 +229,12 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
         1200,
       ),
       position: normalizeOverlayPosition(sourceOverlay.position),
+    },
+    hostAutomation: {
+      enabled: normalizeBoolean(
+        sourceHostAutomation.enabled,
+        DEFAULT_EXTENSION_CONFIG.hostAutomation.enabled,
+      ),
     },
   };
 }

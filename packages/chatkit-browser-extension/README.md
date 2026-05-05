@@ -39,6 +39,7 @@ Open the extension options page and set:
 - enabled surfaces
 - automatic page pet launch on new HTTP(S) tabs
 - page overlay size and position
+- host page automation for agent client tools
 
 The first version uses manual credentials. The extension does not call Xpert
 APIs directly and does not use native `fetch` to reach the platform. Instead,
@@ -60,6 +61,7 @@ building and confirm the local frame server is not sending `X-Frame-Options` or
 
 ```bash
 pnpm --filter @xpert-ai/chatkit-browser-extension type-check
+pnpm --filter @xpert-ai/chatkit-host-automation test
 pnpm --filter @xpert-ai/chatkit-browser-extension test
 pnpm --filter @xpert-ai/chatkit-browser-extension build
 ```
