@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-react",
-  "version": "0.1.2",
+  "version": "0.3.0",
   "description": "React bindings for Xpert Chatkit",
   "type": "module",
   "sideEffects": false,

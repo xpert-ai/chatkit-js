@@ -15,11 +15,39 @@ const THEME_RADIUS_PRESET_CLASS: Record<ThemeRadiusPreset, string> = {
   sharp: 'rounded-none',
 };
 
+const THEME_PANEL_RADIUS_PRESET_CLASS: Record<ThemeRadiusPreset, string> = {
+  pill: 'rounded-3xl',
+  round: 'rounded-xl',
+  soft: 'rounded-lg',
+  sharp: 'rounded-none',
+};
+
+const THEME_MENU_ITEM_RADIUS_PRESET_CLASS: Record<ThemeRadiusPreset, string> = {
+  pill: 'rounded-xl',
+  round: 'rounded-lg',
+  soft: 'rounded-md',
+  sharp: 'rounded-none',
+};
+
 export function getRoundedClass(
   themeRadius: ThemeRadiusPreset | undefined,
   fallback = 'rounded-full',
 ) {
   return themeRadius ? THEME_RADIUS_PRESET_CLASS[themeRadius] : fallback;
+}
+
+export function getPanelRoundedClass(
+  themeRadius: ThemeRadiusPreset | undefined,
+  fallback: ThemeRadiusPreset = 'soft',
+) {
+  return THEME_PANEL_RADIUS_PRESET_CLASS[themeRadius ?? fallback];
+}
+
+export function getMenuItemRoundedClass(
+  themeRadius: ThemeRadiusPreset | undefined,
+  fallback: ThemeRadiusPreset = 'soft',
+) {
+  return THEME_MENU_ITEM_RADIUS_PRESET_CLASS[themeRadius ?? fallback];
 }
 
 export function createMessageId() {

@@ -70,6 +70,11 @@ export type CommandExecutionEffect =
   | { type: 'none' }
   | { type: 'toggle_plan'; clearComposer?: boolean }
   | {
+      type: 'pet';
+      mode: 'toggle' | 'on' | 'off' | 'settings';
+      clearComposer?: boolean;
+    }
+  | {
       type: 'submit_prompt';
       inputText: string;
       displayText: string;

@@ -52,6 +52,19 @@ export const BUILTIN_SLASH_COMMANDS: ChatKitSlashCommand[] = [
       },
     },
   },
+  {
+    name: 'pet',
+    label: 'Pet',
+    description: 'Toggle pet companion',
+    category: 'session',
+    argsHint: '[on|off|settings]',
+    action: {
+      type: 'client_action',
+      action: {
+        type: 'chatkit.pet.toggle',
+      },
+    },
+  },
 ];
 
 export const BUILTIN_SLASH_COMMAND_NAMES = new Set(

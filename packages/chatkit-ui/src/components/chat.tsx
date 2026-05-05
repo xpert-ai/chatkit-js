@@ -7,6 +7,7 @@ import {
   Pencil,
   Quote,
   RefreshCw,
+  Settings,
   X,
 } from 'lucide-react';
 
@@ -25,7 +26,13 @@ import type {
   ToolOption,
 } from '@xpert-ai/chatkit-types';
 
-import { cn, createMessageId, getRoundedClass } from '../lib/utils';
+import {
+  cn,
+  createMessageId,
+  getMenuItemRoundedClass,
+  getPanelRoundedClass,
+  getRoundedClass,
+} from '../lib/utils';
 import {
   getAssistantStreamingStatus,
   hasRenderableAssistantMessage,
@@ -42,6 +49,8 @@ import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
 import { HITLApprovalPanel } from './composer/hitl-approval-panel';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
+import { useConversationSummaryEvent } from './chat/useConversationSummaryEvent';
+import { usePetAutoState } from './chat/usePetAutoState';
 import { useSlashCommands } from './chat/useSlashCommands';
 import {
   AssistantMessage,
@@ -79,6 +88,17 @@ import {
 } from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
+import { PetBridge } from './pet/PetBridge';
+import { SettingsSheet } from './settings/SettingsSheet';
+import {
+  buildPetOptionsFromLocalSettings,
+  derivePetLocalSettings,
+  isPetEnabled,
+  readPetLocalSettings,
+  writePetLocalSettings,
+  type PetCommandMode,
+  type PetLocalSettings,
+} from './pet/pet-local-settings';
 import {
   createEmptyRuntimeCapabilitiesSelection,
   createDefaultRuntimeCapabilitiesSelection,
@@ -519,6 +539,9 @@ export function Chat({
     null,
   );
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
+  const [petSettingsOpen, setPetSettingsOpen] = React.useState(false);
+  const [petLocalSettings, setPetLocalSettings] =
+    React.useState<PetLocalSettings | null>(() => readPetLocalSettings());
   const [runtimeCapabilities, setRuntimeCapabilities] =
     React.useState<RuntimeCapabilitiesWithCommands | null>(null);
   const [runtimeCapabilitiesReady, setRuntimeCapabilitiesReady] =
@@ -567,6 +590,62 @@ export function Chat({
 
   const resolvedTitle = title ?? t('chat.title');
   const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
+  const petRequired = options?.displayMode === 'pet';
+  const basePetSettings = React.useMemo(
+    () => derivePetLocalSettings(options?.pet),
+    [options?.pet],
+  );
+  const displayedPetSettings = React.useMemo(
+    () => ({
+      ...(petLocalSettings ?? basePetSettings),
+      ...(petRequired ? { enabled: true } : {}),
+    }),
+    [basePetSettings, petLocalSettings, petRequired],
+  );
+  const effectivePet = React.useMemo(
+    () => {
+      if (petRequired || petLocalSettings) {
+        return buildPetOptionsFromLocalSettings(displayedPetSettings);
+      }
+
+      return options?.pet ?? null;
+    },
+    [displayedPetSettings, options?.pet, petLocalSettings, petRequired],
+  );
+  const savePetLocalSettings = React.useCallback(
+    (settings: PetLocalSettings) => {
+      const nextSettings = petRequired
+        ? { ...settings, enabled: true }
+        : settings;
+      setPetLocalSettings(nextSettings);
+      writePetLocalSettings(nextSettings);
+    },
+    [petRequired],
+  );
+  const handlePetCommand = React.useCallback(
+    (mode: PetCommandMode) => {
+      if (mode === 'settings') {
+        setPetSettingsOpen(true);
+        return;
+      }
+
+      if (petRequired) {
+        savePetLocalSettings({
+          ...displayedPetSettings,
+          enabled: true,
+        });
+        return;
+      }
+
+      const enabled =
+        mode === 'toggle' ? !isPetEnabled(effectivePet) : mode === 'on';
+      savePetLocalSettings({
+        ...displayedPetSettings,
+        enabled,
+      });
+    },
+    [displayedPetSettings, effectivePet, petRequired, savePetLocalSettings],
+  );
 
   // Use placeholder from composer options or fallback to prop/i18n
   const inputPlaceholder =
@@ -1650,6 +1729,7 @@ export function Chat({
     setComposerText,
     focusComposerAt,
     setPlanModeEnabled,
+    onPetCommand: handlePetCommand,
     addRunRuntimeCapabilities,
     setRunRuntimeCapabilities,
     insertComposerCapabilityToken,
@@ -2376,6 +2456,27 @@ export function Chat({
     stream.isLoading ||
     currentThread?.status === 'busy' ||
     String(currentThread?.status ?? '').toLowerCase() === 'running';
+  const petAutoState = usePetAutoState({
+    currentThreadStatus: currentThread?.status,
+    currentThreadIsRunning,
+    isClientSecretInitializing,
+    isHistoryLoading,
+    isStreamLoading: stream.isLoading,
+    isStreamReady: stream.isReady,
+    lastStreamOutputAt: lastStreamOutputAtRef.current,
+    messages,
+    now: streamingNow,
+    threadErrorMessage,
+  });
+  useConversationSummaryEvent({
+    parentMessenger,
+    threadId: stream.threadId,
+    currentThread,
+    currentThreadIsRunning,
+    threadErrorMessage,
+    messages,
+    fallbackTitle: t('history.threadFallback'),
+  });
 
   const assistantTitle = assistantName || resolvedTitle;
 
@@ -2410,44 +2511,68 @@ export function Chat({
             </p>
           </div>
         </div>
-        {/* History controls - only shown when history.enabled is true (default) */}
-        {history?.enabled !== false && (
-          <div className="flex items-center gap-1">
-            {/* New thread button */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex h-8 w-8">
-                  <button
-                    type="button"
-                    onClick={handleNewThread}
-                    disabled={missingConfig || isHistoryLoading}
-                    className={cn(
-                      'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                      'text-muted-foreground hover:text-foreground hover:bg-muted',
-                      'transition-colors duration-150',
-                      'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
-                    )}
-                    aria-label={t('history.newThread')}
-                  >
-                    <Pencil size={16} />
-                  </button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t('history.newThread')}
-              </TooltipContent>
-            </Tooltip>
-            <HistorySidebar
-              threads={threads}
-              currentThreadId={stream.threadId ?? undefined}
-              onNewThread={handleNewThread}
-              onSelectThread={handleSelectThread}
-              onDeleteThread={handleDeleteThread}
-              showDelete={history?.showDelete !== false}
-              disabled={missingConfig || isThreadsLoading || isHistoryLoading}
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex h-8 w-8">
+                <button
+                  type="button"
+                  onClick={() => setPetSettingsOpen(true)}
+                  className={cn(
+                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                    'text-muted-foreground hover:text-foreground hover:bg-muted',
+                    'transition-colors duration-150',
+                  )}
+                  aria-label={t('settings.open')}
+                >
+                  <Settings size={16} />
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t('settings.open')}
+            </TooltipContent>
+          </Tooltip>
+
+          {/* History controls - only shown when history.enabled is true (default) */}
+          {history?.enabled !== false && (
+            <>
+              {/* New thread button */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex h-8 w-8">
+                    <button
+                      type="button"
+                      onClick={handleNewThread}
+                      disabled={missingConfig || isHistoryLoading}
+                      className={cn(
+                        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                        'text-muted-foreground hover:text-foreground hover:bg-muted',
+                        'transition-colors duration-150',
+                        'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
+                      )}
+                      aria-label={t('history.newThread')}
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t('history.newThread')}
+                </TooltipContent>
+              </Tooltip>
+              <HistorySidebar
+                threads={threads}
+                currentThreadId={stream.threadId ?? undefined}
+                onNewThread={handleNewThread}
+                onSelectThread={handleSelectThread}
+                onDeleteThread={handleDeleteThread}
+                showDelete={history?.showDelete !== false}
+                disabled={missingConfig || isThreadsLoading || isHistoryLoading}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 p-4">
@@ -2941,7 +3066,8 @@ export function Chat({
             options={slashPaletteOptions}
             paletteRef={slashPaletteRef}
             optionRefs={slashPaletteOptionRefs}
-            roundedClass={getRoundedClass(theme.radius)}
+            panelRoundedClass={getPanelRoundedClass(theme.radius)}
+            itemRoundedClass={getMenuItemRoundedClass(theme.radius)}
             emptyLabel={slashPaletteEmptyLabel}
             capabilityEmptyLabels={slashPaletteCapabilityEmptyLabels}
             onSelect={selectSlashPaletteOption}
@@ -3118,6 +3244,14 @@ export function Chat({
           <ContextUsageIndicator className="absolute right-4" />
         </div>
       </div>
+      <SettingsSheet
+        open={petSettingsOpen}
+        settings={displayedPetSettings}
+        petRequired={petRequired}
+        onOpenChange={setPetSettingsOpen}
+        onSave={savePetLocalSettings}
+      />
+      <PetBridge pet={effectivePet} state={petAutoState} />
     </div>
   );
 }

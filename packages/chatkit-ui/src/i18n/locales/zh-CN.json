@@ -113,6 +113,11 @@
         "subagents": {
           "label": "子智能体",
           "description": "显示运行时子智能体"
+        },
+        "pet": {
+          "label": "Pet",
+          "description": "切换 Pet",
+          "argsHint": "[on|off|settings]"
         }
       },
       "empty": {
@@ -160,6 +165,42 @@
       "responseRequired": "需要填写回复内容",
       "dismiss": "关闭",
       "submit": "确认"
+    }
+  },
+  "settings": {
+    "open": "设置",
+    "title": "设置"
+  },
+  "pet": {
+    "settings": {
+      "title": "Pet",
+      "description": "仅保存在当前浏览器。",
+      "enabled": "启用 Pet",
+      "requiredHint": "Pet launcher 模式下必须开启。",
+      "characterType": "形象",
+      "characterTypes": {
+        "builtin": "内置",
+        "atlas": "Spritesheet URL"
+      },
+      "builtin": "内置 Pet",
+      "builtins": {
+        "batmeme": "Batmeme",
+        "boba": "Boba",
+        "bolt": "Bolt",
+        "einstein": "Einstein",
+        "lando-2": "Lando",
+        "mini-sama": "Mini Sama",
+        "miso": "Miso",
+        "noir-webling": "Noir Webling",
+        "nukey": "Nukey",
+        "steve": "Steve"
+      },
+      "atlasUrl": "Spritesheet URL",
+      "scale": "缩放",
+      "draggable": "允许拖拽",
+      "persistPosition": "记住位置",
+      "cancel": "取消",
+      "save": "保存"
     }
   },
   "sheet": {

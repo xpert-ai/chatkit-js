@@ -11,6 +11,7 @@ You don't need to build custom UIs, manage low-level chat state, or patch togeth
 - **Tool Invocation Support** — Enable AI agents to call server-side and client-side tools during conversations
 - **File Attachments** — Support for uploading and processing files within the chat interface
 - **Real-time Streaming** — Stream responses as they're generated for a responsive user experience
+- **Animated Pet Launcher** — Optional host-viewport Pet companion with drag, local settings, conversation summaries, and quick replies
 - **Multi-platform Support** — Works with React, Vue, vanilla JavaScript, and any web framework
 
 ## Architecture
@@ -235,6 +236,7 @@ pnpm managed-chatkit:dev
 ## Next Steps
 
 - **[Tools Guide](./concepts/tools.md)** — Learn about server tools and client tools in depth
+- **[Pet Guide](./guides/pet.md)** — Understand the Pet API, host overlay, atlas contract, and conversation bubble
 - **Theming Guide** *(Coming Soon)* — Customize ChatKit's appearance
 - **API Reference** *(Coming Soon)* — Complete configuration options
 - **[XpertAI Console](https://console.xpertai.com)** — Configure your agents and workflows

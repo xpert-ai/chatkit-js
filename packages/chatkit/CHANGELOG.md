@@ -1,5 +1,19 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.0
+
+### Minor Changes
+
+- pet & plugins & skills & prompts
+
+### Patch Changes
+
+- 5c0cab1: sub-agents selection
+- f594038: human in the loop.
+- 361c358: skills & middlewares selection
+- 96aac52: Add ChatKit runtime sub-agent selection.
+- 169d5d5: slash commands
+
 ## 0.2.1
 
 ### Patch Changes

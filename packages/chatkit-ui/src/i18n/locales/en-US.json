@@ -113,6 +113,11 @@
         "subagents": {
           "label": "Sub-agents",
           "description": "Show runtime sub-agents"
+        },
+        "pet": {
+          "label": "Pet",
+          "description": "Toggle pet companion",
+          "argsHint": "[on|off|settings]"
         }
       },
       "empty": {
@@ -160,6 +165,42 @@
       "responseRequired": "A response message is required",
       "dismiss": "Dismiss",
       "submit": "Confirm"
+    }
+  },
+  "settings": {
+    "open": "Settings",
+    "title": "Settings"
+  },
+  "pet": {
+    "settings": {
+      "title": "Pet",
+      "description": "Stored in this browser.",
+      "enabled": "Enable pet",
+      "requiredHint": "Required in pet launcher mode.",
+      "characterType": "Character",
+      "characterTypes": {
+        "builtin": "Built-in",
+        "atlas": "Spritesheet URL"
+      },
+      "builtin": "Built-in pet",
+      "builtins": {
+        "batmeme": "Batmeme",
+        "boba": "Boba",
+        "bolt": "Bolt",
+        "einstein": "Einstein",
+        "lando-2": "Lando",
+        "mini-sama": "Mini Sama",
+        "miso": "Miso",
+        "noir-webling": "Noir Webling",
+        "nukey": "Nukey",
+        "steve": "Steve"
+      },
+      "atlasUrl": "Spritesheet URL",
+      "scale": "Scale",
+      "draggable": "Draggable",
+      "persistPosition": "Remember position",
+      "cancel": "Cancel",
+      "save": "Save"
     }
   },
   "sheet": {

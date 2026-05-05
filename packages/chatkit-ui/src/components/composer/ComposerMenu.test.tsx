@@ -5,9 +5,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ComposerMenu } from './ComposerMenu';
+
+const themeMock = vi.hoisted(() => ({
+  radius: 'soft' as 'pill' | 'round' | 'soft' | 'sharp',
+}));
 
 vi.mock('../../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
@@ -39,17 +43,39 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
 vi.mock('../../providers/Theme', () => ({
   useTheme: () => ({
     theme: {
-      radius: 'soft',
+      radius: themeMock.radius,
     },
   }),
 }));
 
 describe('ComposerMenu', () => {
+  beforeEach(() => {
+    themeMock.radius = 'soft';
+  });
+
   function openMenu() {
     const trigger = screen.getByRole('button', { name: 'Open menu' });
     trigger.focus();
     fireEvent.keyDown(trigger, { key: 'Enter', code: 'Enter' });
+    return trigger;
   }
+
+  it('uses panel radius for dropdown content without making pill panels oval', () => {
+    themeMock.radius = 'pill';
+
+    render(<ComposerMenu />);
+
+    const trigger = openMenu();
+
+    const content = document.querySelector('[data-slot="dropdown-menu-content"]');
+    const planMode = screen.getByRole('switch', { name: 'Plan mode' });
+
+    expect(trigger).toHaveClass('rounded-full');
+    expect(content).toHaveClass('rounded-3xl');
+    expect(content).not.toHaveClass('rounded-full');
+    expect(planMode).toHaveClass('rounded-xl');
+    expect(planMode).not.toHaveClass('rounded-full');
+  });
 
   it('renders plan mode even without attachments or tools', () => {
     const onPlanModeChange = vi.fn();

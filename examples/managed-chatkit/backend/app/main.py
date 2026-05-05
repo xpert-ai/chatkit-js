@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-DEFAULT_CHATKIT_BASE = "https://api.mtda.cloud/api/ai"
+DEFAULT_CHATKIT_BASE = "https://api.xpertai.cn/api/ai"
 SESSION_COOKIE_NAME = "chatkit_session_id"
 SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
@@ -90,7 +90,7 @@ async def create_session(request: Request) -> JSONResponse:
                 "/v1/chatkit/sessions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
-                    "OpenAI-Beta": "chatkit_beta=v1",
+                    "x-XpertAI-Beta": "chatkit_beta=v1",
                     "Content-Type": "application/json",
                 },
                 json={"assistant": {"id": assistant_id}, "user": user_id},

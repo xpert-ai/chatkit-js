@@ -55,7 +55,8 @@ export function SlashPalette({
   options,
   paletteRef,
   optionRefs,
-  roundedClass,
+  panelRoundedClass,
+  itemRoundedClass,
   emptyLabel,
   capabilityEmptyLabels,
   onSelect,
@@ -64,7 +65,8 @@ export function SlashPalette({
   options: SlashPaletteOption[];
   paletteRef: React.RefObject<HTMLDivElement | null>;
   optionRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
-  roundedClass?: string;
+  panelRoundedClass?: string;
+  itemRoundedClass?: string;
   emptyLabel: string;
   capabilityEmptyLabels?: Partial<
     Record<RuntimeCapabilityOption['type'], string>
@@ -77,7 +79,7 @@ export function SlashPalette({
       data-slot="slash-palette"
       className={cn(
         'mb-2 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md',
-        roundedClass,
+        panelRoundedClass,
       )}
     >
       {options.length > 0 ? (
@@ -102,6 +104,7 @@ export function SlashPalette({
               }}
               className={cn(
                 'flex h-8 w-full items-center gap-1 rounded-md px-2 text-left text-sm hover:bg-muted',
+                itemRoundedClass,
                 option.kind === 'capability' && option.depth === 1 && 'pl-9',
                 index === palette.activeIndex && 'bg-muted',
               )}

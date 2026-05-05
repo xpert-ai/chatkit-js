@@ -290,6 +290,28 @@ describe('slash command executor', () => {
     });
   });
 
+  it('turns /pet args into local pet actions', () => {
+    const pet = resolveSlashCommands(undefined, undefined).find(
+      (command) => command.name === 'pet',
+    );
+    if (!pet) {
+      throw new Error('Expected /pet to be registered.');
+    }
+
+    expect(createSlashCommandExecutionEffect(pet, '')).toMatchObject({
+      type: 'pet',
+      mode: 'toggle',
+    });
+    expect(createSlashCommandExecutionEffect(pet, 'off')).toMatchObject({
+      type: 'pet',
+      mode: 'off',
+    });
+    expect(createSlashCommandExecutionEffect(pet, 'settings')).toMatchObject({
+      type: 'pet',
+      mode: 'settings',
+    });
+  });
+
   it('renders submit_prompt templates with args and command metadata', () => {
     const review = resolveSlashCommands(
       [

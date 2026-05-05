@@ -18,6 +18,7 @@ Welcome to the ChatKit SDK documentation.
 - [Tool Integration](./concepts/tools.md)
 - [Slash Commands](./guides/slash-commands.md)
 - [Runtime Skills and Plugins Selection](./guides/runtime-capabilities.md)
+- [Pet](./guides/pet.md)
 - [Framework-Agnostic Integration](./guides/framework-agnostic-integration.md)
 - [Update Client During Response](./guides/update-client-during-response.md)
 

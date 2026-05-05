@@ -178,24 +178,6 @@ function hslToOklch(h: number, s: number, l: number): string {
 }
 
 /**
- * Get radius value based on preset
- */
-function getRadiusValue(radius: string): string {
-  switch (radius) {
-    case 'pill':
-      return '9999px';
-    case 'round':
-      return '0.75rem';
-    case 'soft':
-      return '0.5rem';
-    case 'sharp':
-      return '0';
-    default:
-      return '0.5rem';
-  }
-}
-
-/**
  * Get density spacing multiplier
  * compact: 0.75, normal: 1, spacious: 1.25
  */
@@ -301,7 +283,6 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
     // Radius
     if (radius) {
       el.dataset.radius = radius;
-      el.style.setProperty('--radius', getRadiusValue(radius));
     }
 
     // Density - set CSS variables for spacing
@@ -426,7 +407,6 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
       el.classList.remove('dark');
       el.removeAttribute('data-radius');
       el.removeAttribute('data-density');
-      el.style.removeProperty('--radius');
       el.style.removeProperty('--density-spacing');
       el.style.removeProperty('--density-padding');
       el.style.removeProperty('--density-gap');

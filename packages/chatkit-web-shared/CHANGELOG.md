@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.2.0
+
+### Minor Changes
+
+- pet & plugins & skills & prompts
+
 ## 0.1.1
 
 ### Patch Changes

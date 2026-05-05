@@ -21,7 +21,7 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
-VITE_CHATKIT_TARGET=http://localhost:5176
+VITE_CHATKIT_TARGET=http://localhost:5173
 VITE_CHATKIT_ASSISTANT_ID=your-assistant-id
 VITE_BACKEND_ORIGIN=
 VITE_BACKEND_TARGET=http://localhost:8000
@@ -54,7 +54,7 @@ Terminal 3 - Frontend:
 pnpm dev
 ```
 
-App runs on http://localhost:5173
+App runs on http://localhost:5174
 
 ## Project Structure
 
@@ -87,6 +87,7 @@ export default function App() {
     },
     theme: { colorScheme: 'light', radius: 'round' },
     composer: { placeholder: 'Ask me anything...' },
+    pet: true,
   });
 
   return (
@@ -114,7 +115,7 @@ pnpm lint         # Lint code
 ### ChatKit UI Not Visible
 
 Check:
-1. ChatKit UI server running at http://localhost:5176
+1. ChatKit UI server running at http://localhost:5173
 2. Browser console for errors
 3. Network tab - `/api/create-session` succeeds
 4. `VITE_CHATKIT_TARGET` in `.env`

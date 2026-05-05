@@ -6,6 +6,29 @@ import type {
 import { isRuntimeCapabilitiesSelection } from '../message-metadata';
 import type { CommandExecutionEffect, ResolvedSlashCommand } from './types';
 
+function resolvePetCommandMode(
+  args: string,
+): 'toggle' | 'on' | 'off' | 'settings' {
+  const normalized = args.trim().toLowerCase();
+  if (!normalized) {
+    return 'toggle';
+  }
+
+  if (['on', 'enable', 'enabled', 'true'].includes(normalized)) {
+    return 'on';
+  }
+
+  if (['off', 'disable', 'disabled', 'false'].includes(normalized)) {
+    return 'off';
+  }
+
+  if (['settings', 'setting', 'config', 'configure'].includes(normalized)) {
+    return 'settings';
+  }
+
+  return 'toggle';
+}
+
 export function renderSlashCommandTemplate(
   template: string,
   args: string,
@@ -85,6 +108,14 @@ export function createSlashCommandExecutionEffect(
 
     if (command.name === 'subagents') {
       return { type: 'show_capabilities', capabilityTypes: ['subAgent'] };
+    }
+
+    if (command.name === 'pet') {
+      return {
+        type: 'pet',
+        mode: resolvePetCommandMode(args),
+        clearComposer: true,
+      };
     }
   }
 

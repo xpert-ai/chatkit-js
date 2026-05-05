@@ -9,6 +9,7 @@ import {
 import {
   STATE_VARIABLE_HUMAN,
   type ChatKitOptions,
+  type ChatKitPetAnimationName,
   type ChatKitReferenceCompositionMode,
   type FollowUpBehavior,
   type SendUserMessageParams,
@@ -59,10 +60,18 @@ type ParentResponseMessage = {
   error?: unknown;
 };
 
-type ParentEventMessage = {
+type ParentEventPayloadMap = {
+  public_event: [Capability.Event, unknown];
+  pet_options_change: { pet: ChatKitOptions['pet'] | null };
+  pet_state_change: { state: ChatKitPetAnimationName };
+};
+
+type ParentEventName = keyof ParentEventPayloadMap;
+
+type ParentEventMessage<K extends ParentEventName = ParentEventName> = {
   type: 'event';
-  event: 'public_event';
-  data: [Capability.Event, unknown];
+  event: K;
+  data: ParentEventPayloadMap[K];
 };
 
 type ParentMessage =
@@ -98,9 +107,9 @@ export type ParentMessenger = {
     data?: CommandMessageMap[C],
     transfer?: Transferable[],
   ) => Promise<unknown>;
-  sendEvent: (
-    event: 'public_event',
-    data?: [Capability.Event, unknown],
+  sendEvent: <E extends ParentEventName>(
+    event: E,
+    data: ParentEventPayloadMap[E],
     transfer?: Transferable[],
   ) => void;
 };
@@ -470,9 +479,9 @@ export function ParentMessengerProvider({
   );
 
   const sendEvent = useCallback(
-    (
-      event: 'public_event',
-      data?: [Capability.Event, unknown],
+    <E extends ParentEventName,>(
+      event: E,
+      data: ParentEventPayloadMap[E],
       transfer?: Transferable[],
     ) => {
       if (!isParentAvailable) return;

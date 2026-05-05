@@ -1,0 +1,6 @@
+{
+  "id": "bolt",
+  "displayName": "Bolt",
+  "description": "A small original boxy robot companion with tank treads, binocular eyes, and a curious helpful personality.",
+  "spritesheetPath": "spritesheet.webp"
+}

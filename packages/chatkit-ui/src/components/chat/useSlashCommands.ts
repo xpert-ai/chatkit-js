@@ -58,6 +58,11 @@ const BUILTIN_SLASH_COMMAND_I18N_KEYS: Record<
     label: 'composer.slashCommands.commands.subagents.label',
     description: 'composer.slashCommands.commands.subagents.description',
   },
+  pet: {
+    label: 'composer.slashCommands.commands.pet.label',
+    description: 'composer.slashCommands.commands.pet.description',
+    argsHint: 'composer.slashCommands.commands.pet.argsHint',
+  },
 };
 
 export function useSlashCommands({
@@ -74,6 +79,7 @@ export function useSlashCommands({
   setComposerText,
   focusComposerAt,
   setPlanModeEnabled,
+  onPetCommand,
   addRunRuntimeCapabilities,
   setRunRuntimeCapabilities,
   insertComposerCapabilityToken,
@@ -94,6 +100,7 @@ export function useSlashCommands({
   setComposerText: (text: string, caretOffset?: number) => void;
   focusComposerAt: (offset: number) => void;
   setPlanModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  onPetCommand?: (mode: 'toggle' | 'on' | 'off' | 'settings') => void;
   addRunRuntimeCapabilities: (selection: RuntimeCapabilitiesSelection) => void;
   setRunRuntimeCapabilities: React.Dispatch<
     React.SetStateAction<RuntimeCapabilitiesSelection>
@@ -276,6 +283,16 @@ export function useSlashCommands({
         return true;
       }
 
+      if (effect.type === 'pet') {
+        onPetCommand?.(effect.mode);
+        if (effect.clearComposer) {
+          setComposerText('', 0);
+        }
+        setPalette(null);
+        focusComposerAt(0);
+        return true;
+      }
+
       if (effect.type === 'show_capabilities') {
         if (effect.capabilityTypes.length === 1) {
           showCapabilityGroup(effect.capabilityTypes[0], command.name);
@@ -337,6 +354,7 @@ export function useSlashCommands({
       focusComposerAt,
       getComposerEditingLength,
       parentMessenger,
+      onPetCommand,
       selectCapabilityById,
       setComposerText,
       setPalette,
