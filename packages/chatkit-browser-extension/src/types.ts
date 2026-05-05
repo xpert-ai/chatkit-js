@@ -16,7 +16,11 @@ export type ChatKitExtensionConfig = {
   locale?: SupportedLocale;
   displayMode: ChatKitDisplayMode;
   theme?: { colorScheme?: 'light' | 'dark' };
-  surfaces: { sidePanel: boolean; pageOverlay: boolean };
+  surfaces: {
+    sidePanel: boolean;
+    pageOverlay: boolean;
+    autoPageOverlay: boolean;
+  };
   overlay: {
     width: number;
     height: number;

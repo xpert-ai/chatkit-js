@@ -37,6 +37,7 @@ Open the extension options page and set:
 - launch mode (`Pet launcher` by default, or `Chat panel`)
 - locale (`en` and `zh-Hans` are supported by the extension UI) and theme
 - enabled surfaces
+- automatic page pet launch on new HTTP(S) tabs
 - page overlay size and position
 
 The first version uses manual credentials. The extension does not call Xpert

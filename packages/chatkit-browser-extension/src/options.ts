@@ -29,6 +29,7 @@ type FormFields = {
   colorScheme: HTMLSelectElement;
   sidePanel: HTMLInputElement;
   pageOverlay: HTMLInputElement;
+  autoPageOverlay: HTMLInputElement;
   overlayWidth: HTMLInputElement;
   overlayHeight: HTMLInputElement;
   overlayPosition: HTMLSelectElement;
@@ -97,6 +98,7 @@ function collectFields(form: HTMLFormElement): FormFields {
     colorScheme: getField<HTMLSelectElement>(form, 'colorScheme'),
     sidePanel: getField<HTMLInputElement>(form, 'sidePanel'),
     pageOverlay: getField<HTMLInputElement>(form, 'pageOverlay'),
+    autoPageOverlay: getField<HTMLInputElement>(form, 'autoPageOverlay'),
     overlayWidth: getField<HTMLInputElement>(form, 'overlayWidth'),
     overlayHeight: getField<HTMLInputElement>(form, 'overlayHeight'),
     overlayPosition: getField<HTMLSelectElement>(form, 'overlayPosition'),
@@ -117,6 +119,7 @@ function readForm(fields: FormFields): ChatKitExtensionConfig {
     surfaces: {
       sidePanel: fields.sidePanel.checked,
       pageOverlay: fields.pageOverlay.checked,
+      autoPageOverlay: fields.autoPageOverlay.checked,
     },
     overlay: {
       width: fields.overlayWidth.value,
@@ -215,6 +218,10 @@ function renderOptions(config: ChatKitExtensionConfig) {
           <label class="ck-checkbox-label">
             <input name="pageOverlay" type="checkbox"${config.surfaces.pageOverlay ? ' checked' : ''} />
             ${i18n.t('enablePageOverlay')}
+          </label>
+          <label class="ck-checkbox-label">
+            <input name="autoPageOverlay" type="checkbox"${config.surfaces.autoPageOverlay ? ' checked' : ''} />
+            ${i18n.t('autoPagePet')}
           </label>
         </div>
       </section>

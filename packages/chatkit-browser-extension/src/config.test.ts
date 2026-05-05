@@ -21,7 +21,11 @@ describe('extension config', () => {
         locale: 'zh-Hans',
         displayMode: 'chat',
         theme: { colorScheme: 'dark' },
-        surfaces: { sidePanel: false, pageOverlay: true },
+        surfaces: {
+          sidePanel: false,
+          pageOverlay: true,
+          autoPageOverlay: true,
+        },
         overlay: { width: 1200, height: 20, position: 'top-left' },
       }),
     ).toMatchObject({
@@ -32,7 +36,11 @@ describe('extension config', () => {
       locale: 'zh-Hans',
       displayMode: 'chat',
       theme: { colorScheme: 'dark' },
-      surfaces: { sidePanel: false, pageOverlay: true },
+      surfaces: {
+        sidePanel: false,
+        pageOverlay: true,
+        autoPageOverlay: true,
+      },
       overlay: { width: 900, height: 360, position: 'top-left' },
     });
   });

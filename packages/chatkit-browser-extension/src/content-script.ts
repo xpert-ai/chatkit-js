@@ -55,6 +55,7 @@ declare const chrome: {
 };
 
 const FRAME_ID = 'xpertai-chatkit-extension-overlay-frame';
+const OPEN_OVERLAY_MESSAGE = 'xpertai.chatkit.openOverlay';
 const TOGGLE_OVERLAY_MESSAGE = 'xpertai.chatkit.toggleOverlay';
 const OVERLAY_STYLE_MESSAGE = 'xpertai.chatkit.overlayStyle';
 const OVERLAY_HIT_REGIONS_MESSAGE = 'xpertai.chatkit.overlayHitRegions';
@@ -213,6 +214,15 @@ function createFrame(): HTMLIFrameElement {
   return frame;
 }
 
+function openOverlay(): boolean {
+  if (getFrame()) {
+    return true;
+  }
+
+  createFrame();
+  return true;
+}
+
 function toggleOverlay(): boolean {
   const existing = getFrame();
   if (existing) {
@@ -277,12 +287,19 @@ window.addEventListener(
 );
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type !== TOGGLE_OVERLAY_MESSAGE) {
+  if (
+    message.type !== TOGGLE_OVERLAY_MESSAGE &&
+    message.type !== OPEN_OVERLAY_MESSAGE
+  ) {
     return false;
   }
 
   try {
-    sendResponse({ ok: true, open: toggleOverlay() });
+    sendResponse({
+      ok: true,
+      open:
+        message.type === OPEN_OVERLAY_MESSAGE ? openOverlay() : toggleOverlay(),
+    });
   } catch (error) {
     sendResponse({
       ok: false,

@@ -1,3 +1,4 @@
+export const OPEN_OVERLAY_MESSAGE = 'xpertai.chatkit.openOverlay';
 export const TOGGLE_OVERLAY_MESSAGE = 'xpertai.chatkit.toggleOverlay';
 export const OVERLAY_STYLE_MESSAGE = 'xpertai.chatkit.overlayStyle';
 export const OVERLAY_HIT_REGIONS_MESSAGE = 'xpertai.chatkit.overlayHitRegions';

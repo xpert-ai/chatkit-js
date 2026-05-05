@@ -1,4 +1,7 @@
-import { TOGGLE_OVERLAY_MESSAGE } from '../../messages';
+import { validateConfig } from '../../config';
+import { OPEN_OVERLAY_MESSAGE, TOGGLE_OVERLAY_MESSAGE } from '../../messages';
+import { readConfig } from '../../storage';
+import type { ChatKitExtensionConfig } from '../../types';
 
 export type ChromeTab = {
   id?: number;
@@ -9,6 +12,17 @@ export type ChromeTab = {
 type ActiveChromeTab = ChromeTab & {
   id: number;
 };
+
+type ChromeTabUpdateChangeInfo = {
+  status?: string;
+  url?: string;
+};
+
+type ChromeTabUpdateListener = (
+  tabId: number,
+  changeInfo: ChromeTabUpdateChangeInfo,
+  tab: ChromeTab,
+) => void;
 
 export type ChromeStorageArea = {
   get: (keys?: string | string[] | null) => Promise<Record<string, unknown>>;
@@ -48,6 +62,9 @@ export type ChromeApi = {
       tabId: number,
       message: Record<string, unknown>,
     ) => Promise<unknown>;
+    onUpdated?: {
+      addListener: (listener: ChromeTabUpdateListener) => void;
+    };
   };
   scripting: {
     executeScript: (details: {
@@ -79,6 +96,15 @@ export function isInjectableTabUrl(url: string | undefined): boolean {
   return typeof url === 'string' && /^https?:\/\//i.test(url);
 }
 
+export function shouldAutoOpenPagePet(config: ChatKitExtensionConfig): boolean {
+  return (
+    config.surfaces.pageOverlay &&
+    config.surfaces.autoPageOverlay &&
+    config.displayMode === 'pet' &&
+    validateConfig(config).ok
+  );
+}
+
 async function queryActiveTab(api: ChromeApi): Promise<ActiveChromeTab> {
   const [tab] = await api.tabs.query({ active: true, currentWindow: true });
   if (!tab || typeof tab.id !== 'number') {
@@ -88,10 +114,30 @@ async function queryActiveTab(api: ChromeApi): Promise<ActiveChromeTab> {
   return { ...tab, id: tab.id };
 }
 
-async function sendToggleMessage(api: ChromeApi, tabId: number) {
+async function sendOverlayMessage(
+  api: ChromeApi,
+  tabId: number,
+  type: typeof OPEN_OVERLAY_MESSAGE | typeof TOGGLE_OVERLAY_MESSAGE,
+) {
   return api.tabs.sendMessage(tabId, {
-    type: TOGGLE_OVERLAY_MESSAGE,
+    type,
   });
+}
+
+async function sendOverlayMessageWithInjection(
+  api: ChromeApi,
+  tabId: number,
+  type: typeof OPEN_OVERLAY_MESSAGE | typeof TOGGLE_OVERLAY_MESSAGE,
+) {
+  try {
+    return await sendOverlayMessage(api, tabId, type);
+  } catch {
+    await api.scripting.executeScript({
+      target: { tabId },
+      files: [CONTENT_SCRIPT_FILE],
+    });
+    return sendOverlayMessage(api, tabId, type);
+  }
 }
 
 export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
@@ -116,15 +162,21 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
       );
     }
 
-    try {
-      return await sendToggleMessage(api, tab.id);
-    } catch {
-      await api.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: [CONTENT_SCRIPT_FILE],
-      });
-      return sendToggleMessage(api, tab.id);
+    return sendOverlayMessageWithInjection(api, tab.id, TOGGLE_OVERLAY_MESSAGE);
+  };
+
+  const openPageOverlayForTab = async (tab: ActiveChromeTab) => {
+    if (!isInjectableTabUrl(tab.url)) {
+      return false;
     }
+
+    const config = await readConfig(api.storage.local);
+    if (!shouldAutoOpenPagePet(config)) {
+      return false;
+    }
+
+    await sendOverlayMessageWithInjection(api, tab.id, OPEN_OVERLAY_MESSAGE);
+    return true;
   };
 
   const restrictStorageAccess = async () => {
@@ -148,6 +200,13 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
     configure();
     api.runtime.onInstalled?.addListener(configure);
     api.runtime.onStartup?.addListener(configure);
+    api.tabs.onUpdated?.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.status !== 'complete') {
+        return;
+      }
+
+      void openPageOverlayForTab({ ...tab, id: tabId }).catch(() => undefined);
+    });
   };
 
   return {
@@ -156,6 +215,7 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
     openOptionsPage,
     openSidePanelForActiveTab,
     togglePageOverlayForActiveTab,
+    openPageOverlayForTab,
     restrictStorageAccess,
     initializeBackground,
   };

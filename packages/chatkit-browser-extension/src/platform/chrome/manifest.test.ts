@@ -15,6 +15,8 @@ describe('chrome manifest', () => {
       'activeTab',
     ]);
     expect(manifest.host_permissions).toEqual([
+      'http://*/*',
+      'https://*/*',
       'http://localhost/*',
       'http://127.0.0.1/*',
     ]);

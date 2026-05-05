@@ -29,7 +29,12 @@ export type ChromeManifest = {
   };
 };
 
-const LOCAL_DEV_HOST_PERMISSIONS = ['http://localhost/*', 'http://127.0.0.1/*'];
+const PAGE_OVERLAY_HOST_PERMISSIONS = [
+  'http://*/*',
+  'https://*/*',
+  'http://localhost/*',
+  'http://127.0.0.1/*',
+];
 
 const EMBEDDABLE_FRAME_SOURCES = ["'self'", 'http://*:*', 'https://*:*'];
 
@@ -57,7 +62,7 @@ export function createChromeManifest(version = '0.3.0'): ChromeManifest {
       default_path: 'sidepanel.html',
     },
     permissions: ['storage', 'sidePanel', 'scripting', 'activeTab'],
-    host_permissions: LOCAL_DEV_HOST_PERMISSIONS,
+    host_permissions: PAGE_OVERLAY_HOST_PERMISSIONS,
     web_accessible_resources: [
       {
         resources: ['overlay.html', 'assets/*'],

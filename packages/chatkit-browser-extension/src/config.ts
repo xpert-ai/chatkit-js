@@ -15,6 +15,7 @@ type ThemeInput = {
 type SurfacesInput = {
   sidePanel?: unknown;
   pageOverlay?: unknown;
+  autoPageOverlay?: unknown;
 };
 
 type OverlayInput = {
@@ -48,6 +49,7 @@ export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
   surfaces: {
     sidePanel: true,
     pageOverlay: true,
+    autoPageOverlay: false,
   },
   overlay: {
     width: 420,
@@ -192,6 +194,10 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
       pageOverlay: normalizeBoolean(
         sourceSurfaces.pageOverlay,
         DEFAULT_EXTENSION_CONFIG.surfaces.pageOverlay,
+      ),
+      autoPageOverlay: normalizeBoolean(
+        sourceSurfaces.autoPageOverlay,
+        DEFAULT_EXTENSION_CONFIG.surfaces.autoPageOverlay,
       ),
     },
     overlay: {
