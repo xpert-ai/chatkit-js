@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.1
+
+### Patch Changes
+
+- ec68d2b: Expose runtime constants from a dedicated `./constants` subpath with ESM and CJS entry points.
+
 ## 0.2.3
 
 ### Patch Changes
