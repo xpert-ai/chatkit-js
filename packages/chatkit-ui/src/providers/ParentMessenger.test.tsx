@@ -19,8 +19,18 @@ vi.mock('../hooks/useStream', () => ({
 }));
 
 import { ParentMessengerProvider } from './ParentMessenger';
+import { useParentMessenger } from '../hooks/useParentMessenger';
 
-describe('ParentMessengerProvider plan mode', () => {
+function PetEnabledProbe({
+  onSetPetEnabled,
+}: {
+  onSetPetEnabled: (enabled: boolean) => void;
+}) {
+  useParentMessenger({ onSetPetEnabled });
+  return null;
+}
+
+describe('ParentMessengerProvider', () => {
   let originalParent: Window['parent'];
   let parentWindow: { postMessage: ReturnType<typeof vi.fn> };
 
@@ -136,6 +146,45 @@ describe('ParentMessengerProvider plan mode', () => {
         },
       }),
       expect.any(Object),
+    );
+  });
+
+  it('dispatches setPetEnabled commands to registered handlers', async () => {
+    const onSetPetEnabled = vi.fn();
+    render(
+      <ParentMessengerProvider>
+        <PetEnabledProbe onSetPetEnabled={onSetPetEnabled} />
+      </ParentMessengerProvider>,
+    );
+
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onSetPetEnabled',
+        nonce: 'pet-enabled-test',
+        data: {
+          enabled: false,
+        },
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: parentWindow,
+    });
+
+    window.dispatchEvent(event);
+
+    await waitFor(() => expect(onSetPetEnabled).toHaveBeenCalledWith(false));
+    expect(parentWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __xpaiChatKit: true,
+        type: 'response',
+        nonce: 'pet-enabled-test',
+        response: { ok: true },
+      }),
+      '*',
     );
   });
 });

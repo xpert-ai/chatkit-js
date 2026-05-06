@@ -17,10 +17,12 @@ describe('normalizeClientSecretResult', () => {
       normalizeClientSecretResult({
         secret: '  cs-x-next  ',
         organizationId: '  org-456  ',
+        xpertId: '  xpert-1  ',
       }),
     ).toEqual({
       secret: 'cs-x-next',
       organizationId: 'org-456',
+      xpertId: 'xpert-1',
     });
   });
 

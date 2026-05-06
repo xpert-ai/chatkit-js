@@ -1,31 +1,157 @@
 export type ChatKitReq = any
 
+type JsonRecord = Record<string, unknown>
+
+export type SerializedChatKitOptions = JsonRecord
+export type ChatKitCommandUserMessageContent = unknown
+export type ChatKitCommandToolChoice = unknown
+
+export type ChatKitReferenceBase = {
+    id?: string
+    label?: string
+    text: string
+}
+
+export type ChatKitCodeReference = ChatKitReferenceBase & {
+    type: "code"
+    path: string
+    startLine: number
+    endLine: number
+    language?: string
+    taskId?: string
+}
+
+export type ChatKitQuoteReference = ChatKitReferenceBase & {
+    type: "quote"
+    messageId?: string
+    source?: string
+}
+
+export type ChatKitImageReference = ChatKitReferenceBase & {
+    type: "image"
+    fileId?: string
+    url?: string
+    mimeType?: string
+    name?: string
+    size?: number
+    width?: number
+    height?: number
+}
+
+export type ChatKitReference =
+    | ChatKitCodeReference
+    | ChatKitQuoteReference
+    | ChatKitImageReference
+
+export type ChatKitReferenceCompositionMode = "compose" | "preserve"
+
+export type RuntimeCapabilitiesSelection = {
+    mode: "allowlist"
+    skills: {
+        workspaceId?: string
+        ids: string[]
+    }
+    plugins: {
+        nodeKeys: string[]
+    }
+    subAgents?: {
+        nodeKeys: string[]
+    }
+}
+
+export type ChatKitMessageAttachment =
+    | {
+        type: "file"
+        id: string
+        name: string
+        mime_type: string
+    }
+    | {
+        type: "image"
+        id: string
+        preview_url: string
+        name: string
+        mime_type: string
+    }
+
+export type WorkflowTriggerParams = JsonRecord
+export type FollowUpMode = "default" | "queue" | "steer"
+
+export type SendUserMessageCommandPayload = {
+    text?: string
+    content?: ChatKitCommandUserMessageContent[]
+    state?: JsonRecord
+    reply?: string
+    attachments?: ChatKitMessageAttachment[]
+    newThread?: boolean
+    references?: ChatKitReference[]
+    referenceComposition?: ChatKitReferenceCompositionMode
+    toolChoice?: ChatKitCommandToolChoice
+    model?: string
+    planMode?: boolean
+    runtimeCapabilities?: RuntimeCapabilitiesSelection
+    trigger?: WorkflowTriggerParams
+    followUpMode?: FollowUpMode
+}
+
+export type SetComposerValueCommandPayload = {
+    text?: string
+    content?: ChatKitCommandUserMessageContent[]
+    reply?: string
+    attachments?: ChatKitMessageAttachment[]
+    references?: ChatKitReference[]
+    appendReferences?: boolean
+    files?: File[]
+    selectedToolId?: string | null
+    selectedModelId?: string | null
+}
+
+export type CustomActionCommandPayload = {
+    action: {
+        type: string
+        payload?: JsonRecord
+    }
+    itemId?: string
+}
+
+export type PublicLogEventPayload = {
+    name: string
+    data?: JsonRecord
+    [key: string]: unknown
+}
+
+export type PublicNamedEventPayload = {
+    name: string
+    data?: JsonRecord
+}
+
 export type OuterCommands = {
-    setOptions: any
-    sendUserMessage: any
-    setComposerValue: any
-    setThreadId: any
-    focusComposer: any
-    fetchUpdates: any
-    sendCustomAction: any
-    showHistory: any
-    hideHistory: any
-    shareThread: any
-    setTrainingOptOut: any
+    setOptions: (options: SerializedChatKitOptions) => void
+    sendUserMessage: (params: SendUserMessageCommandPayload) => void
+    setPetEnabled: (params: { enabled: boolean }) => void
+    setComposerValue: (params: SetComposerValueCommandPayload) => void
+    setThreadId: (params: { threadId: string | null }) => void
+    focusComposer: () => void
+    fetchUpdates: () => void
+    sendCustomAction: (params: CustomActionCommandPayload) => void
+    showHistory: () => void
+    hideHistory: () => void
+    shareThread: () => void
+    setTrainingOptOut: (params: { value: boolean }) => void
 }
 export type PublicEvents = {
-    ready: any
-    error: any
-    log: any
-    "response.start": any
-    "response.end": any
+    ready: void
+    error: { error: Error }
+    log: PublicLogEventPayload
+    "response.start": void
+    "response.end": void
     "response.stop": any
-    "thread.change": any
+    "thread.change": { threadId: string | null }
     "tool.change": any
-    "thread.load.start": any
-    "thread.load.end": any
-    deeplink: any
-    effect: any
+    "thread.load.start": { threadId: string }
+    "thread.load.end": { threadId: string }
+    deeplink: PublicNamedEventPayload
+    effect: PublicNamedEventPayload
     'thread.restore': any
     "message.share": any
     "image.download": any

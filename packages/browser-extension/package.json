@@ -1,0 +1,40 @@
+{
+  "name": "@xpert-ai/chatkit-browser-extension",
+  "version": "0.3.0",
+  "description": "Chrome extension host for Xpert ChatKit",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch --mode development",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@xpert-ai/chatkit-host-automation": "workspace:~",
+    "@xpert-ai/chatkit-types": "workspace:~",
+    "@xpert-ai/chatkit-web-component": "workspace:~"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.0.0",
+    "vitest": "^3.2.4"
+  },
+  "keywords": [
+    "chatkit",
+    "browser-extension",
+    "chrome",
+    "xpert"
+  ],
+  "repository": {
+    "directory": "packages/chatkit-browser-extension",
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  }
+}

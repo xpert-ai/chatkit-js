@@ -203,6 +203,7 @@ export type StreamContextType = {
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
   values: StateType;
   messages: ChatKitAIMessage[];
+  historyMessageLoadVersion: number;
   todos: TodoListSnapshot | null;
   runtimeActivities: RuntimeActivitiesState;
   pendingFollowUps: PendingFollowUp[];
@@ -1384,6 +1385,7 @@ const StreamSession = ({
 }) => {
   const [threadId, setThreadId] = useQueryState('threadId');
   const [values, setValues] = useState<StateType>({ messages: [] });
+  const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [todos, setTodos] = useState<TodoListSnapshot | null>(null);
@@ -1994,6 +1996,7 @@ const StreamSession = ({
         setThreadId(loadedThreadId);
       }
       setValues({ messages: mapped ?? [] });
+      setHistoryMessageLoadVersion((version) => version + 1);
       hydratePendingHITLRequestFromOperation(
         (conversationDetail as { operation?: unknown } | null)?.operation,
         latestExecutionId,
@@ -2779,6 +2782,7 @@ const StreamSession = ({
     contextUsageByAgentKey,
     values,
     messages: values.messages ?? [],
+    historyMessageLoadVersion,
     todos,
     runtimeActivities,
     pendingFollowUps,

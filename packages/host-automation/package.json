@@ -1,0 +1,52 @@
+{
+  "name": "@xpert-ai/chatkit-host-automation",
+  "version": "0.3.0",
+  "description": "Host page automation tools for Xpert ChatKit client tools",
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!**/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@xpert-ai/chatkit-types": "workspace:~"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "^3.7.0",
+    "vitest": "^3.2.4"
+  },
+  "keywords": [
+    "chatkit",
+    "automation",
+    "client-tools"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/chatkit-host-automation",
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  }
+}
