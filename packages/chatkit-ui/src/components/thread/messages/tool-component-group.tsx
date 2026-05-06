@@ -945,7 +945,7 @@ function ToolCallRow({
       <button
         type="button"
         className={cn(
-          'flex w-full min-w-0 items-center gap-2 text-left text-sm leading-6 text-muted-foreground',
+          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-sm leading-6 text-muted-foreground',
           hasDetails && 'cursor-pointer hover:text-foreground',
           hasError && 'text-destructive hover:text-destructive',
         )}
@@ -977,7 +977,7 @@ function ToolCallRow({
         ) : (
           <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         )}
-        <span className="min-w-0 flex-1 truncate" title={label}>
+        <span className="min-w-0 truncate" title={label}>
           {label}
         </span>
         {durationLabel ? (
@@ -989,7 +989,7 @@ function ToolCallRow({
           <ChevronRight
             aria-hidden="true"
             className={cn(
-              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+              'h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/tool-call:opacity-100 group-focus-visible/tool-call:opacity-100',
               isExpanded && 'rotate-90',
             )}
           />
