@@ -137,8 +137,26 @@ type ToolCallOutputRenderer = React.ComponentType<ToolCallOutputRendererProps>;
 
 const TOOL_CALL_OUTPUT_RENDERERS: Partial<Record<string, ToolCallOutputRenderer>> = {};
 
+function normalizeStepCategory(category: unknown): string {
+  if (typeof category !== 'string' || category.trim() === '') {
+    return 'Tool';
+  }
+
+  return category;
+}
+
 export function getToolStepData(content: TMessageContentComponent): PartialStepData {
-  return (content.data ?? {}) as PartialStepData;
+  const data = (content.data ?? {}) as PartialStepData;
+  const category = normalizeStepCategory(data.category);
+
+  if (category === data.category) {
+    return data;
+  }
+
+  return {
+    ...data,
+    category,
+  };
 }
 
 function parseStepDate(value: unknown): number | null {
@@ -276,7 +294,7 @@ function isGroupableToolComponent(
   return (
     isComponentContent(content) &&
     !isWidgetComponent(content) &&
-    content.data?.category === 'Tool'
+    getToolStepData(content).category === 'Tool'
   );
 }
 
@@ -659,12 +677,32 @@ function ToolStepIcon({
     usesToolsetAvatar,
     apiUrl,
   );
+  const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
+  const [failedIconUrl, setFailedIconUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setFailedIconUrl(null);
+  }, [iconUrl]);
+
   if (avatar) {
     return (
       <ToolAvatarIcon
         avatar={avatar}
         label={String(data.tool ?? data.toolset ?? 'Tool')}
         className={className}
+      />
+    );
+  }
+
+  if (iconUrl && failedIconUrl !== iconUrl) {
+    return (
+      <img
+        alt=""
+        aria-hidden="true"
+        className={cn('rounded-sm object-contain', className)}
+        data-slot="tool-step-icon"
+        src={iconUrl}
+        onError={() => setFailedIconUrl(iconUrl)}
       />
     );
   }
@@ -697,19 +735,6 @@ function ToolStepIcon({
         className={className}
         aria-hidden="true"
         data-slot="tool-step-icon"
-      />
-    );
-  }
-
-  const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
-  if (iconUrl) {
-    return (
-      <img
-        alt=""
-        aria-hidden="true"
-        className={cn('rounded-sm object-contain', className)}
-        data-slot="tool-step-icon"
-        src={iconUrl}
       />
     );
   }

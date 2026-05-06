@@ -3,17 +3,19 @@ import {
   type HostPageAutomationClientToolCall,
 } from 'packages/host-automation/src';
 import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+import { withDefaultHostAutomationResultDelay } from './host-automation-delay';
 
-import {
-  EXTENSION_MESSAGE_SOURCE,
-  HOST_AUTOMATION_REQUEST_MESSAGE,
-  HOST_AUTOMATION_RESPONSE_MESSAGE,
-  OPEN_OVERLAY_MESSAGE,
-  OVERLAY_HIT_REGIONS_MESSAGE,
-  OVERLAY_STYLE_MESSAGE,
-  RUN_HOST_AUTOMATION_MESSAGE,
-  TOGGLE_OVERLAY_MESSAGE,
-} from './messages';
+// Keep runtime constants local so Vite emits this as an injectable classic script.
+const OPEN_OVERLAY_MESSAGE = 'xpertai.chatkit.openOverlay';
+const TOGGLE_OVERLAY_MESSAGE = 'xpertai.chatkit.toggleOverlay';
+const OVERLAY_STYLE_MESSAGE = 'xpertai.chatkit.overlayStyle';
+const OVERLAY_HIT_REGIONS_MESSAGE = 'xpertai.chatkit.overlayHitRegions';
+const HOST_AUTOMATION_REQUEST_MESSAGE =
+  'xpertai.chatkit.hostAutomationRequest';
+const HOST_AUTOMATION_RESPONSE_MESSAGE =
+  'xpertai.chatkit.hostAutomationResponse';
+const RUN_HOST_AUTOMATION_MESSAGE = 'xpertai.chatkit.runHostAutomation';
+const EXTENSION_MESSAGE_SOURCE = 'xpertai.chatkit.browserExtension';
 
 type ChromeRuntimeMessage = {
   type?: unknown;
@@ -130,7 +132,9 @@ function isHostAutomationCall(
 async function runHostAutomation(
   call: HostPageAutomationClientToolCall,
 ): Promise<ClientToolMessageInput> {
-  return hostAutomationHandler(call);
+  return withDefaultHostAutomationResultDelay(call, () =>
+    hostAutomationHandler(call),
+  );
 }
 
 function normalizeHitRegion(value: unknown): NormalizedHitRegion | null {
