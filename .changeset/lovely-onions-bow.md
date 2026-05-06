@@ -4,6 +4,7 @@
 '@xpert-ai/chatkit-web-component': patch
 '@xpert-ai/chatkit-ui': patch
 '@xpert-ai/chatkit-types': patch
+'@xpert-ai/chatkit-browser-extension': patch
 ---
 
 pet & browser extension & host automation
