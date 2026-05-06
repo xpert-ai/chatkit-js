@@ -104,7 +104,7 @@ importers:
         version: 19.2.3(@types/react@19.2.7)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
-        version: 4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))
+        version: 4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.23(postcss@8.5.6)
@@ -119,7 +119,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^6.0.0
-        version: 6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
+        version: 6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
 
   examples/managed-chatkit:
     devDependencies:
@@ -231,6 +231,31 @@ importers:
         specifier: ^6.0.0
         version: 6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
 
+  packages/browser-extension:
+    dependencies:
+      '@xpert-ai/chatkit-host-automation':
+        specifier: workspace:~
+        version: link:../host-automation
+      '@xpert-ai/chatkit-types':
+        specifier: workspace:~
+        version: link:../chatkit
+      '@xpert-ai/chatkit-web-component':
+        specifier: workspace:~
+        version: link:../web-component
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.0
+        version: 6.1.2
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@20.19.27)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@25.0.1)(less@4.6.4)(lightningcss@1.30.2)(msw@2.12.6(@types/node@20.19.27)(typescript@5.9.3))(sass@1.98.0)
+
   packages/chatkit:
     dependencies:
       '@a2ui/lit':
@@ -277,53 +302,6 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
-
-  packages/chatkit-browser-extension:
-    dependencies:
-      '@xpert-ai/chatkit-host-automation':
-        specifier: workspace:~
-        version: link:../chatkit-host-automation
-      '@xpert-ai/chatkit-types':
-        specifier: workspace:~
-        version: link:../chatkit
-      '@xpert-ai/chatkit-web-component':
-        specifier: workspace:~
-        version: link:../web-component
-    devDependencies:
-      rimraf:
-        specifier: ^6.0.0
-        version: 6.1.2
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vite:
-        specifier: ^5.0.0
-        version: 5.4.21(@types/node@20.19.27)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@25.0.1)(less@4.6.4)(lightningcss@1.30.2)(msw@2.12.6(@types/node@20.19.27)(typescript@5.9.3))(sass@1.98.0)
-
-  packages/chatkit-host-automation:
-    dependencies:
-      '@xpert-ai/chatkit-types':
-        specifier: workspace:~
-        version: link:../chatkit
-    devDependencies:
-      rimraf:
-        specifier: ^6.0.0
-        version: 6.1.2
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vite:
-        specifier: ^5.0.0
-        version: 5.4.21(@types/node@20.19.27)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
-      vite-plugin-dts:
-        specifier: ^3.7.0
-        version: 3.9.1(@types/node@20.19.27)(rollup@4.53.5)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.27)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@25.0.1)(less@4.6.4)(lightningcss@1.30.2)(msw@2.12.6(@types/node@20.19.27)(typescript@5.9.3))(sass@1.98.0)
 
   packages/chatkit-js:
     dependencies:
@@ -653,6 +631,28 @@ importers:
       '@rollup/rollup-darwin-arm64':
         specifier: ^4.53.5
         version: 4.53.5
+
+  packages/host-automation:
+    dependencies:
+      '@xpert-ai/chatkit-types':
+        specifier: workspace:~
+        version: link:../chatkit
+    devDependencies:
+      rimraf:
+        specifier: ^6.0.0
+        version: 6.1.2
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@20.19.27)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
+      vite-plugin-dts:
+        specifier: ^3.7.0
+        version: 3.9.1(@types/node@20.19.27)(rollup@4.53.5)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.27)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.27)(jiti@2.6.1)(jsdom@25.0.1)(less@4.6.4)(lightningcss@1.30.2)(msw@2.12.6(@types/node@20.19.27)(typescript@5.9.3))(sass@1.98.0)
 
   packages/web-component:
     dependencies:
@@ -9874,6 +9874,18 @@ snapshots:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
 
+  '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))':
+    dependencies:
+      '@babel/core': 7.28.5
+      '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.28.5)
+      '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.28.5)
+      '@rolldown/pluginutils': 1.0.0-beta.27
+      '@types/babel__core': 7.20.5
+      react-refresh: 0.17.0
+      vite: 6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
+    transitivePeerDependencies:
+      - supports-color
+
   '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))':
     dependencies:
       '@babel/core': 7.28.5
@@ -14395,6 +14407,22 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.27
       fsevents: 2.3.3
+      less: 4.6.4
+      lightningcss: 1.30.2
+      sass: 1.98.0
+
+  vite@6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0):
+    dependencies:
+      esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.3)
+      picomatch: 4.0.3
+      postcss: 8.5.6
+      rollup: 4.53.5
+      tinyglobby: 0.2.15
+    optionalDependencies:
+      '@types/node': 20.19.27
+      fsevents: 2.3.3
+      jiti: 1.21.7
       less: 4.6.4
       lightningcss: 1.30.2
       sass: 1.98.0

@@ -8,10 +8,10 @@
       "@xpert-ai/a2ui-react": ["packages/chatkit-widgets/src/index.ts"],
       "@xpert-ai/chatkit-angular": ["packages/chatkit-angular/src/index.ts"],
       "@xpert-ai/chatkit-browser-extension": [
-        "packages/chatkit-browser-extension/src/index.ts"
+        "packages/browser-extension/src/index.ts"
       ],
       "@xpert-ai/chatkit-host-automation": [
-        "packages/chatkit-host-automation/src/index.ts"
+        "packages/host-automation/src/index.ts"
       ],
       "@xpert-ai/chatkit-js": ["packages/chatkit-js/src/index.ts"],
       "@xpert-ai/chatkit-react": ["packages/chatkit-react/src/index.ts"],

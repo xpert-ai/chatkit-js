@@ -1,7 +1,7 @@
 import {
   createHostPageAutomationClientToolHandler,
   type HostPageAutomationClientToolCall,
-} from '@xpert-ai/chatkit-host-automation';
+} from 'packages/host-automation/src';
 import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
 
 import {
