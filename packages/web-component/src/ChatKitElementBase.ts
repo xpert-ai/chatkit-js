@@ -93,10 +93,12 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #launcherCloseButton?: HTMLButtonElement;
   #launcherOpen = false;
   #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
+  #petClosedByContextMenu = false;
 
   #shadow = this.attachShadow({ mode: 'open' });
   #petOverlay = new PetOverlay(this.#shadow, {
     onActivate: () => this.#handlePetActivate(),
+    onClose: () => this.#handlePetClose(),
     onReply: (text) => this.#handlePetReply(text),
     onThreadSummaryActivate: (threadId) =>
       void this.#handlePetThreadSummaryActivate(threadId),
@@ -266,9 +268,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     return options?.displayMode === 'pet' ? 'pet' : 'chat';
   }
 
-  #getConfiguredPetOptions(
-    options = this.#opts,
-  ): ChatKitOptions['pet'] | null {
+  #getConfiguredPetOptions(options = this.#opts): ChatKitOptions['pet'] | null {
     if (!options) {
       return null;
     }
@@ -284,6 +284,10 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
+    if (this.#petClosedByContextMenu) {
+      return null;
+    }
+
     let pet =
       this.#framePetOptionsOverride !== undefined
         ? this.#framePetOptionsOverride
@@ -358,8 +362,21 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     }
 
     this.#setLauncherOpen(true);
+    this.#loaded.then(() => this.focusComposer()).catch(() => undefined);
+  }
+
+  #handlePetClose() {
+    this.#petClosedByContextMenu = true;
+    this.#framePetOptionsOverride = null;
+    this.#setLauncherOpen(false);
+    this.#petOverlay.setOptions(null);
+
+    if (this.#getDisplayMode() === 'pet') {
+      return;
+    }
+
     this.#loaded
-      .then(() => this.focusComposer())
+      .then(() => this.#messenger.commands.setPetEnabled({ enabled: false }))
       .catch(() => undefined);
   }
 
@@ -638,6 +655,9 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     this.#messenger.on('pet_options_change', (data) => {
       const payload = parsePetOptionsChangePayload(data);
       if (payload) {
+        if (!this.#petClosedByContextMenu || payload.pet === null) {
+          this.#petClosedByContextMenu = false;
+        }
         this.#framePetOptionsOverride = payload.pet;
         this.#petOverlay.setOptions(this.#getOverlayPetOptions());
       }
@@ -705,6 +725,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
     this.#opts = newOptions;
+    this.#petClosedByContextMenu = false;
     this.#petOverlay.setLocale(newOptions.locale);
     this.#petOverlay.setOptions(this.#getOverlayPetOptions());
     if (this.#initialized) {

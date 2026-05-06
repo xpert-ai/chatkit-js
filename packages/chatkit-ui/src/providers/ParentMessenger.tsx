@@ -29,6 +29,7 @@ type CommandMessageMap = {
   onSendUserMessage: SendUserMessageParams;
   onSetComposerValue: ComposerValuePayload | null;
   onSetOptions: ChatKitOptions | null;
+  onSetPetEnabled: { enabled: boolean };
   onFocusComposer: null;
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
@@ -115,6 +116,7 @@ export type ParentMessenger = {
 };
 
 type OnSetOptionsHandler = (options: ChatKitOptions | null) => void;
+type OnSetPetEnabledHandler = (enabled: boolean) => void;
 type OnSetComposerValueHandler = (
   payload: ComposerValuePayload | null,
 ) => void | Promise<void>;
@@ -122,6 +124,7 @@ type OnFocusComposerHandler = () => void | Promise<void>;
 
 type ParentMessengerContextValue = ParentMessenger & {
   registerOnSetOptions: (handler: OnSetOptionsHandler) => () => void;
+  registerOnSetPetEnabled: (handler: OnSetPetEnabledHandler) => () => void;
   registerOnSetComposerValue: (
     handler: OnSetComposerValueHandler,
   ) => () => void;
@@ -147,6 +150,7 @@ export function ParentMessengerProvider({
     >(),
   );
   const onSetOptionsHandlersRef = useRef(new Set<OnSetOptionsHandler>());
+  const onSetPetEnabledHandlersRef = useRef(new Set<OnSetPetEnabledHandler>());
   const onSetComposerValueHandlersRef = useRef(
     new Set<OnSetComposerValueHandler>(),
   );
@@ -167,6 +171,16 @@ export function ParentMessengerProvider({
       onSetOptionsHandlersRef.current.delete(handler);
     };
   }, []);
+
+  const registerOnSetPetEnabled = useCallback(
+    (handler: OnSetPetEnabledHandler) => {
+      onSetPetEnabledHandlersRef.current.add(handler);
+      return () => {
+        onSetPetEnabledHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
 
   const registerOnSetComposerValue = useCallback(
     (handler: OnSetComposerValueHandler) => {
@@ -384,6 +398,18 @@ export function ParentMessengerProvider({
         return;
       }
 
+      if (payload.type === 'command' && payload.command === 'onSetPetEnabled') {
+        const data = payload.data as { enabled?: unknown } | null | undefined;
+        const enabled = data?.enabled === true;
+        onSetPetEnabledHandlersRef.current.forEach((handler) => {
+          handler(enabled);
+        });
+        if (payload.nonce) {
+          sendResponse(payload.nonce, { ok: true });
+        }
+        return;
+      }
+
       if (payload.type === 'command' && payload.command === 'onFocusComposer') {
         void Promise.all(
           [...onFocusComposerHandlersRef.current].map((handler) =>
@@ -479,7 +505,7 @@ export function ParentMessengerProvider({
   );
 
   const sendEvent = useCallback(
-    <E extends ParentEventName,>(
+    <E extends ParentEventName>(
       event: E,
       data: ParentEventPayloadMap[E],
       transfer?: Transferable[],
@@ -502,6 +528,7 @@ export function ParentMessengerProvider({
       sendCommand,
       sendEvent,
       registerOnSetOptions,
+      registerOnSetPetEnabled,
       registerOnSetComposerValue,
       registerOnFocusComposer,
     }),
@@ -510,6 +537,7 @@ export function ParentMessengerProvider({
       sendCommand,
       sendEvent,
       registerOnSetOptions,
+      registerOnSetPetEnabled,
       registerOnSetComposerValue,
       registerOnFocusComposer,
     ],

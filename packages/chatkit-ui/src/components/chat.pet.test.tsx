@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
     threadId: null as string | null,
     contextUsageByAgentKey: {},
     values: { messages: [] },
+    historyMessageLoadVersion: 0,
     messages: [] as Array<{
       id?: string;
       type: string;
@@ -194,6 +195,20 @@ function installMatchMedia() {
   });
 }
 
+function getThreadSummaryLogData() {
+  return mocks.parentMessengerSendEvent.mock.calls.flatMap((call) => {
+    const [event, payload] = call;
+    if (event !== 'public_event' || !Array.isArray(payload)) {
+      return [];
+    }
+
+    const logPayload = payload[1] as
+      | { name?: unknown; data?: unknown }
+      | undefined;
+    return logPayload?.name === 'thread.summary' ? [logPayload.data] : [];
+  });
+}
+
 describe('Chat pet integration', () => {
   beforeEach(() => {
     installMatchMedia();
@@ -202,6 +217,7 @@ describe('Chat pet integration', () => {
     mocks.threads = [];
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
+    mocks.stream.historyMessageLoadVersion = 0;
     mocks.stream.isLoading = false;
     mocks.stream.isReady = true;
     mocks.stream.error = null;
@@ -234,7 +250,7 @@ describe('Chat pet integration', () => {
     );
   });
 
-  it('sends the active thread summary through log events', async () => {
+  it('sends newly appended thread summaries through log events', async () => {
     mocks.stream.threadId = 'thread-1';
     mocks.threads = [
       {
@@ -243,6 +259,16 @@ describe('Chat pet integration', () => {
         status: 'completed',
       },
     ];
+
+    const { rerender } = render(
+      <Chat options={{ ...baseOptions, pet: true }} />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    mocks.parentMessengerSendEvent.mockClear();
+
     mocks.stream.messages = [
       {
         id: 'human-1',
@@ -257,26 +283,17 @@ describe('Chat pet integration', () => {
       },
     ];
 
-    render(<Chat options={{ ...baseOptions, pet: true }} />);
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
 
     await waitFor(() =>
-      expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
-        'public_event',
-        [
-          'log',
-          {
-            name: 'thread.summary',
-            data: {
-              threadId: 'thread-1',
-              title: 'Research pets',
-              message: 'The pet bubble is ready.',
-              status: 'completed',
-              messageId: 'assistant-1',
-              updatedAt: '2026-05-05T00:00:00.000Z',
-            },
-          },
-        ],
-      ),
+      expect(getThreadSummaryLogData()).toContainEqual({
+        threadId: 'thread-1',
+        title: 'Research pets',
+        message: 'The pet bubble is ready.',
+        status: 'completed',
+        messageId: 'assistant-1',
+        updatedAt: '2026-05-05T00:00:00.000Z',
+      }),
     );
   });
 
@@ -290,6 +307,16 @@ describe('Chat pet integration', () => {
         status: 'running',
       },
     ];
+
+    const { rerender } = render(
+      <Chat options={{ ...baseOptions, pet: true }} />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    mocks.parentMessengerSendEvent.mockClear();
+
     mocks.stream.messages = [
       {
         id: 'assistant-1',
@@ -298,28 +325,20 @@ describe('Chat pet integration', () => {
       },
     ];
 
-    render(<Chat options={{ ...baseOptions, pet: true }} />);
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
 
     await waitFor(() =>
-      expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
-        'public_event',
-        [
-          'log',
-          {
-            name: 'thread.summary',
-            data: expect.objectContaining({
-              threadId: 'thread-1',
-              status: 'running',
-            }),
-          },
-        ],
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          status: 'running',
+        }),
       ),
     );
   });
 
   it('marks the pet thread summary as failed on thread errors', async () => {
     mocks.stream.threadId = 'thread-1';
-    mocks.stream.error = new Error('Thread failed');
     mocks.threads = [
       {
         id: 'thread-1',
@@ -327,6 +346,17 @@ describe('Chat pet integration', () => {
         status: 'completed',
       },
     ];
+
+    const { rerender } = render(
+      <Chat options={{ ...baseOptions, pet: true }} />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    mocks.parentMessengerSendEvent.mockClear();
+
+    mocks.stream.error = new Error('Thread failed');
     mocks.stream.messages = [
       {
         id: 'assistant-1',
@@ -335,28 +365,20 @@ describe('Chat pet integration', () => {
       },
     ];
 
-    render(<Chat options={{ ...baseOptions, pet: true }} />);
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
 
     await waitFor(() =>
-      expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
-        'public_event',
-        [
-          'log',
-          {
-            name: 'thread.summary',
-            data: expect.objectContaining({
-              threadId: 'thread-1',
-              status: 'failed',
-            }),
-          },
-        ],
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          status: 'failed',
+        }),
       ),
     );
   });
 
   it('sends the pet thread summary with the error message when the thread fails before an assistant message', async () => {
     mocks.stream.threadId = 'thread-1';
-    mocks.stream.error = new Error('Conversation failed before output');
     mocks.threads = [
       {
         id: 'thread-1',
@@ -364,6 +386,17 @@ describe('Chat pet integration', () => {
         status: 'completed',
       },
     ];
+
+    const { rerender } = render(
+      <Chat options={{ ...baseOptions, pet: true }} />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    mocks.parentMessengerSendEvent.mockClear();
+
+    mocks.stream.error = new Error('Conversation failed before output');
     mocks.stream.messages = [
       {
         id: 'human-1',
@@ -372,23 +405,142 @@ describe('Chat pet integration', () => {
       },
     ];
 
-    render(<Chat options={{ ...baseOptions, pet: true }} />);
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
 
     await waitFor(() =>
-      expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
-        'public_event',
-        [
-          'log',
-          {
-            name: 'thread.summary',
-            data: expect.objectContaining({
-              threadId: 'thread-1',
-              title: 'Failed before output',
-              message: 'Conversation failed before output',
-              status: 'failed',
-            }),
-          },
-        ],
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          title: 'Failed before output',
+          message: 'Conversation failed before output',
+          status: 'failed',
+        }),
+      ),
+    );
+  });
+
+  it('does not send pet thread summaries for history-loaded messages', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.threads = [
+      {
+        id: 'thread-1',
+        title: 'Historical thread',
+        status: 'running',
+      },
+    ];
+
+    const { rerender } = render(
+      <Chat options={{ ...baseOptions, pet: true }} />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    mocks.parentMessengerSendEvent.mockClear();
+
+    mocks.stream.historyMessageLoadVersion = 1;
+    mocks.stream.messages = [
+      {
+        id: 'human-1',
+        type: 'human',
+        content: 'Old question',
+      },
+      {
+        id: 'assistant-1',
+        type: 'assistant',
+        content: 'Old answer',
+      },
+    ];
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() => expect(getThreadSummaryLogData()).toContain(null));
+    expect(getThreadSummaryLogData().filter(Boolean)).toHaveLength(0);
+
+    mocks.parentMessengerSendEvent.mockClear();
+    mocks.stream.isLoading = true;
+    mocks.stream.messages = [
+      ...mocks.stream.messages,
+      {
+        id: 'human-2',
+        type: 'human',
+        content: 'New question',
+      },
+    ];
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() =>
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          message: 'New question',
+          messageId: 'human-2',
+          status: 'running',
+        }),
+      ),
+    );
+
+    mocks.parentMessengerSendEvent.mockClear();
+    mocks.stream.messages = [
+      ...mocks.stream.messages,
+      {
+        id: 'assistant-2',
+        type: 'assistant',
+        content: '',
+      },
+    ];
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() =>
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          message: 'New question',
+          messageId: 'human-2',
+          status: 'running',
+        }),
+      ),
+    );
+    expect(getThreadSummaryLogData()).not.toContain(null);
+
+    mocks.parentMessengerSendEvent.mockClear();
+    mocks.stream.messages = [
+      ...mocks.stream.messages.slice(0, -1),
+      {
+        id: 'assistant-2',
+        type: 'assistant',
+        content: 'New answer',
+      },
+    ];
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() =>
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          message: 'New answer',
+          messageId: 'assistant-2',
+          status: 'running',
+        }),
+      ),
+    );
+
+    mocks.parentMessengerSendEvent.mockClear();
+    mocks.stream.isLoading = false;
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() =>
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          message: 'New answer',
+          messageId: 'assistant-2',
+          status: 'completed',
+        }),
       ),
     );
   });

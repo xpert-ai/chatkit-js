@@ -602,16 +602,13 @@ export function Chat({
     }),
     [basePetSettings, petLocalSettings, petRequired],
   );
-  const effectivePet = React.useMemo(
-    () => {
-      if (petRequired || petLocalSettings) {
-        return buildPetOptionsFromLocalSettings(displayedPetSettings);
-      }
+  const effectivePet = React.useMemo(() => {
+    if (petRequired || petLocalSettings) {
+      return buildPetOptionsFromLocalSettings(displayedPetSettings);
+    }
 
-      return options?.pet ?? null;
-    },
-    [displayedPetSettings, options?.pet, petLocalSettings, petRequired],
-  );
+    return options?.pet ?? null;
+  }, [displayedPetSettings, options?.pet, petLocalSettings, petRequired]);
   const savePetLocalSettings = React.useCallback(
     (settings: PetLocalSettings) => {
       const nextSettings = petRequired
@@ -875,6 +872,19 @@ export function Chat({
     onFocusComposer: React.useCallback(() => {
       composerInputRef.current?.focus();
     }, []),
+    onSetPetEnabled: React.useCallback(
+      (enabled: boolean) => {
+        if (petRequired) {
+          return;
+        }
+
+        savePetLocalSettings({
+          ...displayedPetSettings,
+          enabled,
+        });
+      },
+      [displayedPetSettings, petRequired, savePetLocalSettings],
+    ),
   });
 
   const syncQuoteSelection = React.useCallback(() => {
@@ -2472,9 +2482,10 @@ export function Chat({
     parentMessenger,
     threadId: stream.threadId,
     currentThread,
-    currentThreadIsRunning,
+    currentThreadIsRunning: stream.isLoading,
     threadErrorMessage,
     messages,
+    historyMessageLoadVersion: stream.historyMessageLoadVersion ?? 0,
     fallbackTitle: t('history.threadFallback'),
   });
 
@@ -2529,9 +2540,7 @@ export function Chat({
                 </button>
               </span>
             </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {t('settings.open')}
-            </TooltipContent>
+            <TooltipContent side="bottom">{t('settings.open')}</TooltipContent>
           </Tooltip>
 
           {/* History controls - only shown when history.enabled is true (default) */}

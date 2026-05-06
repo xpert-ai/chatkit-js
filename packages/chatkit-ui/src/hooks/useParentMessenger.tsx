@@ -10,12 +10,14 @@ export type { ParentMessenger } from '../providers/ParentMessenger';
 
 export type ParentMessengerOptions = {
   onSetOptions?: (options: ChatKitOptions | null) => void;
+  onSetPetEnabled?: (enabled: boolean) => void;
   onSetComposerValue?: (payload: ComposerValuePayload | null) => void;
   onFocusComposer?: () => void;
 };
 
 export function useParentMessenger({
   onSetOptions,
+  onSetPetEnabled,
   onSetComposerValue,
   onFocusComposer,
 }: ParentMessengerOptions = {}): ParentMessenger {
@@ -28,16 +30,21 @@ export function useParentMessenger({
 
   const {
     registerOnSetOptions,
+    registerOnSetPetEnabled,
     registerOnSetComposerValue,
     registerOnFocusComposer,
     ...messenger
   } = context;
   const onSetOptionsRef = useRef(onSetOptions);
+  const onSetPetEnabledRef = useRef(onSetPetEnabled);
   const onSetComposerValueRef = useRef(onSetComposerValue);
   const onFocusComposerRef = useRef(onFocusComposer);
   useEffect(() => {
     onSetOptionsRef.current = onSetOptions;
   }, [onSetOptions]);
+  useEffect(() => {
+    onSetPetEnabledRef.current = onSetPetEnabled;
+  }, [onSetPetEnabled]);
   useEffect(() => {
     onSetComposerValueRef.current = onSetComposerValue;
   }, [onSetComposerValue]);
@@ -46,6 +53,7 @@ export function useParentMessenger({
   }, [onFocusComposer]);
 
   const hasOnSetOptions = Boolean(onSetOptions);
+  const hasOnSetPetEnabled = Boolean(onSetPetEnabled);
   const hasOnSetComposerValue = Boolean(onSetComposerValue);
   const hasOnFocusComposer = Boolean(onFocusComposer);
   useEffect(() => {
@@ -55,6 +63,14 @@ export function useParentMessenger({
     };
     return registerOnSetOptions(handler);
   }, [hasOnSetOptions, registerOnSetOptions]);
+
+  useEffect(() => {
+    if (!hasOnSetPetEnabled) return;
+    const handler = (enabled: boolean) => {
+      onSetPetEnabledRef.current?.(enabled);
+    };
+    return registerOnSetPetEnabled(handler);
+  }, [hasOnSetPetEnabled, registerOnSetPetEnabled]);
 
   useEffect(() => {
     if (!hasOnSetComposerValue) return;
