@@ -24,6 +24,11 @@ type OverlayInput = {
   position?: unknown;
 };
 
+type PetInput = {
+  scale?: unknown;
+  boundsPadding?: unknown;
+};
+
 type HostAutomationInput = {
   enabled?: unknown;
 };
@@ -38,14 +43,15 @@ type ConfigInput = {
   theme?: ThemeInput | null;
   surfaces?: SurfacesInput | null;
   overlay?: OverlayInput | null;
+  pet?: PetInput | null;
   hostAutomation?: HostAutomationInput | null;
 };
 
 export const STORAGE_KEY = 'chatkitExtensionConfig';
 
 export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
-  frameUrl: '',
-  apiUrl: '',
+  frameUrl: 'https://app.xpertai.cn/chatkit',
+  apiUrl: 'https://api.xpertai.cn/api/ai',
   xpertId: undefined,
   clientSecret: '',
   locale: undefined,
@@ -60,6 +66,10 @@ export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
     width: 420,
     height: 720,
     position: 'bottom-right',
+  },
+  pet: {
+    scale: 1,
+    boundsPadding: 50,
   },
   hostAutomation: {
     enabled: true,
@@ -97,12 +107,20 @@ function isOverlayInput(value: unknown): value is OverlayInput {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function isPetInput(value: unknown): value is PetInput {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function isHostAutomationInput(value: unknown): value is HostAutomationInput {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeStringWithDefault(value: unknown, fallback: string): string {
+  return normalizeString(value) || fallback;
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -178,6 +196,24 @@ function normalizeOverlayPosition(value: unknown): OverlayPosition {
     : DEFAULT_EXTENSION_CONFIG.overlay.position;
 }
 
+function normalizePetScale(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return DEFAULT_EXTENSION_CONFIG.pet.scale;
+  }
+
+  return Math.min(2, Math.max(0.1, numeric));
+}
+
+function normalizePetBoundsPadding(value: unknown): number {
+  return normalizeOverlayNumber(
+    value,
+    DEFAULT_EXTENSION_CONFIG.pet.boundsPadding,
+    0,
+    500,
+  );
+}
+
 export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
   const source = isConfigInput(value) ? value : {};
   const sourceTheme = isThemeInput(source.theme) ? source.theme : {};
@@ -185,14 +221,21 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
     ? source.surfaces
     : {};
   const sourceOverlay = isOverlayInput(source.overlay) ? source.overlay : {};
+  const sourcePet = isPetInput(source.pet) ? source.pet : {};
   const sourceHostAutomation = isHostAutomationInput(source.hostAutomation)
     ? source.hostAutomation
     : {};
   const colorScheme = normalizeColorScheme(sourceTheme.colorScheme);
 
   return {
-    frameUrl: normalizeString(source.frameUrl),
-    apiUrl: normalizeString(source.apiUrl),
+    frameUrl: normalizeStringWithDefault(
+      source.frameUrl,
+      DEFAULT_EXTENSION_CONFIG.frameUrl,
+    ),
+    apiUrl: normalizeStringWithDefault(
+      source.apiUrl,
+      DEFAULT_EXTENSION_CONFIG.apiUrl,
+    ),
     xpertId: optionalString(source.xpertId),
     clientSecret: normalizeString(source.clientSecret),
     locale: normalizeLocale(source.locale),
@@ -229,6 +272,10 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
         1200,
       ),
       position: normalizeOverlayPosition(sourceOverlay.position),
+    },
+    pet: {
+      scale: normalizePetScale(sourcePet.scale),
+      boundsPadding: normalizePetBoundsPadding(sourcePet.boundsPadding),
     },
     hostAutomation: {
       enabled: normalizeBoolean(

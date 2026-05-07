@@ -1,6 +1,7 @@
 export type {
   ChatKitDisplayMode,
   ChatKitExtensionConfig,
+  ChatKitPetConfig,
   ConfigValidationIssue,
   ConfigValidationResult,
   OverlayPosition,

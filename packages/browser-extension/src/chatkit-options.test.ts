@@ -48,7 +48,12 @@ describe('createChatKitOptions', () => {
     expect('xpertId' in options.api).toBe(false);
     expect(options.locale).toBeUndefined();
     expect(options.displayMode).toBe('pet');
-    expect(options.pet).toBe(true);
+    expect(options.pet).toEqual({
+      position: {
+        scale: 1,
+        boundsPadding: 100,
+      },
+    });
   });
 
   it('can override display mode for a specific extension surface', () => {

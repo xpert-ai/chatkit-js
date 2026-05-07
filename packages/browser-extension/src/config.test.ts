@@ -27,6 +27,7 @@ describe('extension config', () => {
           autoPageOverlay: true,
         },
         overlay: { width: 1200, height: 20, position: 'top-left' },
+        pet: { scale: 1.8, boundsPadding: 140 },
         hostAutomation: { enabled: false },
       }),
     ).toMatchObject({
@@ -43,6 +44,7 @@ describe('extension config', () => {
         autoPageOverlay: true,
       },
       overlay: { width: 900, height: 360, position: 'top-left' },
+      pet: { scale: 1.8, boundsPadding: 140 },
       hostAutomation: { enabled: false },
     });
   });
@@ -57,13 +59,11 @@ describe('extension config', () => {
     expect(normalizeConfig({ locale: 'fr-FR' }).locale).toBeUndefined();
   });
 
-  it('reports missing required ChatKit connection fields', () => {
+  it('reports missing required manual credentials', () => {
     const validation = validateConfig(normalizeConfig({}));
 
     expect(validation.ok).toBe(false);
     expect(validation.issues.map((issue) => issue.field)).toEqual([
-      'frameUrl',
-      'apiUrl',
       'clientSecret',
     ]);
   });

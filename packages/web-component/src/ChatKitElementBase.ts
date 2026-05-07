@@ -283,15 +283,53 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     return options.pet ?? null;
   }
 
+  #mergeConfiguredPetPositionDefaults(
+    pet: ChatKitOptions['pet'] | null,
+  ): ChatKitOptions['pet'] | null {
+    if (!pet) {
+      return pet;
+    }
+
+    const configured = normalizePetOptions(
+      this.#getConfiguredPetOptions() ?? null,
+    );
+    if (!configured) {
+      return pet;
+    }
+
+    if (pet === true) {
+      return { position: configured.position };
+    }
+
+    if (!pet.position) {
+      return { ...pet, position: configured.position };
+    }
+
+    return {
+      ...pet,
+      position: {
+        ...configured.position,
+        ...pet.position,
+        boundsPadding:
+          pet.position.boundsPadding ?? configured.position.boundsPadding,
+        pin: 'pin' in pet.position ? pet.position.pin : configured.position.pin,
+      },
+    };
+  }
+
   #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
     if (this.#petClosedByContextMenu) {
       return null;
     }
 
-    let pet =
-      this.#framePetOptionsOverride !== undefined
-        ? this.#framePetOptionsOverride
-        : this.#getConfiguredPetOptions();
+    let pet;
+    if (this.#framePetOptionsOverride !== undefined) {
+      pet = this.#mergeConfiguredPetPositionDefaults(
+        this.#framePetOptionsOverride,
+      );
+    } else {
+      pet = this.#getConfiguredPetOptions();
+    }
 
     if (this.#getDisplayMode() === 'pet' && !normalizePetOptions(pet ?? null)) {
       pet = true;
