@@ -7,11 +7,14 @@ import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
 import { validateConfig } from '../../config';
 import {
   OPEN_OVERLAY_MESSAGE,
+  RUN_HOST_AUTOMATION_IN_TAB_MESSAGE,
   RUN_HOST_AUTOMATION_MESSAGE,
   TOGGLE_OVERLAY_MESSAGE,
 } from '../../messages';
 import { readConfig } from '../../storage';
 import type { ChatKitExtensionConfig } from '../../types';
+import { withDefaultHostAutomationResultDelay } from '../../host-automation-delay';
+import { runCdpHostAutomation, type ChromeDebuggerApi } from './cdp-automation';
 
 export type ChromeTab = {
   id?: number;
@@ -34,6 +37,10 @@ type ChromeTabUpdateListener = (
   tab: ChromeTab,
 ) => void;
 
+type ChromeMessageSender = {
+  tab?: ChromeTab;
+};
+
 export type ChromeStorageArea = {
   get: (keys?: string | string[] | null) => Promise<Record<string, unknown>>;
   set: (items: Record<string, unknown>) => Promise<void>;
@@ -44,7 +51,17 @@ export type ChromeStorageArea = {
 
 export type ChromeApi = {
   runtime: {
+    getURL: (path: string) => string;
     openOptionsPage: () => Promise<void> | void;
+    onMessage?: {
+      addListener: (
+        listener: (
+          message: Record<string, unknown>,
+          sender: ChromeMessageSender,
+          sendResponse: (response?: unknown) => void,
+        ) => boolean | void,
+      ) => void;
+    };
     onInstalled?: {
       addListener: (listener: () => void) => void;
     };
@@ -68,6 +85,10 @@ export type ChromeApi = {
       active: boolean;
       currentWindow: boolean;
     }) => Promise<ChromeTab[]>;
+    update?: (
+      tabId: number,
+      updateProperties: { url: string },
+    ) => Promise<ChromeTab | undefined> | void;
     sendMessage: (
       tabId: number,
       message: Record<string, unknown>,
@@ -79,7 +100,9 @@ export type ChromeApi = {
   scripting: {
     executeScript: (details: {
       target: { tabId: number };
-      files: string[];
+      files?: string[];
+      func?: (...args: string[]) => unknown;
+      args?: string[];
     }) => Promise<unknown>;
   };
   sidePanel?: {
@@ -88,6 +111,7 @@ export type ChromeApi = {
       openPanelOnActionClick: boolean;
     }) => Promise<void>;
   };
+  debugger?: ChromeDebuggerApi;
 };
 
 export type ChromeExtensionPlatform = ReturnType<
@@ -140,12 +164,20 @@ async function sendMessageWithInjection(
   try {
     return await api.tabs.sendMessage(tabId, message);
   } catch {
-    await api.scripting.executeScript({
-      target: { tabId },
-      files: [CONTENT_SCRIPT_FILE],
-    });
+    await injectContentScript(api, tabId);
     return api.tabs.sendMessage(tabId, message);
   }
+}
+
+async function injectContentScript(api: ChromeApi, tabId: number) {
+  await api.scripting.executeScript({
+    target: { tabId },
+    func: async (scriptUrl: string) => {
+      await import(scriptUrl);
+      return true;
+    },
+    args: [api.runtime.getURL(CONTENT_SCRIPT_FILE)],
+  });
 }
 
 function unwrapHostAutomationResponse(value: unknown): ClientToolMessageInput {
@@ -167,6 +199,111 @@ function unwrapHostAutomationResponse(value: unknown): ClientToolMessageInput {
   }
 
   return response.response as ClientToolMessageInput;
+}
+
+function hasAccessibilityRefTarget(call: HostPageAutomationClientToolCall) {
+  const params = call.params;
+  if (!params || typeof params !== 'object' || Array.isArray(params)) {
+    return false;
+  }
+
+  const record = params as Record<string, unknown>;
+  const axRef = record.axRef;
+  const ref = record.ref;
+  const hasAxRef =
+    (typeof axRef === 'string' && axRef.trim()) ||
+    (typeof axRef === 'number' && Number.isFinite(axRef));
+  const hasDomRef = typeof ref === 'string' && ref.trim();
+  return Boolean(hasAxRef && !hasDomRef);
+}
+
+function createHostAutomationToolMessage(
+  call: HostPageAutomationClientToolCall,
+  status: 'success' | 'error',
+  content: unknown,
+): ClientToolMessageInput {
+  return {
+    tool_call_id: call.tool_call_id ?? call.id,
+    name: call.name,
+    status,
+    content: JSON.stringify(content),
+  };
+}
+
+function resolveNavigationUrl(
+  tab: ActiveChromeTab,
+  call: HostPageAutomationClientToolCall,
+) {
+  if (call.name !== 'host_page_navigate') {
+    return null;
+  }
+
+  const params = call.params;
+  const rawUrl =
+    params && typeof params === 'object' && !Array.isArray(params)
+      ? (params as Record<string, unknown>).url
+      : undefined;
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    throw new Error('url must be a non-empty string.');
+  }
+
+  const nextUrl = new URL(rawUrl, tab.url);
+  if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
+    throw new Error('Navigation only supports HTTP(S) URLs.');
+  }
+
+  return nextUrl.toString();
+}
+
+async function navigateRestrictedTab(
+  api: ChromeApi,
+  tab: ActiveChromeTab,
+  call: HostPageAutomationClientToolCall,
+): Promise<ClientToolMessageInput> {
+  if (!api.tabs.update) {
+    throw new Error('Chrome tabs.update API is not available.');
+  }
+
+  const url = resolveNavigationUrl(tab, call);
+  if (!url) {
+    throw new Error('Host page automation can only run on HTTP(S) pages.');
+  }
+
+  await api.tabs.update(tab.id, { url });
+  return createHostAutomationToolMessage(call, 'success', {
+    ok: true,
+    result: {
+      navigated: url,
+      strategy: 'chrome_tabs_update',
+    },
+  });
+}
+
+async function runHostAutomationForTab(
+  api: ChromeApi,
+  tab: ActiveChromeTab,
+  call: HostPageAutomationClientToolCall,
+): Promise<ClientToolMessageInput> {
+  if (!isInjectableTabUrl(tab.url)) {
+    return withDefaultHostAutomationResultDelay(call, () =>
+      navigateRestrictedTab(api, tab, call),
+    );
+  }
+
+  if (api.debugger) {
+    const cdpResponse = await withDefaultHostAutomationResultDelay(call, () =>
+      runCdpHostAutomation(api, tab, call),
+    );
+    if (cdpResponse.status !== 'error' || hasAccessibilityRefTarget(call)) {
+      return cdpResponse;
+    }
+  }
+
+  const response = await sendMessageWithInjection(api, tab.id, {
+    type: RUN_HOST_AUTOMATION_MESSAGE,
+    call,
+  });
+  return unwrapHostAutomationResponse(response);
 }
 
 export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
@@ -216,15 +353,7 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
       }
 
       const tab = await queryActiveTab(api);
-      if (!isInjectableTabUrl(tab.url)) {
-        throw new Error('Host page automation can only run on HTTP(S) pages.');
-      }
-
-      const response = await sendMessageWithInjection(api, tab.id, {
-        type: RUN_HOST_AUTOMATION_MESSAGE,
-        call,
-      });
-      return unwrapHostAutomationResponse(response);
+      return runHostAutomationForTab(api, tab, call);
     };
 
   const restrictStorageAccess = async () => {
@@ -244,6 +373,50 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
         openPanelOnActionClick: false,
       });
     };
+
+    api.runtime.onMessage?.addListener((message, sender, sendResponse) => {
+      if (message.type !== RUN_HOST_AUTOMATION_IN_TAB_MESSAGE) {
+        return false;
+      }
+
+      const tab = sender.tab;
+      if (!tab || typeof tab.id !== 'number') {
+        sendResponse({ ok: false, error: 'No sender tab is available.' });
+        return false;
+      }
+      const senderTab: ActiveChromeTab = { ...tab, id: tab.id };
+
+      const call = message.call;
+      if (typeof call !== 'object' || call === null || Array.isArray(call)) {
+        sendResponse({ ok: false, error: 'Invalid host automation request.' });
+        return false;
+      }
+
+      void readConfig(api.storage.local)
+        .then((config) => {
+          if (!config.hostAutomation.enabled) {
+            throw new Error('Host page automation is disabled.');
+          }
+
+          return runHostAutomationForTab(
+            api,
+            senderTab,
+            call as HostPageAutomationClientToolCall,
+          );
+        })
+        .then(
+          (response) => sendResponse({ ok: true, response }),
+          (error) =>
+            sendResponse({
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Host automation failed.',
+            }),
+        );
+      return true;
+    });
 
     configure();
     api.runtime.onInstalled?.addListener(configure);

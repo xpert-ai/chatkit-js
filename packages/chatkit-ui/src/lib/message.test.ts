@@ -144,6 +144,7 @@ describe('appendMessageContent', () => {
             toolset: 'todoListMiddleware',
             tool: 'write_todos',
             title: 'write_todos',
+            message: 'Writing todos',
             created_date: '2026-04-24T12:24:52.898Z',
             status: 'running',
             input: {
@@ -165,6 +166,7 @@ describe('appendMessageContent', () => {
       data: {
         status: 'success',
         end_date: '2026-04-24T12:24:54.398Z',
+        message: 'write_todos',
         output: 'Updated todo list',
       },
     } as any);
@@ -179,10 +181,49 @@ describe('appendMessageContent', () => {
           toolset: 'todoListMiddleware',
           tool: 'write_todos',
           title: 'write_todos',
+          message: 'Writing todos',
           created_date: '2026-04-24T12:24:52.898Z',
           status: 'success',
           end_date: '2026-04-24T12:24:54.398Z',
           output: 'Updated todo list',
+        }),
+      }),
+    ]);
+  });
+
+  it('allows later component updates to replace non-generic tool messages', () => {
+    const message = {
+      id: 'assistant-1',
+      type: 'assistant',
+      content: [
+        {
+          id: 'tool-1',
+          type: 'component',
+          data: {
+            category: 'Tool',
+            tool: 'host_page_click',
+            title: 'host_page_click',
+            message: 'Click the Execute button',
+            status: 'running',
+          },
+        },
+      ],
+    } as any;
+
+    appendMessageContent(message, {
+      id: 'tool-1',
+      type: 'component',
+      data: {
+        message: 'Click the highlighted Execute button',
+        status: 'success',
+      },
+    } as any);
+
+    expect(message.content).toEqual([
+      expect.objectContaining({
+        data: expect.objectContaining({
+          message: 'Click the highlighted Execute button',
+          status: 'success',
         }),
       }),
     ]);

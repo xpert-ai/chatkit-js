@@ -3,17 +3,21 @@ import {
   type HostPageAutomationClientToolCall,
 } from 'packages/host-automation/src';
 import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+import { withDefaultHostAutomationResultDelay } from './host-automation-delay';
 
-import {
-  EXTENSION_MESSAGE_SOURCE,
-  HOST_AUTOMATION_REQUEST_MESSAGE,
-  HOST_AUTOMATION_RESPONSE_MESSAGE,
-  OPEN_OVERLAY_MESSAGE,
-  OVERLAY_HIT_REGIONS_MESSAGE,
-  OVERLAY_STYLE_MESSAGE,
-  RUN_HOST_AUTOMATION_MESSAGE,
-  TOGGLE_OVERLAY_MESSAGE,
-} from './messages';
+// Keep runtime constants local so Vite emits this as an injectable classic script.
+const OPEN_OVERLAY_MESSAGE = 'xpertai.chatkit.openOverlay';
+const TOGGLE_OVERLAY_MESSAGE = 'xpertai.chatkit.toggleOverlay';
+const OVERLAY_STYLE_MESSAGE = 'xpertai.chatkit.overlayStyle';
+const OVERLAY_HIT_REGIONS_MESSAGE = 'xpertai.chatkit.overlayHitRegions';
+const HOST_AUTOMATION_REQUEST_MESSAGE =
+  'xpertai.chatkit.hostAutomationRequest';
+const HOST_AUTOMATION_RESPONSE_MESSAGE =
+  'xpertai.chatkit.hostAutomationResponse';
+const RUN_HOST_AUTOMATION_MESSAGE = 'xpertai.chatkit.runHostAutomation';
+const RUN_HOST_AUTOMATION_IN_TAB_MESSAGE =
+  'xpertai.chatkit.runHostAutomationInTab';
+const EXTENSION_MESSAGE_SOURCE = 'xpertai.chatkit.browserExtension';
 
 type ChromeRuntimeMessage = {
   type?: unknown;
@@ -67,6 +71,7 @@ type ExtensionWindowMessage = {
 declare const chrome: {
   runtime: {
     getURL: (path: string) => string;
+    sendMessage: (message: Record<string, unknown>) => Promise<unknown>;
     onMessage: {
       addListener: (
         listener: (
@@ -130,7 +135,48 @@ function isHostAutomationCall(
 async function runHostAutomation(
   call: HostPageAutomationClientToolCall,
 ): Promise<ClientToolMessageInput> {
-  return hostAutomationHandler(call);
+  let response: unknown;
+  try {
+    response = await chrome.runtime.sendMessage({
+      type: RUN_HOST_AUTOMATION_IN_TAB_MESSAGE,
+      call,
+    });
+  } catch {
+    return runLocalHostAutomation(call);
+  }
+
+  return unwrapRuntimeHostAutomationResponse(response);
+}
+
+async function runLocalHostAutomation(
+  call: HostPageAutomationClientToolCall,
+): Promise<ClientToolMessageInput> {
+  return withDefaultHostAutomationResultDelay(call, () =>
+    hostAutomationHandler(call),
+  );
+}
+
+function unwrapRuntimeHostAutomationResponse(
+  value: unknown,
+): ClientToolMessageInput {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Invalid host automation response.');
+  }
+
+  const response = value as {
+    ok?: unknown;
+    response?: unknown;
+    error?: unknown;
+  };
+  if (response.ok !== true) {
+    throw new Error(
+      typeof response.error === 'string'
+        ? response.error
+        : 'Host automation failed.',
+    );
+  }
+
+  return response.response as ClientToolMessageInput;
 }
 
 function normalizeHitRegion(value: unknown): NormalizedHitRegion | null {
@@ -383,7 +429,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return false;
     }
 
-    void runHostAutomation(message.call).then(
+    void runLocalHostAutomation(message.call).then(
       (response) => sendResponse({ ok: true, response }),
       (error) =>
         sendResponse({

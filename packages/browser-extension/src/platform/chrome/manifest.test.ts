@@ -13,6 +13,7 @@ describe('chrome manifest', () => {
       'sidePanel',
       'scripting',
       'activeTab',
+      'debugger',
     ]);
     expect(manifest.host_permissions).toEqual([
       'http://*/*',
@@ -24,6 +25,9 @@ describe('chrome manifest', () => {
     expect(manifest.options_ui.page).toBe('options.html');
     expect(manifest.web_accessible_resources[0].resources).toContain(
       'overlay.html',
+    );
+    expect(manifest.web_accessible_resources[0].resources).toContain(
+      'content-script.js',
     );
   });
 

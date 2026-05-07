@@ -96,6 +96,8 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
 
 import { AssistantMessage } from './ai';
 
+type AssistantChatkitMessage = ChatkitMessage & { type: 'assistant' };
+
 type ToolComponentDataOverride = Partial<
   Omit<TMessageComponentStep, 'message' | 'title' | 'type'>
 > & {
@@ -178,8 +180,8 @@ describe('AssistantMessage tool components', () => {
     });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('read-file')).toBeInTheDocument();
-    expect(screen.getByText('search-docs')).toBeInTheDocument();
+    expect(screen.getByText('Read package.json')).toBeInTheDocument();
+    expect(screen.getByText('Searched docs')).toBeInTheDocument();
 
     fireEvent.click(toggle);
 
@@ -209,7 +211,7 @@ describe('AssistantMessage tool components', () => {
       screen.queryByRole('button', { name: /Processing/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByText('Ran pnpm test')).toBeInTheDocument();
-    expect(screen.getByText('read-file')).toBeInTheDocument();
+    expect(screen.getByText('Read ai.tsx')).toBeInTheDocument();
   });
 
   it('uses text content to break consecutive tool component groups', () => {
@@ -379,6 +381,19 @@ describe('AssistantMessage tool components', () => {
     expect(screen.queryByText('正在更新项目任务')).not.toBeInTheDocument();
   });
 
+  it('uses message before generated tool-name titles for completed tool labels', () => {
+    renderAssistant([
+      createToolComponent('host_page_click', {
+        message: 'Click the bottom Execute button',
+        status: 'success',
+      }),
+      createToolComponent('dispatchRunnableTasks'),
+    ]);
+
+    expect(screen.getByText('Click the bottom Execute button')).toBeInTheDocument();
+    expect(screen.queryByText('host_page_click')).not.toBeInTheDocument();
+  });
+
   it('renders json string outputs with tree and raw views', () => {
     renderAssistant([
       createToolComponent('read_json', {
@@ -541,6 +556,26 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('second-tool')).toBeInTheDocument();
   });
 
+  it('treats component messages with an empty category as tool components', () => {
+    renderAssistant([
+      createToolComponent('host_page_snapshot', {
+        category: undefined,
+        type: undefined,
+        tool: 'host_page_snapshot',
+        title: 'host_page_snapshot',
+        output: JSON.stringify({
+          url: 'https://docs.xpertai.cn',
+          title: 'Docs',
+        }),
+      }),
+    ]);
+
+    expect(
+      screen.getByRole('button', { name: /Processed 1 tool/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('host_page_snapshot')).toBeInTheDocument();
+  });
+
   it('summarizes grouped tool components by category priority', () => {
     renderAssistant([
       createToolComponent('read-files', { type: 'files' }),
@@ -580,7 +615,7 @@ describe('AssistantMessage tool components', () => {
                 },
               },
             ],
-          } as any
+          } as AssistantChatkitMessage
         }
       />,
     );
@@ -617,7 +652,7 @@ describe('AssistantMessage tool components', () => {
                 status: 'success',
               }),
             ],
-          } as any
+          } as AssistantChatkitMessage
         }
         apiUrl="https://api.example.com/api/ai"
         organizationId="org-1"
@@ -630,6 +665,73 @@ describe('AssistantMessage tool components', () => {
       'src',
       'https://api.example.com/api/xpert-toolset/builtin-provider/tavily/icon?org=org-1',
     );
+  });
+
+  it('uses the provider icon URL for middleware toolsets before the step type icon', () => {
+    const { container } = render(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [
+              createToolComponent('host_page_snapshot', {
+                type: 'program',
+                toolset: 'browser-automation',
+                title: 'host_page_snapshot',
+                status: 'success',
+              }),
+            ],
+          } as AssistantChatkitMessage
+        }
+        apiUrl="https://api.example.com/api/ai"
+        organizationId="org-1"
+      />,
+    );
+
+    expect(
+      container.querySelector('img[data-slot="tool-step-icon"]'),
+    ).toHaveAttribute(
+      'src',
+      'https://api.example.com/api/xpert-toolset/builtin-provider/browser-automation/icon?org=org-1',
+    );
+  });
+
+  it('falls back to the step type icon when the provider icon URL fails', async () => {
+    const { container } = render(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [
+              createToolComponent('host_page_snapshot', {
+                type: 'program',
+                toolset: 'browser-automation',
+                title: 'host_page_snapshot',
+                status: 'success',
+              }),
+            ],
+          } as AssistantChatkitMessage
+        }
+        apiUrl="https://api.example.com/api/ai"
+      />,
+    );
+
+    const icon = container.querySelector('img[data-slot="tool-step-icon"]');
+    if (!(icon instanceof HTMLImageElement)) {
+      throw new Error('Expected a provider icon image.');
+    }
+    fireEvent.error(icon);
+
+    await waitFor(() => {
+      expect(
+        container.querySelector('img[data-slot="tool-step-icon"]'),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      container.querySelector('svg[data-slot="tool-step-icon"]'),
+    ).toBeInTheDocument();
   });
 
   it('marks stale running tools as failed and freezes their duration when the thread is idle', () => {
@@ -666,8 +768,8 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getByRole('button', { name: /Processing failed 1 task/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText('write_todos')).toBeInTheDocument();
-    expect(screen.queryByText('Writing todos')).not.toBeInTheDocument();
+    expect(screen.getByText('Writing todos')).toBeInTheDocument();
+    expect(screen.queryByText('write_todos')).not.toBeInTheDocument();
     expect(screen.getByText('1.5s')).toBeInTheDocument();
 
     act(() => {

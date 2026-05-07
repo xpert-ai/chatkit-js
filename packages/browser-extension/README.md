@@ -21,10 +21,24 @@ pnpm --filter @xpert-ai/chatkit-browser-extension build
 The Chrome extension is emitted to:
 
 ```text
-packages/chatkit-browser-extension/dist/chrome
+packages/browser-extension/dist/chrome
 ```
 
 Load that directory from `chrome://extensions` with Developer Mode enabled.
+
+## GitHub Browser Extension Release Package
+
+The `Package Browser Extension` workflow creates a GitHub Release package after
+the root `Release` workflow succeeds on `main`. Add
+`@xpert-ai/chatkit-browser-extension` to a changeset so `pnpm changeset version`
+bumps the package version in the release PR before packaging.
+
+The workflow only packages automatically when the package version changes. It
+also supports manual dispatch for re-running the current version. In both cases,
+it builds `dist/chrome`, uploads the zip as a GitHub Actions artifact, then
+attaches the same zip to the `chatkit-browser-extension-v<version>` GitHub
+Release. Publishing the zip to the Chrome Web Store is intentionally left for a
+future workflow update.
 
 ## Configure
 
@@ -40,6 +54,10 @@ Open the extension options page and set:
 - automatic page pet launch on new HTTP(S) tabs
 - page overlay size and position
 - host page automation for agent client tools
+
+Host page automation uses the Chrome `debugger` permission when available so it
+can collect CDP snapshots and dispatch browser-level mouse/keyboard input. If
+CDP is unavailable, the extension falls back to the content-script DOM executor.
 
 The first version uses manual credentials. The extension does not call Xpert
 APIs directly and does not use native `fetch` to reach the platform. Instead,

@@ -137,8 +137,26 @@ type ToolCallOutputRenderer = React.ComponentType<ToolCallOutputRendererProps>;
 
 const TOOL_CALL_OUTPUT_RENDERERS: Partial<Record<string, ToolCallOutputRenderer>> = {};
 
+function normalizeStepCategory(category: unknown): string {
+  if (typeof category !== 'string' || category.trim() === '') {
+    return 'Tool';
+  }
+
+  return category;
+}
+
 export function getToolStepData(content: TMessageContentComponent): PartialStepData {
-  return (content.data ?? {}) as PartialStepData;
+  const data = (content.data ?? {}) as PartialStepData;
+  const category = normalizeStepCategory(data.category);
+
+  if (category === data.category) {
+    return data;
+  }
+
+  return {
+    ...data,
+    category,
+  };
 }
 
 function parseStepDate(value: unknown): number | null {
@@ -276,7 +294,7 @@ function isGroupableToolComponent(
   return (
     isComponentContent(content) &&
     !isWidgetComponent(content) &&
-    content.data?.category === 'Tool'
+    getToolStepData(content).category === 'Tool'
   );
 }
 
@@ -379,17 +397,27 @@ export function getToolActivityLabel(
   statusOverride?: StepStatus,
 ) {
   const data = getToolStepData(content);
-  const runningCandidates = [data.message, data.title, data.tool, data.type];
-  const completedCandidates = [data.title, data.message, data.tool, data.type];
   const status = statusOverride ?? data.status;
-  const candidates = status === 'running' ? runningCandidates : completedCandidates;
+  const message = resolveLocalizedText(data.message, language);
+  const title = resolveLocalizedText(data.title, language);
+  const tool = resolveLocalizedText(data.tool, language);
+  const type = resolveLocalizedText(data.type, language);
 
-  for (const candidate of candidates) {
-    const label = resolveLocalizedText(candidate, language);
-    if (label) return label;
+  if (status === 'running') {
+    return message ?? title ?? tool ?? type ?? 'Tool';
   }
 
-  return 'Tool';
+  const titleToken = normalizeToolToken(title);
+  const genericTitle =
+    titleToken !== null &&
+    [tool, type]
+      .map((candidate) => normalizeToolToken(candidate))
+      .some((candidate) => candidate === titleToken);
+  if (message && (!title || genericTitle)) {
+    return message;
+  }
+
+  return title ?? message ?? tool ?? type ?? 'Tool';
 }
 
 function flushPendingTools(
@@ -659,12 +687,32 @@ function ToolStepIcon({
     usesToolsetAvatar,
     apiUrl,
   );
+  const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
+  const [failedIconUrl, setFailedIconUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setFailedIconUrl(null);
+  }, [iconUrl]);
+
   if (avatar) {
     return (
       <ToolAvatarIcon
         avatar={avatar}
         label={String(data.tool ?? data.toolset ?? 'Tool')}
         className={className}
+      />
+    );
+  }
+
+  if (iconUrl && failedIconUrl !== iconUrl) {
+    return (
+      <img
+        alt=""
+        aria-hidden="true"
+        className={cn('rounded-sm object-contain', className)}
+        data-slot="tool-step-icon"
+        src={iconUrl}
+        onError={() => setFailedIconUrl(iconUrl)}
       />
     );
   }
@@ -697,19 +745,6 @@ function ToolStepIcon({
         className={className}
         aria-hidden="true"
         data-slot="tool-step-icon"
-      />
-    );
-  }
-
-  const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
-  if (iconUrl) {
-    return (
-      <img
-        alt=""
-        aria-hidden="true"
-        className={cn('rounded-sm object-contain', className)}
-        data-slot="tool-step-icon"
-        src={iconUrl}
       />
     );
   }
@@ -877,17 +912,32 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   );
 }
 
-function ToolCallRow({
-  content,
-  isThreadRunning,
-  organizationId,
-  apiUrl,
-}: {
+type ToolCallRowProps = {
   content: TMessageContentComponent;
   isThreadRunning?: ToolStepRunState;
   organizationId?: string;
   apiUrl?: string;
-}) {
+};
+
+function areToolCallRowPropsEqual(
+  previous: ToolCallRowProps,
+  next: ToolCallRowProps,
+) {
+  return (
+    previous.content.id === next.content.id &&
+    previous.content.data === next.content.data &&
+    previous.isThreadRunning === next.isThreadRunning &&
+    previous.organizationId === next.organizationId &&
+    previous.apiUrl === next.apiUrl
+  );
+}
+
+function ToolCallRowContent({
+  content,
+  isThreadRunning,
+  organizationId,
+  apiUrl,
+}: ToolCallRowProps) {
   const { i18n } = useChatkitTranslation();
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
@@ -920,7 +970,7 @@ function ToolCallRow({
       <button
         type="button"
         className={cn(
-          'flex w-full min-w-0 items-center gap-2 text-left text-sm leading-6 text-muted-foreground',
+          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-sm leading-6 text-muted-foreground',
           hasDetails && 'cursor-pointer hover:text-foreground',
           hasError && 'text-destructive hover:text-destructive',
         )}
@@ -952,7 +1002,7 @@ function ToolCallRow({
         ) : (
           <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         )}
-        <span className="min-w-0 flex-1 truncate" title={label}>
+        <span className="min-w-0 truncate" title={label}>
           {label}
         </span>
         {durationLabel ? (
@@ -964,7 +1014,7 @@ function ToolCallRow({
           <ChevronRight
             aria-hidden="true"
             className={cn(
-              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+              'h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/tool-call:opacity-100 group-focus-visible/tool-call:opacity-100',
               isExpanded && 'rotate-90',
             )}
           />
@@ -978,6 +1028,9 @@ function ToolCallRow({
     </li>
   );
 }
+
+const ToolCallRow = React.memo(ToolCallRowContent, areToolCallRowPropsEqual);
+ToolCallRow.displayName = 'ToolCallRow';
 
 export function ToolComponentGroup({
   items,

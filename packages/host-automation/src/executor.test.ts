@@ -44,6 +44,106 @@ describe('HostPageAutomationExecutor', () => {
     expect(click).toHaveBeenCalledTimes(1);
   });
 
+  it('clicks a target by semantic role and accessible name', async () => {
+    document.body.innerHTML = `<div role="button" aria-label="Save changes">Save</div>`;
+    const click = vi.fn();
+    document.querySelector('[role="button"]')?.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+
+    await executor.execute('host_page_click', {
+      role: 'button',
+      name: 'Save changes',
+    });
+
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes richer page state and actionability metadata in snapshots', () => {
+    document.body.innerHTML = `<button data-testid="save-action">Save</button>`;
+    const buttonElement = document.querySelector('button');
+    if (!buttonElement) {
+      throw new Error('Missing button element.');
+    }
+    vi.spyOn(buttonElement, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 80,
+      bottom: 24,
+      width: 80,
+      height: 24,
+      toJSON: () => ({}),
+    });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => buttonElement),
+    });
+    const executor = new HostPageAutomationExecutor();
+
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
+
+    expect(snapshot.capabilities).toMatchObject({
+      cdp: false,
+      realInput: false,
+      screenshot: false,
+    });
+    expect(snapshot.page?.readyState).toBe(document.readyState);
+    expect(snapshot.viewport.devicePixelRatio).toBe(window.devicePixelRatio);
+    expect(button).toMatchObject({
+      testId: 'save-action',
+      enabled: true,
+      visible: true,
+    });
+    expect(Array.isArray(button?.hitStack)).toBe(true);
+  });
+
+  it('uses nearby visible text as context for weakly labelled form fields', () => {
+    document.body.innerHTML = `
+      <span id="po-label">采购订单</span>
+      <input id="po-number" />
+    `;
+    const label = document.getElementById('po-label');
+    const input = document.getElementById('po-number');
+    if (!label || !input) {
+      throw new Error('Missing test elements.');
+    }
+    vi.spyOn(label, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 64,
+      bottom: 24,
+      width: 64,
+      height: 24,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(input, 'getBoundingClientRect').mockReturnValue({
+      x: 80,
+      y: 0,
+      left: 80,
+      top: 0,
+      right: 180,
+      bottom: 24,
+      width: 100,
+      height: 24,
+      toJSON: () => ({}),
+    });
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => input),
+    });
+    const executor = new HostPageAutomationExecutor();
+
+    const snapshot = executor.snapshot();
+    const field = snapshot.elements.find((element) => element.tag === 'input');
+
+    expect(field?.name).toBe('采购订单');
+    expect(field?.nearbyText).toContain('采购订单');
+  });
+
   it('fills a target by selector and dispatches input events', async () => {
     document.body.innerHTML = `<input id="name" />`;
     const input = document.querySelector<HTMLInputElement>('#name');
@@ -117,6 +217,26 @@ describe('HostPageAutomationExecutor', () => {
 
     expect(scrollBy).toHaveBeenCalledWith(5, 30);
     expect(list.scrollTop).toBe(30);
+  });
+
+  it('focuses, hovers, and waits for targets', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const hover = vi.fn();
+    document.getElementById('save')?.addEventListener('mouseover', hover);
+    const executor = new HostPageAutomationExecutor();
+
+    await executor.execute('host_page_focus', { selector: '#save' });
+    await executor.execute('host_page_hover', { selector: '#save' });
+    await expect(
+      executor.execute('host_page_wait_for', {
+        selector: '#save',
+        state: 'attached',
+        timeoutSeconds: 1,
+      }),
+    ).resolves.toMatchObject({ waitedFor: 'attached' });
+
+    expect(document.activeElement?.id).toBe('save');
+    expect(hover).toHaveBeenCalledTimes(1);
   });
 
   it('includes elements inside open shadow roots in snapshots', () => {
