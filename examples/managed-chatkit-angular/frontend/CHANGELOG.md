@@ -1,5 +1,13 @@
 # managed-chatkit-angular-frontend
 
+## 0.0.13
+
+### Patch Changes
+
+- Updated dependencies
+  - @xpert-ai/chatkit-web-component@0.3.2
+  - @xpert-ai/chatkit-types@0.3.3
+
 ## 0.0.12
 
 ### Patch Changes

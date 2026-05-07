@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.2
+
+### Patch Changes
+
+- browser automation extension
+- Updated dependencies
+  - @xpert-ai/chatkit-web-shared@0.3.2
+  - @xpert-ai/chatkit-types@0.3.3
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.3.2
+
+### Patch Changes
+
+- browser automation extension
+
 ## 0.3.1
 
 ### Patch Changes
