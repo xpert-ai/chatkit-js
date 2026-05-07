@@ -205,6 +205,60 @@ type ComponentStepLike = Partial<TMessageComponentStep<unknown>> & {
   category?: string
 }
 
+function normalizeStepText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return normalized || null
+}
+
+/**
+ * Treat tool names/titles as fallback labels so they do not overwrite a
+ * more descriptive message that arrived earlier in the stream.
+ */
+function isGenericStepMessage(
+  message: unknown,
+  previousData: ComponentStepLike,
+  incomingData: ComponentStepLike,
+) {
+  const normalizedMessage = normalizeStepText(message)
+  if (!normalizedMessage) return false
+
+  return [
+    incomingData.tool,
+    incomingData.title,
+    incomingData.type,
+    previousData.tool,
+    previousData.title,
+    previousData.type,
+  ].some((candidate) => normalizeStepText(candidate) === normalizedMessage)
+}
+
+/**
+ * Keep the existing message when an update omits one or sends only a generic
+ * tool identifier; otherwise allow later concrete messages to replace it.
+ */
+function mergeComponentStepMessage(
+  previousData: ComponentStepLike,
+  incomingData: ComponentStepLike,
+) {
+  if (incomingData.message === undefined) {
+    return previousData.message
+  }
+
+  if (
+    previousData.message !== undefined &&
+    isGenericStepMessage(incomingData.message, previousData, incomingData)
+  ) {
+    return previousData.message
+  }
+
+  return incomingData.message
+}
+
+/**
+ * Streaming step updates are partial, so merge new fields while preserving
+ * stable metadata that later status/output events may omit.
+ */
 function mergeComponentStepData(
   previous: TMessageContentComponent['data'],
   incoming: TMessageContentComponent['data'],
@@ -215,16 +269,21 @@ function mergeComponentStepData(
   return {
     ...previousData,
     ...incomingData,
-    type: previousData.type ?? incomingData.type,
-    category: previousData.category ?? incomingData.category,
-    toolset: previousData.toolset ?? incomingData.toolset,
-    toolset_id: previousData.toolset_id ?? incomingData.toolset_id,
-    tool: previousData.tool ?? incomingData.tool,
-    title: previousData.title ?? incomingData.title,
-    created_date: previousData.created_date ?? incomingData.created_date,
+    type: incomingData.type ?? previousData.type,
+    category: incomingData.category ?? previousData.category,
+    toolset: incomingData.toolset ?? previousData.toolset,
+    toolset_id: incomingData.toolset_id ?? previousData.toolset_id,
+    tool: incomingData.tool ?? previousData.tool,
+    title: incomingData.title ?? previousData.title,
+    message: mergeComponentStepMessage(previousData, incomingData),
+    created_date: incomingData.created_date ?? previousData.created_date,
   } as TMessageContentComponent['data']
 }
 
+/**
+ * Merge repeated component chunks by id without dropping outer metadata such
+ * as agent identity, then delegate step-data rules to the data merger.
+ */
 function mergeMessageComponent(
   previous: TMessageContentComponent,
   incoming: TMessageContentComponent,

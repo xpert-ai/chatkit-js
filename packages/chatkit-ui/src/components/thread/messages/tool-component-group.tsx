@@ -397,17 +397,27 @@ export function getToolActivityLabel(
   statusOverride?: StepStatus,
 ) {
   const data = getToolStepData(content);
-  const runningCandidates = [data.message, data.title, data.tool, data.type];
-  const completedCandidates = [data.title, data.message, data.tool, data.type];
   const status = statusOverride ?? data.status;
-  const candidates = status === 'running' ? runningCandidates : completedCandidates;
+  const message = resolveLocalizedText(data.message, language);
+  const title = resolveLocalizedText(data.title, language);
+  const tool = resolveLocalizedText(data.tool, language);
+  const type = resolveLocalizedText(data.type, language);
 
-  for (const candidate of candidates) {
-    const label = resolveLocalizedText(candidate, language);
-    if (label) return label;
+  if (status === 'running') {
+    return message ?? title ?? tool ?? type ?? 'Tool';
   }
 
-  return 'Tool';
+  const titleToken = normalizeToolToken(title);
+  const genericTitle =
+    titleToken !== null &&
+    [tool, type]
+      .map((candidate) => normalizeToolToken(candidate))
+      .some((candidate) => candidate === titleToken);
+  if (message && (!title || genericTitle)) {
+    return message;
+  }
+
+  return title ?? message ?? tool ?? type ?? 'Tool';
 }
 
 function flushPendingTools(
@@ -902,17 +912,32 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   );
 }
 
-function ToolCallRow({
-  content,
-  isThreadRunning,
-  organizationId,
-  apiUrl,
-}: {
+type ToolCallRowProps = {
   content: TMessageContentComponent;
   isThreadRunning?: ToolStepRunState;
   organizationId?: string;
   apiUrl?: string;
-}) {
+};
+
+function areToolCallRowPropsEqual(
+  previous: ToolCallRowProps,
+  next: ToolCallRowProps,
+) {
+  return (
+    previous.content.id === next.content.id &&
+    previous.content.data === next.content.data &&
+    previous.isThreadRunning === next.isThreadRunning &&
+    previous.organizationId === next.organizationId &&
+    previous.apiUrl === next.apiUrl
+  );
+}
+
+function ToolCallRowContent({
+  content,
+  isThreadRunning,
+  organizationId,
+  apiUrl,
+}: ToolCallRowProps) {
   const { i18n } = useChatkitTranslation();
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
@@ -1003,6 +1028,9 @@ function ToolCallRow({
     </li>
   );
 }
+
+const ToolCallRow = React.memo(ToolCallRowContent, areToolCallRowPropsEqual);
+ToolCallRow.displayName = 'ToolCallRow';
 
 export function ToolComponentGroup({
   items,

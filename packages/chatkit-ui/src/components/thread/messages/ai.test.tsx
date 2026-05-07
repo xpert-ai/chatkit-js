@@ -180,8 +180,8 @@ describe('AssistantMessage tool components', () => {
     });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('read-file')).toBeInTheDocument();
-    expect(screen.getByText('search-docs')).toBeInTheDocument();
+    expect(screen.getByText('Read package.json')).toBeInTheDocument();
+    expect(screen.getByText('Searched docs')).toBeInTheDocument();
 
     fireEvent.click(toggle);
 
@@ -211,7 +211,7 @@ describe('AssistantMessage tool components', () => {
       screen.queryByRole('button', { name: /Processing/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByText('Ran pnpm test')).toBeInTheDocument();
-    expect(screen.getByText('read-file')).toBeInTheDocument();
+    expect(screen.getByText('Read ai.tsx')).toBeInTheDocument();
   });
 
   it('uses text content to break consecutive tool component groups', () => {
@@ -379,6 +379,19 @@ describe('AssistantMessage tool components', () => {
 
     expect(screen.getByText('更新项目任务')).toBeInTheDocument();
     expect(screen.queryByText('正在更新项目任务')).not.toBeInTheDocument();
+  });
+
+  it('uses message before generated tool-name titles for completed tool labels', () => {
+    renderAssistant([
+      createToolComponent('host_page_click', {
+        message: 'Click the bottom Execute button',
+        status: 'success',
+      }),
+      createToolComponent('dispatchRunnableTasks'),
+    ]);
+
+    expect(screen.getByText('Click the bottom Execute button')).toBeInTheDocument();
+    expect(screen.queryByText('host_page_click')).not.toBeInTheDocument();
   });
 
   it('renders json string outputs with tree and raw views', () => {
@@ -755,8 +768,8 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getByRole('button', { name: /Processing failed 1 task/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText('write_todos')).toBeInTheDocument();
-    expect(screen.queryByText('Writing todos')).not.toBeInTheDocument();
+    expect(screen.getByText('Writing todos')).toBeInTheDocument();
+    expect(screen.queryByText('write_todos')).not.toBeInTheDocument();
     expect(screen.getByText('1.5s')).toBeInTheDocument();
 
     act(() => {
