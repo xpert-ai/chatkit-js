@@ -26,25 +26,19 @@ packages/browser-extension/dist/chrome
 
 Load that directory from `chrome://extensions` with Developer Mode enabled.
 
-## GitHub Browser Extension Publishing
+## GitHub Browser Extension Release Package
 
-The `Publish Browser Extension` workflow publishes this package to the Chrome
-Web Store after the root `Release` workflow succeeds on `main`. Add
+The `Package Browser Extension` workflow creates a GitHub Release package after
+the root `Release` workflow succeeds on `main`. Add
 `@xpert-ai/chatkit-browser-extension` to a changeset so `pnpm changeset version`
-bumps the package version in the release PR before publishing.
+bumps the package version in the release PR before packaging.
 
-Required repository secrets:
-
-- `CHROME_CLIENT_ID`
-- `CHROME_CLIENT_SECRET`
-- `CHROME_REFRESH_TOKEN`
-- `CHROME_PUBLISHER_ID`
-- `CHROME_EXTENSION_ID`
-
-The workflow only publishes automatically when the package version changes. It
+The workflow only packages automatically when the package version changes. It
 also supports manual dispatch for re-running the current version. In both cases,
 it builds `dist/chrome`, uploads the zip as a GitHub Actions artifact, then
-uploads and publishes the same zip through the Chrome Web Store API.
+attaches the same zip to the `chatkit-browser-extension-v<version>` GitHub
+Release. Publishing the zip to the Chrome Web Store is intentionally left for a
+future workflow update.
 
 ## Configure
 

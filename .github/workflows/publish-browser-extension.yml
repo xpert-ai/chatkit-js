@@ -1,4 +1,4 @@
-name: Publish Browser Extension
+name: Package Browser Extension
 
 on:
   workflow_run:
@@ -11,8 +11,8 @@ on:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  publish-chrome:
-    name: Publish Chrome extension
+  package-release:
+    name: Package browser extension release
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (
@@ -21,7 +21,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -74,7 +74,8 @@ jobs:
           set -euo pipefail
 
           version="${{ steps.browser_extension.outputs.version }}"
-          zip_path="$RUNNER_TEMP/chatkit-browser-extension-$version.zip"
+          zip_name="chatkit-browser-extension-$version.zip"
+          zip_path="$RUNNER_TEMP/$zip_name"
 
           pnpm --filter @xpert-ai/chatkit-browser-extension type-check
           pnpm --filter @xpert-ai/chatkit-host-automation test
@@ -83,91 +84,37 @@ jobs:
 
           cd packages/browser-extension/dist/chrome
           zip -r "$zip_path" .
+          echo "zip_name=$zip_name" >> "$GITHUB_OUTPUT"
           echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
 
-      - name: Upload browser extension artifact
+      - name: Upload browser extension workflow artifact
         if: steps.browser_extension.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: chatkit-browser-extension-${{ steps.browser_extension.outputs.version }}
           path: ${{ steps.package_browser_extension.outputs.zip_path }}
 
-      - name: Publish browser extension to Chrome Web Store
+      - name: Attach browser extension zip to GitHub Release
         if: steps.browser_extension.outputs.changed == 'true'
         shell: bash
         env:
-          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
-          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.browser_extension.outputs.version }}
+          ZIP_NAME: ${{ steps.package_browser_extension.outputs.zip_name }}
           ZIP_PATH: ${{ steps.package_browser_extension.outputs.zip_path }}
         run: |
           set -euo pipefail
 
-          missing=()
-          for name in CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN CHROME_PUBLISHER_ID CHROME_EXTENSION_ID; do
-            if [[ -z "${!name}" ]]; then
-              missing+=("$name")
-            fi
-          done
+          release_tag="chatkit-browser-extension-v$VERSION"
+          release_title="ChatKit Browser Extension v$VERSION"
+          release_notes="Chrome extension package for @xpert-ai/chatkit-browser-extension v$VERSION."
+          target_sha="$(git rev-parse HEAD)"
 
-          if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required Chrome Web Store secrets: %s\n' "${missing[*]}" >&2
-            exit 1
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" "$ZIP_PATH#$ZIP_NAME" --clobber
+          else
+            gh release create "$release_tag" "$ZIP_PATH#$ZIP_NAME" \
+              --target "$target_sha" \
+              --title "$release_title" \
+              --notes "$release_notes"
           fi
-
-          is_in_progress() {
-            [[ "$1" == "IN_PROGRESS" || "$1" == "UPLOAD_IN_PROGRESS" ]]
-          }
-
-          is_succeeded() {
-            [[ "$1" == "SUCCEEDED" || "$1" == "SUCCESS" ]]
-          }
-
-          token_response="$(curl -fsS https://oauth2.googleapis.com/token \
-            -d "client_id=$CHROME_CLIENT_ID" \
-            -d "client_secret=$CHROME_CLIENT_SECRET" \
-            -d "refresh_token=$CHROME_REFRESH_TOKEN" \
-            -d "grant_type=refresh_token")"
-
-          access_token="$(jq -r '.access_token // empty' <<< "$token_response")"
-          if [[ -z "$access_token" ]]; then
-            echo "Chrome Web Store token response did not include an access token." >&2
-            exit 1
-          fi
-
-          item_name="publishers/$CHROME_PUBLISHER_ID/items/$CHROME_EXTENSION_ID"
-
-          upload_response="$(curl -fsS -X POST \
-            -H "Authorization: Bearer $access_token" \
-            -H "Content-Type: application/zip" \
-            --data-binary "@$ZIP_PATH" \
-            "https://chromewebstore.googleapis.com/upload/v2/$item_name:upload")"
-
-          upload_state="$(jq -r '.uploadState // empty' <<< "$upload_response")"
-
-          if is_in_progress "$upload_state"; then
-            for _ in {1..30}; do
-              sleep 10
-              status_response="$(curl -fsS \
-                -H "Authorization: Bearer $access_token" \
-                "https://chromewebstore.googleapis.com/v2/$item_name:fetchStatus")"
-              upload_state="$(jq -r '.lastAsyncUploadState // empty' <<< "$status_response")"
-              is_in_progress "$upload_state" || break
-            done
-          fi
-
-          if ! is_succeeded "$upload_state"; then
-            echo "Chrome Web Store upload did not succeed. Final state: ${upload_state:-unknown}" >&2
-            echo "$upload_response" | jq .
-            exit 1
-          fi
-
-          publish_response="$(curl -fsS -X POST \
-            -H "Authorization: Bearer $access_token" \
-            -H "Content-Type: application/json" \
-            --data '{"publishType":"DEFAULT_PUBLISH"}' \
-            "https://chromewebstore.googleapis.com/v2/$item_name:publish")"
-
-          echo "$publish_response" | jq .
