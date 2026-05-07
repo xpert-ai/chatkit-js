@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.1
+
+### Patch Changes
+
+- 7f60e3c: pet & browser extension & host automation
+- Updated dependencies [7f60e3c]
+  - @xpert-ai/chatkit-web-shared@0.3.1
+  - @xpert-ai/chatkit-types@0.3.2
+
 ## 0.2.5
 
 ### Patch Changes
