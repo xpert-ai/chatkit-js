@@ -51,7 +51,7 @@ describe('createChatKitOptions', () => {
     expect(options.pet).toEqual({
       position: {
         scale: 1,
-        boundsPadding: 100,
+        boundsPadding: 50,
       },
     });
   });
