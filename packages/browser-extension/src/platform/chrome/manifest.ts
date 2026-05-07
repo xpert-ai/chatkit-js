@@ -61,11 +61,11 @@ export function createChromeManifest(version = '0.3.0'): ChromeManifest {
     side_panel: {
       default_path: 'sidepanel.html',
     },
-    permissions: ['storage', 'sidePanel', 'scripting', 'activeTab'],
+    permissions: ['storage', 'sidePanel', 'scripting', 'activeTab', 'debugger'],
     host_permissions: PAGE_OVERLAY_HOST_PERMISSIONS,
     web_accessible_resources: [
       {
-        resources: ['overlay.html', 'assets/*'],
+        resources: ['overlay.html', 'content-script.js', 'assets/*'],
         matches: ['<all_urls>'],
       },
     ],

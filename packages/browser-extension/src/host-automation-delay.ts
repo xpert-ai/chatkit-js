@@ -13,7 +13,7 @@ export type HostAutomationDelay = (durationMs: number) => Promise<void>;
 
 function wait(durationMs: number): Promise<void> {
   return new Promise((resolve) => {
-    window.setTimeout(resolve, durationMs);
+    globalThis.setTimeout(resolve, durationMs);
   });
 }
 

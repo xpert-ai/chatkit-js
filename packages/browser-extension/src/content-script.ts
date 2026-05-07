@@ -15,6 +15,8 @@ const HOST_AUTOMATION_REQUEST_MESSAGE =
 const HOST_AUTOMATION_RESPONSE_MESSAGE =
   'xpertai.chatkit.hostAutomationResponse';
 const RUN_HOST_AUTOMATION_MESSAGE = 'xpertai.chatkit.runHostAutomation';
+const RUN_HOST_AUTOMATION_IN_TAB_MESSAGE =
+  'xpertai.chatkit.runHostAutomationInTab';
 const EXTENSION_MESSAGE_SOURCE = 'xpertai.chatkit.browserExtension';
 
 type ChromeRuntimeMessage = {
@@ -69,6 +71,7 @@ type ExtensionWindowMessage = {
 declare const chrome: {
   runtime: {
     getURL: (path: string) => string;
+    sendMessage: (message: Record<string, unknown>) => Promise<unknown>;
     onMessage: {
       addListener: (
         listener: (
@@ -132,9 +135,48 @@ function isHostAutomationCall(
 async function runHostAutomation(
   call: HostPageAutomationClientToolCall,
 ): Promise<ClientToolMessageInput> {
+  let response: unknown;
+  try {
+    response = await chrome.runtime.sendMessage({
+      type: RUN_HOST_AUTOMATION_IN_TAB_MESSAGE,
+      call,
+    });
+  } catch {
+    return runLocalHostAutomation(call);
+  }
+
+  return unwrapRuntimeHostAutomationResponse(response);
+}
+
+async function runLocalHostAutomation(
+  call: HostPageAutomationClientToolCall,
+): Promise<ClientToolMessageInput> {
   return withDefaultHostAutomationResultDelay(call, () =>
     hostAutomationHandler(call),
   );
+}
+
+function unwrapRuntimeHostAutomationResponse(
+  value: unknown,
+): ClientToolMessageInput {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Invalid host automation response.');
+  }
+
+  const response = value as {
+    ok?: unknown;
+    response?: unknown;
+    error?: unknown;
+  };
+  if (response.ok !== true) {
+    throw new Error(
+      typeof response.error === 'string'
+        ? response.error
+        : 'Host automation failed.',
+    );
+  }
+
+  return response.response as ClientToolMessageInput;
 }
 
 function normalizeHitRegion(value: unknown): NormalizedHitRegion | null {
@@ -387,7 +429,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return false;
     }
 
-    void runHostAutomation(message.call).then(
+    void runLocalHostAutomation(message.call).then(
       (response) => sendResponse({ ok: true, response }),
       (error) =>
         sendResponse({

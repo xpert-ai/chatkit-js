@@ -61,6 +61,10 @@ Open the extension options page and set:
 - page overlay size and position
 - host page automation for agent client tools
 
+Host page automation uses the Chrome `debugger` permission when available so it
+can collect CDP snapshots and dispatch browser-level mouse/keyboard input. If
+CDP is unavailable, the extension falls back to the content-script DOM executor.
+
 The first version uses manual credentials. The extension does not call Xpert
 APIs directly and does not use native `fetch` to reach the platform. Instead,
 the ChatKit options passed to the web component include `api.getClientSecret`,

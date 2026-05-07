@@ -7,4 +7,6 @@ export const HOST_AUTOMATION_REQUEST_MESSAGE =
 export const HOST_AUTOMATION_RESPONSE_MESSAGE =
   'xpertai.chatkit.hostAutomationResponse';
 export const RUN_HOST_AUTOMATION_MESSAGE = 'xpertai.chatkit.runHostAutomation';
+export const RUN_HOST_AUTOMATION_IN_TAB_MESSAGE =
+  'xpertai.chatkit.runHostAutomationInTab';
 export const EXTENSION_MESSAGE_SOURCE = 'xpertai.chatkit.browserExtension';
