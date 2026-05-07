@@ -13,6 +13,15 @@ export function createChatKitOptions(
   options: ChatKitOptionsBuildOptions = {},
 ): ChatKitOptions {
   const displayMode = options.displayMode ?? config.displayMode;
+  const pet: ChatKitOptions['pet'] =
+    displayMode === 'pet'
+      ? {
+          position: {
+            scale: config.pet.scale,
+            boundsPadding: config.pet.boundsPadding,
+          },
+        }
+      : undefined;
   const api: ChatKitOptions['api'] = {
     apiUrl: config.apiUrl,
     getClientSecret: async () => ({
@@ -29,7 +38,7 @@ export function createChatKitOptions(
     api,
     locale: config.locale,
     displayMode,
-    pet: displayMode === 'pet' ? true : undefined,
+    pet,
     theme: config.theme,
     onClientTool: config.hostAutomation.enabled
       ? options.onClientTool

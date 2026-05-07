@@ -8,6 +8,11 @@ export type OverlayPosition =
 
 export type ChatKitDisplayMode = 'chat' | 'pet';
 
+export type ChatKitPetConfig = {
+  scale: number;
+  boundsPadding: number;
+};
+
 export type ChatKitExtensionConfig = {
   frameUrl: string;
   apiUrl: string;
@@ -26,6 +31,7 @@ export type ChatKitExtensionConfig = {
     height: number;
     position: OverlayPosition;
   };
+  pet: ChatKitPetConfig;
   hostAutomation: {
     enabled: boolean;
   };
