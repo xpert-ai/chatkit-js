@@ -133,6 +133,43 @@
     }
 }
 
+@keyframes chatkit-tool-call-text-shimmer {
+    0% {
+        background-position: 200% 50%;
+    }
+
+    100% {
+        background-position: -200% 50%;
+    }
+}
+
+.ck-tool-call-running-text {
+    color: transparent;
+    background-image: linear-gradient(
+        100deg,
+        var(--muted-foreground) 0%,
+        var(--muted-foreground) 35%,
+        var(--foreground) 45%,
+        var(--primary) 50%,
+        var(--foreground) 55%,
+        var(--muted-foreground) 65%,
+        var(--muted-foreground) 100%
+    );
+    background-size: 220% 100%;
+    background-position: 200% 50%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: chatkit-tool-call-text-shimmer 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ck-tool-call-running-text {
+        color: var(--muted-foreground);
+        background: none;
+        animation: none;
+    }
+}
+
 .dark,
 .dark * {
     scrollbar-color: var(--ring) var(--background);

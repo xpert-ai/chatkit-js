@@ -924,8 +924,6 @@ function ToolCallRowContent({
   const { i18n } = useChatkitTranslation();
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
-  const itemConfig = status ? toolStatusConfig[status] : null;
-  const ItemStatusIcon = itemConfig?.icon;
   const hasError = status === 'fail' || Boolean(data.error);
   const label = getToolActivityLabel(content, i18n.language, status);
   const detailsId = React.useId();
@@ -965,15 +963,7 @@ function ToolCallRowContent({
           if (hasDetails) setIsExpanded((prev) => !prev);
         }}
       >
-        {status === 'running' && ItemStatusIcon ? (
-          <ItemStatusIcon
-            className={cn(
-              'h-3.5 w-3.5 shrink-0',
-              itemConfig?.iconClass,
-              'animate-spin',
-            )}
-          />
-        ) : status ? (
+        {status ? (
           <ToolStepIcon
             data={data}
             organizationId={organizationId}
@@ -986,7 +976,13 @@ function ToolCallRowContent({
         ) : (
           <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         )}
-        <span className="min-w-0 truncate" title={label}>
+        <span
+          className={cn(
+            'min-w-0 truncate',
+            status === 'running' && 'ck-tool-call-running-text',
+          )}
+          title={label}
+        >
           {label}
         </span>
         {durationLabel ? (

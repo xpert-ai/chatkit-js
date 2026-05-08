@@ -663,6 +663,37 @@ describe('AssistantMessage tool components', () => {
     );
   });
 
+  it('adds a shimmer text effect to running grouped tool rows', () => {
+    renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'running',
+        end_date: undefined,
+      }),
+    ]);
+
+    expect(screen.getByText('run-command')).toHaveClass(
+      'ck-tool-call-running-text',
+    );
+  });
+
+  it('uses the tool icon for running tool rows instead of a loading indicator', () => {
+    const { container } = renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'running',
+        end_date: undefined,
+      }),
+    ]);
+
+    expect(
+      container.querySelector('[data-slot="tool-step-icon"]'),
+    ).toBeInTheDocument();
+    expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
+  });
+
   it('uses the builtin provider icon URL for provider toolsets', () => {
     const { container } = render(
       <AssistantMessage
