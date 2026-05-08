@@ -49,7 +49,6 @@ export type PartialStepData = Partial<Omit<TMessageComponentStep, 'message' | 't
   title?: LocalizedText;
 };
 type StepStatus = NonNullable<PartialStepData['status']>;
-type ToolGroupDisplayStatus = Exclude<StepStatus, 'running'>;
 type ToolStepRunState = boolean | undefined;
 
 type ToolGroupCategory =
@@ -370,25 +369,6 @@ function getToolGroupCategoryCounts(
     counts[category] = (counts[category] ?? 0) + 1;
     return counts;
   }, {});
-}
-
-function getEffectiveToolGroupDisplayStatus(
-  items: TMessageContentComponent[],
-  isThreadRunning?: ToolStepRunState,
-): ToolGroupDisplayStatus {
-  if (
-    items.some((item) => {
-      const data = getToolStepData(item);
-      return (
-        getEffectiveToolStepStatus(data, isThreadRunning) === 'fail' ||
-        Boolean(data.error)
-      );
-    })
-  ) {
-    return 'fail';
-  }
-
-  return 'success';
 }
 
 export function getToolActivityLabel(
@@ -1047,7 +1027,6 @@ export function ToolComponentGroup({
 }) {
   const { t } = useChatkitTranslation();
   const contentId = React.useId();
-  const groupStatus = getEffectiveToolGroupDisplayStatus(items, isThreadRunning);
   const [isExpanded, setIsExpanded] = React.useState(!hasFollowingItem);
   const categoryCounts = getToolGroupCategoryCounts(items);
   const categorySummary = TOOL_GROUP_CATEGORY_ORDER.flatMap((category) => {
@@ -1061,8 +1040,8 @@ export function ToolComponentGroup({
       ),
     ];
   }).join(t('message.toolGroup.separator'));
-  const summary = `${t(`message.toolGroup.status.${groupStatus}`)} ${categorySummary}`;
-  const config = toolStatusConfig[groupStatus];
+  const summary = `${t('message.toolGroup.status.success')} ${categorySummary}`;
+  const config = toolStatusConfig.success;
   const StatusIcon = config.icon;
 
   React.useEffect(() => {

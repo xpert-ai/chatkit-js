@@ -422,6 +422,13 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('run_command'),
     ]);
 
+    expect(
+      screen.getByRole('button', { name: /Processed 2 tools/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processing failed 2 tools/ }),
+    ).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
 
     expect(screen.getByText('Error')).toBeInTheDocument();
@@ -766,8 +773,11 @@ describe('AssistantMessage tool components', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: /Processing failed 1 task/ }),
+      screen.getByRole('button', { name: /Processed 1 task/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processing failed 1 task/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText('Writing todos')).toBeInTheDocument();
     expect(screen.queryByText('write_todos')).not.toBeInTheDocument();
     expect(screen.getByText('1.5s')).toBeInTheDocument();
