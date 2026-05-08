@@ -77,6 +77,26 @@ describe('ComposerMenu', () => {
     expect(planMode).not.toHaveClass('rounded-full');
   });
 
+  it('uses square button rounding for the dropdown trigger', () => {
+    const cases = [
+      ['pill', 'rounded-full'],
+      ['round', 'rounded-xl'],
+      ['soft', 'rounded-lg'],
+      ['sharp', 'rounded-none'],
+    ] as const;
+
+    for (const [radius, expectedClass] of cases) {
+      themeMock.radius = radius;
+      const { unmount } = render(<ComposerMenu />);
+
+      expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass(
+        expectedClass,
+      );
+
+      unmount();
+    }
+  });
+
   it('renders plan mode even without attachments or tools', () => {
     const onPlanModeChange = vi.fn();
 

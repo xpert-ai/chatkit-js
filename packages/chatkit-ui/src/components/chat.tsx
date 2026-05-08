@@ -29,6 +29,7 @@ import type {
 import {
   cn,
   createMessageId,
+  getComposerInputRoundedClass,
   getMenuItemRoundedClass,
   getPanelRoundedClass,
   getRoundedClass,
@@ -661,6 +662,11 @@ export function Chat({
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
   const isComposerStacked = planModeEnabled || Boolean(selectedTool);
+  const isComposerInputEmpty = getComposerEditingLength(composerParts) === 0;
+  const composerInputRoundedClass = getComposerInputRoundedClass(theme.radius, {
+    isEmpty: isComposerInputEmpty,
+    isStacked: isComposerStacked,
+  });
   const pendingFollowUps = React.useMemo(
     () =>
       [...(stream.pendingFollowUps ?? [])].sort(
@@ -3084,19 +3090,18 @@ export function Chat({
         )}
 
         <form className="flex items-end" onSubmit={handleSubmit}>
-          {/* Capsule-shaped input container */}
           <div
             data-slot="composer-input-shell"
             data-layout={isComposerStacked ? 'stacked' : 'inline'}
             className={cn(
-              'relative flex flex-1 overflow-hidden rounded-xl',
+              'relative flex flex-1 overflow-hidden',
               'bg-background border border-border shadow-sm',
               isComposerStacked
                 ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
                 : 'min-h-12 px-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-[min-height,padding,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-              getRoundedClass(theme.radius),
+              'transition-[min-height,padding,border-radius,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+              composerInputRoundedClass,
             )}
           >
             <div
