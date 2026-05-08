@@ -44,6 +44,62 @@ function mockRect(element: Element, rect: DOMRect) {
   });
 }
 
+function findVisualEffectEvaluationIndex(
+  sendCommand: ReturnType<typeof vi.fn>,
+): number {
+  return sendCommand.mock.calls.findIndex(([, method, commandParams]) => {
+    if (method !== 'Runtime.evaluate') {
+      return false;
+    }
+    const expression =
+      commandParams &&
+      typeof commandParams === 'object' &&
+      'expression' in commandParams
+        ? commandParams.expression
+        : undefined;
+    return (
+      typeof expression === 'string' &&
+      expression.includes('data-xpertai-chatkit-visual-effect')
+    );
+  });
+}
+
+function findFirstMouseEventIndex(sendCommand: ReturnType<typeof vi.fn>) {
+  return sendCommand.mock.calls.findIndex(
+    ([, method]) => method === 'Input.dispatchMouseEvent',
+  );
+}
+
+function findFirstKeyEventIndex(sendCommand: ReturnType<typeof vi.fn>) {
+  return sendCommand.mock.calls.findIndex(
+    ([, method]) => method === 'Input.dispatchKeyEvent',
+  );
+}
+
+function findFirstScreenshotIndex(sendCommand: ReturnType<typeof vi.fn>) {
+  return sendCommand.mock.calls.findIndex(
+    ([, method]) => method === 'Page.captureScreenshot',
+  );
+}
+
+function findRuntimeEvaluationIndexContaining(
+  sendCommand: ReturnType<typeof vi.fn>,
+  text: string,
+) {
+  return sendCommand.mock.calls.findIndex(([, method, commandParams]) => {
+    if (method !== 'Runtime.evaluate') {
+      return false;
+    }
+    const expression =
+      commandParams &&
+      typeof commandParams === 'object' &&
+      'expression' in commandParams
+        ? commandParams.expression
+        : undefined;
+    return typeof expression === 'string' && expression.includes(text);
+  });
+}
+
 function installSameOriginFrameFixture() {
   document.body.innerHTML = '<iframe id="sap-frame"></iframe>';
   const frame = document.querySelector('iframe');
@@ -205,6 +261,113 @@ describe('CDP host automation', () => {
     );
   });
 
+  it('captures visible labels, group labels, and select options in runtime snapshots', async () => {
+    document.body.innerHTML = `
+      <form>
+        <strong id="education-label">Highest level of education</strong><br />
+        <input id="radio-button-1" type="radio" aria-label="Radio button" value="radio-button-1" /> High School<br />
+        <input id="radio-button-2" type="radio" aria-label="Radio button" value="radio-button-2" /> College<br />
+
+        <strong id="sex-label">Sex</strong><br />
+        <input id="checkbox-1" type="checkbox" aria-label="checkbox" value="checkbox-1" /> Male<br />
+        <input id="checkbox-2" type="checkbox" aria-label="checkbox" value="checkbox-2" /> Female<br />
+
+        <label id="experience-label" for="select-menu">Years of experience:</label>
+        <select id="select-menu">
+          <option value="0">Select an option</option>
+          <option value="1">0-1</option>
+          <option value="2">2-4</option>
+        </select>
+      </form>
+    `;
+    const educationLabel = document.getElementById('education-label');
+    const radioHighSchool = document.getElementById('radio-button-1');
+    const radioCollege = document.getElementById('radio-button-2');
+    const sexLabel = document.getElementById('sex-label');
+    const checkboxMale = document.getElementById('checkbox-1');
+    const checkboxFemale = document.getElementById('checkbox-2');
+    const select = document.getElementById('select-menu');
+    if (
+      !educationLabel ||
+      !radioHighSchool ||
+      !radioCollege ||
+      !sexLabel ||
+      !checkboxMale ||
+      !checkboxFemale ||
+      !select
+    ) {
+      throw new Error('labelled control fixture is unavailable.');
+    }
+    mockRect(educationLabel, createDomRect(128, 456, 184, 20));
+    mockRect(radioHighSchool, createDomRect(128, 486, 13, 13));
+    mockRect(radioCollege, createDomRect(128, 510, 13, 13));
+    mockRect(sexLabel, createDomRect(128, 586, 32, 20));
+    mockRect(checkboxMale, createDomRect(128, 614, 13, 13));
+    mockRect(checkboxFemale, createDomRect(128, 638, 13, 13));
+    mockRect(select, createDomRect(128, 736, 280, 38));
+    document.elementsFromPoint = vi.fn((x, y) => {
+      const hit = [
+        radioHighSchool,
+        radioCollege,
+        checkboxMale,
+        checkboxFemale,
+        select,
+      ].find((element) => {
+        const rect = element.getBoundingClientRect();
+        return (
+          x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+        );
+      });
+      return hit ? [hit, document.body] : [document.body];
+    });
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-1' },
+    );
+    const content = parseContent(response);
+    const elements = content.result.elements as Array<Record<string, unknown>>;
+    const highSchool = elements.find(
+      (element) => element.selector === '#radio-button-1',
+    );
+    const female = elements.find(
+      (element) => element.selector === '#checkbox-2',
+    );
+    const experience = elements.find(
+      (element) => element.selector === '#select-menu',
+    );
+
+    expect(response.status).toBe('success');
+    expect(highSchool).toMatchObject({
+      role: 'radio',
+      name: 'High School',
+      label: 'High School',
+      groupLabel: 'Highest level of education',
+      value: 'radio-button-1',
+    });
+    expect(female).toMatchObject({
+      role: 'checkbox',
+      name: 'Female',
+      label: 'Female',
+      groupLabel: 'Sex',
+      value: 'checkbox-2',
+    });
+    expect(experience).toMatchObject({
+      role: 'combobox',
+      name: 'Years of experience:',
+      label: 'Years of experience:',
+      value: '0',
+      selectedLabel: 'Select an option',
+      options: [
+        { label: 'Select an option', value: '0', selected: true },
+        { label: '0-1', value: '1' },
+        { label: '2-4', value: '2' },
+      ],
+    });
+  });
+
   it('uses CDP mouse events for clicks', async () => {
     const sendCommand = vi.fn(async (_target, method) => {
       if (method === 'Runtime.evaluate') {
@@ -228,6 +391,10 @@ describe('CDP host automation', () => {
     );
 
     expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findFirstMouseEventIndex(sendCommand),
+    );
     expect(sendCommand).toHaveBeenCalledWith(
       { tabId: 42 },
       'Input.dispatchMouseEvent',
@@ -242,6 +409,54 @@ describe('CDP host automation', () => {
       { tabId: 42 },
       'Input.dispatchMouseEvent',
       expect.objectContaining({ type: 'mouseReleased', button: 'left' }),
+    );
+  });
+
+  it('re-measures the CDP click point after the target-anchored effect', async () => {
+    let resolveCount = 0;
+    const sendCommand = vi.fn(async (_target, method, commandParams) => {
+      if (method === 'Runtime.evaluate') {
+        const expression =
+          commandParams && typeof commandParams.expression === 'string'
+            ? commandParams.expression
+            : '';
+        if (expression.includes('data-xpertai-chatkit-visual-effect')) {
+          return { result: { value: undefined } };
+        }
+        resolveCount += 1;
+        return {
+          result: {
+            value: {
+              point:
+                resolveCount === 1 ? { x: 120, y: 40 } : { x: 222, y: 333 },
+              target: { tag: 'button', name: 'Save' },
+              requested: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_click', params: { role: 'button', name: 'Save' } },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('success');
+    expect(content).toMatchObject({
+      ok: true,
+      result: {
+        point: { x: 222, y: 333 },
+      },
+    });
+    expect(sendCommand).toHaveBeenCalledWith(
+      { tabId: 42 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed', x: 222, y: 333 }),
     );
   });
 
@@ -311,6 +526,63 @@ describe('CDP host automation', () => {
     );
   });
 
+  it('shows CDP visual effects before hover mouse events', async () => {
+    const sendCommand = vi.fn(async (_target, method) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              point: { x: 120, y: 40 },
+              target: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_hover', params: { role: 'button', name: 'Save' } },
+    );
+
+    expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findFirstMouseEventIndex(sendCommand),
+    );
+  });
+
+  it('shows CDP visual effects before key presses', async () => {
+    const sendCommand = vi.fn(async (_target, method) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              focused: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_press', params: { key: 'Enter' } },
+    );
+
+    expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findFirstKeyEventIndex(sendCommand),
+    );
+  });
+
   it('uses viewport coordinates for pointer clicks and returns hit-test details', async () => {
     const sendCommand = vi.fn(async (_target, method) => {
       if (method === 'Runtime.evaluate') {
@@ -366,6 +638,174 @@ describe('CDP host automation', () => {
         button: 'right',
         clickCount: 2,
       }),
+    );
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findFirstMouseEventIndex(sendCommand),
+    );
+  });
+
+  it('shows CDP visual effects before non-click pointer events', async () => {
+    const sendCommand = vi.fn(async (_target, method) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              coordinateSpace: 'viewport-css-px',
+              hitTarget: { tag: 'button', name: 'Execute' },
+              hitStack: [{ tag: 'button', name: 'Execute' }],
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          action: 'down',
+          x: 320,
+          y: 480,
+        },
+      },
+    );
+
+    expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findFirstMouseEventIndex(sendCommand),
+    );
+    expect(sendCommand).toHaveBeenCalledWith(
+      { tabId: 42 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed', x: 320, y: 480 }),
+    );
+  });
+
+  it('continues CDP clicks when the click effect injection fails', async () => {
+    const sendCommand = vi.fn(async (_target, method, commandParams) => {
+      if (method === 'Runtime.evaluate') {
+        const expression =
+          commandParams && typeof commandParams.expression === 'string'
+            ? commandParams.expression
+            : '';
+        if (expression.includes('data-xpertai-chatkit-visual-effect')) {
+          return { exceptionDetails: { text: 'effect failed' } };
+        }
+        return {
+          result: {
+            value: {
+              point: { x: 120, y: 40 },
+              target: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_click', params: { role: 'button', name: 'Save' } },
+    );
+
+    expect(response.status).toBe('success');
+    expect(sendCommand).toHaveBeenCalledWith(
+      { tabId: 42 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed', x: 120, y: 40 }),
+    );
+  });
+
+  it('shows CDP visual effects before fill scripts', async () => {
+    const sendCommand = vi.fn(async (_target, method) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              point: { x: 120, y: 40 },
+              target: { tag: 'input', name: 'Name' },
+              requested: { tag: 'input', name: 'Name' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_fill', params: { selector: '#name', value: 'Ada' } },
+    );
+
+    expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findRuntimeEvaluationIndexContaining(
+        sendCommand,
+        'Target element cannot be filled.',
+      ),
+    );
+  });
+
+  it('shows CDP visual effects before page scroll wheel events', async () => {
+    const sendCommand = vi.fn(async () => ({}));
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_scroll', params: { deltaY: 240 } },
+    );
+
+    expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findFirstMouseEventIndex(sendCommand),
+    );
+  });
+
+  it('shows CDP visual effects before wait_for scripts', async () => {
+    const sendCommand = vi.fn(async (_target, method) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          result: {
+            value: {
+              point: { x: 120, y: 40 },
+              target: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_wait_for',
+        params: { role: 'button', name: 'Save', state: 'visible' },
+      },
+    );
+
+    expect(response.status).toBe('success');
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(-1);
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeLessThan(
+      findRuntimeEvaluationIndexContaining(
+        sendCommand,
+        'Timed out waiting for target',
+      ),
     );
   });
 
@@ -521,6 +961,9 @@ describe('CDP host automation', () => {
       scroll: { x: 10, y: 20 },
       coordinateSpace: 'viewport-css-px',
     });
+    expect(findVisualEffectEvaluationIndex(sendCommand)).toBeGreaterThan(
+      findFirstScreenshotIndex(sendCommand),
+    );
   });
 
   it('parses JPEG screenshot dimensions', async () => {

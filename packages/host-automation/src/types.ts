@@ -22,6 +22,55 @@ export type HostPageAutomationOptions = {
   enabled?: boolean;
   root?: Document | ShadowRoot;
   allowNavigation?: boolean;
+  showVisualEffect?: (
+    context: HostPageAutomationVisualEffectContext,
+  ) => Promise<void> | void;
+  showClickEffect?: (
+    context: HostPageAutomationClickEffectContext,
+  ) => Promise<void> | void;
+};
+
+export type HostPageAutomationClickEffectContext = {
+  point: {
+    x: number;
+    y: number;
+  };
+  target: Element;
+  requested?: Element;
+};
+
+export type HostPageAutomationVisualEffectType =
+  | 'click'
+  | 'fill'
+  | 'select'
+  | 'press'
+  | 'scroll'
+  | 'hover'
+  | 'focus'
+  | 'pointer'
+  | 'wait_for'
+  | 'screenshot';
+
+export type HostPageAutomationVisualEffectContext = {
+  type: HostPageAutomationVisualEffectType;
+  point?: {
+    x: number;
+    y: number;
+  };
+  anchor?: 'target' | 'point';
+  target?: Element;
+  requested?: Element;
+  action?: 'move' | 'down' | 'up' | 'click';
+  key?: string;
+  value?: string;
+  values?: string[];
+  state?: 'attached' | 'visible' | 'hidden' | 'detached';
+  deltaX?: number;
+  deltaY?: number;
+  scroll?: {
+    x: number;
+    y: number;
+  };
 };
 
 export type HostPageAutomationClientToolCall = {
@@ -40,10 +89,19 @@ export type HostPageAutomationElementSnapshot = {
   tag: string;
   role?: string;
   name?: string;
+  label?: string;
+  groupLabel?: string;
   text?: string;
   nearbyText?: string[];
   testId?: string;
   value?: string;
+  selectedLabel?: string;
+  options?: Array<{
+    label: string;
+    value: string;
+    selected?: boolean;
+    disabled?: boolean;
+  }>;
   placeholder?: string;
   selector?: string;
   disabled?: boolean;

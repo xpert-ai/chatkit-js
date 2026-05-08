@@ -1027,7 +1027,10 @@ function rememberClientToolCalls(
   });
 }
 
-function normalizeToolMessagesResponse(
+/**
+ * Normalize host-provided client tool results at the resume protocol boundary.
+ */
+export function normalizeToolMessagesResponse(
   response: unknown,
 ): ClientToolMessageInput | null {
   if (!response) return null;
@@ -1038,6 +1041,7 @@ function normalizeToolMessagesResponse(
       name: raw.name,
       content: raw.content,
       status: raw.status,
+      artifact: raw.artifact,
     };
   }
   return null;

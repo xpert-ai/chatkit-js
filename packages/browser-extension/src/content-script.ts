@@ -3,6 +3,7 @@ import {
   type HostPageAutomationClientToolCall,
 } from 'packages/host-automation/src';
 import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
+import { showHostAutomationEffect } from './visual-effect';
 import { withDefaultHostAutomationResultDelay } from './host-automation-delay';
 
 // Keep runtime constants local so Vite emits this as an injectable classic script.
@@ -88,6 +89,7 @@ const FRAME_ID = 'xpertai-chatkit-extension-overlay-frame';
 const HIT_REGION_PADDING = 8;
 const hostAutomationHandler = createHostPageAutomationClientToolHandler({
   allowNavigation: true,
+  showVisualEffect: showHostAutomationEffect,
 });
 
 let currentDisplayMode: unknown = 'pet';

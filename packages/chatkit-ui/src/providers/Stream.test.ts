@@ -24,6 +24,7 @@ import {
   mergeQueuedFollowUpGroup,
   normalizeRequestUserInputParams,
   normalizeRequestUserInputToolCall,
+  normalizeToolMessagesResponse,
   retainResumeStreamOptions,
   resolveClientToolCallResponse,
   shouldBroadcastThreadChange,
@@ -350,6 +351,45 @@ describe('request_user_input normalization', () => {
       id: 'call-2',
     });
     expect(waitForRequestUserInput).not.toHaveBeenCalled();
+  });
+
+  it('preserves client tool artifacts when normalizing resume messages', () => {
+    const screenshotArtifact = {
+      type: 'host_page_screenshot',
+      mimeType: 'image/png',
+      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+      viewport: { width: 1440, height: 900 },
+      imageSize: { width: 1, height: 1 },
+      coordinateSpace: 'viewport-css-px',
+    };
+
+    expect(
+      normalizeToolMessagesResponse({
+        tool_call_id: 'call-3',
+        name: 'host_page_screenshot',
+        content: JSON.stringify({
+          ok: true,
+          result: {
+            mimeType: 'image/png',
+            dataLength: screenshotArtifact.data.length,
+          },
+        }),
+        status: 'success',
+        artifact: screenshotArtifact,
+      }),
+    ).toEqual({
+      tool_call_id: 'call-3',
+      name: 'host_page_screenshot',
+      content: JSON.stringify({
+        ok: true,
+        result: {
+          mimeType: 'image/png',
+          dataLength: screenshotArtifact.data.length,
+        },
+      }),
+      status: 'success',
+      artifact: screenshotArtifact,
+    });
   });
 
   it('does not claim other client tool calls', () => {
