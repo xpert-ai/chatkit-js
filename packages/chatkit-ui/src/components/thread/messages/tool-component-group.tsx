@@ -122,6 +122,9 @@ const TOOL_GROUP_TOKEN_CATEGORY: Record<string, ToolGroupCategory> = {
   tools: 'tools',
 };
 
+const TOOL_CALL_ROW_TEXT_CLASS =
+  'text-xs leading-5 in-data-[density=compact]:text-[11px] in-data-[density=compact]:leading-4 in-data-[density=spacious]:text-[13px] in-data-[density=spacious]:leading-5';
+
 type PendingToolComponent = {
   item: TMessageContentComponent;
   index: number;
@@ -950,7 +953,8 @@ function ToolCallRowContent({
       <button
         type="button"
         className={cn(
-          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-sm leading-6 text-muted-foreground',
+          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-muted-foreground',
+          TOOL_CALL_ROW_TEXT_CLASS,
           hasDetails && 'cursor-pointer hover:text-foreground',
           hasError && 'text-destructive hover:text-destructive',
         )}

@@ -644,6 +644,25 @@ describe('AssistantMessage tool components', () => {
     ).toBeInTheDocument();
   });
 
+  it('uses smaller density-aware text for grouped tool rows', () => {
+    renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'success',
+      }),
+    ]);
+
+    expect(screen.getByRole('button', { name: /run-command/ })).toHaveClass(
+      'text-xs',
+      'leading-5',
+      'in-data-[density=compact]:text-[11px]',
+      'in-data-[density=compact]:leading-4',
+      'in-data-[density=spacious]:text-[13px]',
+      'in-data-[density=spacious]:leading-5',
+    );
+  });
+
   it('uses the builtin provider icon URL for provider toolsets', () => {
     const { container } = render(
       <AssistantMessage
