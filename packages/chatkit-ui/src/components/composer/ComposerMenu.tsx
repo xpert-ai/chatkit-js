@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import type {
   RuntimeCapabilitiesResponse,
-  RuntimeCapabilitiesSelection,
   RuntimeCapabilitySubAgent,
 } from '@xpert-ai/xpert-sdk';
 import type {
@@ -48,6 +47,7 @@ import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { useTheme } from '../../providers/Theme';
 import {
   isRuntimeCapabilitySelected,
+  type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../../lib/runtime-capabilities';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';

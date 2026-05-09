@@ -422,6 +422,13 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('run_command'),
     ]);
 
+    expect(
+      screen.getByRole('button', { name: /Processed 2 tools/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processing failed 2 tools/ }),
+    ).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
 
     expect(screen.getByText('Error')).toBeInTheDocument();
@@ -637,6 +644,56 @@ describe('AssistantMessage tool components', () => {
     ).toBeInTheDocument();
   });
 
+  it('uses smaller density-aware text for grouped tool rows', () => {
+    renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'success',
+      }),
+    ]);
+
+    expect(screen.getByRole('button', { name: /run-command/ })).toHaveClass(
+      'text-xs',
+      'leading-5',
+      'in-data-[density=compact]:text-[11px]',
+      'in-data-[density=compact]:leading-4',
+      'in-data-[density=spacious]:text-[13px]',
+      'in-data-[density=spacious]:leading-5',
+    );
+  });
+
+  it('adds a shimmer text effect to running grouped tool rows', () => {
+    renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'running',
+        end_date: undefined,
+      }),
+    ]);
+
+    expect(screen.getByText('run-command')).toHaveClass(
+      'ck-tool-call-running-text',
+    );
+  });
+
+  it('uses the tool icon for running tool rows instead of a loading indicator', () => {
+    const { container } = renderAssistant([
+      createToolComponent('run-command', {
+        type: 'program',
+        title: 'run-command',
+        status: 'running',
+        end_date: undefined,
+      }),
+    ]);
+
+    expect(
+      container.querySelector('[data-slot="tool-step-icon"]'),
+    ).toBeInTheDocument();
+    expect(container.querySelector('.animate-spin')).not.toBeInTheDocument();
+  });
+
   it('uses the builtin provider icon URL for provider toolsets', () => {
     const { container } = render(
       <AssistantMessage
@@ -766,8 +823,11 @@ describe('AssistantMessage tool components', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: /Processing failed 1 task/ }),
+      screen.getByRole('button', { name: /Processed 1 task/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Processing failed 1 task/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText('Writing todos')).toBeInTheDocument();
     expect(screen.queryByText('write_todos')).not.toBeInTheDocument();
     expect(screen.getByText('1.5s')).toBeInTheDocument();

@@ -223,8 +223,7 @@ export type ChatKitReference =
 
 export type ChatKitReferenceCompositionMode = 'compose' | 'preserve';
 
-export type RuntimeCapabilitiesSelection = {
-  mode: 'allowlist';
+export type RuntimeCapabilitiesSelectionSet = {
   skills: {
     workspaceId?: string;
     ids: string[];
@@ -235,6 +234,11 @@ export type RuntimeCapabilitiesSelection = {
   subAgents?: {
     nodeKeys: string[];
   };
+};
+
+export type RuntimeCapabilitiesSelection = RuntimeCapabilitiesSelectionSet & {
+  mode: 'allowlist';
+  recommended?: RuntimeCapabilitiesSelectionSet;
 };
 
 /**

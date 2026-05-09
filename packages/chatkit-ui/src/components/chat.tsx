@@ -11,10 +11,7 @@ import {
   X,
 } from 'lucide-react';
 
-import type {
-  Message,
-  RuntimeCapabilitiesSelection,
-} from '@xpert-ai/xpert-sdk';
+import type { Message } from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
   ChatKitImageReference,
@@ -29,6 +26,7 @@ import type {
 import {
   cn,
   createMessageId,
+  getComposerInputRoundedClass,
   getMenuItemRoundedClass,
   getPanelRoundedClass,
   getRoundedClass,
@@ -102,10 +100,13 @@ import {
 import {
   createEmptyRuntimeCapabilitiesSelection,
   createDefaultRuntimeCapabilitiesSelection,
+  createRuntimeCapabilitiesForSubmit,
+  getRecommendedRuntimeCapabilitiesSelection,
   getRuntimeCapabilityOptions,
   isRuntimeCapabilitySelected,
   mergeRuntimeCapabilitiesSelections,
   toggleRuntimeCapabilitySelection,
+  type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../lib/runtime-capabilities';
 import {
@@ -661,6 +662,11 @@ export function Chat({
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
   const isComposerStacked = planModeEnabled || Boolean(selectedTool);
+  const isComposerInputEmpty = getComposerEditingLength(composerParts) === 0;
+  const composerInputRoundedClass = getComposerInputRoundedClass(theme.radius, {
+    isEmpty: isComposerInputEmpty,
+    isStacked: isComposerStacked,
+  });
   const pendingFollowUps = React.useMemo(
     () =>
       [...(stream.pendingFollowUps ?? [])].sort(
@@ -687,22 +693,6 @@ export function Chat({
           )
         : null,
     [runtimeCapabilities, runtimeCapabilitiesReady, sessionRuntimeCapabilities],
-  );
-  const effectiveRuntimeCapabilitiesForSubmit = React.useMemo(
-    () =>
-      runtimeCapabilitiesReady && runtimeCapabilities
-        ? mergeRuntimeCapabilitiesSelections(
-            runtimeCapabilities,
-            sessionRuntimeCapabilities,
-            runRuntimeCapabilities,
-          )
-        : null,
-    [
-      runtimeCapabilities,
-      runtimeCapabilitiesReady,
-      runRuntimeCapabilities,
-      sessionRuntimeCapabilities,
-    ],
   );
   const runRuntimeCapabilityOptions = React.useMemo(
     () =>
@@ -1526,19 +1516,29 @@ export function Chat({
         return;
       }
 
-      const runtimeCapabilitiesForSubmit =
+      const recommendedRuntimeCapabilitiesForSubmit =
         submitOptions.runtimeCapabilities &&
         runtimeCapabilities &&
         runtimeCapabilitiesReady
           ? mergeRuntimeCapabilitiesSelections(
               runtimeCapabilities,
-              effectiveRuntimeCapabilitiesForSubmit,
+              runRuntimeCapabilities,
               submitOptions.runtimeCapabilities,
             )
-          : effectiveRuntimeCapabilitiesForSubmit;
+          : runRuntimeCapabilities;
+      const runtimeCapabilitiesForSubmit =
+        runtimeCapabilities && runtimeCapabilitiesReady
+          ? createRuntimeCapabilitiesForSubmit({
+              capabilities: runtimeCapabilities,
+              available: effectiveSessionRuntimeCapabilities,
+              recommended: recommendedRuntimeCapabilitiesForSubmit,
+            })
+          : null;
       const runtimeCapabilityOptionsForMessage =
         getSelectedRuntimeCapabilityOptions(
-          runtimeCapabilitiesForSubmit,
+          getRecommendedRuntimeCapabilitiesSelection(
+            runtimeCapabilitiesForSubmit,
+          ),
           runtimeCapabilityOptions,
         );
 
@@ -1649,7 +1649,6 @@ export function Chat({
       setRuntimeCapabilityPalette(null);
     },
     [
-      effectiveRuntimeCapabilitiesForSubmit,
       effectiveSessionRuntimeCapabilities,
       isSendDisabled,
       options?.request,
@@ -1658,6 +1657,7 @@ export function Chat({
       runtimeCapabilities,
       runtimeCapabilitiesReady,
       runtimeCapabilityOptions,
+      runRuntimeCapabilities,
       scrollToBottom,
       selectedTool,
       commitComposerParts,
@@ -1729,7 +1729,7 @@ export function Chat({
     runtimeCapabilities,
     runtimeCapabilitiesReady,
     runtimeCapabilityOptions,
-    effectiveRuntimeCapabilitiesForSubmit,
+    recommendedRuntimeCapabilities: runRuntimeCapabilities,
     draft,
     palette: runtimeCapabilityPalette,
     setPalette: setRuntimeCapabilityPalette,
@@ -2654,7 +2654,9 @@ export function Chat({
                 message.type === 'human'
                   ? (humanMessage.runtimeCapabilityOptions ??
                     getSelectedRuntimeCapabilityOptions(
-                      humanMessage.runtimeCapabilities,
+                      getRecommendedRuntimeCapabilitiesSelection(
+                        humanMessage.runtimeCapabilities,
+                      ),
                       runtimeCapabilityOptions,
                     ))
                   : [];
@@ -3084,19 +3086,18 @@ export function Chat({
         )}
 
         <form className="flex items-end" onSubmit={handleSubmit}>
-          {/* Capsule-shaped input container */}
           <div
             data-slot="composer-input-shell"
             data-layout={isComposerStacked ? 'stacked' : 'inline'}
             className={cn(
-              'relative flex flex-1 overflow-hidden rounded-xl',
+              'relative flex flex-1 overflow-hidden',
               'bg-background border border-border shadow-sm',
               isComposerStacked
                 ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
                 : 'min-h-12 px-1.5 py-1',
               'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-[min-height,padding,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-              getRoundedClass(theme.radius),
+              'transition-[min-height,padding,border-radius,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+              composerInputRoundedClass,
             )}
           >
             <div

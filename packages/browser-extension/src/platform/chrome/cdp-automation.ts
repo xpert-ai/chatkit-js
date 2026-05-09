@@ -3,6 +3,7 @@ import {
   HOST_PAGE_AUTOMATION_TOOL_NAMES,
   type HostPageAutomationClientToolCall,
 } from 'packages/host-automation/src';
+import { showHostAutomationEffect } from '../../visual-effect';
 
 export type ChromeDebuggee = {
   tabId: number;
@@ -86,6 +87,13 @@ type HitTestInfo = {
   coordinateSpace: ScreenshotCoordinateSpace;
   hitTarget?: unknown;
   hitStack: unknown[];
+};
+
+type CdpResolvedPoint = {
+  point: { x: number; y: number };
+  target?: unknown;
+  requested?: unknown;
+  actionability?: unknown;
 };
 
 const CDP_PROTOCOL_VERSION = '1.3';
@@ -639,7 +647,11 @@ function pageSnapshotScript(rawArgs: unknown) {
     let node = walker.nextNode();
     while (node) {
       const candidate = node as Element;
-      if (candidate !== element && isTextOnlyLabelCandidate(candidate)) {
+      if (
+        candidate !== element &&
+        !candidate.contains(element) &&
+        isTextOnlyLabelCandidate(candidate)
+      ) {
         const rect = getGlobalRect(candidate);
         const text = getOwnText(candidate) ?? getText(candidate);
         if (text) {
@@ -651,20 +663,28 @@ function pageSnapshotScript(rawArgs: unknown) {
             rectRight <= targetRect.x + 12 &&
             Math.abs(centerY - targetCenterY) <=
               Math.max(28, targetRect.height * 1.25);
+          const sameRowRight =
+            rect.x >= targetRight - 8 &&
+            rect.x - targetRight <= 240 &&
+            Math.abs(centerY - targetCenterY) <=
+              Math.max(28, targetRect.height * 1.25);
           const above =
             rectBottom <= targetRect.y + 8 &&
             targetRect.y - rectBottom <= 80 &&
             centerX >= targetRect.x - 80 &&
             centerX <= targetRight + 80;
-          if (sameRow || above) {
+          if (sameRow || sameRowRight || above) {
             candidates.push({
               text,
               score:
                 (sameRow
                   ? targetRect.x - rectRight + Math.abs(centerY - targetCenterY)
-                  : targetRect.y -
-                    rectBottom +
-                    Math.abs(centerX - targetCenterX)) + (sameRow ? 0 : 100),
+                  : sameRowRight
+                    ? rect.x - targetRight + Math.abs(centerY - targetCenterY)
+                    : targetRect.y -
+                      rectBottom +
+                      Math.abs(centerX - targetCenterX)) +
+                (sameRow ? 0 : sameRowRight ? 5 : 100),
             });
           }
         }
@@ -699,17 +719,253 @@ function pageSnapshotScript(rawArgs: unknown) {
     }
     return undefined;
   };
-  const getName = (element: Element) => {
-    const ariaLabel = element.getAttribute('aria-label')?.trim();
-    if (ariaLabel) return ariaLabel;
-    const title = element.getAttribute('title')?.trim();
-    if (title) return title;
-    if (isInputElement(element)) {
-      const labels = Array.from(element.labels ?? [])
-        .map((label) => getText(label))
-        .filter(Boolean);
-      if (labels.length > 0) return labels.join(' ').slice(0, 180);
+  const isChoiceInput = (element: Element): element is HTMLInputElement =>
+    isInputElement(element) &&
+    (element.type === 'checkbox' || element.type === 'radio');
+  const getControlLabels = (element: Element) => {
+    if (
+      isInputElement(element) ||
+      isSelectElement(element) ||
+      isTextAreaElement(element)
+    ) {
+      return Array.from(element.labels ?? []);
     }
+    return [];
+  };
+  const getTextByElementIds = (element: Element, attribute: string) => {
+    const ids = element.getAttribute(attribute)?.trim().split(/\s+/) ?? [];
+    return ids
+      .map((id) => element.ownerDocument.getElementById(id))
+      .filter((target): target is HTMLElement => Boolean(target))
+      .map((target) => getText(target))
+      .filter((text): text is string => Boolean(text));
+  };
+  const getExplicitControlLabel = (element: Element) => {
+    const ariaLabelledBy = getTextByElementIds(element, 'aria-labelledby');
+    if (ariaLabelledBy.length > 0) {
+      return ariaLabelledBy.join(' ').slice(0, 180);
+    }
+
+    const labels = getControlLabels(element)
+      .map((label) => getText(label))
+      .filter((text): text is string => Boolean(text));
+    if (labels.length > 0) {
+      return labels.join(' ').slice(0, 180);
+    }
+
+    return undefined;
+  };
+  const getAdjacentTextAfter = (element: Element) => {
+    const segments: string[] = [];
+    let node = element.nextSibling;
+
+    while (node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+        if (text) segments.push(text);
+      } else if (
+        node.nodeType === Node.ELEMENT_NODE &&
+        (node as Element).tagName.toLowerCase() === 'br'
+      ) {
+        break;
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const siblingElement = node as Element;
+        if (
+          siblingElement.matches(
+            'input,textarea,select,button,a[href],[role="button"],[role="link"]',
+          )
+        ) {
+          break;
+        }
+        const text = getText(siblingElement);
+        if (text) segments.push(text);
+        break;
+      }
+
+      if (segments.join(' ').length >= 120) break;
+      node = node.nextSibling;
+    }
+
+    const text = segments.join(' ').replace(/\s+/g, ' ').trim();
+    return text ? text.slice(0, 180) : undefined;
+  };
+  const getSameRowText = (element: Element, side: 'left' | 'right') => {
+    const ownerDocument = element.ownerDocument;
+    if (!ownerDocument.body) return undefined;
+    const targetRect = getGlobalRect(element);
+    if (targetRect.width <= 0 || targetRect.height <= 0) return undefined;
+
+    const targetCenterY = targetRect.y + targetRect.height / 2;
+    const candidates: Array<{ text: string; score: number }> = [];
+    const walker = ownerDocument.createTreeWalker(
+      ownerDocument.body,
+      NodeFilter.SHOW_ELEMENT,
+    );
+    let node = walker.nextNode();
+    while (node) {
+      const candidate = node as Element;
+      if (
+        candidate !== element &&
+        !candidate.contains(element) &&
+        isTextOnlyLabelCandidate(candidate)
+      ) {
+        const rect = getGlobalRect(candidate);
+        const text = getOwnText(candidate) ?? getText(candidate);
+        if (text) {
+          const centerY = rect.y + rect.height / 2;
+          const sameRow =
+            Math.abs(centerY - targetCenterY) <=
+            Math.max(28, targetRect.height * 1.25);
+          const distance =
+            side === 'left'
+              ? targetRect.x - (rect.x + rect.width)
+              : rect.x - (targetRect.x + targetRect.width);
+
+          if (sameRow && distance >= -8 && distance <= 240) {
+            candidates.push({
+              text,
+              score: Math.abs(distance) + Math.abs(centerY - targetCenterY),
+            });
+          }
+        }
+      }
+      node = walker.nextNode();
+    }
+
+    return candidates.sort((left, right) => left.score - right.score)[0]?.text;
+  };
+  const getControlLabel = (element: Element) => {
+    if (
+      !(
+        isInputElement(element) ||
+        isSelectElement(element) ||
+        isTextAreaElement(element)
+      )
+    ) {
+      return undefined;
+    }
+
+    const explicit = getExplicitControlLabel(element);
+    if (explicit) return explicit;
+
+    if (isChoiceInput(element)) {
+      return (
+        getSameRowText(element, 'right') ??
+        getAdjacentTextAfter(element) ??
+        getNearbyText(element)[0]
+      );
+    }
+
+    return getSameRowText(element, 'left') ?? getNearbyText(element)[0];
+  };
+  const isWeakControlName = (element: Element, name: string) => {
+    const normalized = name.trim().toLowerCase();
+    if (isInputElement(element) && element.type === 'radio') {
+      return normalized === 'radio' || normalized === 'radio button';
+    }
+    if (isInputElement(element) && element.type === 'checkbox') {
+      return normalized === 'checkbox' || normalized === 'check box';
+    }
+    if (isSelectElement(element)) {
+      return (
+        normalized === 'select' ||
+        normalized === 'select menu' ||
+        normalized === 'combobox' ||
+        normalized === 'combo box'
+      );
+    }
+    return false;
+  };
+  const getChoiceGroupLabel = (element: Element) => {
+    if (!isChoiceInput(element)) return undefined;
+
+    const fieldset = element.closest('fieldset');
+    const legend = fieldset?.querySelector('legend');
+    const legendText = legend ? getText(legend) : undefined;
+    if (legendText) return legendText;
+
+    const ownerDocument = element.ownerDocument;
+    if (!ownerDocument.body) return undefined;
+    const targetRect = getGlobalRect(element);
+    if (targetRect.width <= 0 || targetRect.height <= 0) return undefined;
+
+    const targetCenterX = targetRect.x + targetRect.width / 2;
+    const candidates: Array<{ text: string; score: number }> = [];
+    const walker = ownerDocument.createTreeWalker(
+      ownerDocument.body,
+      NodeFilter.SHOW_ELEMENT,
+    );
+    let node = walker.nextNode();
+    while (node) {
+      const candidate = node as Element;
+      if (
+        candidate !== element &&
+        !candidate.contains(element) &&
+        candidate.matches(
+          'legend,strong,b,[role="heading"],h1,h2,h3,h4,h5,h6',
+        ) &&
+        isTextOnlyLabelCandidate(candidate)
+      ) {
+        const rect = getGlobalRect(candidate);
+        const text = getOwnText(candidate) ?? getText(candidate);
+        if (text && rect.y + rect.height <= targetRect.y + 8) {
+          const verticalDistance = targetRect.y - (rect.y + rect.height);
+          const centerX = rect.x + rect.width / 2;
+          const aligned =
+            verticalDistance <= 160 &&
+            centerX >= targetRect.x - 120 &&
+            centerX <= targetRect.x + targetRect.width + 320;
+
+          if (aligned) {
+            candidates.push({
+              text,
+              score:
+                verticalDistance + Math.abs(centerX - targetCenterX) * 0.25,
+            });
+          }
+        }
+      }
+      node = walker.nextNode();
+    }
+
+    return candidates.sort((left, right) => left.score - right.score)[0]?.text;
+  };
+  const getSelectOptions = (element: Element) => {
+    if (!isSelectElement(element)) return undefined;
+
+    const options = Array.from(element.options).map((option) => {
+      const label = (option.label || option.textContent || option.value)
+        .replace(/\s+/g, ' ')
+        .trim();
+      return {
+        label: (label || option.value).slice(0, 180),
+        value: option.value,
+        selected: option.selected || undefined,
+        disabled: option.disabled || undefined,
+      };
+    });
+
+    return options.length ? options : undefined;
+  };
+  const getSelectedLabel = (element: Element) => {
+    if (!isSelectElement(element)) return undefined;
+
+    const selected = element.selectedOptions[0];
+    const label = selected
+      ? (selected.label || selected.textContent || selected.value)
+          .replace(/\s+/g, ' ')
+          .trim()
+      : undefined;
+
+    return label ? label.slice(0, 180) : undefined;
+  };
+  const getName = (element: Element) => {
+    const controlLabel = getControlLabel(element);
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    if (ariaLabel && !isWeakControlName(element, ariaLabel)) return ariaLabel;
+    const title = element.getAttribute('title')?.trim();
+    if (title && !isWeakControlName(element, title)) return title;
+    if (controlLabel) return controlLabel;
     const nearbyText = getNearbyText(element)[0];
     if (nearbyText) return nearbyText;
     return getText(element);
@@ -788,6 +1044,8 @@ function pageSnapshotScript(rawArgs: unknown) {
       tag: element.tagName.toLowerCase(),
       role: getRole(element),
       name: getName(element),
+      label: getControlLabel(element),
+      groupLabel: getChoiceGroupLabel(element),
       text: getText(element),
       nearbyText: getNearbyText(element),
       testId:
@@ -801,6 +1059,8 @@ function pageSnapshotScript(rawArgs: unknown) {
         isSelectElement(element)
           ? element.value
           : undefined,
+      selectedLabel: getSelectedLabel(element),
+      options: getSelectOptions(element),
       placeholder:
         isInputElement(element) || isTextAreaElement(element)
           ? element.placeholder || undefined
@@ -1313,6 +1573,15 @@ function pageResolveTargetScript(rawArgs: unknown) {
 
 function pageResolveElementHandleScript(this: Element) {
   const element = this;
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      refs: Record<string, Element>;
+      lastResolved?: Element;
+    };
+  };
+  const store =
+    globalObject.__xpertaiChatKitHostAutomation ??
+    (globalObject.__xpertaiChatKitHostAutomation = { refs: {} });
   const getElementView = (target: Element) =>
     target.ownerDocument.defaultView ?? window;
   const isHtmlElement = (target: Element) => {
@@ -1482,6 +1751,7 @@ function pageResolveElementHandleScript(this: Element) {
   }
   const hitStack = getDeepHitStack(point);
   const hitTarget = hitStack[0];
+  store.lastResolved = target;
   return {
     point,
     target: summarize(target),
@@ -1494,6 +1764,143 @@ function pageResolveElementHandleScript(this: Element) {
         (target === hitTarget ||
           target.contains(hitTarget) ||
           hitTarget.contains(target)),
+      ),
+      hitTarget: hitTarget ? summarize(hitTarget) : undefined,
+      hitStack: hitStack.slice(0, 5).map(summarize),
+    },
+  };
+}
+
+function pageMeasureLastResolvedTargetScript() {
+  const isInputElement = (target: Element): target is HTMLInputElement =>
+    target.tagName.toLowerCase() === 'input';
+  const isFrameElement = (target: Element): target is HTMLIFrameElement =>
+    target.tagName.toLowerCase() === 'iframe';
+  const getFrameDocument = (frame: Element) => {
+    if (!isFrameElement(frame)) return null;
+    try {
+      return frame.contentDocument;
+    } catch {
+      return null;
+    }
+  };
+  const getFrameOffset = (doc: Document) => {
+    let x = 0;
+    let y = 0;
+    let view = doc.defaultView;
+    while (view?.frameElement) {
+      const frame = view.frameElement;
+      const rect = frame.getBoundingClientRect();
+      x += rect.left;
+      y += rect.top;
+      view = frame.ownerDocument.defaultView;
+    }
+    return { x, y };
+  };
+  const getGlobalRect = (target: Element) => {
+    const rect = target.getBoundingClientRect();
+    const offset = getFrameOffset(target.ownerDocument);
+    return {
+      x: rect.left + offset.x,
+      y: rect.top + offset.y,
+      width: rect.width,
+      height: rect.height,
+    };
+  };
+  const getText = (target: Element) =>
+    (target.textContent ?? '').replace(/\s+/g, ' ').trim();
+  const getRole = (target: Element) => {
+    const explicit = target.getAttribute('role')?.trim();
+    if (explicit) return explicit;
+    const tag = target.tagName.toLowerCase();
+    if (tag === 'button') return 'button';
+    if (tag === 'a') return 'link';
+    if (tag === 'textarea') return 'textbox';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'summary') return 'button';
+    if (isInputElement(target)) {
+      if (target.type === 'checkbox') return 'checkbox';
+      if (target.type === 'radio') return 'radio';
+      if (['button', 'submit', 'reset'].includes(target.type)) return 'button';
+      return 'textbox';
+    }
+    return undefined;
+  };
+  const getName = (target: Element) =>
+    target.getAttribute('aria-label')?.trim() ||
+    target.getAttribute('title')?.trim() ||
+    getText(target);
+  const summarize = (target: Element) => ({
+    tag: target.tagName.toLowerCase(),
+    role: getRole(target),
+    name: getName(target),
+  });
+  const getDeepHitStack = (
+    point: { x: number; y: number },
+    doc: Document = document,
+  ): Element[] => {
+    const offset = getFrameOffset(doc);
+    const localX = point.x - offset.x;
+    const localY = point.y - offset.y;
+    const stack =
+      typeof doc.elementsFromPoint === 'function'
+        ? doc.elementsFromPoint(localX, localY)
+        : ([doc.elementFromPoint(localX, localY)].filter(Boolean) as Element[]);
+    const result: Element[] = [];
+    for (const hit of stack) {
+      const childDocument = getFrameDocument(hit);
+      if (childDocument) {
+        result.push(...getDeepHitStack(point, childDocument));
+      }
+      result.push(hit);
+    }
+    return result;
+  };
+  const containsOrEquals = (parent: Element, child: Element) =>
+    parent === child || parent.contains(child);
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      lastResolved?: Element;
+    };
+  };
+  const target = globalObject.__xpertaiChatKitHostAutomation?.lastResolved;
+  if (!target) {
+    throw new Error('No resolved host page target to measure.');
+  }
+
+  const rect = getGlobalRect(target);
+  const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  const insetX = Math.min(8, rect.width / 2);
+  const insetY = Math.min(8, rect.height / 2);
+  const candidates =
+    rect.width > 0 && rect.height > 0
+      ? [
+          center,
+          { x: rect.x + insetX, y: center.y },
+          { x: rect.x + rect.width - insetX, y: center.y },
+          { x: center.x, y: rect.y + insetY },
+          { x: center.x, y: rect.y + rect.height - insetY },
+        ]
+      : [center];
+  const point =
+    candidates.find((candidate) =>
+      getDeepHitStack(candidate).some(
+        (hit) =>
+          containsOrEquals(target, hit) || containsOrEquals(hit, target),
+      ),
+    ) ?? center;
+  const hitStack = getDeepHitStack(point);
+  const hitTarget = hitStack[0];
+  return {
+    point,
+    target: summarize(target),
+    actionability: {
+      visible: rect.width > 0 && rect.height > 0,
+      receivesEvents: Boolean(
+        hitTarget &&
+          (target === hitTarget ||
+            target.contains(hitTarget) ||
+            hitTarget.contains(target)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
@@ -1517,10 +1924,15 @@ function pageFillScript(rawArgs: unknown) {
     const view = element.ownerDocument.defaultView ?? window;
     return element instanceof view.HTMLElement;
   };
+  const summarize = (element: Element) => ({
+    tag: element.tagName.toLowerCase(),
+    name:
+      element.getAttribute('aria-label')?.trim() ||
+      element.getAttribute('title')?.trim() ||
+      (element.textContent ?? '').replace(/\s+/g, ' ').trim() ||
+      undefined,
+  });
   const value = typeof params.value === 'string' ? params.value : '';
-  const target = pageResolveTargetScript(params) as {
-    requested?: { tag?: string; name?: string };
-  };
   const store = (
     globalThis as typeof globalThis & {
       __xpertaiChatKitHostAutomation?: {
@@ -1529,6 +1941,12 @@ function pageFillScript(rawArgs: unknown) {
       };
     }
   ).__xpertaiChatKitHostAutomation;
+  const target = store?.lastResolved
+    ? undefined
+    : (pageResolveTargetScript(params) as {
+        requested?: { tag?: string; name?: string };
+        target?: { tag?: string; name?: string };
+      });
   const element =
     store?.lastResolved ??
     (typeof params.ref === 'string' && store?.refs[params.ref]
@@ -1545,14 +1963,14 @@ function pageFillScript(rawArgs: unknown) {
     descriptor?.set?.call(element, value);
     element.dispatchEvent(new view.Event('input', { bubbles: true }));
     element.dispatchEvent(new view.Event('change', { bubbles: true }));
-    return { filled: target.requested, value };
+    return { filled: target?.requested ?? summarize(element), value };
   }
   if (element && isHtmlElement(element) && element.isContentEditable) {
     const view = element.ownerDocument.defaultView ?? window;
     element.textContent = value;
     element.dispatchEvent(new view.Event('input', { bubbles: true }));
     element.dispatchEvent(new view.Event('change', { bubbles: true }));
-    return { filled: target.requested, value };
+    return { filled: target?.requested ?? summarize(element), value };
   }
   throw new Error('Target element cannot be filled.');
 }
@@ -1569,7 +1987,6 @@ function pageSelectScript(rawArgs: unknown) {
     : typeof params.value === 'string'
       ? [params.value]
       : [];
-  pageResolveTargetScript(params);
   const store = (
     globalThis as typeof globalThis & {
       __xpertaiChatKitHostAutomation?: {
@@ -1577,6 +1994,9 @@ function pageSelectScript(rawArgs: unknown) {
       };
     }
   ).__xpertaiChatKitHostAutomation;
+  if (!store?.lastResolved) {
+    pageResolveTargetScript(params);
+  }
   const element =
     store?.lastResolved ??
     (typeof params.selector === 'string'
@@ -1975,26 +2395,20 @@ async function resolvePoint(
   sendCommand: ChromeDebuggerApi['sendCommand'],
   tabId: number,
   params: Record<string, unknown>,
-) {
+): Promise<CdpResolvedPoint> {
   const axRef = readParamRef(params, 'axRef');
   const ref = readParamRef(params, 'ref');
   if (axRef && !ref && !axRef.startsWith('e')) {
-    return resolveAccessibilityRefPoint(sendCommand, tabId, axRef) as Promise<{
-      point: { x: number; y: number };
-      target?: unknown;
-      requested?: unknown;
-      actionability?: unknown;
-    }>;
+    return resolveAccessibilityRefPoint(
+      sendCommand,
+      tabId,
+      axRef,
+    ) as Promise<CdpResolvedPoint>;
   }
 
   return evaluatePageScript(sendCommand, tabId, pageResolveTargetScript, [
     params,
-  ]) as Promise<{
-    point: { x: number; y: number };
-    target?: unknown;
-    requested?: unknown;
-    actionability?: unknown;
-  }>;
+  ]) as Promise<CdpResolvedPoint>;
 }
 
 function getMouseButton(value: unknown): 'left' | 'middle' | 'right' {
@@ -2005,6 +2419,38 @@ function getClickCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(1, Math.min(3, Math.floor(value)))
     : 1;
+}
+
+async function showCdpVisualEffect(
+  sendCommand: ChromeDebuggerApi['sendCommand'],
+  tabId: number,
+  args: Record<string, unknown>,
+) {
+  await evaluatePageScript(sendCommand, tabId, showHostAutomationEffect, [
+    args,
+  ]).catch(() => undefined);
+}
+
+function isCdpResolvedPoint(value: unknown): value is CdpResolvedPoint {
+  const point = getObjectField(value, 'point');
+  return (
+    getFiniteNumber(point?.x) !== undefined &&
+    getFiniteNumber(point?.y) !== undefined
+  );
+}
+
+async function resolvePointAfterEffect(
+  sendCommand: ChromeDebuggerApi['sendCommand'],
+  tabId: number,
+  fallback: CdpResolvedPoint,
+): Promise<CdpResolvedPoint> {
+  return evaluatePageScript(
+    sendCommand,
+    tabId,
+    pageMeasureLastResolvedTargetScript,
+  )
+    .then((value) => (isCdpResolvedPoint(value) ? value : fallback))
+    .catch(() => fallback);
 }
 
 async function dispatchMouseClick(
@@ -2095,36 +2541,54 @@ export async function runCdpHostAutomation(
             const resolved = await resolvePoint(sendCommand, tab.id, params);
             const button = getMouseButton(params.button);
             const clickCount = getClickCount(params.clickCount);
-            await dispatchMouseClick(sendCommand, tab.id, resolved.point, {
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'click',
+              anchor: 'target',
+            });
+            const latest = await resolvePointAfterEffect(
+              sendCommand,
+              tab.id,
+              resolved,
+            );
+            await dispatchMouseClick(sendCommand, tab.id, latest.point, {
               button,
               clickCount,
             });
             return {
-              clicked: resolved.target,
-              requested: resolved.requested,
-              point: resolved.point,
+              clicked: latest.target ?? resolved.target,
+              requested: latest.requested ?? resolved.requested,
+              point: latest.point,
               button,
               clickCount,
               strategy: 'cdp_mouse',
               coordinateSpace: 'viewport-css-px',
-              actionability: resolved.actionability,
+              actionability: latest.actionability ?? resolved.actionability,
             };
           }
           case 'host_page_hover': {
             const resolved = await resolvePoint(sendCommand, tab.id, params);
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'hover',
+              anchor: 'target',
+            });
+            const latest = await resolvePointAfterEffect(
+              sendCommand,
+              tab.id,
+              resolved,
+            );
             await sendCdpCommand(
               sendCommand,
               tab.id,
               'Input.dispatchMouseEvent',
               {
                 type: 'mouseMoved',
-                x: resolved.point.x,
-                y: resolved.point.y,
+                x: latest.point.x,
+                y: latest.point.y,
               },
             );
             return {
-              hovered: resolved.target,
-              point: resolved.point,
+              hovered: latest.target ?? resolved.target,
+              point: latest.point,
               strategy: 'cdp_mouse',
             };
           }
@@ -2137,6 +2601,11 @@ export async function runCdpHostAutomation(
               throw new Error('key must be a non-empty string.');
             }
             const keyDef = getKeyDefinition(key);
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'press',
+              key,
+              anchor: 'target',
+            });
             await sendCdpCommand(
               sendCommand,
               tab.id,
@@ -2167,15 +2636,11 @@ export async function runCdpHostAutomation(
               typeof params.action === 'string' ? params.action : 'click';
             const button = getMouseButton(params.button);
             const clickCount = getClickCount(params.clickCount);
-            const resolved =
-              typeof params.x === 'number' && typeof params.y === 'number'
-                ? { point: { x: params.x, y: params.y } }
-                : await resolvePoint(sendCommand, tab.id, params);
-            const hitTest = await getPointHitTest(
-              sendCommand,
-              tab.id,
-              resolved.point,
-            );
+            const hasExplicitPoint =
+              typeof params.x === 'number' && typeof params.y === 'number';
+            const resolved: CdpResolvedPoint = hasExplicitPoint
+              ? { point: { x: params.x as number, y: params.y as number } }
+              : await resolvePoint(sendCommand, tab.id, params);
             const eventMap: Record<string, string[]> = {
               move: ['mouseMoved'],
               down: ['mousePressed'],
@@ -2183,12 +2648,40 @@ export async function runCdpHostAutomation(
               click: ['mouseMoved', 'mousePressed', 'mouseReleased'],
             };
             const events = eventMap[action] ?? eventMap.click;
+            let latest = resolved;
             if (action === 'click') {
-              await dispatchMouseClick(sendCommand, tab.id, resolved.point, {
+              await showCdpVisualEffect(sendCommand, tab.id, {
+                type: 'click',
+                ...(hasExplicitPoint
+                  ? { point: resolved.point, anchor: 'point' }
+                  : { anchor: 'target' }),
+              });
+              latest = hasExplicitPoint
+                ? resolved
+                : await resolvePointAfterEffect(
+                    sendCommand,
+                    tab.id,
+                    resolved,
+                  );
+              await dispatchMouseClick(sendCommand, tab.id, latest.point, {
                 button,
                 clickCount,
               });
             } else {
+              await showCdpVisualEffect(sendCommand, tab.id, {
+                type: 'pointer',
+                action,
+                ...(hasExplicitPoint
+                  ? { point: resolved.point, anchor: 'point' }
+                  : { anchor: 'target' }),
+              });
+              latest = hasExplicitPoint
+                ? resolved
+                : await resolvePointAfterEffect(
+                    sendCommand,
+                    tab.id,
+                    resolved,
+                  );
               for (const type of events) {
                 await sendCdpCommand(
                   sendCommand,
@@ -2196,31 +2689,55 @@ export async function runCdpHostAutomation(
                   'Input.dispatchMouseEvent',
                   {
                     type,
-                    x: resolved.point.x,
-                    y: resolved.point.y,
+                    x: latest.point.x,
+                    y: latest.point.y,
                     button: type === 'mouseMoved' ? 'none' : button,
                     clickCount: type === 'mouseMoved' ? 0 : clickCount,
                   },
                 );
               }
             }
+            const hitTest = await getPointHitTest(
+              sendCommand,
+              tab.id,
+              latest.point,
+            );
             return {
               pointer: action,
-              point: resolved.point,
+              point: latest.point,
               button,
               clickCount,
               strategy: 'cdp_mouse',
               ...hitTest,
             };
           }
-          case 'host_page_fill':
+          case 'host_page_fill': {
+            await resolvePoint(sendCommand, tab.id, params);
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'fill',
+              anchor: 'target',
+              value: typeof params.value === 'string' ? params.value : '',
+            });
             return evaluatePageScript(sendCommand, tab.id, pageFillScript, [
               params,
             ]);
-          case 'host_page_select':
+          }
+          case 'host_page_select': {
+            await resolvePoint(sendCommand, tab.id, params);
+            const values = Array.isArray(params.values)
+              ? params.values.filter((value) => typeof value === 'string')
+              : typeof params.value === 'string'
+                ? [params.value]
+                : [];
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'select',
+              anchor: 'target',
+              values,
+            });
             return evaluatePageScript(sendCommand, tab.id, pageSelectScript, [
               params,
             ]);
+          }
           case 'host_page_scroll': {
             const hasTarget =
               typeof params.ref === 'string' ||
@@ -2234,6 +2751,15 @@ export async function runCdpHostAutomation(
               (typeof params.deltaX === 'number' ||
                 typeof params.deltaY === 'number')
             ) {
+              await showCdpVisualEffect(sendCommand, tab.id, {
+                type: 'scroll',
+                point: {
+                  x: typeof params.x === 'number' ? params.x : 10,
+                  y: typeof params.y === 'number' ? params.y : 10,
+                },
+                deltaX: typeof params.deltaX === 'number' ? params.deltaX : 0,
+                deltaY: typeof params.deltaY === 'number' ? params.deltaY : 0,
+              });
               await sendCdpCommand(
                 sendCommand,
                 tab.id,
@@ -2248,6 +2774,15 @@ export async function runCdpHostAutomation(
               );
               return { scrolled: 'page', strategy: 'cdp_mouse_wheel' };
             }
+            const resolved = hasTarget
+              ? await resolvePoint(sendCommand, tab.id, params)
+              : null;
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'scroll',
+              ...(resolved ? { anchor: 'target' } : {}),
+              deltaX: typeof params.deltaX === 'number' ? params.deltaX : 0,
+              deltaY: typeof params.deltaY === 'number' ? params.deltaY : 0,
+            });
             return evaluatePageScript(sendCommand, tab.id, pageScrollScript, [
               params,
             ]);
@@ -2263,10 +2798,16 @@ export async function runCdpHostAutomation(
             });
             return { navigated: nextUrl.toString(), strategy: 'cdp_page' };
           }
-          case 'host_page_focus':
+          case 'host_page_focus': {
+            await resolvePoint(sendCommand, tab.id, params);
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'focus',
+              anchor: 'target',
+            });
             return evaluatePageScript(sendCommand, tab.id, pageFocusScript, [
               params,
             ]);
+          }
           case 'host_page_screenshot': {
             const format = params.format === 'png' ? 'png' : 'jpeg';
             const quality =
@@ -2314,6 +2855,9 @@ export async function runCdpHostAutomation(
                     (pageMetrics as Record<string, unknown>).devicePixelRatio,
                   )
                 : undefined;
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'screenshot',
+            });
             return {
               mimeType,
               data,
@@ -2324,10 +2868,26 @@ export async function runCdpHostAutomation(
               coordinateSpace: 'viewport-css-px',
             };
           }
-          case 'host_page_wait_for':
+          case 'host_page_wait_for': {
+            const resolved = await resolvePoint(
+              sendCommand,
+              tab.id,
+              params,
+            ).catch(() => null);
+            await showCdpVisualEffect(sendCommand, tab.id, {
+              type: 'wait_for',
+              state:
+                params.state === 'attached' ||
+                params.state === 'hidden' ||
+                params.state === 'detached'
+                  ? params.state
+                  : 'visible',
+              ...(resolved ? { anchor: 'target' } : {}),
+            });
             return evaluatePageScript(sendCommand, tab.id, pageWaitForScript, [
               params,
             ]);
+          }
         }
       },
     );

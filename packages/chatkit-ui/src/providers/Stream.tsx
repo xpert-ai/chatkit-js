@@ -13,7 +13,6 @@ import {
   Client,
   type Checkpoint,
   type Config,
-  type RuntimeCapabilitiesSelection,
   type StreamMode,
   type ChatMessage,
 } from '@xpert-ai/xpert-sdk';
@@ -56,6 +55,7 @@ import {
 } from '../lib/client-secret';
 import { createMissingApiConfigurationError } from '../lib/api-config';
 import { normalizeRequestContextAndConfig } from '../lib/request-options';
+import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import type { ParentMessenger } from './ParentMessenger';
 import {
@@ -424,9 +424,9 @@ function isResumeRunInput(
 ): input is TXpertChatResumeRequest {
   return Boolean(
     input &&
-      typeof input === 'object' &&
-      'action' in input &&
-      input.action === 'resume',
+    typeof input === 'object' &&
+    'action' in input &&
+    input.action === 'resume',
   );
 }
 
@@ -1027,7 +1027,10 @@ function rememberClientToolCalls(
   });
 }
 
-function normalizeToolMessagesResponse(
+/**
+ * Normalize host-provided client tool results at the resume protocol boundary.
+ */
+export function normalizeToolMessagesResponse(
   response: unknown,
 ): ClientToolMessageInput | null {
   if (!response) return null;
@@ -1038,6 +1041,7 @@ function normalizeToolMessagesResponse(
       name: raw.name,
       content: raw.content,
       status: raw.status,
+      artifact: raw.artifact,
     };
   }
   return null;
@@ -1546,8 +1550,7 @@ const StreamSession = ({
             where: { threadId: activeThreadId },
             limit: 1,
           });
-          conversationId =
-            conversationResult.items?.[0]?.id?.trim() ?? null;
+          conversationId = conversationResult.items?.[0]?.id?.trim() ?? null;
           conversationIdRef.current = conversationId;
         }
       }
@@ -2650,9 +2653,7 @@ const StreamSession = ({
             ...humanInput,
             id: humanInput.id ?? createMessageId(),
             executionId:
-              humanInput.executionId ??
-              lastExecutionIdRef.current ??
-              undefined,
+              humanInput.executionId ?? lastExecutionIdRef.current ?? undefined,
             followUpMode,
           },
           followUpMode,

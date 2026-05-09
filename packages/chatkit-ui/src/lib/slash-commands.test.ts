@@ -7,7 +7,10 @@ import {
   shouldSubmitRawSlashInvocation,
   type RuntimeCapabilityPaletteState,
 } from './slash-commands';
-import type { RuntimeCapabilityOption } from './runtime-capabilities';
+import type {
+  RuntimeCapabilitiesSelection,
+  RuntimeCapabilityOption,
+} from './runtime-capabilities';
 
 const runtimeCapabilities = {
   skills: [
@@ -44,7 +47,15 @@ const runtimeCapabilityOptions: RuntimeCapabilityOption[] = [
   },
 ];
 
-function getPaletteOptions(palette: RuntimeCapabilityPaletteState) {
+function getPaletteOptions(
+  palette: RuntimeCapabilityPaletteState,
+  selectedRuntimeCapabilities: RuntimeCapabilitiesSelection = {
+    mode: 'allowlist',
+    skills: { workspaceId: 'workspace-1', ids: [] },
+    plugins: { nodeKeys: [] },
+    subAgents: { nodeKeys: [] },
+  },
+) {
   return createSlashPaletteOptions({
     palette,
     resolvedCommands: resolveSlashCommands(
@@ -74,12 +85,7 @@ function getPaletteOptions(palette: RuntimeCapabilityPaletteState) {
     runtimeCapabilitiesReady: true,
     runtimeCapabilityOptions,
     runtimeCapabilities,
-    effectiveRuntimeCapabilitiesForSubmit: {
-      mode: 'allowlist',
-      skills: { workspaceId: 'workspace-1', ids: [] },
-      plugins: { nodeKeys: [] },
-      subAgents: { nodeKeys: [] },
-    },
+    recommendedRuntimeCapabilities: selectedRuntimeCapabilities,
   });
 }
 
@@ -236,6 +242,27 @@ describe('slash command palette', () => {
       kind: 'capability',
       label: 'Review Skill',
     });
+  });
+
+  it('hides capabilities that have already been recommended', () => {
+    const options = getPaletteOptions(
+      {
+        query: 'review',
+        start: 0,
+        end: 7,
+        activeIndex: 0,
+        atMessageStart: true,
+      },
+      {
+        mode: 'allowlist',
+        skills: { workspaceId: 'workspace-1', ids: ['skill-review'] },
+        plugins: { nodeKeys: [] },
+        subAgents: { nodeKeys: [] },
+      },
+    );
+
+    expect(options.map((option) => option.label)).toContain('Review');
+    expect(options.map((option) => option.label)).not.toContain('Review Skill');
   });
 
   it('nests runtime capabilities under expanded built-in groups', () => {

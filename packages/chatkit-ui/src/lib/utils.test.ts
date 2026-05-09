@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { getMenuItemRoundedClass, getPanelRoundedClass } from './utils';
+import {
+  getComposerInputRoundedClass,
+  getMenuItemRoundedClass,
+  getPanelRoundedClass,
+} from './utils';
 
 describe('theme utility classes', () => {
   it('uses radius-sized panel rounding without turning pill panels into capsules', () => {
@@ -17,5 +21,34 @@ describe('theme utility classes', () => {
     expect(getMenuItemRoundedClass('soft')).toBe('rounded-md');
     expect(getMenuItemRoundedClass('sharp')).toBe('rounded-none');
     expect(getMenuItemRoundedClass(undefined)).toBe('rounded-md');
+  });
+
+  it('uses bounded rounding for the composer input shell', () => {
+    expect(getComposerInputRoundedClass('pill')).toBe('rounded-3xl');
+    expect(getComposerInputRoundedClass('round')).toBe('rounded-xl');
+    expect(getComposerInputRoundedClass('soft')).toBe('rounded-lg');
+    expect(getComposerInputRoundedClass('sharp')).toBe('rounded-none');
+    expect(getComposerInputRoundedClass(undefined)).toBe('rounded-xl');
+  });
+
+  it('keeps an empty pill composer input capsule-shaped while inline', () => {
+    expect(
+      getComposerInputRoundedClass('pill', {
+        isEmpty: true,
+        isStacked: false,
+      }),
+    ).toBe('rounded-full');
+    expect(
+      getComposerInputRoundedClass('pill', {
+        isEmpty: true,
+        isStacked: true,
+      }),
+    ).toBe('rounded-3xl');
+    expect(
+      getComposerInputRoundedClass('pill', {
+        isEmpty: false,
+        isStacked: false,
+      }),
+    ).toBe('rounded-3xl');
   });
 });

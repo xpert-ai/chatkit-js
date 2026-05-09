@@ -1,6 +1,5 @@
 import type { Message } from '@langchain/core/messages';
 import type { ToolCall } from '@langchain/core/messages/tool';
-import type { RuntimeCapabilitiesSelection } from '@xpert-ai/xpert-sdk';
 import {
   isClientToolRequest,
   type ChatKitReference,
@@ -8,6 +7,10 @@ import {
 } from '@xpert-ai/chatkit-types';
 
 import { normalizeReferences } from './references';
+import type {
+  RuntimeCapabilitiesSelection,
+  RuntimeCapabilitiesSelectionSet,
+} from './runtime-capabilities';
 
 export type MessageMetadataContainer = Record<string, unknown> & {
   references?: unknown;
@@ -92,6 +95,17 @@ function isNodeKeySelection(value: unknown): value is { nodeKeys: string[] } {
   return isObjectRecord(value) && isStringArray(value.nodeKeys);
 }
 
+function isRuntimeCapabilitiesSelectionSet(
+  value: unknown,
+): value is RuntimeCapabilitiesSelectionSet {
+  return (
+    isObjectRecord(value) &&
+    isSkillSelection(value.skills) &&
+    isNodeKeySelection(value.plugins) &&
+    (value.subAgents === undefined || isNodeKeySelection(value.subAgents))
+  );
+}
+
 export function isRuntimeCapabilitiesSelection(
   value: unknown,
 ): value is RuntimeCapabilitiesSelection {
@@ -99,11 +113,14 @@ export function isRuntimeCapabilitiesSelection(
     return false;
   }
 
+  const selection = value as RuntimeCapabilitiesSelection & {
+    recommended?: unknown;
+  };
   return (
-    value.mode === 'allowlist' &&
-    isSkillSelection(value.skills) &&
-    isNodeKeySelection(value.plugins) &&
-    (value.subAgents === undefined || isNodeKeySelection(value.subAgents))
+    selection.mode === 'allowlist' &&
+    isRuntimeCapabilitiesSelectionSet(selection) &&
+    (selection.recommended === undefined ||
+      isRuntimeCapabilitiesSelectionSet(selection.recommended))
   );
 }
 

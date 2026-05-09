@@ -3,10 +3,10 @@ import type {
   ChatKitCommandSource,
   ChatKitOptions,
 } from '@xpert-ai/chatkit-types';
-import type { RuntimeCapabilitiesSelection } from '@xpert-ai/xpert-sdk';
 
 import {
   toggleRuntimeCapabilitySelection,
+  type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../../lib/runtime-capabilities';
 import type { ParentMessenger } from '../../providers/ParentMessenger';
@@ -70,7 +70,7 @@ export function useSlashCommands({
   runtimeCapabilities,
   runtimeCapabilitiesReady,
   runtimeCapabilityOptions,
-  effectiveRuntimeCapabilitiesForSubmit,
+  recommendedRuntimeCapabilities,
   draft,
   palette,
   setPalette,
@@ -89,7 +89,7 @@ export function useSlashCommands({
   runtimeCapabilities: RuntimeCapabilitiesWithCommands | null;
   runtimeCapabilitiesReady: boolean;
   runtimeCapabilityOptions: RuntimeCapabilityOption[];
-  effectiveRuntimeCapabilitiesForSubmit: RuntimeCapabilitiesSelection | null;
+  recommendedRuntimeCapabilities: RuntimeCapabilitiesSelection | null;
   draft: string;
   palette: RuntimeCapabilityPaletteState | null;
   setPalette: React.Dispatch<
@@ -152,12 +152,12 @@ export function useSlashCommands({
         runtimeCapabilitiesReady,
         runtimeCapabilityOptions,
         runtimeCapabilities,
-        effectiveRuntimeCapabilitiesForSubmit,
+        recommendedRuntimeCapabilities,
       }),
     [
-      effectiveRuntimeCapabilitiesForSubmit,
       localizedResolvedCommands,
       palette,
+      recommendedRuntimeCapabilities,
       runtimeCapabilities,
       runtimeCapabilitiesReady,
       runtimeCapabilityOptions,

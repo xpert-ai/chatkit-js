@@ -49,7 +49,6 @@ export type PartialStepData = Partial<Omit<TMessageComponentStep, 'message' | 't
   title?: LocalizedText;
 };
 type StepStatus = NonNullable<PartialStepData['status']>;
-type ToolGroupDisplayStatus = Exclude<StepStatus, 'running'>;
 type ToolStepRunState = boolean | undefined;
 
 type ToolGroupCategory =
@@ -122,6 +121,9 @@ const TOOL_GROUP_TOKEN_CATEGORY: Record<string, ToolGroupCategory> = {
   tool: 'tools',
   tools: 'tools',
 };
+
+const TOOL_CALL_ROW_TEXT_CLASS =
+  'text-xs leading-5 in-data-[density=compact]:text-[11px] in-data-[density=compact]:leading-4 in-data-[density=spacious]:text-[13px] in-data-[density=spacious]:leading-5';
 
 type PendingToolComponent = {
   item: TMessageContentComponent;
@@ -370,25 +372,6 @@ function getToolGroupCategoryCounts(
     counts[category] = (counts[category] ?? 0) + 1;
     return counts;
   }, {});
-}
-
-function getEffectiveToolGroupDisplayStatus(
-  items: TMessageContentComponent[],
-  isThreadRunning?: ToolStepRunState,
-): ToolGroupDisplayStatus {
-  if (
-    items.some((item) => {
-      const data = getToolStepData(item);
-      return (
-        getEffectiveToolStepStatus(data, isThreadRunning) === 'fail' ||
-        Boolean(data.error)
-      );
-    })
-  ) {
-    return 'fail';
-  }
-
-  return 'success';
 }
 
 export function getToolActivityLabel(
@@ -941,8 +924,6 @@ function ToolCallRowContent({
   const { i18n } = useChatkitTranslation();
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
-  const itemConfig = status ? toolStatusConfig[status] : null;
-  const ItemStatusIcon = itemConfig?.icon;
   const hasError = status === 'fail' || Boolean(data.error);
   const label = getToolActivityLabel(content, i18n.language, status);
   const detailsId = React.useId();
@@ -970,7 +951,8 @@ function ToolCallRowContent({
       <button
         type="button"
         className={cn(
-          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-sm leading-6 text-muted-foreground',
+          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-muted-foreground',
+          TOOL_CALL_ROW_TEXT_CLASS,
           hasDetails && 'cursor-pointer hover:text-foreground',
           hasError && 'text-destructive hover:text-destructive',
         )}
@@ -981,15 +963,7 @@ function ToolCallRowContent({
           if (hasDetails) setIsExpanded((prev) => !prev);
         }}
       >
-        {status === 'running' && ItemStatusIcon ? (
-          <ItemStatusIcon
-            className={cn(
-              'h-3.5 w-3.5 shrink-0',
-              itemConfig?.iconClass,
-              'animate-spin',
-            )}
-          />
-        ) : status ? (
+        {status ? (
           <ToolStepIcon
             data={data}
             organizationId={organizationId}
@@ -1002,7 +976,13 @@ function ToolCallRowContent({
         ) : (
           <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         )}
-        <span className="min-w-0 truncate" title={label}>
+        <span
+          className={cn(
+            'min-w-0 truncate',
+            status === 'running' && 'ck-tool-call-running-text',
+          )}
+          title={label}
+        >
           {label}
         </span>
         {durationLabel ? (
@@ -1047,7 +1027,6 @@ export function ToolComponentGroup({
 }) {
   const { t } = useChatkitTranslation();
   const contentId = React.useId();
-  const groupStatus = getEffectiveToolGroupDisplayStatus(items, isThreadRunning);
   const [isExpanded, setIsExpanded] = React.useState(!hasFollowingItem);
   const categoryCounts = getToolGroupCategoryCounts(items);
   const categorySummary = TOOL_GROUP_CATEGORY_ORDER.flatMap((category) => {
@@ -1061,8 +1040,8 @@ export function ToolComponentGroup({
       ),
     ];
   }).join(t('message.toolGroup.separator'));
-  const summary = `${t(`message.toolGroup.status.${groupStatus}`)} ${categorySummary}`;
-  const config = toolStatusConfig[groupStatus];
+  const summary = `${t('message.toolGroup.status.success')} ${categorySummary}`;
+  const config = toolStatusConfig.success;
   const StatusIcon = config.icon;
 
   React.useEffect(() => {

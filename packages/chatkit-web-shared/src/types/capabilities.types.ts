@@ -1,3 +1,5 @@
+import type { RuntimeCapabilitiesSelection as ChatKitRuntimeCapabilitiesSelection } from "@xpert-ai/chatkit-types"
+
 export type ChatKitReq = any
 
 type JsonRecord = Record<string, unknown>
@@ -45,18 +47,13 @@ export type ChatKitReference =
 
 export type ChatKitReferenceCompositionMode = "compose" | "preserve"
 
-export type RuntimeCapabilitiesSelection = {
-    mode: "allowlist"
-    skills: {
-        workspaceId?: string
-        ids: string[]
-    }
-    plugins: {
-        nodeKeys: string[]
-    }
-    subAgents?: {
-        nodeKeys: string[]
-    }
+export type RuntimeCapabilitiesSelectionSet = Omit<
+    ChatKitRuntimeCapabilitiesSelection,
+    "mode" | "recommended"
+>
+
+export type RuntimeCapabilitiesSelection = ChatKitRuntimeCapabilitiesSelection & {
+    recommended?: RuntimeCapabilitiesSelectionSet
 }
 
 export type ChatKitMessageAttachment =

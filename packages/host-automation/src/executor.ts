@@ -3,6 +3,7 @@ import {
   type HostPageAutomationElementSnapshot,
   type HostPageAutomationOptions,
   type HostPageAutomationToolName,
+  type HostPageAutomationVisualEffectContext,
   type HostPageSnapshot,
 } from './types';
 
@@ -199,24 +200,204 @@ function getElementValue(element: Element): string | undefined {
   return undefined;
 }
 
+function isChoiceInput(element: Element): element is HTMLInputElement {
+  return (
+    element instanceof HTMLInputElement &&
+    (element.type === 'checkbox' || element.type === 'radio')
+  );
+}
+
+function getControlLabels(element: Element): HTMLLabelElement[] {
+  if (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLTextAreaElement
+  ) {
+    return Array.from(element.labels ?? []);
+  }
+
+  return [];
+}
+
+function getTextByElementIds(element: Element, attribute: string): string[] {
+  const ids = element.getAttribute(attribute)?.trim().split(/\s+/) ?? [];
+  return ids
+    .map((id) => element.ownerDocument.getElementById(id))
+    .filter((target): target is HTMLElement => Boolean(target))
+    .map((target) => getElementText(target))
+    .filter((text): text is string => Boolean(text));
+}
+
+function getExplicitControlLabel(element: Element): string | undefined {
+  const ariaLabelledBy = getTextByElementIds(element, 'aria-labelledby');
+  if (ariaLabelledBy.length > 0) {
+    return ariaLabelledBy.join(' ').slice(0, 160);
+  }
+
+  const labels = getControlLabels(element)
+    .map((label) => getElementText(label))
+    .filter((text): text is string => Boolean(text));
+  if (labels.length > 0) {
+    return labels.join(' ').slice(0, 160);
+  }
+
+  return undefined;
+}
+
+function getAdjacentTextAfter(element: Element): string | undefined {
+  const segments: string[] = [];
+  let node = element.nextSibling;
+
+  while (node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (text) {
+        segments.push(text);
+      }
+    } else if (
+      node.nodeType === Node.ELEMENT_NODE &&
+      (node as Element).tagName.toLowerCase() === 'br'
+    ) {
+      break;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const siblingElement = node as Element;
+      if (
+        siblingElement.matches(
+          'input,textarea,select,button,a[href],[role="button"],[role="link"]',
+        )
+      ) {
+        break;
+      }
+      const text = getElementText(siblingElement);
+      if (text) {
+        segments.push(text);
+      }
+      break;
+    }
+
+    if (segments.join(' ').length >= 120) {
+      break;
+    }
+    node = node.nextSibling;
+  }
+
+  const text = segments.join(' ').replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, 160) : undefined;
+}
+
+function getSameRowText(
+  element: Element,
+  side: 'left' | 'right',
+): string | undefined {
+  const doc = element.ownerDocument;
+  const body = doc.body;
+  if (!body) {
+    return undefined;
+  }
+
+  const targetRect = element.getBoundingClientRect();
+  if (targetRect.width <= 0 || targetRect.height <= 0) {
+    return undefined;
+  }
+
+  const targetCenterY = targetRect.top + targetRect.height / 2;
+  const candidates: Array<{ text: string; score: number }> = [];
+  const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT);
+  let node = walker.nextNode();
+
+  while (node) {
+    const candidate = node as Element;
+    if (
+      candidate !== element &&
+      !candidate.contains(element) &&
+      isTextOnlyLabelCandidate(candidate)
+    ) {
+      const rect = candidate.getBoundingClientRect();
+      const text = getElementOwnText(candidate) ?? getElementText(candidate);
+      if (text) {
+        const centerY = rect.top + rect.height / 2;
+        const sameRow =
+          Math.abs(centerY - targetCenterY) <=
+          Math.max(28, targetRect.height * 1.25);
+        const distance =
+          side === 'left'
+            ? targetRect.left - rect.right
+            : rect.left - targetRect.right;
+
+        if (sameRow && distance >= -8 && distance <= 240) {
+          candidates.push({
+            text,
+            score: Math.abs(distance) + Math.abs(centerY - targetCenterY),
+          });
+        }
+      }
+    }
+    node = walker.nextNode();
+  }
+
+  return candidates.sort((left, right) => left.score - right.score)[0]?.text;
+}
+
+function getControlLabel(element: Element): string | undefined {
+  if (
+    !(
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLSelectElement ||
+      element instanceof HTMLTextAreaElement
+    )
+  ) {
+    return undefined;
+  }
+
+  const explicit = getExplicitControlLabel(element);
+  if (explicit) {
+    return explicit;
+  }
+
+  if (isChoiceInput(element)) {
+    return (
+      getSameRowText(element, 'right') ??
+      getAdjacentTextAfter(element) ??
+      getNearbyText(element)[0]
+    );
+  }
+
+  return getSameRowText(element, 'left') ?? getNearbyText(element)[0];
+}
+
+function isWeakControlName(element: Element, name: string): boolean {
+  const normalized = name.trim().toLowerCase();
+  if (element instanceof HTMLInputElement && element.type === 'radio') {
+    return normalized === 'radio' || normalized === 'radio button';
+  }
+  if (element instanceof HTMLInputElement && element.type === 'checkbox') {
+    return normalized === 'checkbox' || normalized === 'check box';
+  }
+  if (element instanceof HTMLSelectElement) {
+    return (
+      normalized === 'select' ||
+      normalized === 'select menu' ||
+      normalized === 'combobox' ||
+      normalized === 'combo box'
+    );
+  }
+  return false;
+}
+
 function getElementName(element: Element): string | undefined {
+  const controlLabel = getControlLabel(element);
   const ariaLabel = element.getAttribute('aria-label');
-  if (ariaLabel?.trim()) {
+  if (ariaLabel?.trim() && !isWeakControlName(element, ariaLabel)) {
     return ariaLabel.trim();
   }
 
   const title = element.getAttribute('title');
-  if (title?.trim()) {
+  if (title?.trim() && !isWeakControlName(element, title)) {
     return title.trim();
   }
 
-  if (element instanceof HTMLInputElement) {
-    const labels = Array.from(element.labels ?? [])
-      .map((label) => getElementText(label))
-      .filter(Boolean);
-    if (labels.length > 0) {
-      return labels.join(' ').slice(0, 160);
-    }
+  if (controlLabel) {
+    return controlLabel;
   }
 
   const nearbyText = getNearbyText(element)[0];
@@ -248,6 +429,103 @@ function isTextOnlyLabelCandidate(element: Element): boolean {
   return Boolean(text && text.length <= 120);
 }
 
+function getChoiceGroupLabel(element: Element): string | undefined {
+  if (!isChoiceInput(element)) {
+    return undefined;
+  }
+
+  const fieldset = element.closest('fieldset');
+  const legend = fieldset?.querySelector('legend');
+  const legendText = legend ? getElementText(legend) : undefined;
+  if (legendText) {
+    return legendText;
+  }
+
+  const doc = element.ownerDocument;
+  const body = doc.body;
+  if (!body) {
+    return undefined;
+  }
+
+  const targetRect = element.getBoundingClientRect();
+  if (targetRect.width <= 0 || targetRect.height <= 0) {
+    return undefined;
+  }
+
+  const targetCenterX = targetRect.left + targetRect.width / 2;
+  const candidates: Array<{ text: string; score: number }> = [];
+  const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT);
+  let node = walker.nextNode();
+
+  while (node) {
+    const candidate = node as Element;
+    if (
+      candidate !== element &&
+      !candidate.contains(element) &&
+      candidate.matches('legend,strong,b,[role="heading"],h1,h2,h3,h4,h5,h6') &&
+      isTextOnlyLabelCandidate(candidate)
+    ) {
+      const rect = candidate.getBoundingClientRect();
+      const text = getElementOwnText(candidate) ?? getElementText(candidate);
+      if (text && rect.bottom <= targetRect.top + 8) {
+        const verticalDistance = targetRect.top - rect.bottom;
+        const centerX = rect.left + rect.width / 2;
+        const aligned =
+          verticalDistance <= 160 &&
+          centerX >= targetRect.left - 120 &&
+          centerX <= targetRect.right + 320;
+
+        if (aligned) {
+          candidates.push({
+            text,
+            score: verticalDistance + Math.abs(centerX - targetCenterX) * 0.25,
+          });
+        }
+      }
+    }
+    node = walker.nextNode();
+  }
+
+  return candidates.sort((left, right) => left.score - right.score)[0]?.text;
+}
+
+function getSelectOptions(
+  element: Element,
+): HostPageAutomationElementSnapshot['options'] | undefined {
+  if (!(element instanceof HTMLSelectElement)) {
+    return undefined;
+  }
+
+  const options = Array.from(element.options).map((option) => {
+    const label = (option.label || option.textContent || option.value)
+      .replace(/\s+/g, ' ')
+      .trim();
+    return {
+      label: (label || option.value).slice(0, 160),
+      value: option.value,
+      selected: option.selected || undefined,
+      disabled: option.disabled || undefined,
+    };
+  });
+
+  return options.length ? options : undefined;
+}
+
+function getSelectedLabel(element: Element): string | undefined {
+  if (!(element instanceof HTMLSelectElement)) {
+    return undefined;
+  }
+
+  const selected = element.selectedOptions[0];
+  const label = selected
+    ? (selected.label || selected.textContent || selected.value)
+        .replace(/\s+/g, ' ')
+        .trim()
+    : undefined;
+
+  return label ? label.slice(0, 160) : undefined;
+}
+
 function getNearbyText(element: Element): string[] {
   const doc = element.ownerDocument;
   const body = doc.body;
@@ -268,7 +546,11 @@ function getNearbyText(element: Element): string[] {
 
   while (node) {
     const candidate = node as Element;
-    if (candidate !== element && isTextOnlyLabelCandidate(candidate)) {
+    if (
+      candidate !== element &&
+      !candidate.contains(element) &&
+      isTextOnlyLabelCandidate(candidate)
+    ) {
       const rect = candidate.getBoundingClientRect();
       const text = getElementOwnText(candidate) ?? getElementText(candidate);
       if (text) {
@@ -278,19 +560,28 @@ function getNearbyText(element: Element): string[] {
           rect.right <= targetRect.left + 12 &&
           Math.abs(centerY - targetCenterY) <=
             Math.max(28, targetRect.height * 1.25);
+        const sameRowRight =
+          rect.left >= targetRect.right - 8 &&
+          rect.left - targetRect.right <= 240 &&
+          Math.abs(centerY - targetCenterY) <=
+            Math.max(28, targetRect.height * 1.25);
         const above =
           rect.bottom <= targetRect.top + 8 &&
           targetRect.top - rect.bottom <= 80 &&
           centerX >= targetRect.left - 80 &&
           centerX <= targetRect.right + 80;
 
-        if (sameRow || above) {
+        if (sameRow || sameRowRight || above) {
           const distance = sameRow
             ? targetRect.left - rect.right + Math.abs(centerY - targetCenterY)
-            : targetRect.top - rect.bottom + Math.abs(centerX - targetCenterX);
+            : sameRowRight
+              ? rect.left - targetRect.right + Math.abs(centerY - targetCenterY)
+              : targetRect.top -
+                rect.bottom +
+                Math.abs(centerX - targetCenterX);
           candidates.push({
             text,
-            score: distance + (sameRow ? 0 : 100),
+            score: distance + (sameRow ? 0 : sameRowRight ? 5 : 100),
           });
         }
       }
@@ -577,6 +868,15 @@ function getReceivesEventsPoint(element: Element): Point | undefined {
       (hit) => containsOrEquals(element, hit) || containsOrEquals(hit, element),
     ),
   );
+}
+
+function getGlobalPoint(element: Element, point: Point): Point {
+  const rect = element.getBoundingClientRect();
+  const globalRect = getGlobalRect(element);
+  return {
+    x: point.x + globalRect.x - rect.left,
+    y: point.y + globalRect.y - rect.top,
+  };
 }
 
 function findSemanticVisibleFallback(
@@ -926,7 +1226,6 @@ export class HostPageAutomationExecutor {
     element: Element,
     ref: string,
   ): HostPageAutomationElementSnapshot {
-
     const placeholder =
       element instanceof HTMLInputElement ||
       element instanceof HTMLTextAreaElement
@@ -939,10 +1238,14 @@ export class HostPageAutomationExecutor {
       tag: element.tagName.toLowerCase(),
       role: inferRole(element),
       name: getElementName(element),
+      label: getControlLabel(element),
+      groupLabel: getChoiceGroupLabel(element),
       text: getElementText(element),
       nearbyText: getNearbyText(element),
       testId: getElementTestId(element),
       value: getElementValue(element),
+      selectedLabel: getSelectedLabel(element),
+      options: getSelectOptions(element),
       placeholder,
       selector: createSelector(element),
       disabled: isDisabled(element),
@@ -1003,7 +1306,7 @@ export class HostPageAutomationExecutor {
     );
   }
 
-  private click(params: Record<string, unknown>) {
+  private async click(params: Record<string, unknown>) {
     const input = normalizeParams(params);
     const requestedElement = this.resolveElement(input);
     const actionability = getActionability(requestedElement);
@@ -1024,6 +1327,22 @@ export class HostPageAutomationExecutor {
 
     focusElement(target);
 
+    const latestTargetPoint = getReceivesEventsPoint(target);
+    const latestTargetActionability = getActionability(target);
+    const latestRequestedActionability = getActionability(requestedElement);
+    const clickPoint = latestTargetPoint
+      ? getGlobalPoint(target, latestTargetPoint)
+      : (latestTargetActionability.center ?? actionability.center);
+    if (clickPoint) {
+      await this.showVisualEffect({
+        type: 'click',
+        point: clickPoint,
+        anchor: 'target',
+        target,
+        requested: requestedElement,
+      });
+    }
+
     if (target instanceof HTMLElement) {
       target.click();
     } else {
@@ -1035,16 +1354,16 @@ export class HostPageAutomationExecutor {
       requested: this.describeElement(requestedElement),
       strategy:
         target === requestedElement ? 'dom' : 'semantic_visible_fallback',
-      point: targetPoint ?? actionability.center,
+      point: clickPoint,
       actionability: {
-        visible: actionability.visible,
-        enabled: actionability.enabled,
-        receivesEvents: actionability.receivesEvents,
+        visible: latestRequestedActionability.visible,
+        enabled: latestRequestedActionability.enabled,
+        receivesEvents: latestRequestedActionability.receivesEvents,
       },
     };
   }
 
-  private fill(params: Record<string, unknown>) {
+  private async fill(params: Record<string, unknown>) {
     const input = normalizeParams(params) as FillParams;
     const value = readString(input.value, 'value');
     const element = this.resolveElement(input);
@@ -1054,12 +1373,28 @@ export class HostPageAutomationExecutor {
       element instanceof HTMLInputElement ||
       element instanceof HTMLTextAreaElement
     ) {
+      await this.showVisualEffect({
+        type: 'fill',
+        target: element,
+        requested: element,
+        value,
+        anchor: 'target',
+        point: getActionability(element).center,
+      });
       setNativeValue(element, value);
       dispatchInputEvents(element);
       return { filled: this.describeElement(element), value };
     }
 
     if (element instanceof HTMLElement && element.isContentEditable) {
+      await this.showVisualEffect({
+        type: 'fill',
+        target: element,
+        requested: element,
+        value,
+        anchor: 'target',
+        point: getActionability(element).center,
+      });
       element.textContent = value;
       dispatchInputEvents(element);
       return { filled: this.describeElement(element), value };
@@ -1068,7 +1403,7 @@ export class HostPageAutomationExecutor {
     throw new Error('Target element cannot be filled.');
   }
 
-  private press(params: Record<string, unknown>) {
+  private async press(params: Record<string, unknown>) {
     const input = normalizeParams(params) as PressParams;
     const key = readString(input.key, 'key');
     const element =
@@ -1084,6 +1419,14 @@ export class HostPageAutomationExecutor {
     }
 
     focusElement(element);
+    await this.showVisualEffect({
+      type: 'press',
+      target: element,
+      requested: element,
+      key,
+      anchor: 'target',
+      point: getActionability(element).center,
+    });
     const eventInit = { key, bubbles: true, cancelable: true };
     element.dispatchEvent(new KeyboardEvent('keydown', eventInit));
     if (key.length === 1) {
@@ -1093,7 +1436,7 @@ export class HostPageAutomationExecutor {
     return { pressed: key, target: this.describeElement(element) };
   }
 
-  private select(params: Record<string, unknown>) {
+  private async select(params: Record<string, unknown>) {
     const input = normalizeParams(params) as SelectParams;
     const values = readStringList(input.values ?? input.value);
     const element = this.resolveElement(input);
@@ -1102,7 +1445,16 @@ export class HostPageAutomationExecutor {
       throw new Error('Target element is not a select.');
     }
 
+    focusElement(element);
     const valueSet = new Set(values);
+    await this.showVisualEffect({
+      type: 'select',
+      target: element,
+      requested: element,
+      values,
+      anchor: 'target',
+      point: getActionability(element).center,
+    });
     for (const option of Array.from(element.options)) {
       option.selected = valueSet.has(option.value);
     }
@@ -1116,7 +1468,7 @@ export class HostPageAutomationExecutor {
     };
   }
 
-  private scroll(params: Record<string, unknown>) {
+  private async scroll(params: Record<string, unknown>) {
     const input = normalizeParams(params) as ScrollParams;
     const absolute: Point | null =
       input.x !== undefined || input.y !== undefined
@@ -1142,6 +1494,15 @@ export class HostPageAutomationExecutor {
       if (!(element instanceof HTMLElement)) {
         throw new Error('Target element cannot be scrolled.');
       }
+      await this.showVisualEffect({
+        type: 'scroll',
+        target: element,
+        requested: element,
+        deltaX,
+        deltaY,
+        anchor: 'target',
+        point: getActionability(element).center,
+      });
       if (absolute) {
         element.scrollTo?.(absolute.x, absolute.y);
       } else {
@@ -1153,6 +1514,15 @@ export class HostPageAutomationExecutor {
       };
     }
 
+    await this.showVisualEffect({
+      type: 'scroll',
+      deltaX,
+      deltaY,
+      point: {
+        x: view.innerWidth / 2,
+        y: view.innerHeight / 2,
+      },
+    });
     if (absolute) {
       view.scrollTo?.(absolute.x, absolute.y);
     } else {
@@ -1181,11 +1551,18 @@ export class HostPageAutomationExecutor {
     return { navigated: nextUrl.toString() };
   }
 
-  private hover(params: Record<string, unknown>) {
+  private async hover(params: Record<string, unknown>) {
     const input = normalizeParams(params) as HoverParams;
     const element = this.resolveElement(input);
     const point = getActionability(element).center;
 
+    await this.showVisualEffect({
+      type: 'hover',
+      target: element,
+      requested: element,
+      anchor: 'target',
+      point,
+    });
     element.dispatchEvent(
       new MouseEvent('mouseover', {
         bubbles: true,
@@ -1206,14 +1583,21 @@ export class HostPageAutomationExecutor {
     return { hovered: this.describeElement(element), point };
   }
 
-  private focus(params: Record<string, unknown>) {
+  private async focus(params: Record<string, unknown>) {
     const input = normalizeParams(params) as FocusParams;
     const element = this.resolveElement(input);
     focusElement(element);
+    await this.showVisualEffect({
+      type: 'focus',
+      target: element,
+      requested: element,
+      anchor: 'target',
+      point: getActionability(element).center,
+    });
     return { focused: this.describeElement(element) };
   }
 
-  private pointer(params: Record<string, unknown>) {
+  private async pointer(params: Record<string, unknown>) {
     const input = normalizeParams(params) as PointerParams;
     const action =
       readOptionalEnum(input.action, ['move', 'down', 'up', 'click'] as const) ??
@@ -1254,15 +1638,42 @@ export class HostPageAutomationExecutor {
     };
 
     if (action === 'move') {
+      await this.showVisualEffect({
+        type: 'pointer',
+        action,
+        anchor: 'point',
+        point,
+        target,
+      });
       target.dispatchEvent(createPointerLikeEvent('pointermove', eventInit));
       target.dispatchEvent(new MouseEvent('mousemove', eventInit));
     } else if (action === 'down') {
+      await this.showVisualEffect({
+        type: 'pointer',
+        action,
+        anchor: 'point',
+        point,
+        target,
+      });
       target.dispatchEvent(createPointerLikeEvent('pointerdown', eventInit));
       target.dispatchEvent(new MouseEvent('mousedown', eventInit));
     } else if (action === 'up') {
+      await this.showVisualEffect({
+        type: 'pointer',
+        action,
+        anchor: 'point',
+        point,
+        target,
+      });
       target.dispatchEvent(createPointerLikeEvent('pointerup', eventInit));
       target.dispatchEvent(new MouseEvent('mouseup', eventInit));
     } else {
+      await this.showVisualEffect({
+        type: 'click',
+        anchor: 'point',
+        point,
+        target,
+      });
       target.dispatchEvent(createPointerLikeEvent('pointerdown', eventInit));
       target.dispatchEvent(new MouseEvent('mousedown', eventInit));
       target.dispatchEvent(createPointerLikeEvent('pointerup', eventInit));
@@ -1287,6 +1698,35 @@ export class HostPageAutomationExecutor {
     );
   }
 
+  private async showVisualEffect(
+    context: HostPageAutomationVisualEffectContext,
+  ) {
+    try {
+      await this.options.showVisualEffect?.(context);
+    } catch {
+      // Visual feedback is best-effort and should never block automation.
+    }
+
+    if (
+      context.type !== 'click' ||
+      !context.point ||
+      !context.target ||
+      this.options.showVisualEffect
+    ) {
+      return;
+    }
+
+    try {
+      await this.options.showClickEffect?.({
+        point: context.point,
+        target: context.target,
+        requested: context.requested,
+      });
+    } catch {
+      // Visual feedback is best-effort and should never block automation.
+    }
+  }
+
   private async waitFor(params: Record<string, unknown>) {
     const input = normalizeParams(params) as WaitForParams;
     const state =
@@ -1302,6 +1742,18 @@ export class HostPageAutomationExecutor {
       Math.max(0, (timeoutSeconds ?? WAIT_FOR_DEFAULT_TIMEOUT_MS / 1_000) * 1_000),
     );
     const startedAt = Date.now();
+    const initialElement = this.tryResolveElement(input);
+
+    await this.showVisualEffect({
+      type: 'wait_for',
+      state,
+      target: initialElement ?? undefined,
+      requested: initialElement ?? undefined,
+      ...(initialElement ? { anchor: 'target' as const } : {}),
+      point: initialElement
+        ? getActionability(initialElement).center
+        : undefined,
+    });
 
     while (Date.now() - startedAt <= timeoutMs) {
       const element = this.tryResolveElement(input);
