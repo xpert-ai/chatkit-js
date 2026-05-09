@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.4
+
+### Patch Changes
+
+- e2f3141: browser automation tools
+- Updated dependencies [e2f3141]
+  - @xpert-ai/chatkit-web-shared@0.3.3
+  - @xpert-ai/chatkit-types@0.3.5
+
 ## 0.3.3
 
 ### Patch Changes

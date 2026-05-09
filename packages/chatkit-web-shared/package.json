@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-web-shared",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Type definitions for the ChatKit Web Shared.",
   "sideEffects": false,
   "type": "module",
