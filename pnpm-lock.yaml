@@ -565,6 +565,9 @@ importers:
       '@microsoft/fetch-event-source':
         specifier: ^2.0.1
         version: 2.0.1
+      '@xpert-ai/chatkit-types':
+        specifier: workspace:~
+        version: link:../chatkit
     devDependencies:
       vite:
         specifier: ^5.0.0

@@ -1,7 +1,4 @@
-import type {
-  RuntimeCapabilitiesResponse,
-  RuntimeCapabilitiesSelection,
-} from '@xpert-ai/xpert-sdk';
+import type { RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitCommandSource,
   ChatKitPromptWorkflow,
@@ -11,7 +8,10 @@ import type {
   ChatKitSlashCommandKind,
 } from '@xpert-ai/chatkit-types';
 
-import type { RuntimeCapabilityOption } from '../runtime-capabilities';
+import type {
+  RuntimeCapabilitiesSelection,
+  RuntimeCapabilityOption,
+} from '../runtime-capabilities';
 
 export type RuntimeCapabilitiesWithCommands = RuntimeCapabilitiesResponse & {
   commands?: ChatKitSlashCommand[];

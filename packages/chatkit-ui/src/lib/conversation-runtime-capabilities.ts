@@ -2,8 +2,13 @@ import type {
   ChatConversation,
   Client,
   RuntimeCapabilitiesResponse,
-  RuntimeCapabilitiesSelection,
 } from '@xpert-ai/xpert-sdk';
+import {
+  getAvailableRuntimeCapabilitiesSelection,
+  hasRuntimeCapabilitySelectionSet,
+  type RuntimeCapabilitiesSelection,
+  type RuntimeCapabilitiesSelectionSet,
+} from './runtime-capabilities';
 
 export type ConversationRuntimeCapabilitiesOptions = Record<string, unknown> & {
   runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
@@ -79,18 +84,14 @@ function splitByAvailability(
   return { found, missing };
 }
 
-export function hasMissingRuntimeCapabilityReferences(
-  missing: MissingRuntimeCapabilityReferences,
-) {
-  return (
-    missing.skillIds.length > 0 ||
-    missing.pluginNodeKeys.length > 0 ||
-    missing.subAgentNodeKeys.length > 0
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
   );
 }
 
-export function getRuntimeCapabilitiesSelectionAvailability(
-  selection: RuntimeCapabilitiesSelection,
+function getAvailableSelectionSet(
+  selection: RuntimeCapabilitiesSelectionSet,
   capabilities: RuntimeCapabilitiesResponse,
 ): RuntimeCapabilitiesSelectionAvailability {
   const skillIds = splitByAvailability(
@@ -126,6 +127,58 @@ export function getRuntimeCapabilitiesSelectionAvailability(
       skillIds: skillIds.missing,
       pluginNodeKeys: pluginNodeKeys.missing,
       subAgentNodeKeys: subAgentNodeKeys.missing,
+    },
+  };
+}
+
+export function hasMissingRuntimeCapabilityReferences(
+  missing: MissingRuntimeCapabilityReferences,
+) {
+  return (
+    missing.skillIds.length > 0 ||
+    missing.pluginNodeKeys.length > 0 ||
+    missing.subAgentNodeKeys.length > 0
+  );
+}
+
+export function getRuntimeCapabilitiesSelectionAvailability(
+  selection: RuntimeCapabilitiesSelection,
+  capabilities: RuntimeCapabilitiesResponse,
+): RuntimeCapabilitiesSelectionAvailability {
+  const available = getAvailableSelectionSet(selection, capabilities);
+  const recommended = selection.recommended
+    ? getAvailableSelectionSet(selection.recommended, capabilities)
+    : null;
+
+  return {
+    selection: {
+      mode: 'allowlist',
+      skills: available.selection.skills,
+      plugins: available.selection.plugins,
+      subAgents: available.selection.subAgents,
+      ...(recommended && hasRuntimeCapabilitySelectionSet(recommended.selection)
+        ? {
+            recommended: {
+              skills: recommended.selection.skills,
+              plugins: recommended.selection.plugins,
+              subAgents: recommended.selection.subAgents,
+            },
+          }
+        : {}),
+    },
+    missing: {
+      skillIds: uniqueStrings([
+        ...available.missing.skillIds,
+        ...(recommended?.missing.skillIds ?? []),
+      ]),
+      pluginNodeKeys: uniqueStrings([
+        ...available.missing.pluginNodeKeys,
+        ...(recommended?.missing.pluginNodeKeys ?? []),
+      ]),
+      subAgentNodeKeys: uniqueStrings([
+        ...available.missing.subAgentNodeKeys,
+        ...(recommended?.missing.subAgentNodeKeys ?? []),
+      ]),
     },
   };
 }
@@ -225,7 +278,9 @@ export async function persistConversationRuntimeCapabilities({
   await client.conversations.update(conversation.id, {
     options: {
       ...(conversation.options ?? {}),
-      runtimeCapabilities: availability.selection,
+      runtimeCapabilities: getAvailableRuntimeCapabilitiesSelection(
+        availability.selection,
+      ),
     },
   });
 

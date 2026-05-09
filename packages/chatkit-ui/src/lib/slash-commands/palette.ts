@@ -1,8 +1,7 @@
-import type { RuntimeCapabilitiesSelection } from '@xpert-ai/xpert-sdk';
-
 import {
   createEmptyRuntimeCapabilitiesSelection,
   isRuntimeCapabilitySelected,
+  type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../runtime-capabilities';
 import type {
@@ -113,14 +112,14 @@ export function createSlashPaletteOptions({
   runtimeCapabilitiesReady,
   runtimeCapabilityOptions,
   runtimeCapabilities,
-  effectiveRuntimeCapabilitiesForSubmit,
+  recommendedRuntimeCapabilities,
 }: {
   palette: RuntimeCapabilityPaletteState | null;
   resolvedCommands: ResolvedSlashCommand[];
   runtimeCapabilitiesReady: boolean;
   runtimeCapabilityOptions: RuntimeCapabilityOption[];
   runtimeCapabilities: RuntimeCapabilitiesWithCommands | null;
-  effectiveRuntimeCapabilitiesForSubmit: RuntimeCapabilitiesSelection | null;
+  recommendedRuntimeCapabilities: RuntimeCapabilitiesSelection | null;
 }): SlashPaletteOption[] {
   if (!palette) {
     return [];
@@ -132,7 +131,7 @@ export function createSlashPaletteOptions({
     palette.expandedCapabilityTypes ?? [],
   );
   const selection =
-    effectiveRuntimeCapabilitiesForSubmit ??
+    recommendedRuntimeCapabilities ??
     createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities);
 
   const getCapabilityOptions = (

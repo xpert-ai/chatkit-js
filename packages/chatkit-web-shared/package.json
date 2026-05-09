@@ -37,6 +37,7 @@
     "vite-plugin-dts": "^3.7.0"
   },
   "dependencies": {
+    "@xpert-ai/chatkit-types": "workspace:~",
     "@microsoft/fetch-event-source": "^2.0.1"
   }
 }

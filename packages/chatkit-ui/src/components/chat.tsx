@@ -11,10 +11,7 @@ import {
   X,
 } from 'lucide-react';
 
-import type {
-  Message,
-  RuntimeCapabilitiesSelection,
-} from '@xpert-ai/xpert-sdk';
+import type { Message } from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
   ChatKitImageReference,
@@ -103,10 +100,13 @@ import {
 import {
   createEmptyRuntimeCapabilitiesSelection,
   createDefaultRuntimeCapabilitiesSelection,
+  createRuntimeCapabilitiesForSubmit,
+  getRecommendedRuntimeCapabilitiesSelection,
   getRuntimeCapabilityOptions,
   isRuntimeCapabilitySelected,
   mergeRuntimeCapabilitiesSelections,
   toggleRuntimeCapabilitySelection,
+  type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../lib/runtime-capabilities';
 import {
@@ -693,22 +693,6 @@ export function Chat({
           )
         : null,
     [runtimeCapabilities, runtimeCapabilitiesReady, sessionRuntimeCapabilities],
-  );
-  const effectiveRuntimeCapabilitiesForSubmit = React.useMemo(
-    () =>
-      runtimeCapabilitiesReady && runtimeCapabilities
-        ? mergeRuntimeCapabilitiesSelections(
-            runtimeCapabilities,
-            sessionRuntimeCapabilities,
-            runRuntimeCapabilities,
-          )
-        : null,
-    [
-      runtimeCapabilities,
-      runtimeCapabilitiesReady,
-      runRuntimeCapabilities,
-      sessionRuntimeCapabilities,
-    ],
   );
   const runRuntimeCapabilityOptions = React.useMemo(
     () =>
@@ -1532,19 +1516,29 @@ export function Chat({
         return;
       }
 
-      const runtimeCapabilitiesForSubmit =
+      const recommendedRuntimeCapabilitiesForSubmit =
         submitOptions.runtimeCapabilities &&
         runtimeCapabilities &&
         runtimeCapabilitiesReady
           ? mergeRuntimeCapabilitiesSelections(
               runtimeCapabilities,
-              effectiveRuntimeCapabilitiesForSubmit,
+              runRuntimeCapabilities,
               submitOptions.runtimeCapabilities,
             )
-          : effectiveRuntimeCapabilitiesForSubmit;
+          : runRuntimeCapabilities;
+      const runtimeCapabilitiesForSubmit =
+        runtimeCapabilities && runtimeCapabilitiesReady
+          ? createRuntimeCapabilitiesForSubmit({
+              capabilities: runtimeCapabilities,
+              available: effectiveSessionRuntimeCapabilities,
+              recommended: recommendedRuntimeCapabilitiesForSubmit,
+            })
+          : null;
       const runtimeCapabilityOptionsForMessage =
         getSelectedRuntimeCapabilityOptions(
-          runtimeCapabilitiesForSubmit,
+          getRecommendedRuntimeCapabilitiesSelection(
+            runtimeCapabilitiesForSubmit,
+          ),
           runtimeCapabilityOptions,
         );
 
@@ -1655,7 +1649,6 @@ export function Chat({
       setRuntimeCapabilityPalette(null);
     },
     [
-      effectiveRuntimeCapabilitiesForSubmit,
       effectiveSessionRuntimeCapabilities,
       isSendDisabled,
       options?.request,
@@ -1664,6 +1657,7 @@ export function Chat({
       runtimeCapabilities,
       runtimeCapabilitiesReady,
       runtimeCapabilityOptions,
+      runRuntimeCapabilities,
       scrollToBottom,
       selectedTool,
       commitComposerParts,
@@ -1735,7 +1729,7 @@ export function Chat({
     runtimeCapabilities,
     runtimeCapabilitiesReady,
     runtimeCapabilityOptions,
-    effectiveRuntimeCapabilitiesForSubmit,
+    recommendedRuntimeCapabilities: runRuntimeCapabilities,
     draft,
     palette: runtimeCapabilityPalette,
     setPalette: setRuntimeCapabilityPalette,
@@ -2660,7 +2654,9 @@ export function Chat({
                 message.type === 'human'
                   ? (humanMessage.runtimeCapabilityOptions ??
                     getSelectedRuntimeCapabilityOptions(
-                      humanMessage.runtimeCapabilities,
+                      getRecommendedRuntimeCapabilitiesSelection(
+                        humanMessage.runtimeCapabilities,
+                      ),
                       runtimeCapabilityOptions,
                     ))
                   : [];

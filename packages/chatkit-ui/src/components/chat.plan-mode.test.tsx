@@ -634,6 +634,11 @@ describe('Chat plan mode payload', () => {
         skills: { workspaceId: 'workspace-1', ids: ['skill-review'] },
         plugins: { nodeKeys: [] },
         subAgents: { nodeKeys: [] },
+        recommended: {
+          skills: { workspaceId: 'workspace-1', ids: ['skill-review'] },
+          plugins: { nodeKeys: [] },
+          subAgents: { nodeKeys: [] },
+        },
       },
       commandSource: {
         type: 'slash_command',
@@ -921,6 +926,85 @@ describe('Chat plan mode payload', () => {
     );
   });
 
+  it('submits composer-selected capabilities as available without human message chips', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+        subAgents: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    fireEvent.click(screen.getByTestId('select-plugin'));
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, 'run it');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.stream.submit.mock.calls[0][0].input.runtimeCapabilities,
+    ).toEqual({
+      mode: 'allowlist',
+      skills: { ids: [] },
+      plugins: { nodeKeys: ['middleware-1'] },
+      subAgents: { nodeKeys: [] },
+    });
+
+    const optimisticValues =
+      mocks.stream.submit.mock.calls[0][1].optimisticValues?.({
+        messages: [],
+      });
+    expect(optimisticValues?.messages[0].runtimeCapabilityOptions).toBe(
+      undefined,
+    );
+  });
+
+  it('keeps composer-available capabilities selectable from the slash palette', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [],
+        plugins: [
+          {
+            nodeKey: 'middleware-1',
+            provider: 'sandbox',
+            label: 'Sandbox',
+          },
+        ],
+        subAgents: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    fireEvent.click(screen.getByTestId('select-plugin'));
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/sand');
+
+    expect(await screen.findByText('Sandbox')).toBeInTheDocument();
+  });
+
   it('submits run-only palette capabilities without persisting them to the conversation', async () => {
     mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
       {
@@ -985,6 +1069,11 @@ describe('Chat plan mode payload', () => {
       skills: { ids: [] },
       plugins: { nodeKeys: ['middleware-1'] },
       subAgents: { nodeKeys: [] },
+      recommended: {
+        skills: { ids: [] },
+        plugins: { nodeKeys: ['middleware-1'] },
+        subAgents: { nodeKeys: [] },
+      },
     });
     const optimisticValues =
       mocks.stream.submit.mock.calls[0][1].optimisticValues?.({
@@ -995,6 +1084,11 @@ describe('Chat plan mode payload', () => {
       skills: { ids: [] },
       plugins: { nodeKeys: ['middleware-1'] },
       subAgents: { nodeKeys: [] },
+      recommended: {
+        skills: { ids: [] },
+        plugins: { nodeKeys: ['middleware-1'] },
+        subAgents: { nodeKeys: [] },
+      },
     });
     expect(optimisticValues?.messages[0].runtimeCapabilityOptions).toEqual([
       expect.objectContaining({
@@ -1021,7 +1115,7 @@ describe('Chat plan mode payload', () => {
     );
   });
 
-  it('renders selected runtime capabilities on human messages', async () => {
+  it('renders only recommended runtime capabilities on human messages', async () => {
     mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
       {
         skills: [],
@@ -1030,6 +1124,11 @@ describe('Chat plan mode payload', () => {
             nodeKey: 'middleware-1',
             provider: 'sandbox',
             label: 'Sandbox',
+          },
+          {
+            nodeKey: 'middleware-available',
+            provider: 'available',
+            label: 'Available Only',
           },
         ],
         subAgents: [],
@@ -1045,6 +1144,22 @@ describe('Chat plan mode payload', () => {
           skills: { ids: [] },
           plugins: { nodeKeys: ['middleware-1'] },
           subAgents: { nodeKeys: [] },
+          recommended: {
+            skills: { ids: [] },
+            plugins: { nodeKeys: ['middleware-1'] },
+            subAgents: { nodeKeys: [] },
+          },
+        },
+      },
+      {
+        id: 'human-2',
+        type: 'human',
+        content: 'available only',
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: { ids: [] },
+          plugins: { nodeKeys: ['middleware-available'] },
+          subAgents: { nodeKeys: [] },
         },
       },
     ] as any;
@@ -1058,6 +1173,7 @@ describe('Chat plan mode payload', () => {
     );
 
     expect(screen.getByText('Sandbox')).toBeInTheDocument();
+    expect(screen.queryByText('Available Only')).not.toBeInTheDocument();
     expect(screen.getByText('run it')).toBeInTheDocument();
   });
 

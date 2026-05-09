@@ -18,11 +18,13 @@ import type { Capability } from '@xpert-ai/chatkit-web-shared';
 import type { Message } from '@xpert-ai/xpert-sdk';
 import { useStreamManager } from '../hooks/useStream';
 import { buildInjectedRequestOptions } from '../lib/request-options';
+import { isRuntimeCapabilitiesSelection } from '../lib/message-metadata';
 import {
   buildHumanMessageInputPayload,
   type ComposerValuePayload,
   normalizeReferences,
 } from '../lib/references';
+import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { createMessageId } from '../lib/utils';
 
 type CommandMessageMap = {
@@ -274,26 +276,25 @@ export function ParentMessengerProvider({
           }
           return;
         }
+        const runtimeCapabilitiesCandidate =
+          params.runtimeCapabilities ??
+          params.state?.[STATE_VARIABLE_HUMAN]?.runtimeCapabilities;
+        const runtimeCapabilities = isRuntimeCapabilitiesSelection(
+          runtimeCapabilitiesCandidate,
+        )
+          ? runtimeCapabilitiesCandidate
+          : undefined;
         const requestHumanInput =
           params.planMode === true ||
           params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true ||
-          params.runtimeCapabilities ||
-          params.state?.[STATE_VARIABLE_HUMAN]?.runtimeCapabilities
+          runtimeCapabilities
             ? {
                 ...humanInput,
                 ...(params.planMode === true ||
                 params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true
                   ? { planMode: true }
                   : {}),
-                ...(params.runtimeCapabilities
-                  ? { runtimeCapabilities: params.runtimeCapabilities }
-                  : params.state?.[STATE_VARIABLE_HUMAN]?.runtimeCapabilities
-                    ? {
-                        runtimeCapabilities:
-                          params.state[STATE_VARIABLE_HUMAN]
-                            .runtimeCapabilities,
-                      }
-                    : {}),
+                ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
               }
             : humanInput;
 
@@ -302,6 +303,7 @@ export function ParentMessengerProvider({
           submittedInput?: string;
           referenceComposition?: ChatKitReferenceCompositionMode;
           followUpMode?: FollowUpBehavior;
+          runtimeCapabilities?: RuntimeCapabilitiesSelection;
         } = {
           id: createMessageId(),
           type: 'human',
@@ -311,6 +313,7 @@ export function ParentMessengerProvider({
             ? { referenceComposition: humanInput.referenceComposition }
             : {}),
           ...(references.length > 0 ? { references } : {}),
+          ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
         };
         const stream = streamRef.current;
         const activeFollowUpMode = stream?.isLoading

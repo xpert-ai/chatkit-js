@@ -74,4 +74,25 @@ describe('message metadata extraction', () => {
       }),
     ).toBe(true);
   });
+
+  it('accepts runtime capability selections with recommended metadata', () => {
+    const runtimeCapabilities = {
+      mode: 'allowlist',
+      skills: { workspaceId: 'workspace-1', ids: ['skill-available'] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+      recommended: {
+        skills: { workspaceId: 'workspace-1', ids: ['skill-recommended'] },
+        plugins: { nodeKeys: ['middleware-1'] },
+        subAgents: { nodeKeys: [] },
+      },
+    };
+
+    expect(isRuntimeCapabilitiesSelection(runtimeCapabilities)).toBe(true);
+    expect(
+      extractRuntimeCapabilities({
+        runtimeCapabilities,
+      }),
+    ).toEqual(runtimeCapabilities);
+  });
 });
