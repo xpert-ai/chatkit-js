@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SlashPalette } from './SlashPalette';
@@ -61,5 +61,41 @@ describe('SlashPalette', () => {
     expect(panel).toHaveClass('rounded-3xl');
     expect(option).toHaveClass('rounded-xl');
     expect(option).not.toHaveClass('rounded-md');
+  });
+
+  it('renders capability command child counts next to the title', () => {
+    const capabilityCommand: ResolvedSlashCommand = {
+      ...command,
+      id: 'builtin:skills',
+      name: 'skills',
+      label: 'Skills',
+      description: 'Show runtime skills',
+    };
+
+    render(
+      <SlashPalette
+        palette={palette}
+        options={[
+          {
+            kind: 'command',
+            id: 'command:skills',
+            label: 'Skills',
+            description: 'Show runtime skills',
+            command: capabilityCommand,
+            capabilityType: 'skill',
+            childCount: 3,
+          },
+        ]}
+        paletteRef={{ current: null }}
+        optionRefs={{ current: [] }}
+        emptyLabel="No commands"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const option = screen.getByRole('button', { name: /Skills/ });
+    const badge = within(option).getByText('3');
+
+    expect(badge).toHaveAttribute('data-slot', 'slash-palette-child-count');
   });
 });
