@@ -50,6 +50,12 @@ import {
 } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import {
+  createAgentEventContent,
+  normalizeAgentRunInfo,
+  type AgentRunInfo,
+} from '../lib/agent-runs';
+import { upsertAgentRunOnLatestMessage } from '../lib/stream-agent-runs';
+import {
   normalizeClientSecretResult,
   type ResolvedClientSecret,
 } from '../lib/client-secret';
@@ -142,6 +148,7 @@ type ChatKitAIMessage = Message & {
   targetExecutionId?: string | null;
   visibleAt?: string | null;
   clientToolCalls?: ToolCall[];
+  agentRuns?: AgentRunInfo[];
 };
 
 type ChatKitMessageContentPart = NonNullable<
@@ -723,6 +730,12 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
   const toolCalls = extractClientToolCalls(raw);
+  const rawAgentRuns = (raw as { agentRuns?: unknown }).agentRuns;
+  const agentRuns = Array.isArray(rawAgentRuns)
+    ? rawAgentRuns
+        .map((item) => normalizeAgentRunInfo(item))
+        .filter((item): item is AgentRunInfo => Boolean(item))
+    : [];
 
   return {
     id,
@@ -734,6 +747,7 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
+    ...(agentRuns.length > 0 ? { agentRuns } : {}),
   };
 }
 
@@ -1219,6 +1233,25 @@ export function applyStreamEvent(
         }
         break;
       }
+      case ChatMessageEventTypeEnum.ON_AGENT_START:
+      case ChatMessageEventTypeEnum.ON_AGENT_END: {
+        const agentRun = normalizeAgentRunInfo(eventPayloadData, eventType);
+        if (agentRun) {
+          upsertAgentRunOnLatestMessage(
+            setValues,
+            agentRun,
+            findLatestAssistantMessageIndex,
+            (run) =>
+              ({
+                id: createMessageId(),
+                type: 'ai',
+                content: '',
+                agentRuns: [run],
+              }) as ChatKitAIMessage,
+          );
+        }
+        break;
+      }
       case ChatMessageEventTypeEnum.ON_MESSAGE_START: {
         if (executionId) {
           onExecutionId?.(executionId);
@@ -1284,7 +1317,10 @@ export function applyStreamEvent(
             }
             if (typeof last.content === 'string' && last.content.length === 0) {
               const nextMessages = [...messages];
-              nextMessages[lastAssistantIndex] = message;
+              nextMessages[lastAssistantIndex] = {
+                ...message,
+                ...(last.agentRuns ? { agentRuns: last.agentRuns } : {}),
+              };
               return { ...prev, messages: nextMessages };
             }
           }
@@ -1350,6 +1386,18 @@ export function applyStreamEvent(
         const followUpConsumedEvent = parseFollowUpConsumedEvent(payload.data);
         if (followUpConsumedEvent) {
           onFollowUpConsumed?.(followUpConsumedEvent);
+          break;
+        }
+
+        const agentEvent = createAgentEventContent(payload.data);
+        if (agentEvent) {
+          const shouldStartFreshAssistant =
+            consumeFreshAssistantSplit?.() ?? false;
+          startFreshAssistantMessageIfNeeded(
+            setValues,
+            shouldStartFreshAssistant,
+          );
+          appendMessageComponent(setValues, agentEvent);
         }
         break;
       }

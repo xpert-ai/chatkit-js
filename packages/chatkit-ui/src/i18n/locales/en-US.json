@@ -240,6 +240,38 @@
       "option": "Option",
       "other": "Other"
     },
+    "agentRun": {
+      "defaultTitle": "Sub-agent",
+      "inputLabel": "Input",
+      "errorLabel": "Error",
+      "status": {
+        "running": "Running",
+        "success": "Done",
+        "error": "Error",
+        "replied": "Replied",
+        "pending": "Pending",
+        "interrupted": "Interrupted",
+        "timeout": "Timed out"
+      },
+      "counts": {
+        "messages": {
+          "one": "{{count}} message",
+          "other": "{{count}} messages"
+        },
+        "tools": {
+          "one": "{{count}} tool",
+          "other": "{{count}} tools"
+        },
+        "events": {
+          "one": "{{count}} event",
+          "other": "{{count}} events"
+        },
+        "children": {
+          "one": "{{count}} child agent",
+          "other": "{{count}} child agents"
+        }
+      }
+    },
     "toolGroup": {
       "status": {
         "running": "Processing",

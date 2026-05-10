@@ -51,6 +51,9 @@ export type TMessageContentComponent<T extends object = object> = {
   data: TMessageComponent<T>;
   xpertName?: string;
   agentKey?: string;
+  executionId?: string;
+  parentExecutionId?: string;
+  runId?: string;
 };
 
 /**
@@ -86,6 +89,9 @@ export type TMessageContentText = {
   id?: string;
   xpertName?: string;
   agentKey?: string;
+  executionId?: string;
+  parentExecutionId?: string;
+  runId?: string;
   type: 'text';
   text: string;
 };
@@ -99,6 +105,9 @@ export type TMessageContentReasoning = {
   id?: string;
   xpertName?: string;
   agentKey?: string;
+  executionId?: string;
+  parentExecutionId?: string;
+  runId?: string;
   type: 'reasoning';
   text: string;
 };
@@ -121,6 +130,9 @@ export type TMessageContentComplex = (
   id?: string;
   xpertName?: string;
   agentKey?: string;
+  executionId?: string;
+  parentExecutionId?: string;
+  runId?: string;
   created_date?: Date | string;
 };
 

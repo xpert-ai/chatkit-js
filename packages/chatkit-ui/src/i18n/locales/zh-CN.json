@@ -240,6 +240,38 @@
       "option": "选项",
       "other": "其他"
     },
+    "agentRun": {
+      "defaultTitle": "子智能体",
+      "inputLabel": "输入",
+      "errorLabel": "错误",
+      "status": {
+        "running": "运行中",
+        "success": "已完成",
+        "error": "错误",
+        "replied": "已回复",
+        "pending": "等待中",
+        "interrupted": "已中断",
+        "timeout": "已超时"
+      },
+      "counts": {
+        "messages": {
+          "one": "{{count}} 条消息",
+          "other": "{{count}} 条消息"
+        },
+        "tools": {
+          "one": "{{count}} 个工具",
+          "other": "{{count}} 个工具"
+        },
+        "events": {
+          "one": "{{count}} 个事件",
+          "other": "{{count}} 个事件"
+        },
+        "children": {
+          "one": "{{count}} 个子智能体",
+          "other": "{{count}} 个子智能体"
+        }
+      }
+    },
     "toolGroup": {
       "status": {
         "running": "正在处理",

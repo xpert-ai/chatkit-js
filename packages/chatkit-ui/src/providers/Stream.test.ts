@@ -442,6 +442,300 @@ describe('retainResumeStreamOptions', () => {
 });
 
 describe('applyStreamEvent', () => {
+  it('upserts agent run lifecycle events onto the latest assistant message', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'root-exec',
+          content: '',
+        },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_AGENT_START,
+          data: {
+            id: 'child-exec',
+            parentId: 'root-exec',
+            agentKey: 'Agent_A',
+            title: 'Researcher',
+            inputs: { topic: 'pricing' },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages[0].agentRuns).toEqual([
+      expect.objectContaining({
+        id: 'child-exec',
+        parentId: 'root-exec',
+        agentKey: 'Agent_A',
+        title: 'Researcher',
+        status: 'running',
+      }),
+    ]);
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_AGENT_END,
+          data: {
+            id: 'child-exec',
+            parentId: 'root-exec',
+            agentKey: 'Agent_A',
+            title: 'Researcher',
+            status: 'success',
+            elapsedTime: 1234,
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages[0].agentRuns).toEqual([
+      expect.objectContaining({
+        id: 'child-exec',
+        status: 'success',
+        elapsedTime: 1234,
+        inputs: { topic: 'pricing' },
+      }),
+    ]);
+  });
+
+  it('keeps agent run state when message start replaces an empty placeholder', () => {
+    let state = { messages: [] } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_AGENT_START,
+          data: {
+            id: 'child-exec',
+            parentId: 'root-exec',
+            title: 'Researcher',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_MESSAGE_START,
+          data: {
+            id: 'ai-1',
+            type: 'ai',
+            executionId: 'root-exec',
+            content: '',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages[0]).toMatchObject({
+      id: 'ai-1',
+      executionId: 'root-exec',
+      agentRuns: [
+        expect.objectContaining({
+          id: 'child-exec',
+          status: 'running',
+        }),
+      ],
+    });
+  });
+
+  it('preserves execution metadata on streamed text and merged components', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'root-exec',
+          content: [],
+        },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'text-1',
+            type: 'text',
+            text: 'child text',
+            executionId: 'child-exec',
+            parentExecutionId: 'root-exec',
+            agentKey: 'Agent_A',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-1',
+            type: 'component',
+            executionId: 'child-exec',
+            parentExecutionId: 'root-exec',
+            agentKey: 'Agent_A',
+            data: {
+              category: 'Tool',
+              tool: 'read_file',
+              status: 'running',
+            },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            id: 'tool-1',
+            type: 'component',
+            data: {
+              status: 'success',
+              output: 'done',
+            },
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages[0].content).toEqual([
+      expect.objectContaining({
+        id: 'text-1',
+        executionId: 'child-exec',
+        parentExecutionId: 'root-exec',
+      }),
+      expect.objectContaining({
+        id: 'tool-1',
+        executionId: 'child-exec',
+        parentExecutionId: 'root-exec',
+        data: expect.objectContaining({
+          status: 'success',
+          output: 'done',
+        }),
+      }),
+    ]);
+  });
+
+  it('appends execution-scoped chat events as compact agent event content', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'root-exec',
+          content: [],
+        },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: 'progress',
+            title: 'Fetched source list',
+            message: '3 sources',
+            executionId: 'child-exec',
+            parentExecutionId: 'root-exec',
+            agentKey: 'Agent_A',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+    );
+
+    expect(state.messages[0].content).toEqual([
+      expect.objectContaining({
+        type: 'agent_event',
+        event: 'progress',
+        title: 'Fetched source list',
+        message: '3 sources',
+        executionId: 'child-exec',
+        parentExecutionId: 'root-exec',
+        agentKey: 'Agent_A',
+      }),
+    ]);
+  });
+
   it('sets stream error from conversation end error events', () => {
     const setValues = vi.fn();
     const setError = vi.fn();

@@ -20,16 +20,23 @@ import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import {
   type AssistantStreamingStatus,
   getAssistantStreamingStatus,
-  hasRenderableAssistantMessage,
   hasRenderableMessageContent,
   hasRenderableReasoning,
 } from '../../../lib/message';
+import { isAgentEventContent } from '../../../lib/agent-runs';
+import {
+  buildAssistantRenderTree,
+  type AssistantContentEntry,
+  type AssistantMessageWithAgentRuns,
+  type AssistantRenderUnit,
+} from '../../../lib/agent-run-render-tree';
 import { isNearBottom } from '../../../lib/scroll';
 import { cn } from '../../../lib/utils';
 import { Badge } from '../../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { MarkdownText } from '../markdown-text';
+import { AgentEventRow, AgentRunGroup } from './agent-run-group';
 import {
   buildToolComponentRenderUnits,
   getToolActivityLabel,
@@ -54,6 +61,9 @@ export type AssistantMessageProps = {
   organizationId?: string;
   apiUrl?: string;
 };
+
+const assistantMessageStackClassName =
+  'space-y-3 in-data-[density=compact]:space-y-2 in-data-[density=spacious]:space-y-4';
 
 function isTextContent(content: TMessageContentComplex): content is TMessageContentText {
   return content.type === 'text';
@@ -352,12 +362,18 @@ function renderContentItem(
   index: number,
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
+  options?: {
+    isAgentOutput?: boolean;
+  },
 ): React.ReactNode {
   const messageId = message.id;
+  const textClassName = options?.isAgentOutput
+    ? 'text-sm [&_.markdown-content_p]:!leading-6'
+    : undefined;
 
   if (typeof content === 'string') {
     return (
-      <div key={`text-${index}`}>
+      <div key={`text-${index}`} className={textClassName}>
         <MarkdownText>{content}</MarkdownText>
       </div>
     );
@@ -365,7 +381,7 @@ function renderContentItem(
 
   if (isTextContent(content)) {
     return (
-      <div key={content.id ?? `text-${index}`}>
+      <div key={content.id ?? `text-${index}`} className={textClassName}>
         <MarkdownText>{content.text}</MarkdownText>
       </div>
     );
@@ -423,6 +439,14 @@ function renderContentItem(
     );
   }
 
+  if (isAgentEventContent(content)) {
+    return (
+      <div key={content.id ?? `agent-event-${index}`}>
+        <AgentEventRow content={content} />
+      </div>
+    );
+  }
+
   return (
     <div key={content.id ?? `unknown-${index}`}>
       <UnknownBlock content={content} />
@@ -439,10 +463,13 @@ function renderContentUnit(
     isThreadRunning?: boolean;
     organizationId?: string;
     apiUrl?: string;
+    isAgentOutput?: boolean;
   },
 ): React.ReactNode {
   if (unit.type === 'item') {
-    return renderContentItem(unit.item, unit.index, message, lookupMessages);
+    return renderContentItem(unit.item, unit.index, message, lookupMessages, {
+      isAgentOutput: options?.isAgentOutput,
+    });
   }
 
   return (
@@ -460,6 +487,101 @@ function renderContentUnit(
   );
 }
 
+function renderEntryBatch(
+  entries: AssistantContentEntry[],
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
+  hasFollowingItem: boolean,
+  options?: {
+    isThreadRunning?: boolean;
+    organizationId?: string;
+    apiUrl?: string;
+    isAgentOutput?: boolean;
+  },
+) {
+  if (entries.length === 0) return null;
+
+  const renderUnits = buildToolComponentRenderUnits(
+    entries.map((entry) => entry.item),
+    {
+      shouldGroupComponent: (item) =>
+        getRequestUserInputResultCardData(item, lookupMessages) === null,
+    },
+  );
+
+  return renderUnits.map((unit, index) =>
+    renderContentUnit(
+      unit,
+      message,
+      lookupMessages,
+      index < renderUnits.length - 1 || hasFollowingItem,
+      options,
+    ),
+  );
+}
+
+function renderAssistantRenderUnits(
+  units: AssistantRenderUnit[],
+  message: ChatkitMessage,
+  lookupMessages: ChatkitMessage[],
+  options?: {
+    isThreadRunning?: boolean;
+    organizationId?: string;
+    apiUrl?: string;
+    isAgentOutput?: boolean;
+  },
+  depth = 0,
+) {
+  const rendered: React.ReactNode[] = [];
+  let entryBatch: AssistantContentEntry[] = [];
+
+  const flushEntries = (hasFollowingItem: boolean) => {
+    if (entryBatch.length === 0) return;
+    const batch = entryBatch;
+    entryBatch = [];
+    rendered.push(
+      <React.Fragment key={`entries-${batch[0]?.order ?? rendered.length}`}>
+        {renderEntryBatch(batch, message, lookupMessages, hasFollowingItem, {
+          ...options,
+          isAgentOutput: depth > 0,
+        })}
+      </React.Fragment>,
+    );
+  };
+
+  units.forEach((unit, index) => {
+    const hasFollowingItem = index < units.length - 1;
+    if (unit.type === 'entry') {
+      entryBatch.push(unit.entry);
+      if (!hasFollowingItem) {
+        flushEntries(false);
+      }
+      return;
+    }
+
+    flushEntries(true);
+    rendered.push(
+      <AgentRunGroup
+        key={unit.node.id}
+        node={unit.node}
+        hasFollowingItem={hasFollowingItem}
+        depth={depth}
+        renderUnits={(childUnits, nextDepth) =>
+          renderAssistantRenderUnits(
+            childUnits,
+            message,
+            lookupMessages,
+            options,
+            nextDepth,
+          )
+        }
+      />,
+    );
+  });
+
+  return rendered;
+}
+
 function renderContent(
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
@@ -469,6 +591,22 @@ function renderContent(
     apiUrl?: string;
   },
 ) {
+  const renderTree = buildAssistantRenderTree(
+    message as AssistantMessageWithAgentRuns,
+  );
+  if (renderTree.hasAgentRuns) {
+    return (
+      <div className={assistantMessageStackClassName}>
+        {renderAssistantRenderUnits(
+          renderTree.units,
+          message,
+          lookupMessages,
+          options,
+        )}
+      </div>
+    );
+  }
+
   const content = message.content;
   if (typeof content === 'string') {
     if (!content.trim()) return null;
@@ -512,10 +650,13 @@ export function AssistantStreamingIndicator({
   };
 
   return (
-    <div className={cn('flex items-center gap-2 text-xs text-muted-foreground', className)}>
-      {status === 'loading' && (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+    <div
+      className={cn(
+        'flex items-center gap-2 text-xs text-muted-foreground',
+        className,
       )}
+    >
+      {status === 'loading' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
       {status === 'thinking' && (
         <div className="flex items-end gap-1" aria-hidden="true">
           <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s]" />
@@ -546,8 +687,15 @@ export function AssistantMessage({
   apiUrl,
 }: AssistantMessageProps) {
   const { t } = useChatkitTranslation();
-  const hasContent = hasRenderableMessageContent(message.content);
-  const hasReasoning = hasRenderableReasoning(message.reasoning);
+  const renderTree = buildAssistantRenderTree(
+    message as AssistantMessageWithAgentRuns,
+  );
+  const rootReasoning = renderTree.hasAgentRuns
+    ? renderTree.rootReasoning
+    : message.reasoning;
+  const hasContent =
+    hasRenderableMessageContent(message.content) || renderTree.hasAgentRuns;
+  const hasReasoning = hasRenderableReasoning(rootReasoning);
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
   const lookupMessages = messages?.length ? messages : [message];
@@ -558,15 +706,15 @@ export function AssistantMessage({
     apiUrl,
   });
   const reasoningNode = hasReasoning ? (
-    <ReasoningBlock reasoning={message.reasoning ?? []} />
+    <ReasoningBlock reasoning={rootReasoning ?? []} />
   ) : null;
 
-  if (!hasRenderableAssistantMessage(message) && !resolvedStreamingStatus) return null;
+  if (!hasContent && !hasReasoning && !resolvedStreamingStatus) return null;
 
   // Streaming class for smooth animation effect
   const streamingClass = isStreaming ? 'streaming-active' : '';
 
-  if (!hasRenderableAssistantMessage(message) && resolvedStreamingStatus) {
+  if (!hasContent && !hasReasoning && resolvedStreamingStatus) {
     return (
       <div className={cn('space-y-3', streamingClass, className)}>
         <AssistantStreamingIndicator status={resolvedStreamingStatus} />

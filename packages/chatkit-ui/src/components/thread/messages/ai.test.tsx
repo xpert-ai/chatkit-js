@@ -14,6 +14,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentRunInfo } from '../../../lib/agent-runs';
 
 const chatkitLanguage = vi.hoisted(() => ({ value: 'en-US' }));
 const writeTextMock = vi.fn(() => Promise.resolve());
@@ -35,6 +36,38 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return 'Option';
         case 'message.requestUserInputResult.other':
           return 'Other';
+        case 'message.agentRun.defaultTitle':
+          return 'Sub-agent';
+        case 'message.agentRun.inputLabel':
+          return 'Input';
+        case 'message.agentRun.errorLabel':
+          return 'Error';
+        case 'message.agentRun.status.running':
+          return 'Running';
+        case 'message.agentRun.status.success':
+          return 'Done';
+        case 'message.agentRun.status.error':
+          return 'Error';
+        case 'message.agentRun.status.replied':
+          return 'Replied';
+        case 'message.agentRun.status.pending':
+          return 'Pending';
+        case 'message.agentRun.counts.messages.one':
+          return `${count} message`;
+        case 'message.agentRun.counts.messages.other':
+          return `${count} messages`;
+        case 'message.agentRun.counts.tools.one':
+          return `${count} tool`;
+        case 'message.agentRun.counts.tools.other':
+          return `${count} tools`;
+        case 'message.agentRun.counts.events.one':
+          return `${count} event`;
+        case 'message.agentRun.counts.events.other':
+          return `${count} events`;
+        case 'message.agentRun.counts.children.one':
+          return `${count} child agent`;
+        case 'message.agentRun.counts.children.other':
+          return `${count} child agents`;
         case 'message.toolGroup.status.running':
           return 'Processing';
         case 'message.toolGroup.status.success':
@@ -131,7 +164,10 @@ function createToolComponent(
 
 function renderAssistant(
   content: ChatkitMessage['content'],
-  overrides: Partial<ChatkitMessage> = {},
+  overrides: Partial<ChatkitMessage> & {
+    executionId?: string;
+    agentRuns?: AgentRunInfo[];
+  } = {},
 ) {
   return render(
     <AssistantMessage
@@ -390,7 +426,9 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('dispatchRunnableTasks'),
     ]);
 
-    expect(screen.getByText('Click the bottom Execute button')).toBeInTheDocument();
+    expect(
+      screen.getByText('Click the bottom Execute button'),
+    ).toBeInTheDocument();
     expect(screen.queryByText('host_page_click')).not.toBeInTheDocument();
   });
 
@@ -876,5 +914,377 @@ describe('AssistantMessage tool components', () => {
     });
 
     expect(screen.getByText('2.5s')).toBeInTheDocument();
+  });
+
+  it('groups interleaved sub-agent output by execution id', () => {
+    renderAssistant(
+      [
+        {
+          id: 'a-text',
+          type: 'text',
+          text: 'A found the source.',
+          executionId: 'exec-a',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_A',
+          xpertName: 'demo-files',
+        },
+        {
+          id: 'b-text',
+          type: 'text',
+          text: 'B wrote the summary.',
+          executionId: 'exec-b',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_B',
+          xpertName: 'demo-files',
+        },
+        {
+          ...createToolComponent('read_a', {
+            type: 'files',
+            title: 'Read A file',
+          }),
+          executionId: 'exec-a',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_A',
+          xpertName: 'demo-files',
+        },
+        {
+          id: 'a-text-2',
+          type: 'text',
+          text: 'A finished.',
+          executionId: 'exec-a',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_A',
+          xpertName: 'demo-files',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'exec-a',
+            parentId: 'root-exec',
+            title: 'Researcher',
+            status: 'success',
+          },
+          {
+            id: 'exec-b',
+            parentId: 'root-exec',
+            title: 'Writer',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    const researcherToggle = screen.getByRole('button', {
+      name: /Researcher/,
+    });
+    const writerToggle = screen.getByRole('button', { name: /Writer/ });
+
+    expect(researcherToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(writerToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByText('demo-files')).not.toBeInTheDocument();
+    expect(screen.getByText('B wrote the summary.')).toBeInTheDocument();
+    expect(screen.queryByText('A found the source.')).not.toBeInTheDocument();
+
+    fireEvent.click(researcherToggle);
+
+    expect(screen.getByText('A found the source.')).toBeInTheDocument();
+    expect(screen.getByText('A finished.')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Processed 1 file/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('uses density-aware spacing for sub-agent render trees', () => {
+    renderAssistant(
+      [
+        {
+          id: 'a-text',
+          type: 'text',
+          text: 'A found the source.',
+          executionId: 'exec-a',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_A',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'exec-a',
+            parentId: 'root-exec',
+            agentKey: 'Agent_A',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Agent_A/ }).closest('.space-y-3'),
+    ).toHaveClass(
+      'in-data-[density=compact]:space-y-2',
+      'in-data-[density=spacious]:space-y-4',
+    );
+  });
+
+  it('keeps simultaneous runs with the same agent key separate', () => {
+    renderAssistant(
+      [
+        {
+          id: 'worker-1-text',
+          type: 'text',
+          text: 'First worker output.',
+          executionId: 'worker-run-1',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_Worker',
+        },
+        {
+          id: 'worker-2-text',
+          type: 'text',
+          text: 'Second worker output.',
+          executionId: 'worker-run-2',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_Worker',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'worker-run-1',
+            parentId: 'root-exec',
+            agentKey: 'Agent_Worker',
+            title: 'Worker pass 1',
+            status: 'success',
+          },
+          {
+            id: 'worker-run-2',
+            parentId: 'root-exec',
+            agentKey: 'Agent_Worker',
+            title: 'Worker pass 2',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    const firstToggle = screen.getByRole('button', { name: /Worker pass 1/ });
+    const secondToggle = screen.getByRole('button', { name: /Worker pass 2/ });
+
+    expect(firstToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(secondToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Second worker output.')).toBeInTheDocument();
+    expect(screen.queryByText('First worker output.')).not.toBeInTheDocument();
+
+    fireEvent.click(firstToggle);
+
+    expect(screen.getByText('First worker output.')).toBeInTheDocument();
+  });
+
+  it('renders nested sub-agent runs recursively', () => {
+    renderAssistant(
+      [
+        {
+          id: 'parent-text',
+          type: 'text',
+          text: 'Parent planned the work.',
+          executionId: 'parent-run',
+          parentExecutionId: 'root-exec',
+        },
+        {
+          id: 'child-text',
+          type: 'text',
+          text: 'Child completed the task.',
+          executionId: 'child-run',
+          parentExecutionId: 'parent-run',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'parent-run',
+            parentId: 'root-exec',
+            title: 'Planner',
+            status: 'success',
+          },
+          {
+            id: 'child-run',
+            parentId: 'parent-run',
+            title: 'Executor',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByRole('button', { name: /Planner/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /Executor/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByText('Parent planned the work.')).toBeInTheDocument();
+    expect(screen.getByText('Child completed the task.')).toBeInTheDocument();
+  });
+
+  it('keeps tool component groups inside a sub-agent group', () => {
+    renderAssistant(
+      [
+        {
+          ...createToolComponent('read_file', {
+            type: 'files',
+            title: 'Read file',
+          }),
+          executionId: 'tool-agent-run',
+          parentExecutionId: 'root-exec',
+        },
+        {
+          ...createToolComponent('run_tests', {
+            type: 'program',
+            title: 'Run tests',
+          }),
+          executionId: 'tool-agent-run',
+          parentExecutionId: 'root-exec',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'tool-agent-run',
+            parentId: 'root-exec',
+            title: 'Tool worker',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByRole('button', { name: /Tool worker/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(
+      screen.getByRole('button', { name: /Processed 1 file, 1 command/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('expands running sub-agent groups while keeping older completed groups collapsed', () => {
+    renderAssistant(
+      [
+        {
+          id: 'done-text',
+          type: 'text',
+          text: 'Completed output.',
+          executionId: 'done-run',
+          parentExecutionId: 'root-exec',
+        },
+        {
+          id: 'running-text',
+          type: 'text',
+          text: 'Streaming output.',
+          executionId: 'running-run',
+          parentExecutionId: 'root-exec',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'done-run',
+            parentId: 'root-exec',
+            title: 'Finished worker',
+            status: 'success',
+          },
+          {
+            id: 'running-run',
+            parentId: 'root-exec',
+            title: 'Active worker',
+            status: 'running',
+          },
+        ],
+      },
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Finished worker/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByRole('button', { name: /Active worker/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByText('Completed output.')).not.toBeInTheDocument();
+    expect(screen.getByText('Streaming output.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Streaming output.').closest('.text-sm'),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps sub-agent input and message counts in header icon tooltips only', () => {
+    renderAssistant(
+      [
+        {
+          id: 'input-text',
+          type: 'text',
+          text: 'Input scoped output.',
+          executionId: 'input-run',
+          parentExecutionId: 'root-exec',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'input-run',
+            parentId: 'root-exec',
+            title: 'Input worker',
+            status: 'success',
+            inputs: { input: 'Write a horse joke' },
+          },
+        ],
+      },
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Input worker/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Input')).toBeInTheDocument();
+    expect(screen.getByLabelText('1 message')).toBeInTheDocument();
+    expect(screen.queryByText(/Input:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Write a horse joke/)).not.toBeInTheDocument();
+  });
+
+  it('labels pending sub-agent groups with output as replied', () => {
+    renderAssistant(
+      [
+        {
+          id: 'reply-text',
+          type: 'text',
+          text: 'Reply is ready.',
+          executionId: 'reply-run',
+          parentExecutionId: 'root-exec',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'reply-run',
+            parentId: 'root-exec',
+            title: 'Reply worker',
+            status: 'pending',
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByRole('button', { name: /Reply worker/ })).toHaveTextContent(
+      'Replied',
+    );
+    expect(screen.queryByText('Pending')).not.toBeInTheDocument();
   });
 });
