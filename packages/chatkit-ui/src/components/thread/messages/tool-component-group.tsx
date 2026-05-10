@@ -1,7 +1,6 @@
 import * as React from 'react';
 
 import type {
-  TMessageComponentStep,
   TMessageComponentWidgetData,
   TMessageContentComplex,
   TMessageContentComponent,
@@ -23,6 +22,7 @@ import {
   ListTodo,
   Network,
   Repeat2,
+  Search,
   SquareTerminal,
   Wrench,
   XCircle,
@@ -41,13 +41,16 @@ import {
 } from '../json-tree-view';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { normalizeChatkitAvatar } from '../../ui/chatkit-avatar';
+import {
+  getComponentMessageRenderer,
+  hasComponentMessageRendererDetails,
+  type ComponentMessageDetailsRenderer,
+  type ComponentMessageDetailsRendererProps,
+  type ComponentMessagePartialStepData,
+} from './component-message-renderers';
 
 /** Partial step data: during streaming, fields arrive incrementally */
-export type PartialStepData = Partial<Omit<TMessageComponentStep, 'message' | 'title'>> & {
-  category?: string;
-  message?: LocalizedText;
-  title?: LocalizedText;
-};
+export type PartialStepData = ComponentMessagePartialStepData;
 type StepStatus = NonNullable<PartialStepData['status']>;
 type ToolStepRunState = boolean | undefined;
 
@@ -130,14 +133,9 @@ type PendingToolComponent = {
   index: number;
 };
 
-type ToolCallOutputRendererProps = {
-  content: TMessageContentComponent;
-  data: PartialStepData;
-};
-
-type ToolCallOutputRenderer = React.ComponentType<ToolCallOutputRendererProps>;
-
-const TOOL_CALL_OUTPUT_RENDERERS: Partial<Record<string, ToolCallOutputRenderer>> = {};
+const TOOL_CALL_OUTPUT_RENDERERS: Partial<
+  Record<string, ComponentMessageDetailsRenderer>
+> = {};
 
 function normalizeStepCategory(category: unknown): string {
   if (typeof category !== 'string' || category.trim() === '') {
@@ -289,15 +287,17 @@ function isWidgetComponent(
   return data?.type === 'Widget' && Array.isArray(data.widgets);
 }
 
-function isGroupableToolComponent(
+function isGroupableStepComponent(
   content: TMessageContentComplex | string | undefined,
 ): content is TMessageContentComponent {
   if (!content || typeof content === 'string') return false;
-  return (
-    isComponentContent(content) &&
-    !isWidgetComponent(content) &&
-    getToolStepData(content).category === 'Tool'
-  );
+  if (!isComponentContent(content) || isWidgetComponent(content)) return false;
+
+  const data = getToolStepData(content);
+  const renderer = getComponentMessageRenderer(content, data);
+  if (renderer) return renderer.presentation === 'grouped-step';
+
+  return data.category === 'Tool';
 }
 
 function isSkippableToolGroupSeparator(
@@ -429,7 +429,7 @@ export function buildToolComponentRenderUnits(
 
   content.forEach((item, index) => {
     if (
-      isGroupableToolComponent(item) &&
+      isGroupableStepComponent(item) &&
       options?.shouldGroupComponent?.(item) !== false
     ) {
       pendingTools.push({ item, index });
@@ -452,7 +452,9 @@ export function buildToolComponentRenderUnits(
   return units;
 }
 
-function getToolCallOutputRenderer(data: PartialStepData): ToolCallOutputRenderer {
+function getToolCallOutputRenderer(
+  data: PartialStepData,
+): ComponentMessageDetailsRenderer {
   const keys = [data.tool, data.type].filter(
     (value): value is string => typeof value === 'string' && Boolean(value.trim()),
   );
@@ -646,6 +648,8 @@ function getStepTypeIcon(type: unknown): LucideIcon | null {
       return Files;
     case 'program':
       return SquareTerminal;
+    case 'web_search':
+      return Search;
     case 'knowledges':
       return BookOpen;
     default:
@@ -840,7 +844,7 @@ function ToolCallValueBlock({
   );
 }
 
-function DefaultToolCallOutput({ data }: ToolCallOutputRendererProps) {
+function DefaultToolCallOutput({ data }: ComponentMessageDetailsRendererProps) {
   const { t } = useChatkitTranslation();
   const output = data.output ?? null;
   const error = data.error ?? null;
@@ -871,6 +875,21 @@ function DefaultToolCallOutput({ data }: ToolCallOutputRendererProps) {
 function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   const { t } = useChatkitTranslation();
   const data = getToolStepData(content);
+  const renderer = getComponentMessageRenderer(content, data);
+  const hasCustomDetails =
+    data.error === undefined &&
+    hasComponentMessageRendererDetails(renderer, content, data);
+  const CustomDetailsRenderer = hasCustomDetails
+    ? renderer?.renderDetails
+    : undefined;
+  if (CustomDetailsRenderer) {
+    return (
+      <div className="ml-6 mt-1 max-h-60 overflow-auto rounded-md bg-muted/30 text-xs text-muted-foreground">
+        <CustomDetailsRenderer content={content} data={data} />
+      </div>
+    );
+  }
+
   const OutputRenderer = getToolCallOutputRenderer(data);
   const hasInput = data.input !== undefined && data.input !== null;
   const hasOutput =
@@ -927,10 +946,15 @@ function ToolCallRowContent({
   const hasError = status === 'fail' || Boolean(data.error);
   const label = getToolActivityLabel(content, i18n.language, status);
   const detailsId = React.useId();
+  const renderer = getComponentMessageRenderer(content, data);
+  const hasCustomDetails =
+    data.error === undefined &&
+    hasComponentMessageRendererDetails(renderer, content, data);
   const hasDetails =
     data.input !== undefined ||
     data.error !== undefined ||
-    data.output !== undefined;
+    data.output !== undefined ||
+    hasCustomDetails;
   const fallbackEndedAt = useFrozenTimestamp(
     data.status === 'running' && status === 'fail',
   );

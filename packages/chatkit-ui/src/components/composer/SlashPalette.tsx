@@ -127,8 +127,18 @@ export function SlashPalette({
                 )}
               </span>
               <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                <span className="shrink-0 truncate font-medium">
-                  {option.label}
+                <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
+                  <span className="truncate font-medium">{option.label}</span>
+                  {option.kind === 'command' &&
+                  option.capabilityType &&
+                  typeof option.childCount === 'number' ? (
+                    <span
+                      data-slot="slash-palette-child-count"
+                      className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium leading-none text-muted-foreground"
+                    >
+                      {option.childCount}
+                    </span>
+                  ) : null}
                 </span>
                 {option.description && (
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">

@@ -67,35 +67,46 @@ export function MyChat() {
 - **📎 File Uploads** - Attach files and images with flexible config
 - **💬 Thread Management** - Switch conversations, track history
 - **🌍 i18n Ready** - 68+ locales out of the box
-- **🎯 Framework Agnostic** - React/Vue/Angular/vanilla JS all work
+- **🎯 Framework Agnostic** - React/Vue/Angular/UI5/vanilla JS all work
 
 ## 📁 Project Structure
 
 ```
 chatkit-js/
 ├── packages/
-│   ├── chatkit/              # Core type definitions
-│   ├── chatkit-angular/      # Angular bindings
-│   ├── chatkit-js/           # Vanilla JS factory helpers
+│   ├── chatkit/              # Shared ChatKit type contracts
+│   ├── chatkit-web-shared/   # Shared browser utilities and messaging
+│   ├── web-component/        # <xpertai-chatkit> Web Component
+│   ├── chatkit-js/           # Vanilla JS integration helpers
 │   ├── chatkit-react/        # React bindings
-│   ├── chatkit-ui/           # Complete UI library
 │   ├── chatkit-vue/          # Vue bindings
-│   └── web-component/        # Web Component (framework-agnostic)
+│   ├── chatkit-angular/      # Angular bindings
+│   ├── chatkit-ui5/          # SAP UI5 bindings
+│   ├── chatkit-ui/           # Iframe chat UI application
+│   ├── chatkit-widgets/      # A2UI React widget renderer
+│   ├── host-automation/      # Host page client-tool automation
+│   └── browser-extension/    # Chrome extension host package
 ├── examples/
-│   └── managed-chatkit/      # Full-stack example
+│   ├── managed-chatkit/      # React + FastAPI full-stack example
+│   ├── managed-chatkit-angular/
+│   └── excel-echarts-chatkit/
 └── docs/                    # Documentation
 ```
 
-## 📦 Packages
+## 📦 Workspace Packages
 
-- [@xpert-ai/chatkit](./packages/chatkit/)
-- [@xpert-ai/chatkit-angular](./packages/chatkit-angular/)
+- [@xpert-ai/chatkit-types](./packages/chatkit/)
+- [@xpert-ai/chatkit-web-shared](./packages/chatkit-web-shared/)
+- [@xpert-ai/chatkit-web-component](./packages/web-component/)
+- [@xpert-ai/chatkit-js](./packages/chatkit-js/)
 - [@xpert-ai/chatkit-react](./packages/chatkit-react/)
 - [@xpert-ai/chatkit-vue](./packages/chatkit-vue/)
-- [@xpert-ai/chatkit-ui](./packages/chatkit-ui/)
+- [@xpert-ai/chatkit-angular](./packages/chatkit-angular/)
 - [@xpert-ai/chatkit-ui5](./packages/chatkit-ui5/)
-- [@xpert-ai/chatkit-web-component](./packages/web-component/)
-- [@xpert-ai/chatkit-js](./packages/chatkit-js/README.md)
+- [@xpert-ai/chatkit-ui](./packages/chatkit-ui/)
+- [@xpert-ai/chatkit-host-automation](./packages/host-automation/)
+- [@xpert-ai/a2ui-react](./packages/chatkit-widgets/)
+- [@xpert-ai/chatkit-browser-extension](./packages/browser-extension/) (private Chrome extension package)
 
 ## 🛠️ Development
 
@@ -108,6 +119,12 @@ pnpm build
 
 # Run full-stack example
 pnpm managed-chatkit:dev
+
+# Run Angular example
+pnpm managed-chatkit-angular:dev
+
+# Run Excel/ECharts example
+pnpm excel-echarts-chatkit:dev
 
 # Dev UI components
 pnpm dev:ui
@@ -122,6 +139,8 @@ pnpm lint
 ## Publish
 
 This repo uses **Changesets + GitHub Actions** for automated npm publishing.
+The private browser extension package is versioned by Changesets and packaged
+separately by `.github/workflows/publish-browser-extension.yml`.
 
 ### One-time setup
 

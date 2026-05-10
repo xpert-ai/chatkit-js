@@ -5,8 +5,8 @@ import type {
   TMessageComponentStep,
   TMessageContentReasoning,
   TMessageContentText,
-} from "@xpert-ai/chatkit-types"
-import { isNil, omitBy } from "lodash-es"
+} from '@xpert-ai/chatkit-types'
+import { isNil, omitBy } from 'lodash-es'
 
 export type AssistantStreamingStatus = 'loading' | 'thinking' | 'answering'
 export const ASSISTANT_STREAM_IDLE_TO_THINKING_MS = 2000
@@ -111,7 +111,10 @@ export function getAssistantStreamingStatus(
  * @param aiMessage
  * @param content
  */
-export function appendMessageContent(aiMessage: ChatkitMessage, content: string | TMessageContentComplex) {
+export function appendMessageContent(
+  aiMessage: ChatkitMessage,
+  content: string | TMessageContentComplex,
+) {
   aiMessage.status = 'answering'
   const _content = aiMessage.content
   if (typeof content === 'string') {
@@ -124,7 +127,7 @@ export function appendMessageContent(aiMessage: ChatkitMessage, content: string 
       } else {
         _content.push({
           type: 'text',
-          text: content
+          text: content,
         })
       }
     } else {
@@ -134,8 +137,11 @@ export function appendMessageContent(aiMessage: ChatkitMessage, content: string 
     if ((<TMessageContentReasoning>content).type === 'reasoning') {
       const reasoning = <TMessageContentReasoning>content
       aiMessage.reasoning ??= []
-      if (aiMessage.reasoning[aiMessage.reasoning.length - 1]?.id === reasoning.id) {
-        aiMessage.reasoning[aiMessage.reasoning.length - 1].text += reasoning.text
+      if (
+        aiMessage.reasoning[aiMessage.reasoning.length - 1]?.id === reasoning.id
+      ) {
+        aiMessage.reasoning[aiMessage.reasoning.length - 1].text +=
+          reasoning.text
       } else {
         aiMessage.reasoning.push(reasoning)
       }
@@ -166,17 +172,32 @@ export function appendMessageContent(aiMessage: ChatkitMessage, content: string 
       if (Array.isArray(_content)) {
         // Merge text content by id
         if (content.type === 'text' && content.id) {
-          const index = _content.findIndex((_) => _.type === 'text' && _.id === content.id)
+          const index = _content.findIndex(
+            (_) => _.type === 'text' && _.id === content.id,
+          )
           if (index > -1) {
+            const previousText = _content[index] as TMessageContentText &
+              Pick<TMessageContentComplex, 'created_date'>
             _content[index] = {
               ..._content[index],
-              text: (<TMessageContentText>_content[index]).text + content.text
+              ...content,
+              id: previousText.id ?? content.id,
+              created_date: previousText.created_date ?? content.created_date,
+              agentKey: previousText.agentKey ?? content.agentKey,
+              xpertName: previousText.xpertName ?? content.xpertName,
+              executionId: previousText.executionId ?? content.executionId,
+              parentExecutionId:
+                previousText.parentExecutionId ?? content.parentExecutionId,
+              runId: previousText.runId ?? content.runId,
+              text: previousText.text + content.text,
             }
           } else {
             _content.push(content)
           }
         } else {
-          const index = _content.findIndex((_) => _.type === 'component' && _.id === content.id)
+          const index = _content.findIndex(
+            (_) => _.type === 'component' && _.id === content.id,
+          )
           if (index > -1) {
             _content[index] = mergeMessageComponent(
               <TMessageContentComponent>_content[index],
@@ -190,9 +211,9 @@ export function appendMessageContent(aiMessage: ChatkitMessage, content: string 
         aiMessage.content = [
           {
             type: 'text',
-            text: _content
+            text: _content,
           },
-          content
+          content,
         ]
       } else {
         aiMessage.content = [content]
@@ -207,7 +228,10 @@ type ComponentStepLike = Partial<TMessageComponentStep<unknown>> & {
 
 function normalizeStepText(value: unknown): string | null {
   if (typeof value !== 'string') return null
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
   return normalized || null
 }
 
@@ -295,6 +319,9 @@ function mergeMessageComponent(
     type: previous.type ?? incoming.type,
     agentKey: previous.agentKey ?? incoming.agentKey,
     xpertName: previous.xpertName ?? incoming.xpertName,
+    executionId: previous.executionId ?? incoming.executionId,
+    parentExecutionId: previous.parentExecutionId ?? incoming.parentExecutionId,
+    runId: previous.runId ?? incoming.runId,
     data: mergeComponentStepData(previous.data, incoming.data),
   }
 }

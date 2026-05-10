@@ -26,6 +26,8 @@ When a user types `/` after whitespace in the middle of a message, ChatKit only 
 - contributes a run-only runtime capability allow-list for the next request
 - is cleared after the request is sent
 
+When a user types `$`, ChatKit opens the same runtime capability selector filtered to Skills only. Skill search also matches `$`-prefixed skill IDs and labels, so `$review` can select a skill whose ID or label is `review`.
+
 The palette supports mouse selection plus keyboard navigation with Escape, ArrowUp, ArrowDown, Tab, and Enter. Active keyboard navigation keeps the selected item scrolled into view.
 
 ## Command Sources
