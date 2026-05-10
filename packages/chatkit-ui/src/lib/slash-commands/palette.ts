@@ -28,20 +28,23 @@ export function resolveRuntimeCapabilityPalette(
   }
 
   const beforeCaret = value.slice(0, selectionStart);
-  const match = /(^|\s)\/([^\s/]*)$/.exec(beforeCaret);
+  const match = /(^|\s)([/$])([^\s/]*)$/.exec(beforeCaret);
   if (!match) {
     return null;
   }
 
-  const query = match[2] ?? '';
+  const trigger = match[2] as '/' | '$';
+  const query = match[3] ?? '';
   const start = beforeCaret.length - query.length - 1;
   const beforeTrigger = beforeCaret.slice(0, start);
   return {
+    trigger,
     query,
     start,
     end: selectionStart,
     activeIndex: 0,
     atMessageStart: beforeTrigger.trim().length === 0,
+    ...(trigger === '$' ? { capabilityTypes: ['skill' as const] } : {}),
   };
 }
 
@@ -91,7 +94,12 @@ function matchesCapability(
     return false;
   }
 
-  return matchesQuery([option.label, option.description, option.type], query);
+  const skillAliases =
+    option.type === 'skill' ? [`$${option.id}`, `$${option.label}`] : [];
+  return matchesQuery(
+    [option.id, option.label, option.description, option.type, ...skillAliases],
+    query,
+  );
 }
 
 function getCommandPaletteOption(command: ResolvedSlashCommand) {

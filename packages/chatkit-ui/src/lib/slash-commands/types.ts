@@ -18,6 +18,7 @@ export type RuntimeCapabilitiesWithCommands = RuntimeCapabilitiesResponse & {
 };
 
 export type RuntimeCapabilityPaletteState = {
+  trigger?: '/' | '$';
   query: string;
   start: number;
   end: number;

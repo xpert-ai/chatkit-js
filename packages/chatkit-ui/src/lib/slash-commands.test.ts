@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createSlashCommandExecutionEffect,
   createSlashPaletteOptions,
+  resolveRuntimeCapabilityPalette,
   resolveSlashCommands,
   shouldSubmitRawSlashInvocation,
   type RuntimeCapabilityPaletteState,
@@ -198,6 +199,67 @@ describe('slash command registry', () => {
 });
 
 describe('slash command palette', () => {
+  it('resolves dollar triggers as skill-only palette requests', () => {
+    expect(resolveRuntimeCapabilityPalette('ask $rev', 8)).toMatchObject({
+      trigger: '$',
+      query: 'rev',
+      start: 4,
+      end: 8,
+      atMessageStart: false,
+      capabilityTypes: ['skill'],
+    });
+
+    const options = getPaletteOptions(resolveRuntimeCapabilityPalette('$', 1)!);
+
+    expect(options.map((option) => option.kind)).toEqual(['capability']);
+    expect(options.map((option) => option.label)).toEqual(['Review Skill']);
+  });
+
+  it('matches skill capabilities with dollar-prefixed ids and labels', () => {
+    const dollarSkill = {
+      type: 'skill' as const,
+      id: 'audit',
+      label: 'Audit Skill',
+      capability: {
+        id: 'audit',
+        workspaceId: 'workspace-1',
+        label: 'Audit Skill',
+      },
+    };
+
+    const options = createSlashPaletteOptions({
+      palette: resolveRuntimeCapabilityPalette('$$audit', 7),
+      resolvedCommands: resolveSlashCommands(undefined, undefined),
+      runtimeCapabilitiesReady: true,
+      runtimeCapabilityOptions: [
+        dollarSkill,
+        {
+          type: 'plugin',
+          id: 'audit-plugin',
+          label: 'Audit Plugin',
+          capability: {
+            nodeKey: 'audit-plugin',
+            provider: 'audit',
+            label: 'Audit Plugin',
+          },
+        },
+      ],
+      runtimeCapabilities: {
+        skills: [dollarSkill.capability],
+        plugins: [],
+        subAgents: [],
+      },
+      recommendedRuntimeCapabilities: {
+        mode: 'allowlist',
+        skills: { workspaceId: 'workspace-1', ids: [] },
+        plugins: { nodeKeys: [] },
+        subAgents: { nodeKeys: [] },
+      },
+    });
+
+    expect(options.map((option) => option.label)).toEqual(['Audit Skill']);
+  });
+
   it('shows commands and capabilities at the message start', () => {
     const options = getPaletteOptions({
       query: 'review',
