@@ -37,6 +37,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { MarkdownText } from '../markdown-text';
 import { AgentEventRow, AgentRunGroup } from './agent-run-group';
+import { getComponentMessagePresentation } from './component-message-renderers';
 import {
   buildToolComponentRenderUnits,
   getToolActivityLabel,
@@ -363,6 +364,9 @@ function renderContentItem(
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
   options?: {
+    isThreadRunning?: boolean;
+    organizationId?: string;
+    apiUrl?: string;
     isAgentOutput?: boolean;
   },
 ): React.ReactNode {
@@ -424,6 +428,23 @@ function renderContentItem(
       );
     }
 
+    if (
+      getComponentMessagePresentation(content, getToolStepData(content)) ===
+      'grouped-step'
+    ) {
+      return (
+        <div key={content.id ?? `component-group-${index}`}>
+          <ToolComponentGroup
+            items={[content]}
+            hasFollowingItem={false}
+            isThreadRunning={options?.isThreadRunning}
+            organizationId={options?.organizationId}
+            apiUrl={options?.apiUrl}
+          />
+        </div>
+      );
+    }
+
     return (
       <div key={content.id ?? `component-${index}`}>
         <ComponentBlock content={content} />
@@ -468,6 +489,9 @@ function renderContentUnit(
 ): React.ReactNode {
   if (unit.type === 'item') {
     return renderContentItem(unit.item, unit.index, message, lookupMessages, {
+      isThreadRunning: options?.isThreadRunning,
+      organizationId: options?.organizationId,
+      apiUrl: options?.apiUrl,
       isAgentOutput: options?.isAgentOutput,
     });
   }

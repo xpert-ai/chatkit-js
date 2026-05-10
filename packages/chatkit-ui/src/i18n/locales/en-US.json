@@ -284,6 +284,7 @@
       "jsonTitle": "JSON",
       "jsonTree": "Tree",
       "jsonRaw": "Raw",
+      "sourcesTitle": "Sources",
       "copy": "Copy",
       "copied": "Copied",
       "separator": ", ",

@@ -86,7 +86,7 @@ function readOptionalNumber(value: unknown): number | undefined {
 function readNestedName(value: unknown): string | undefined {
   if (!isRecord(value)) return undefined;
   return (
-    readTrimmedString(value.name) ?? readTrimmedString(value.title) ?? undefined
+    readTrimmedString(value.title) ?? readTrimmedString(value.name) ?? undefined
   );
 }
 
@@ -105,8 +105,8 @@ export function normalizeAgentRunInfo(
     undefined;
   const xpertName =
     readTrimmedString(value.xpertName) ??
-    readNestedName(value.xpert) ??
-    readNestedName(value.agent);
+    readNestedName(value.agent) ??
+    readNestedName(value.xpert);
   const status =
     eventType === ChatMessageEventTypeEnum.ON_AGENT_START
       ? 'running'

@@ -14,7 +14,10 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentRunInfo } from '../../../lib/agent-runs';
+import {
+  normalizeAgentRunInfo,
+  type AgentRunInfo,
+} from '../../../lib/agent-runs';
 
 const chatkitLanguage = vi.hoisted(() => ({ value: 'en-US' }));
 const writeTextMock = vi.fn(() => Promise.resolve());
@@ -86,6 +89,8 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return 'Tree';
         case 'message.toolGroup.jsonRaw':
           return 'Raw';
+        case 'message.toolGroup.sourcesTitle':
+          return 'Sources';
         case 'message.toolGroup.copy':
           return 'Copy';
         case 'message.toolGroup.copied':
@@ -134,7 +139,7 @@ type AssistantChatkitMessage = ChatkitMessage & { type: 'assistant' };
 type ToolComponentDataOverride = Partial<
   Omit<TMessageComponentStep, 'message' | 'title' | 'type'>
 > & {
-  category?: 'Tool';
+  category?: 'Tool' | 'Computer';
   type?: string;
   title?: string | Record<string, string>;
   message?: string | Record<string, string>;
@@ -484,6 +489,99 @@ describe('AssistantMessage tool components', () => {
     const toggle = screen.getByRole('button', { name: /Processed 1 file/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Read file')).toBeInTheDocument();
+  });
+
+  it('renders computer web search sources in grouped tool details', () => {
+    renderAssistant([
+      createToolComponent('web-search', {
+        category: 'Computer',
+        type: 'web_search',
+        tool: 'web_search',
+        title: 'Web Search',
+        message: 'Codex /goal',
+        input: {
+          query: 'Codex /goal',
+          numResults: 4,
+        },
+        data: [
+          {
+            title: 'Technical Research - Codex /goal',
+            url: 'https://zenn.dev/example/articles/codex-goal',
+            content:
+              'Codex CLI goal mode keeps a persistent goal-driven workflow.',
+            publishedDate: '2026-04-30',
+            author: 'npaka',
+          },
+          {
+            title: 'Codex CLI 0.128.0 adds /goal',
+            url: 'https://simonwillison.net/example/codex-goal',
+            description:
+              'A short note about the new persistent goal command.',
+          },
+        ],
+      }),
+    ]);
+
+    expect(
+      screen.getByRole('button', { name: /Processed 1 search/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Codex \/goal/ }));
+
+    expect(screen.queryByText('Input')).not.toBeInTheDocument();
+    expect(screen.getByText('Sources')).toBeInTheDocument();
+    const link = screen.getByRole('link', {
+      name: /Technical Research - Codex \/goal/,
+    });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://zenn.dev/example/articles/codex-goal',
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noreferrer');
+    expect(
+      screen.getByText(/persistent goal-driven workflow/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/zenn.dev/)).toBeInTheDocument();
+  });
+
+  it('does not route web fetch computer messages to the web search source renderer', () => {
+    renderAssistant([
+      createToolComponent('web-fetch', {
+        category: 'Computer',
+        type: 'web_search',
+        tool: 'web_fetch',
+        title: 'Web Fetch',
+        message: 'https://docs.xpertai.cn',
+      }),
+    ]);
+
+    expect(
+      screen.queryByRole('button', { name: /Processed 1 search/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('https://docs.xpertai.cn')).toBeInTheDocument();
+  });
+
+  it('falls back to raw output when web search sources are missing', () => {
+    renderAssistant([
+      createToolComponent('web-search-empty', {
+        category: 'Computer',
+        type: 'web_search',
+        tool: 'web_search',
+        title: 'Web Search',
+        data: [{ title: 'Missing URL' }],
+        output: 'raw web search output',
+      }),
+    ]);
+
+    expect(
+      screen.getByRole('button', { name: /Processed 1 search/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Web Search/ }));
+
+    expect(screen.getByText('Output')).toBeInTheDocument();
+    expect(screen.getByText('raw web search output')).toBeInTheDocument();
   });
 
   it('renders request_user_input tool results as a confirmation card', () => {
@@ -1027,6 +1125,80 @@ describe('AssistantMessage tool components', () => {
       'in-data-[density=compact]:space-y-2',
       'in-data-[density=spacious]:space-y-4',
     );
+  });
+
+  it('uses agent event titles and xpert names before agent keys in run headers', () => {
+    renderAssistant(
+      [
+        {
+          id: 'named-agent-text',
+          type: 'text',
+          text: 'Named agent output.',
+          executionId: 'exec-named',
+          parentExecutionId: 'root-exec',
+          agentKey: 'Agent_InternalKey',
+          xpertName: 'Readable Agent',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'exec-titled',
+            parentId: 'root-exec',
+            agentKey: 'web_search',
+            title: '网络搜索',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Readable Agent/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /网络搜索/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Agent_InternalKey')).not.toBeInTheDocument();
+    expect(screen.queryByText('web_search')).not.toBeInTheDocument();
+  });
+
+  it('ignores top-level event names when resolving agent run titles', () => {
+    const runWithToolName: AgentRunInfo & { name: string } = {
+      id: 'exec-name',
+      parentId: 'root-exec',
+      agentKey: 'Agent_NameTrap',
+      name: 'web_search',
+      status: 'success',
+    };
+
+    renderAssistant(
+      [],
+      {
+        executionId: 'root-exec',
+        agentRuns: [runWithToolName],
+      },
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Agent_NameTrap/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('web_search')).not.toBeInTheDocument();
+  });
+
+  it('normalizes nested agent titles before xpert names', () => {
+    expect(
+      normalizeAgentRunInfo({
+        id: 'exec-agent-title',
+        agentKey: 'web_search',
+        xpert: { name: 'Team Name' },
+        agent: {
+          name: 'web_search',
+          title: '网络搜索',
+        },
+      })?.xpertName,
+    ).toBe('网络搜索');
   });
 
   it('keeps simultaneous runs with the same agent key separate', () => {

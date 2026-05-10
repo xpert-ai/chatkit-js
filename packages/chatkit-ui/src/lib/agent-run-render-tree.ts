@@ -121,8 +121,8 @@ export function hasVisibleAgentRunDetails(info: AgentRunInfo) {
 export function getAgentRunTitle(info: AgentRunInfo, fallback?: string) {
   return (
     info.title?.trim() ||
-    info.agentKey?.trim() ||
     info.xpertName?.trim() ||
+    info.agentKey?.trim() ||
     fallback ||
     null
   );
