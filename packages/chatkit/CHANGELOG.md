@@ -1,5 +1,17 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.5
+
+### Patch Changes
+
+- e2f3141: browser automation tools
+
+## 0.3.4
+
+### Patch Changes
+
+- 639ef79: browser automation extension
+
 ## 0.3.3
 
 ### Patch Changes
