@@ -1070,7 +1070,7 @@ export function ToolComponentGroup({
 
   React.useEffect(() => {
     setIsExpanded(!hasFollowingItem);
-  }, [hasFollowingItem, items.length]);
+  }, [hasFollowingItem]);
 
   return (
     <div className="px-1 py-1">

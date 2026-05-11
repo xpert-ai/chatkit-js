@@ -497,9 +497,7 @@ function renderContentUnit(
   }
 
   return (
-    <div
-      key={`tool-group-${unit.startIndex}-${unit.items[0]?.id ?? 'tool'}-${unit.items.length}`}
-    >
+    <div key={`tool-group-${unit.startIndex}-${unit.items[0]?.id ?? 'tool'}`}>
       <ToolComponentGroup
         items={unit.items}
         hasFollowingItem={hasFollowingItem}

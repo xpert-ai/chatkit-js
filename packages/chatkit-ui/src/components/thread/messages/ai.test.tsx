@@ -336,6 +336,41 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('file contents')).toBeInTheDocument();
   });
 
+  it('preserves expanded tool row state when appending to the same group', () => {
+    const firstTool = createToolComponent('read_file', {
+      input: {
+        path: 'packages/chatkit-ui/src/components/thread/messages/ai.tsx',
+      },
+      output: 'file contents',
+    });
+    const secondTool = createToolComponent('run_command');
+    const { rerender } = renderAssistant([firstTool]);
+
+    fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
+
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('file contents')).toBeInTheDocument();
+
+    rerender(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [{ ...firstTool }, secondTool],
+          } as AssistantChatkitMessage
+        }
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Processed 2 tools/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('file contents')).toBeInTheDocument();
+    expect(screen.getByText('run_command')).toBeInTheDocument();
+  });
+
   it('does not treat tool message text as output details', () => {
     renderAssistant([
       createToolComponent('updateProjectTasks', {
