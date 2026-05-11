@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.5
+
+### Patch Changes
+
+- 3ac697b: sub-agent component group
+- Updated dependencies [3ac697b]
+  - @xpert-ai/chatkit-types@0.3.6
+
 ## 0.3.4
 
 ### Patch Changes
