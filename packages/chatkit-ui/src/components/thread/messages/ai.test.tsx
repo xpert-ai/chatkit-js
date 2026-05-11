@@ -368,7 +368,8 @@ describe('AssistantMessage tool components', () => {
     ).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('file contents')).toBeInTheDocument();
-    expect(screen.getByText('run_command')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /run_command/ }).closest('li'))
+      .toHaveClass('ck-tool-call-row-enter');
   });
 
   it('does not treat tool message text as output details', () => {

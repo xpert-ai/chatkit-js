@@ -971,7 +971,7 @@ function ToolCallRowContent({
   }, [data.output, status]);
 
   return (
-    <li className="min-w-0">
+    <li className="ck-tool-call-row-enter min-w-0">
       <button
         type="button"
         className={cn(
