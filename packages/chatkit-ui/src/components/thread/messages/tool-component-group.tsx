@@ -944,9 +944,11 @@ function ToolCallRowContent({
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
   const hasError = status === 'fail' || Boolean(data.error);
-  const label = getToolActivityLabel(content, i18n.language, status);
   const detailsId = React.useId();
   const renderer = getComponentMessageRenderer(content, data);
+  const label =
+    renderer?.getTitle?.(content, data, i18n.language) ??
+    getToolActivityLabel(content, i18n.language, status);
   const hasCustomDetails =
     data.error === undefined &&
     hasComponentMessageRendererDetails(renderer, content, data);

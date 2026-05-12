@@ -6,6 +6,7 @@ import type {
 } from '@xpert-ai/chatkit-types';
 
 import type { LocalizedText } from '../../../i18n/localized-text';
+import { knowledgeRetrieverComponentRenderer } from './knowledge-retriever-component-renderer';
 import { webSearchComponentRenderer } from './web-search-component-renderer';
 
 export type ComponentMessagePartialStepData = Partial<
@@ -35,6 +36,11 @@ export type ComponentMessageRenderer = {
     content: TMessageContentComponent,
     data: ComponentMessagePartialStepData,
   ) => boolean;
+  getTitle?: (
+    content: TMessageContentComponent,
+    data: ComponentMessagePartialStepData,
+    language: string,
+  ) => string | null;
   renderDetails?: ComponentMessageDetailsRenderer;
   hasDetails?: (
     content: TMessageContentComponent,
@@ -43,6 +49,7 @@ export type ComponentMessageRenderer = {
 };
 
 const COMPONENT_MESSAGE_RENDERERS: ComponentMessageRenderer[] = [
+  knowledgeRetrieverComponentRenderer,
   webSearchComponentRenderer,
 ];
 

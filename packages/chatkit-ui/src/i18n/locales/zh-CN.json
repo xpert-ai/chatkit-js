@@ -240,6 +240,13 @@
       "option": "选项",
       "other": "其他"
     },
+    "knowledgeRetriever": {
+      "queryTitle": "查询",
+      "resultsTitle": "检索结果（{{count}}）",
+      "rawDataTitle": "原始数据",
+      "noResults": "未找到知识结果",
+      "scoreLabel": "分数"
+    },
     "agentRun": {
       "defaultTitle": "子智能体",
       "inputLabel": "输入",
