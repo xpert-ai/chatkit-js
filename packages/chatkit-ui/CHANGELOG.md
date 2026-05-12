@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.6
+
+### Patch Changes
+
+- 4703a08: knowledge component
+
 ## 0.3.5
 
 ### Patch Changes
