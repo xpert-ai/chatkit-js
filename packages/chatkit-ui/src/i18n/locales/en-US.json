@@ -240,6 +240,13 @@
       "option": "Option",
       "other": "Other"
     },
+    "knowledgeRetriever": {
+      "queryTitle": "Query",
+      "resultsTitle": "Retrieved results ({{count}})",
+      "rawDataTitle": "Raw data",
+      "noResults": "No knowledge results found",
+      "scoreLabel": "Score"
+    },
     "agentRun": {
       "defaultTitle": "Sub-agent",
       "inputLabel": "Input",

@@ -944,9 +944,11 @@ function ToolCallRowContent({
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
   const hasError = status === 'fail' || Boolean(data.error);
-  const label = getToolActivityLabel(content, i18n.language, status);
   const detailsId = React.useId();
   const renderer = getComponentMessageRenderer(content, data);
+  const label =
+    renderer?.getTitle?.(content, data, i18n.language) ??
+    getToolActivityLabel(content, i18n.language, status);
   const hasCustomDetails =
     data.error === undefined &&
     hasComponentMessageRendererDetails(renderer, content, data);
@@ -971,7 +973,7 @@ function ToolCallRowContent({
   }, [data.output, status]);
 
   return (
-    <li className="min-w-0">
+    <li className="ck-tool-call-row-enter min-w-0">
       <button
         type="button"
         className={cn(
@@ -1070,7 +1072,7 @@ export function ToolComponentGroup({
 
   React.useEffect(() => {
     setIsExpanded(!hasFollowingItem);
-  }, [hasFollowingItem, items.length]);
+  }, [hasFollowingItem]);
 
   return (
     <div className="px-1 py-1">

@@ -39,6 +39,16 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return 'Option';
         case 'message.requestUserInputResult.other':
           return 'Other';
+        case 'message.knowledgeRetriever.queryTitle':
+          return 'Query';
+        case 'message.knowledgeRetriever.resultsTitle':
+          return `Retrieved results (${count})`;
+        case 'message.knowledgeRetriever.rawDataTitle':
+          return 'Raw data';
+        case 'message.knowledgeRetriever.noResults':
+          return 'No knowledge results found';
+        case 'message.knowledgeRetriever.scoreLabel':
+          return 'Score';
         case 'message.agentRun.defaultTitle':
           return 'Sub-agent';
         case 'message.agentRun.inputLabel':
@@ -336,6 +346,42 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('file contents')).toBeInTheDocument();
   });
 
+  it('preserves expanded tool row state when appending to the same group', () => {
+    const firstTool = createToolComponent('read_file', {
+      input: {
+        path: 'packages/chatkit-ui/src/components/thread/messages/ai.tsx',
+      },
+      output: 'file contents',
+    });
+    const secondTool = createToolComponent('run_command');
+    const { rerender } = renderAssistant([firstTool]);
+
+    fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
+
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('file contents')).toBeInTheDocument();
+
+    rerender(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content: [{ ...firstTool }, secondTool],
+          } as AssistantChatkitMessage
+        }
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: /Processed 2 tools/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Input')).toBeInTheDocument();
+    expect(screen.getByText('file contents')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /run_command/ }).closest('li'))
+      .toHaveClass('ck-tool-call-row-enter');
+  });
+
   it('does not treat tool message text as output details', () => {
     renderAssistant([
       createToolComponent('updateProjectTasks', {
@@ -582,6 +628,114 @@ describe('AssistantMessage tool components', () => {
 
     expect(screen.getByText('Output')).toBeInTheDocument();
     expect(screen.getByText('raw web search output')).toBeInTheDocument();
+  });
+
+  it('renders knowledge retriever messages inside grouped tool details', () => {
+    renderAssistant([
+      createToolComponent('knowledge-retriever-1', {
+        category: 'Computer',
+        type: 'knowledges',
+        toolset: 'knowledge',
+        title: 'retriever-kb',
+        message: 'plan mode 详细介绍',
+        input: {
+          query: 'plan mode 详细介绍',
+        },
+        data: [
+          {
+            id: 'chunk-1',
+            pageContent:
+              'Plan mode keeps implementation paused until a complete plan is accepted.',
+            metadata: {
+              chunkId: 'chunk-1',
+              source: 'chatkit-plan-mode.md',
+              relevanceScore: 0.9234,
+              loc: {
+                lines: {
+                  from: 12,
+                  to: 14,
+                },
+              },
+            },
+            document: {
+              name: 'ChatKit Plan Mode',
+              fileUrl: 'https://docs.example.com/plan-mode',
+            },
+          },
+        ],
+      }),
+    ]);
+
+    expect(
+      screen.getByRole('button', { name: /Processed 1 knowledge result/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Query')).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Knowledge Retriever/ }),
+    );
+
+    expect(screen.getByText('Query')).toBeInTheDocument();
+    expect(screen.getByText('plan mode 详细介绍')).toBeInTheDocument();
+    expect(screen.getByText('Retrieved results (1)')).toBeInTheDocument();
+
+    const link = screen.getByRole('link', { name: /ChatKit Plan Mode/ });
+    expect(link).toHaveAttribute('href', 'https://docs.example.com/plan-mode');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noreferrer');
+    expect(screen.getByText('[12-14]')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Plan mode keeps implementation paused/),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Score:')).toBeInTheDocument();
+    expect(screen.getByText('0.923')).toBeInTheDocument();
+    expect(screen.getByText('source:')).toBeInTheDocument();
+    expect(screen.getByText('chatkit-plan-mode.md')).toBeInTheDocument();
+  });
+
+  it('renders an empty state for knowledge retriever messages without results', () => {
+    renderAssistant([
+      createToolComponent('knowledge-retriever-empty', {
+        category: 'Computer',
+        type: 'knowledges',
+        title: 'Knowledge Retriever',
+        message: 'missing knowledge',
+        input: {
+          query: 'missing knowledge',
+        },
+        data: [],
+      }),
+    ]);
+
+    expect(screen.getByText('Knowledge Retriever')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Knowledge Retriever/ }),
+    );
+
+    expect(screen.getByText('missing knowledge')).toBeInTheDocument();
+    expect(screen.getByText('No knowledge results found')).toBeInTheDocument();
+  });
+
+  it('falls back to raw data for non-standard knowledge retriever payloads', () => {
+    renderAssistant([
+      createToolComponent('knowledge-retriever-raw', {
+        category: 'Computer',
+        type: 'knowledges',
+        title: 'Knowledge Retriever',
+        message: 'odd payload',
+        data: [{ foo: 'bar' }],
+      }),
+    ]);
+
+    expect(screen.getByText('Knowledge Retriever')).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Knowledge Retriever/ }),
+    );
+
+    expect(screen.getByText('Raw data')).toBeInTheDocument();
+    expect(screen.getAllByText(/Array\(1\)/).length).toBeGreaterThan(0);
+    expect(screen.getByText('foo:')).toBeInTheDocument();
+    expect(screen.getByText('"bar"')).toBeInTheDocument();
   });
 
   it('renders request_user_input tool results as a confirmation card', () => {

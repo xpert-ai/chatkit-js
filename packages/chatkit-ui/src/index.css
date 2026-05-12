@@ -143,6 +143,16 @@
     }
 }
 
+@keyframes chatkit-tool-call-row-enter {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
 .ck-tool-call-running-text {
     color: transparent;
     background-image: linear-gradient(
@@ -162,7 +172,15 @@
     animation: chatkit-tool-call-text-shimmer 1.8s linear infinite;
 }
 
+.ck-tool-call-row-enter {
+    animation: chatkit-tool-call-row-enter 220ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
+    .ck-tool-call-row-enter {
+        animation: none;
+    }
+
     .ck-tool-call-running-text {
         color: var(--muted-foreground);
         background: none;
