@@ -295,6 +295,14 @@
       "copy": "Copy",
       "copied": "Copied",
       "separator": ", ",
+      "shell": {
+        "success": "Success",
+        "running": "Running",
+        "failed": "Failed",
+        "exitCode": "Exit code {{code}}",
+        "ranCommand": "Ran {{command}}",
+        "runningCommand": "Running {{command}}"
+      },
       "categories": {
         "files": {
           "one": "{{count}} file",

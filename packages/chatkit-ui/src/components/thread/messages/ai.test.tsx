@@ -107,6 +107,18 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return 'Copied';
         case 'message.toolGroup.separator':
           return ', ';
+        case 'message.toolGroup.shell.success':
+          return 'Success';
+        case 'message.toolGroup.shell.running':
+          return 'Running';
+        case 'message.toolGroup.shell.failed':
+          return 'Failed';
+        case 'message.toolGroup.shell.exitCode':
+          return `Exit code ${values?.code}`;
+        case 'message.toolGroup.shell.ranCommand':
+          return `Ran ${values?.command}`;
+        case 'message.toolGroup.shell.runningCommand':
+          return `Running ${values?.command}`;
         case 'message.toolGroup.categories.files.one':
           return `${count} file`;
         case 'message.toolGroup.categories.files.other':
@@ -885,6 +897,121 @@ describe('AssistantMessage tool components', () => {
         name: /Processed 1 file, 1 search, 1 command/,
       }),
     ).toBeInTheDocument();
+  });
+
+  it('renders sandbox_shell tools as expandable shell output cards', async () => {
+    const { container } = renderAssistant([
+      createToolComponent('shell-success', {
+        tool: 'sandbox_shell',
+        title: 'sandbox_shell',
+        input: { command: 'git diff --stat' },
+        output: {
+          stdout:
+            '.../semantic-analysis.service.spec.ts | 95 ++++++++++++++++\n4 files changed, 273 insertions(+), 7 deletions(-)',
+          exit_code: 0,
+        },
+      }),
+      createToolComponent('shell-running', {
+        tool: 'sandbox_shell',
+        title: 'sandbox_shell',
+        input: { command: 'sleep 1' },
+        status: 'running',
+        end_date: undefined,
+      }),
+      createToolComponent('shell-fail', {
+        tool: 'sandbox_shell',
+        title: 'sandbox_shell',
+        input: { cmd: 'pnpm test' },
+        output: {
+          stderr: 'Tests failed',
+          exit_code: 2,
+        },
+        status: 'fail',
+      }),
+    ]);
+
+    expect(
+      screen.getByRole('button', { name: /Processed 3 commands/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Ran git diff --stat/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.getByRole('button', { name: /Running sleep 1/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Shell')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Ran git diff --stat/ }));
+
+    expect(screen.getByText('Shell')).toBeInTheDocument();
+    expect(screen.getByText('$ git diff --stat')).toBeInTheDocument();
+    expect(screen.getByText('Exit code 0')).toBeInTheDocument();
+
+    const cards = container.querySelectorAll(
+      '[data-slot="sandbox-shell-tool-call"]',
+    );
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveClass(
+      'max-h-64',
+      'bg-muted/60',
+      'in-data-[density=compact]:max-h-52',
+      'in-data-[density=compact]:px-2',
+      'in-data-[density=spacious]:max-h-80',
+      'in-data-[density=spacious]:px-4',
+    );
+
+    const command = container.querySelector(
+      '[data-slot="sandbox-shell-command"]',
+    );
+    expect(command).toHaveClass(
+      'whitespace-pre-wrap',
+      'break-words',
+      'text-[13px]',
+      'leading-5',
+      'in-data-[density=compact]:text-xs',
+      'in-data-[density=compact]:leading-4',
+      'in-data-[density=spacious]:text-sm',
+      'in-data-[density=spacious]:leading-6',
+    );
+
+    const output = container.querySelector('[data-slot="sandbox-shell-output"]');
+    expect(output).toHaveClass(
+      'overflow-auto',
+      'whitespace-pre',
+      'text-muted-foreground/85',
+      'in-data-[density=compact]:text-xs',
+      'in-data-[density=spacious]:text-sm',
+    );
+    expect(output).toHaveTextContent('4 files changed');
+
+    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
+    expect(copyButtons).toHaveLength(2);
+    expect(copyButtons[0]).toHaveClass(
+      'opacity-0',
+      'in-data-[density=compact]:h-5',
+      'in-data-[density=spacious]:h-7',
+    );
+    fireEvent.click(copyButtons[0]);
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('git diff --stat');
+    });
+    fireEvent.click(copyButtons[1]);
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith(
+        expect.stringContaining('4 files changed'),
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Ran pnpm test/ }));
+
+    expect(screen.getByRole('button', { name: /Ran pnpm test/ })).not.toHaveClass(
+      'text-destructive',
+    );
+    expect(screen.getByText('$ pnpm test')).toBeInTheDocument();
+    expect(screen.getByText('Exit code 2')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^sandbox_shell$/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows a finished tool duration from created_date to end_date', () => {

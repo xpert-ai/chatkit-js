@@ -211,7 +211,7 @@ pnpm build && pnpm changeset publish
 - [x] Thread management
 - [x] File attachments
 - [ ] Advanced theming
-- [ ] Tool call visualization
+- [x] Tool call visualization
 - [ ] Voice I/O
 - [ ] WebSocket support
 

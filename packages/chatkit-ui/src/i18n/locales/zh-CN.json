@@ -295,6 +295,14 @@
       "copy": "复制",
       "copied": "已复制",
       "separator": "，",
+      "shell": {
+        "success": "成功",
+        "running": "运行中",
+        "failed": "失败",
+        "exitCode": "退出码 {{code}}",
+        "ranCommand": "已运行 {{command}}",
+        "runningCommand": "正在运行 {{command}}"
+      },
       "categories": {
         "files": {
           "one": "{{count}} 个文件",
