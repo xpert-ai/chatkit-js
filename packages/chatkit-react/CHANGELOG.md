@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-react
 
+## 0.3.1
+
+### Patch Changes
+
+- 7c48033: external web component for react
+
 ## 0.2.0
 
 ### Minor Changes
