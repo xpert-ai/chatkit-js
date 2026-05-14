@@ -4,6 +4,7 @@ import {
   FileText,
   ImageIcon,
   Loader2,
+  Minus,
   Pencil,
   Quote,
   RefreshCw,
@@ -876,6 +877,11 @@ export function Chat({
       [displayedPetSettings, petRequired, savePetLocalSettings],
     ),
   });
+  const canMinimizeToPet =
+    parentMessenger?.isParentAvailable === true && isPetEnabled(effectivePet);
+  const handleMinimizeToPet = React.useCallback(() => {
+    parentMessenger?.sendEvent('chat_minimize_change', { minimized: true });
+  }, [parentMessenger]);
 
   const syncQuoteSelection = React.useCallback(() => {
     if (typeof window === 'undefined') {
@@ -2523,6 +2529,30 @@ export function Chat({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {canMinimizeToPet && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex h-8 w-8">
+                  <button
+                    type="button"
+                    onClick={handleMinimizeToPet}
+                    className={cn(
+                      'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                      'text-muted-foreground hover:text-foreground hover:bg-muted',
+                      'transition-colors duration-150',
+                    )}
+                    aria-label={t('chat.minimizeToPet')}
+                  >
+                    <Minus size={16} />
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t('chat.minimizeToPet')}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex h-8 w-8">

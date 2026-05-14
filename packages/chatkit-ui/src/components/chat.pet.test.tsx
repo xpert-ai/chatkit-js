@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
@@ -236,6 +236,17 @@ describe('Chat pet integration', () => {
     );
   });
 
+  it('does not show the pet minimize button by default', async () => {
+    render(<Chat options={baseOptions} />);
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByRole('button', { name: 'chat.minimizeToPet' }),
+    ).toBeNull();
+  });
+
   it('sends the default pet state when enabled', async () => {
     render(<Chat options={{ ...baseOptions, pet: true }} />);
 
@@ -247,6 +258,22 @@ describe('Chat pet integration', () => {
         'pet_state_change',
         { state: 'idle' },
       ),
+    );
+  });
+
+  it('sends a chat minimize event when the pet minimize button is clicked', async () => {
+    render(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'chat.minimizeToPet' }),
+    );
+
+    expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
+      'chat_minimize_change',
+      { minimized: true },
     );
   });
 

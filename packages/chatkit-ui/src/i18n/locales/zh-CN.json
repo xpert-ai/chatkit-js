@@ -14,6 +14,7 @@
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
+    "minimizeToPet": "最小化到 Pet",
     "referencedContentOnly": "已引用内容",
     "youLabel": "你",
     "scrollToBottom": "回到底部",
