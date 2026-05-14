@@ -1,5 +1,12 @@
 # excel-echarts-chatkit-frontend
 
+## 0.0.20
+
+### Patch Changes
+
+- Updated dependencies [7c48033]
+  - @xpert-ai/chatkit-react@0.3.1
+
 ## 0.0.19
 
 ### Patch Changes
