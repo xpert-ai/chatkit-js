@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-browser-extension
 
+## 0.3.4
+
+### Patch Changes
+
+- 5855944: minimize to pet
+- Updated dependencies [5855944]
+  - @xpert-ai/chatkit-web-component@0.3.4
+
 ## 0.3.3
 
 ### Patch Changes

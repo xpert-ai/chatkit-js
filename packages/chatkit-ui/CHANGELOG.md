@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.7
+
+### Patch Changes
+
+- 5855944: minimize to pet
+- 49bb2ca: shell tool call component
+
 ## 0.3.6
 
 ### Patch Changes
