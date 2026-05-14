@@ -13,7 +13,12 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        '@xpert-ai/chatkit-web-component',
+      ],
       output: {
         globals: {
           react: 'React',
