@@ -30,6 +30,16 @@ function PetEnabledProbe({
   return null;
 }
 
+function ChatMinimizeEventProbe() {
+  const parentMessenger = useParentMessenger();
+
+  React.useEffect(() => {
+    parentMessenger.sendEvent('chat_minimize_change', { minimized: true });
+  }, [parentMessenger]);
+
+  return null;
+}
+
 describe('ParentMessengerProvider', () => {
   let originalParent: Window['parent'];
   let parentWindow: { postMessage: ReturnType<typeof vi.fn> };
@@ -185,6 +195,25 @@ describe('ParentMessengerProvider', () => {
         response: { ok: true },
       }),
       '*',
+    );
+  });
+
+  it('sends chat minimize events to the parent frame', () => {
+    render(
+      <ParentMessengerProvider>
+        <ChatMinimizeEventProbe />
+      </ParentMessengerProvider>,
+    );
+
+    expect(parentWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __xpaiChatKit: true,
+        type: 'event',
+        event: 'chat_minimize_change',
+        data: { minimized: true },
+      }),
+      '*',
+      undefined,
     );
   });
 });

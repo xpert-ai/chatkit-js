@@ -14,6 +14,7 @@
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
+    "minimizeToPet": "最小化到 Pet",
     "referencedContentOnly": "已引用内容",
     "youLabel": "你",
     "scrollToBottom": "回到底部",
@@ -295,6 +296,14 @@
       "copy": "复制",
       "copied": "已复制",
       "separator": "，",
+      "shell": {
+        "success": "成功",
+        "running": "运行中",
+        "failed": "失败",
+        "exitCode": "退出码 {{code}}",
+        "ranCommand": "已运行 {{command}}",
+        "runningCommand": "正在运行 {{command}}"
+      },
       "categories": {
         "files": {
           "one": "{{count}} 个文件",

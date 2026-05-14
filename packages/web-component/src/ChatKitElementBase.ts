@@ -92,6 +92,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #wrapper?: HTMLDivElement;
   #launcherCloseButton?: HTMLButtonElement;
   #launcherOpen = false;
+  #chatMinimizedToPet = false;
   #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
   #petClosedByContextMenu = false;
 
@@ -394,7 +395,34 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     }
   }
 
+  #setChatMinimizedToPet(minimized: boolean) {
+    const next = minimized && Boolean(this.#getOverlayPetOptions());
+    this.#chatMinimizedToPet = next;
+    if (next) {
+      this.dataset.chatMinimizedToPet = 'true';
+    } else {
+      delete this.dataset.chatMinimizedToPet;
+    }
+  }
+
+  #syncPetOverlayOptions() {
+    const overlayPetOptions = this.#getOverlayPetOptions();
+    this.#petOverlay.setOptions(overlayPetOptions);
+    if (!overlayPetOptions) {
+      this.#setChatMinimizedToPet(false);
+    }
+  }
+
   #handlePetActivate() {
+    if (this.#chatMinimizedToPet) {
+      this.#setChatMinimizedToPet(false);
+      if (this.#getDisplayMode() === 'pet') {
+        this.#setLauncherOpen(true);
+      }
+      this.#loaded.then(() => this.focusComposer()).catch(() => undefined);
+      return;
+    }
+
     if (this.#getDisplayMode() !== 'pet') {
       return;
     }
@@ -406,6 +434,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #handlePetClose() {
     this.#petClosedByContextMenu = true;
     this.#framePetOptionsOverride = null;
+    this.#setChatMinimizedToPet(false);
     this.#setLauncherOpen(false);
     this.#petOverlay.setOptions(null);
 
@@ -486,6 +515,9 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
         overflow: visible;
       }
       :host([data-display-mode="pet"]) {
+        display: contents;
+      }
+      :host([data-chat-minimized-to-pet="true"]) {
         display: contents;
       }
       .ck-iframe {
@@ -598,6 +630,11 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       :host([data-loaded="true"]) .ck-wrapper {
         opacity: 1;
       }
+      :host([data-chat-minimized-to-pet="true"]) .ck-wrapper {
+        opacity: 0;
+        pointer-events: none;
+        visibility: hidden;
+      }
       :host([data-display-mode="pet"]:not([data-chat-open="true"])) .ck-wrapper {
         opacity: 0;
       }
@@ -697,7 +734,23 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
           this.#petClosedByContextMenu = false;
         }
         this.#framePetOptionsOverride = payload.pet;
-        this.#petOverlay.setOptions(this.#getOverlayPetOptions());
+        this.#syncPetOverlayOptions();
+      }
+    });
+    this.#messenger.on('chat_minimize_change', (data) => {
+      const minimized =
+        typeof data === 'object' &&
+        data !== null &&
+        'minimized' in data &&
+        (data as { minimized?: unknown }).minimized === true;
+
+      if (minimized && !this.#getOverlayPetOptions()) {
+        return;
+      }
+
+      this.#setChatMinimizedToPet(minimized);
+      if (minimized) {
+        this.#setLauncherOpen(false);
       }
     });
     this.#messenger.on('unmount', () => {
@@ -765,7 +818,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     this.#opts = newOptions;
     this.#petClosedByContextMenu = false;
     this.#petOverlay.setLocale(newOptions.locale);
-    this.#petOverlay.setOptions(this.#getOverlayPetOptions());
+    this.#syncPetOverlayOptions();
     if (this.#initialized) {
       this.#setOptionsDataAttributes(this.#opts);
       this.#loaded.then(() => {

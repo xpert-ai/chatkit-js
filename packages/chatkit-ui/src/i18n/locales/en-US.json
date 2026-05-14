@@ -14,6 +14,7 @@
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",
+    "minimizeToPet": "Minimize to pet",
     "referencedContentOnly": "Referenced content",
     "youLabel": "You",
     "scrollToBottom": "Scroll to bottom",
@@ -295,6 +296,14 @@
       "copy": "Copy",
       "copied": "Copied",
       "separator": ", ",
+      "shell": {
+        "success": "Success",
+        "running": "Running",
+        "failed": "Failed",
+        "exitCode": "Exit code {{code}}",
+        "ranCommand": "Ran {{command}}",
+        "runningCommand": "Running {{command}}"
+      },
       "categories": {
         "files": {
           "one": "{{count}} file",

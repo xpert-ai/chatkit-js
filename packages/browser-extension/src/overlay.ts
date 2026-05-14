@@ -12,7 +12,7 @@ import type {
   ClientToolMessageInput,
 } from '@xpert-ai/chatkit-types';
 import { readConfig, readConfigChange } from './storage';
-import type { ChatKitExtensionConfig } from './types';
+import type { ChatKitDisplayMode, ChatKitExtensionConfig } from './types';
 import { mountChatKitHost } from './host';
 import { createChromeExtensionPlatform } from './platform/chrome/api';
 
@@ -27,6 +27,8 @@ let currentConfig: ChatKitExtensionConfig | null = null;
 let interactionActive = false;
 let lastPointer: { x: number; y: number } | null = null;
 let hostAutomationNonce = 0;
+let minimizedStateObserver: MutationObserver | null = null;
+let observedChatkitElement: HTMLElement | null = null;
 
 type HostAutomationResponseMessage = {
   source?: unknown;
@@ -93,16 +95,59 @@ function createOverlayHostAutomationHandler(): ChatKitOptions['onClientTool'] {
     });
 }
 
+function getChatkitElement(): HTMLElement | null {
+  const element = appRoot.querySelector('xpertai-chatkit');
+  return element instanceof HTMLElement ? element : null;
+}
+
+function isChatMinimizedToPet(): boolean {
+  return getChatkitElement()?.dataset.chatMinimizedToPet === 'true';
+}
+
+function getEffectiveDisplayMode(
+  config: ChatKitExtensionConfig | null = currentConfig,
+): ChatKitDisplayMode | undefined {
+  return isChatMinimizedToPet() ? 'pet' : config?.displayMode;
+}
+
 function notifyOverlayStyle(config: ChatKitExtensionConfig) {
   window.parent.postMessage(
     {
       source: EXTENSION_MESSAGE_SOURCE,
       type: OVERLAY_STYLE_MESSAGE,
       overlay: config.overlay,
-      displayMode: config.displayMode,
+      displayMode: getEffectiveDisplayMode(config),
     },
     '*',
   );
+}
+
+function notifyOverlayState() {
+  if (currentConfig) {
+    notifyOverlayStyle(currentConfig);
+  }
+  notifyHitRegions();
+}
+
+function observeChatkitMinimizeState() {
+  const chatkit = getChatkitElement();
+  if (chatkit === observedChatkitElement) {
+    return;
+  }
+
+  minimizedStateObserver?.disconnect();
+  observedChatkitElement = chatkit;
+
+  if (!chatkit) {
+    minimizedStateObserver = null;
+    return;
+  }
+
+  minimizedStateObserver = new MutationObserver(notifyOverlayState);
+  minimizedStateObserver.observe(chatkit, {
+    attributes: true,
+    attributeFilter: ['data-chat-minimized-to-pet'],
+  });
 }
 
 function isVisibleHitElement(element: Element): element is HTMLElement {
@@ -158,7 +203,7 @@ function notifyHitRegions() {
     {
       source: EXTENSION_MESSAGE_SOURCE,
       type: OVERLAY_HIT_REGIONS_MESSAGE,
-      displayMode: currentConfig?.displayMode,
+      displayMode: getEffectiveDisplayMode(),
       regions: getHitRegions(),
       interactionActive,
       pointer: lastPointer,
@@ -192,6 +237,7 @@ async function main() {
     openOptionsPage: platform.openOptionsPage,
     onClientTool: createOverlayHostAutomationHandler(),
   });
+  observeChatkitMinimizeState();
 
   platform.onStorageChanged?.addListener((changes, areaName) => {
     if (areaName !== 'local') {
@@ -203,6 +249,7 @@ async function main() {
       currentConfig = nextConfig;
       notifyOverlayStyle(nextConfig);
       host.update(nextConfig);
+      observeChatkitMinimizeState();
       notifyHitRegions();
     }
   });
@@ -249,6 +296,7 @@ async function main() {
   startHitRegionSync();
 
   window.addEventListener('pagehide', () => {
+    minimizedStateObserver?.disconnect();
     host.destroy();
   });
 }

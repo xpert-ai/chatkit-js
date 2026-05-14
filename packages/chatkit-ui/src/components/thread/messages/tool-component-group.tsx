@@ -48,6 +48,11 @@ import {
   type ComponentMessageDetailsRendererProps,
   type ComponentMessagePartialStepData,
 } from './component-message-renderers';
+import {
+  getSandboxShellActivityLabel,
+  isSandboxShellStep,
+  SandboxShellToolCallCard,
+} from './sandbox-shell-tool-call';
 
 /** Partial step data: during streaming, fields arrive incrementally */
 export type PartialStepData = ComponentMessagePartialStepData;
@@ -339,6 +344,8 @@ function classifyToolToken(value: LocalizedText | unknown): ToolGroupCategory | 
     normalized.includes('cmd') ||
     normalized.includes('program') ||
     normalized.includes('exec') ||
+    normalized.includes('shell') ||
+    normalized.includes('terminal') ||
     normalized.startsWith('run_') ||
     normalized.includes('_run')
   ) {
@@ -355,6 +362,8 @@ function classifyToolToken(value: LocalizedText | unknown): ToolGroupCategory | 
 
 function getToolGroupCategory(content: TMessageContentComponent): ToolGroupCategory {
   const data = getToolStepData(content);
+  if (isSandboxShellStep(data)) return 'commands';
+
   return (
     classifyToolToken(data.type) ??
     classifyToolToken(data.tool) ??
@@ -745,7 +754,13 @@ function ToolStepIcon({
   );
 }
 
-function ToolCallCopyButton({ value }: { value: string }) {
+function ToolCallCopyButton({
+  value,
+  className,
+}: {
+  value: string;
+  className?: string;
+}) {
   const { t } = useChatkitTranslation();
   const [isCopied, setIsCopied] = React.useState(false);
   const resetTimeoutRef = React.useRef<number | null>(null);
@@ -781,7 +796,10 @@ function ToolCallCopyButton({ value }: { value: string }) {
   return (
     <button
       type="button"
-      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      className={cn(
+        'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        className,
+      )}
       aria-label={label}
       title={label}
       onClick={handleCopy}
@@ -875,6 +893,14 @@ function DefaultToolCallOutput({ data }: ComponentMessageDetailsRendererProps) {
 function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   const { t } = useChatkitTranslation();
   const data = getToolStepData(content);
+  if (isSandboxShellStep(data)) {
+    return (
+      <div className="ml-6 mt-1">
+        <SandboxShellToolCallCard data={data} />
+      </div>
+    );
+  }
+
   const renderer = getComponentMessageRenderer(content, data);
   const hasCustomDetails =
     data.error === undefined &&
@@ -940,19 +966,23 @@ function ToolCallRowContent({
   organizationId,
   apiUrl,
 }: ToolCallRowProps) {
-  const { i18n } = useChatkitTranslation();
+  const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
   const status = getEffectiveToolStepStatus(data, isThreadRunning);
   const hasError = status === 'fail' || Boolean(data.error);
+  const isSandboxShell = isSandboxShellStep(data);
   const detailsId = React.useId();
   const renderer = getComponentMessageRenderer(content, data);
-  const label =
-    renderer?.getTitle?.(content, data, i18n.language) ??
-    getToolActivityLabel(content, i18n.language, status);
+  const label = isSandboxShell
+    ? getSandboxShellActivityLabel(data, status, i18n.language, t)
+    : (renderer?.getTitle?.(content, data, i18n.language) ??
+      getToolActivityLabel(content, i18n.language, status));
+
   const hasCustomDetails =
     data.error === undefined &&
     hasComponentMessageRendererDetails(renderer, content, data);
   const hasDetails =
+    isSandboxShell ||
     data.input !== undefined ||
     data.error !== undefined ||
     data.output !== undefined ||
@@ -980,7 +1010,9 @@ function ToolCallRowContent({
           'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-muted-foreground',
           TOOL_CALL_ROW_TEXT_CLASS,
           hasDetails && 'cursor-pointer hover:text-foreground',
-          hasError && 'text-destructive hover:text-destructive',
+          hasError &&
+            !isSandboxShell &&
+            'text-destructive hover:text-destructive',
         )}
         aria-expanded={hasDetails ? isExpanded : undefined}
         aria-controls={hasDetails ? detailsId : undefined}
@@ -996,7 +1028,9 @@ function ToolCallRowContent({
             apiUrl={apiUrl}
             className={cn(
               'h-3.5 w-3.5 shrink-0',
-              hasError ? 'text-destructive' : 'text-muted-foreground',
+              hasError && !isSandboxShell
+                ? 'text-destructive'
+                : 'text-muted-foreground',
             )}
           />
         ) : (

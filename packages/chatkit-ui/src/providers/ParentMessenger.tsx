@@ -65,6 +65,7 @@ type ParentResponseMessage = {
 
 type ParentEventPayloadMap = {
   public_event: [Capability.Event, unknown];
+  chat_minimize_change: { minimized: boolean };
   pet_options_change: { pet: ChatKitOptions['pet'] | null };
   pet_state_change: { state: ChatKitPetAnimationName };
 };
