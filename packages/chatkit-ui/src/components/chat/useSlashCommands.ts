@@ -153,9 +153,11 @@ export function useSlashCommands({
         runtimeCapabilityOptions,
         runtimeCapabilities,
         recommendedRuntimeCapabilities,
+        language: i18n.language,
       }),
     [
       localizedResolvedCommands,
+      i18n.language,
       palette,
       recommendedRuntimeCapabilities,
       runtimeCapabilities,
@@ -267,7 +269,11 @@ export function useSlashCommands({
 
   const executeSlashCommand = React.useCallback(
     (command: ResolvedSlashCommand, args: string) => {
-      const effect = createSlashCommandExecutionEffect(command, args);
+      const effect = createSlashCommandExecutionEffect(
+        command,
+        args,
+        i18n.language,
+      );
 
       if (effect.type === 'none') {
         return true;
@@ -353,6 +359,7 @@ export function useSlashCommands({
       addRunRuntimeCapabilities,
       focusComposerAt,
       getComposerEditingLength,
+      i18n.language,
       parentMessenger,
       onPetCommand,
       selectCapabilityById,

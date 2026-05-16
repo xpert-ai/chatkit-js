@@ -1,5 +1,4 @@
 import type {
-  ChatKitPromptWorkflow,
   ChatKitSlashCommand,
   ChatKitSlashCommandAction,
   ChatKitSlashCommandKind,
@@ -39,15 +38,9 @@ function normalizeStringList(value: unknown): string[] {
   );
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 function normalizeSlashCommandKind(
   value: unknown,
-  workflow: ChatKitPromptWorkflow | undefined,
+  workflow: ChatKitSlashCommand['workflow'] | undefined,
   category: string | undefined,
   actionType: ChatKitSlashCommandAction['type'],
 ): ChatKitSlashCommandKind {
@@ -64,67 +57,6 @@ function normalizeSlashCommandKind(
   }
 
   return 'command';
-}
-
-function normalizePromptWorkflow(value: unknown): ChatKitPromptWorkflow | null {
-  const record = asRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  if (
-    record.type !== undefined &&
-    record.type !== null &&
-    record.type !== 'prompt_workflow'
-  ) {
-    return null;
-  }
-
-  const tags = normalizeStringList(record.tags);
-  const name = normalizeOptionalString(record.name);
-  const label = normalizeOptionalString(record.label);
-  const description = normalizeOptionalString(record.description);
-  return {
-    type: 'prompt_workflow',
-    ...(name ? { name } : {}),
-    ...(label ? { label } : {}),
-    ...(description ? { description } : {}),
-    ...(tags.length ? { tags } : {}),
-  };
-}
-
-function createPromptWorkflow({
-  command,
-  name,
-  label,
-  description,
-}: {
-  command: ChatKitSlashCommand;
-  name: string;
-  label: string;
-  description?: string;
-}): ChatKitPromptWorkflow | undefined {
-  const explicitWorkflow = normalizePromptWorkflow(command.workflow);
-  const category = normalizeOptionalString(command.category);
-  const kind = normalizeSlashCommandKind(
-    command.kind,
-    explicitWorkflow ?? undefined,
-    category,
-    command.action.type,
-  );
-  if (kind !== 'prompt_workflow') {
-    return undefined;
-  }
-
-  return {
-    type: 'prompt_workflow',
-    name: explicitWorkflow?.name ?? name,
-    label: explicitWorkflow?.label ?? label,
-    ...(explicitWorkflow?.description ?? description
-      ? { description: explicitWorkflow?.description ?? description }
-      : {}),
-    ...(explicitWorkflow?.tags?.length ? { tags: explicitWorkflow.tags } : {}),
-  };
 }
 
 export function isSlashCommandAction(
@@ -188,15 +120,10 @@ export function resolveSlashCommands(
     }
 
     seen.add(name);
-    const label = normalizeOptionalString(command.label) ?? name;
-    const description = normalizeOptionalString(command.description);
+    const label = command.label ?? name;
+    const description = command.description;
     const category = normalizeOptionalString(command.category);
-    const workflow = createPromptWorkflow({
-      command,
-      name,
-      label,
-      description,
-    });
+    const workflow = command.workflow;
     const kind = normalizeSlashCommandKind(
       command.kind,
       workflow,

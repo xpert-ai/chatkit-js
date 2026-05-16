@@ -1,9 +1,11 @@
 import type {
   ChatKitCommandSource,
+  ChatKitPromptWorkflow,
   ChatKitSlashCommandAction,
 } from '@xpert-ai/chatkit-types';
 
 import { isRuntimeCapabilitiesSelection } from '../message-metadata';
+import { resolveLocalizedText } from '../../i18n/localized-text';
 import type { CommandExecutionEffect, ResolvedSlashCommand } from './types';
 
 function resolvePetCommandMode(
@@ -70,18 +72,59 @@ export function shouldSubmitRawSlashInvocation(
   return command.action.type === 'insert_invocation';
 }
 
+function resolvePromptWorkflowText(
+  value: unknown,
+  language?: string | null,
+): string | undefined {
+  return resolveLocalizedText(value, language ?? undefined) ?? undefined;
+}
+
+function resolveWorkflowTags(workflow: ChatKitPromptWorkflow | undefined) {
+  return Array.isArray(workflow?.tags) && workflow.tags.length
+    ? workflow.tags
+    : undefined;
+}
+
+function resolveCommandSourceWorkflow(
+  command: ResolvedSlashCommand,
+  language?: string | null,
+): ChatKitPromptWorkflow | undefined {
+  if (command.kind !== 'prompt_workflow') {
+    return undefined;
+  }
+
+  const workflow = command.workflow;
+  const label = resolvePromptWorkflowText(workflow?.label, language);
+  const description =
+    resolvePromptWorkflowText(workflow?.description, language) ??
+    resolvePromptWorkflowText(command.description, language);
+  const name = workflow?.name?.trim() || command.name;
+  const fallbackLabel =
+    resolvePromptWorkflowText(command.label, language) ?? command.name;
+  const tags = resolveWorkflowTags(workflow);
+  return {
+    type: 'prompt_workflow',
+    name,
+    label: label ?? fallbackLabel,
+    ...(description ? { description } : {}),
+    ...(tags ? { tags } : {}),
+  };
+}
+
 export function createSlashCommandExecutionEffect(
   command: ResolvedSlashCommand,
   args: string,
+  language?: string | null,
 ): CommandExecutionEffect {
   const action = command.action;
+  const workflow = resolveCommandSourceWorkflow(command, language);
   const commandSource: ChatKitCommandSource = {
     type: 'slash_command' as const,
     name: command.name,
     source: command.source,
     executionType: action.type,
     ...(command.kind === 'prompt_workflow' ? { kind: command.kind } : {}),
-    ...(command.workflow ? { workflow: command.workflow } : {}),
+    ...(workflow ? { workflow } : {}),
   };
 
   if (command.source === 'builtin' && action.type === 'client_action') {

@@ -1,3 +1,5 @@
+import type { LocalizedText } from './localized-text';
+
 export type ChatKitSlashCommandExecutionType =
   | 'insert_text'
   | 'insert_invocation'
@@ -7,11 +9,13 @@ export type ChatKitSlashCommandExecutionType =
 
 export type ChatKitSlashCommandKind = 'command' | 'prompt_workflow';
 
+export type ChatKitI18nText = LocalizedText;
+
 export type ChatKitPromptWorkflow = {
   type: 'prompt_workflow';
   name?: string;
-  label?: string;
-  description?: string;
+  label?: ChatKitI18nText;
+  description?: ChatKitI18nText;
   tags?: string[];
 };
 
@@ -69,8 +73,8 @@ export type ChatKitSlashCommand = {
    * Valid names use lowercase letters, digits, hyphens, and underscores.
    */
   name: string;
-  label?: string;
-  description?: string;
+  label?: ChatKitI18nText;
+  description?: ChatKitI18nText;
   icon?: string | Record<string, unknown>;
   category?: string;
   aliases?: string[];
