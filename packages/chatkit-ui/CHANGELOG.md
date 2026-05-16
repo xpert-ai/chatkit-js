@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.8
+
+### Patch Changes
+
+- 9423ff7: compress slash command
+- Updated dependencies [9423ff7]
+  - @xpert-ai/chatkit-types@0.3.7
+
 ## 0.3.7
 
 ### Patch Changes
