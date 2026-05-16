@@ -33,6 +33,14 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
       const count = Number(values?.count ?? 0);
 
       switch (key) {
+        case 'message.contextCompression.running':
+          return 'Automatically compressing context';
+        case 'message.contextCompression.success':
+          return 'Context automatically compressed';
+        case 'message.contextCompression.skipped':
+          return 'Context not compressed';
+        case 'message.contextCompression.fail':
+          return 'Context compression failed';
         case 'message.requestUserInputResult.title':
           return 'Selections confirmed';
         case 'message.requestUserInputResult.option':
@@ -189,6 +197,25 @@ function createToolComponent(
   };
 }
 
+function createContextCompressionComponent(
+  data: Record<string, unknown> = {},
+): TMessageContentComponent {
+  return {
+    id: 'context-compression-1',
+    type: 'component',
+    data: {
+      category: 'Tool',
+      type: 'context-compression',
+      status: 'success',
+      message: 'Two-phase compression complete.',
+      summary: '<state_snapshot>Compressed history.</state_snapshot>',
+      created_date: '2026-05-16T06:40:16.333Z',
+      end_date: '2026-05-16T06:40:16.441Z',
+      ...data,
+    },
+  } as TMessageContentComponent;
+}
+
 function renderAssistant(
   content: ChatkitMessage['content'],
   overrides: Partial<ChatkitMessage> & {
@@ -224,6 +251,45 @@ describe('AssistantMessage tool components', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('renders context compression components as standalone separators', () => {
+    renderAssistant([
+      createContextCompressionComponent(),
+      createToolComponent('read-file'),
+    ]);
+
+    expect(
+      screen.getByText('Context automatically compressed'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Processed 1 tool')).toBeInTheDocument();
+    expect(screen.queryByText('Processed 2 tools')).not.toBeInTheDocument();
+  });
+
+  it('renders skipped context compression as a no-op separator', () => {
+    renderAssistant([
+      createContextCompressionComponent({
+        reason: 'no_unprotected_history',
+        message:
+          'No unprotected history available to compress. Recent user turns were preserved.',
+      }),
+    ]);
+
+    expect(screen.getByText('Context not compressed')).toBeInTheDocument();
+  });
+
+  it('adds a shimmer text effect to running context compression separators', () => {
+    renderAssistant([
+      createContextCompressionComponent({
+        status: 'running',
+        message: 'Generating context summary...',
+        end_date: undefined,
+      }),
+    ]);
+
+    expect(screen.getByText('Automatically compressing context')).toHaveClass(
+      'ck-tool-call-running-text',
+    );
   });
 
   it('expands the latest completed tool group by default', () => {
@@ -390,8 +456,9 @@ describe('AssistantMessage tool components', () => {
     ).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('file contents')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /run_command/ }).closest('li'))
-      .toHaveClass('ck-tool-call-row-enter');
+    expect(
+      screen.getByRole('button', { name: /run_command/ }).closest('li'),
+    ).toHaveClass('ck-tool-call-row-enter');
   });
 
   it('does not treat tool message text as output details', () => {
@@ -573,8 +640,7 @@ describe('AssistantMessage tool components', () => {
           {
             title: 'Codex CLI 0.128.0 adds /goal',
             url: 'https://simonwillison.net/example/codex-goal',
-            description:
-              'A short note about the new persistent goal command.',
+            description: 'A short note about the new persistent goal command.',
           },
         ],
       }),
@@ -941,7 +1007,9 @@ describe('AssistantMessage tool components', () => {
     ).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('Shell')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Ran git diff --stat/ }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /Ran git diff --stat/ }),
+    );
 
     expect(screen.getByText('Shell')).toBeInTheDocument();
     expect(screen.getByText('$ git diff --stat')).toBeInTheDocument();
@@ -974,7 +1042,9 @@ describe('AssistantMessage tool components', () => {
       'in-data-[density=spacious]:leading-6',
     );
 
-    const output = container.querySelector('[data-slot="sandbox-shell-output"]');
+    const output = container.querySelector(
+      '[data-slot="sandbox-shell-output"]',
+    );
     expect(output).toHaveClass(
       'overflow-auto',
       'whitespace-pre',
@@ -1004,9 +1074,9 @@ describe('AssistantMessage tool components', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Ran pnpm test/ }));
 
-    expect(screen.getByRole('button', { name: /Ran pnpm test/ })).not.toHaveClass(
-      'text-destructive',
-    );
+    expect(
+      screen.getByRole('button', { name: /Ran pnpm test/ }),
+    ).not.toHaveClass('text-destructive');
     expect(screen.getByText('$ pnpm test')).toBeInTheDocument();
     expect(screen.getByText('Exit code 2')).toBeInTheDocument();
     expect(
@@ -1454,13 +1524,10 @@ describe('AssistantMessage tool components', () => {
       status: 'success',
     };
 
-    renderAssistant(
-      [],
-      {
-        executionId: 'root-exec',
-        agentRuns: [runWithToolName],
-      },
-    );
+    renderAssistant([], {
+      executionId: 'root-exec',
+      agentRuns: [runWithToolName],
+    });
 
     expect(
       screen.getByRole('button', { name: /Agent_NameTrap/ }),
@@ -1735,9 +1802,9 @@ describe('AssistantMessage tool components', () => {
       },
     );
 
-    expect(screen.getByRole('button', { name: /Reply worker/ })).toHaveTextContent(
-      'Replied',
-    );
+    expect(
+      screen.getByRole('button', { name: /Reply worker/ }),
+    ).toHaveTextContent('Replied');
     expect(screen.queryByText('Pending')).not.toBeInTheDocument();
   });
 });

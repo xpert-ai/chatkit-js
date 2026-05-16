@@ -30,7 +30,6 @@ import {
   getComposerInputRoundedClass,
   getMenuItemRoundedClass,
   getPanelRoundedClass,
-  getRoundedClass,
 } from '../lib/utils';
 import {
   getAssistantStreamingStatus,
@@ -2717,7 +2716,12 @@ export function Chat({
                       : 'justify-start -ml-1', // AI messages: slightly closer to left
                   )}
                 >
-                  <div className="flex flex-col px-3 overflow-hidden">
+                  <div
+                    className={cn(
+                      'flex flex-col px-3 overflow-hidden',
+                      isAssistantMessage && 'min-w-0 flex-1',
+                    )}
+                  >
                     <div
                       {...(canQuoteMessage
                         ? {

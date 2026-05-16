@@ -236,6 +236,12 @@
     "loading": "正在加载",
     "thinking": "正在思考",
     "answering": "正在生成",
+    "contextCompression": {
+      "running": "正在自动压缩上下文",
+      "success": "上下文已自动压缩",
+      "skipped": "上下文无需压缩",
+      "fail": "上下文压缩失败"
+    },
     "requestUserInputResult": {
       "title": "已确认选择",
       "option": "选项",

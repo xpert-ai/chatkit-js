@@ -236,6 +236,12 @@
     "loading": "Loading",
     "thinking": "Thinking",
     "answering": "Answering",
+    "contextCompression": {
+      "running": "Automatically compressing context",
+      "success": "Context automatically compressed",
+      "skipped": "Context not compressed",
+      "fail": "Context compression failed"
+    },
     "requestUserInputResult": {
       "title": "Selections confirmed",
       "option": "Option",

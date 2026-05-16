@@ -10,11 +10,7 @@ import type {
   TMessageContentReasoning,
   TMessageContentText,
 } from '@xpert-ai/chatkit-types';
-import {
-  ChevronDown,
-  Clock3,
-  Loader2,
-} from 'lucide-react';
+import { ChevronDown, Clock3, Loader2 } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import {
@@ -37,6 +33,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { MarkdownText } from '../markdown-text';
 import { AgentEventRow, AgentRunGroup } from './agent-run-group';
+import {
+  ContextCompressionMessage,
+  isContextCompressionComponent,
+} from './context-compression-message';
 import { getComponentMessagePresentation } from './component-message-renderers';
 import {
   buildToolComponentRenderUnits,
@@ -66,19 +66,27 @@ export type AssistantMessageProps = {
 const assistantMessageStackClassName =
   'space-y-3 in-data-[density=compact]:space-y-2 in-data-[density=spacious]:space-y-4';
 
-function isTextContent(content: TMessageContentComplex): content is TMessageContentText {
+function isTextContent(
+  content: TMessageContentComplex,
+): content is TMessageContentText {
   return content.type === 'text';
 }
 
-function isReasoningContent(content: TMessageContentComplex): content is TMessageContentReasoning {
+function isReasoningContent(
+  content: TMessageContentComplex,
+): content is TMessageContentReasoning {
   return content.type === 'reasoning';
 }
 
-function isImageContent(content: TMessageContentComplex): content is MessageContentImageUrl {
+function isImageContent(
+  content: TMessageContentComplex,
+): content is MessageContentImageUrl {
   return content.type === 'image_url';
 }
 
-function isComponentContent(content: TMessageContentComplex): content is TMessageContentComponent {
+function isComponentContent(
+  content: TMessageContentComplex,
+): content is TMessageContentComponent {
   return content.type === 'component';
 }
 
@@ -89,7 +97,9 @@ function isWidgetComponent(
   return data?.type === 'Widget' && Array.isArray(data.widgets);
 }
 
-function isMemoryContent(content: TMessageContentComplex): content is TMessageContentMemory {
+function isMemoryContent(
+  content: TMessageContentComplex,
+): content is TMessageContentMemory {
   return content.type === 'memory';
 }
 
@@ -105,7 +115,11 @@ function formatDisplayValue(value: unknown) {
   return typeof value === 'string' ? value : safeJson(value);
 }
 
-function ReasoningBlock({ reasoning }: { reasoning: TMessageContentReasoning[] }) {
+function ReasoningBlock({
+  reasoning,
+}: {
+  reasoning: TMessageContentReasoning[];
+}) {
   const blocks = reasoning.filter((item) => item.text?.trim());
   if (blocks.length === 0) return null;
 
@@ -116,7 +130,9 @@ function ReasoningBlock({ reasoning }: { reasoning: TMessageContentReasoning[] }
           key={item.id ?? `reasoning-${index}`}
           className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground"
         >
-          <p className="whitespace-pre-wrap wrap-break-word leading-relaxed">{item.text}</p>
+          <p className="whitespace-pre-wrap wrap-break-word leading-relaxed">
+            {item.text}
+          </p>
         </div>
       ))}
     </div>
@@ -146,7 +162,11 @@ function ImageBlock({ content }: { content: MessageContentImageUrl }) {
 
   return (
     <figure className="overflow-hidden rounded-lg border bg-background">
-      <img src={imageUrl} alt="Assistant output" className="h-auto w-full object-cover" />
+      <img
+        src={imageUrl}
+        alt="Assistant output"
+        className="h-auto w-full object-cover"
+      />
     </figure>
   );
 }
@@ -159,7 +179,9 @@ function MemoryBlock({ content }: { content: TMessageContentMemory }) {
         <Badge variant="secondary">Memory</Badge>
       </CardHeader>
       <CardContent className="text-xs text-muted-foreground">
-        <pre className="whitespace-pre-wrap wrap-break-word">{safeJson(content.data ?? [])}</pre>
+        <pre className="whitespace-pre-wrap wrap-break-word">
+          {safeJson(content.data ?? [])}
+        </pre>
       </CardContent>
     </Card>
   );
@@ -269,7 +291,9 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
     };
 
     updateAutoScrollState();
-    element.addEventListener('scroll', updateAutoScrollState, { passive: true });
+    element.addEventListener('scroll', updateAutoScrollState, {
+      passive: true,
+    });
 
     return () => {
       element.removeEventListener('scroll', updateAutoScrollState);
@@ -295,10 +319,19 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 px-2 py-1 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
+      <CardHeader
+        className="flex flex-row items-center justify-between gap-2 px-2 py-1 cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <div className="flex items-center space-x-1 flex-1 min-w-0">
           {status && StatusIcon && (
-            <StatusIcon className={cn("h-4 w-4", config?.iconClass, status === 'running' && "animate-spin")} />
+            <StatusIcon
+              className={cn(
+                'h-4 w-4',
+                config?.iconClass,
+                status === 'running' && 'animate-spin',
+              )}
+            />
           )}
           <CardTitle className="text-sm truncate">{title}</CardTitle>
         </div>
@@ -309,19 +342,27 @@ function ComponentBlock({ content }: { content: TMessageContentComponent }) {
               <span>{durationLabel}</span>
             </div>
           )}
-          <Badge variant="secondary" className="rounded-lg px-1.5">{category}</Badge>
+          <Badge variant="secondary" className="rounded-lg px-1.5">
+            {category}
+          </Badge>
           <button
             className="text-muted-foreground hover:text-foreground transition-colors"
-            aria-label={isExpanded ? "Collapse" : "Expand"}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
             <ChevronDown
-              className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")}
+              className={cn(
+                'h-4 w-4 transition-transform',
+                isExpanded && 'rotate-180',
+              )}
             />
           </button>
         </div>
       </CardHeader>
       {isExpanded && (
-        <CardContent ref={contentRef} className="text-xs text-muted-foreground max-h-60 overflow-auto">
+        <CardContent
+          ref={contentRef}
+          className="text-xs text-muted-foreground max-h-60 overflow-auto"
+        >
           {data.input && (
             <pre className="whitespace-pre-wrap wrap-break-word">
               {formatDisplayValue(data.input)}
@@ -352,7 +393,9 @@ function UnknownBlock({ content }: { content: TMessageContentComplex }) {
         <Badge variant="outline">{content.type ?? 'unknown'}</Badge>
       </CardHeader>
       <CardContent className="text-xs text-muted-foreground">
-        <pre className="whitespace-pre-wrap break-words">{safeJson(content)}</pre>
+        <pre className="whitespace-pre-wrap break-words">
+          {safeJson(content)}
+        </pre>
       </CardContent>
     </Card>
   );
@@ -408,6 +451,17 @@ function renderContentItem(
   }
 
   if (isComponentContent(content)) {
+    if (isContextCompressionComponent(content)) {
+      return (
+        <div
+          key={content.id ?? `context-compression-${index}`}
+          className="w-full"
+        >
+          <ContextCompressionMessage content={content} />
+        </div>
+      );
+    }
+
     const requestUserInputResult = getRequestUserInputResultCardData(
       content,
       lookupMessages,
@@ -753,7 +807,9 @@ export function AssistantMessage({
         >
           <TabsList className="">
             <TabsTrigger value="answer">{t('message.answer')}</TabsTrigger>
-            <TabsTrigger value="reasoning">{t('message.reasoning')}</TabsTrigger>
+            <TabsTrigger value="reasoning">
+              {t('message.reasoning')}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="answer" className="space-y-3">
             {answerNode}
