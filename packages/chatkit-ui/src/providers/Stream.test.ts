@@ -6,6 +6,7 @@ import {
   REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION,
   REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
   REQUEST_USER_INPUT_RESULT_TYPE,
+  normalizeRequestLanguage,
   type TThreadContextUsageEvent,
 } from '@xpert-ai/chatkit-types';
 
@@ -14,6 +15,7 @@ import { createLangGraphEventState } from './langGraphEventMapper';
 import {
   applyStreamEvent,
   buildSteerFollowUpRunInput,
+  createLanguageHeaders,
   createFetchWithClientSecretRefresh,
   getAutoDrainQueuedFollowUpIds,
   getNextAutoQueuedFollowUp,
@@ -29,6 +31,24 @@ import {
   resolveClientToolCallResponse,
   shouldBroadcastThreadChange,
 } from './Stream';
+
+describe('request language headers', () => {
+  it('normalizes ChatKit locales to Xpert language headers', () => {
+    expect(normalizeRequestLanguage('zh-CN')).toBe('zh-Hans');
+    expect(normalizeRequestLanguage('zh-Hans')).toBe('zh-Hans');
+    expect(normalizeRequestLanguage('zh-TW')).toBe('zh-Hant');
+    expect(normalizeRequestLanguage('en-US')).toBe('en');
+    expect(normalizeRequestLanguage('fr-FR')).toBe('fr-FR');
+  });
+
+  it('creates both Language and Accept-Language headers', () => {
+    expect(createLanguageHeaders('zh-Hans')).toEqual({
+      Language: 'zh-Hans',
+      'Accept-Language': 'zh-Hans',
+    });
+    expect(createLanguageHeaders(null)).toBeUndefined();
+  });
+});
 
 describe('request_user_input normalization', () => {
   const validParams = {

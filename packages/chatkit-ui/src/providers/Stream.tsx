@@ -47,6 +47,7 @@ import {
   type TMessageContentComplex,
   type TMessageContentComponent,
   type TThreadContextUsageEvent,
+  normalizeRequestLanguage,
 } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
 import {
@@ -253,6 +254,18 @@ const defaultApiUrl =
   'https://api.xpertai.cn/api/ai';
 
 const DEFAULT_HISTORY_LIMIT = 200;
+
+export function createLanguageHeaders(
+  locale?: string | null,
+): Record<string, string> | undefined {
+  const language = normalizeRequestLanguage(locale);
+  return language
+    ? {
+        Language: language,
+        'Accept-Language': language,
+      }
+    : undefined;
+}
 
 function createAbortError(message: string): Error | DOMException {
   if (typeof DOMException !== 'undefined') {
@@ -1427,6 +1440,7 @@ const StreamSession = ({
   apiUrl,
   assistantId,
   initialThread,
+  locale,
 }: {
   children: ReactNode;
   apiKey: string;
@@ -1434,6 +1448,7 @@ const StreamSession = ({
   apiUrl: string;
   assistantId: string;
   initialThread?: string | null;
+  locale?: string | null;
 }) => {
   const [threadId, setThreadId] = useQueryState('threadId');
   const [values, setValues] = useState<StateType>({ messages: [] });
@@ -1773,6 +1788,7 @@ const StreamSession = ({
     () =>
       new Client<StateType>({
         apiUrl,
+        defaultHeaders: createLanguageHeaders(locale),
         callerOptions: {
           fetch: fetchWithClientSecretRefresh,
         },
@@ -1797,7 +1813,7 @@ const StreamSession = ({
           return init;
         },
       }),
-    [apiUrl, fetchWithClientSecretRefresh],
+    [apiUrl, fetchWithClientSecretRefresh, locale],
   );
   clientRef.current = client;
   const runtimeActivitiesEnabled =
@@ -2869,7 +2885,16 @@ export const StreamProvider: React.FC<{
   apiUrl?: string;
   xpertId?: string;
   initialThread?: string | null;
-}> = ({ children, apiKey, organizationId, apiUrl, xpertId, initialThread }) => {
+  locale?: string | null;
+}> = ({
+  children,
+  apiKey,
+  organizationId,
+  apiUrl,
+  xpertId,
+  initialThread,
+  locale,
+}) => {
   return (
     <StreamSession
       apiKey={apiKey ?? ''}
@@ -2877,6 +2902,7 @@ export const StreamProvider: React.FC<{
       apiUrl={apiUrl ?? defaultApiUrl}
       assistantId={xpertId ?? 'your-xpert-id'}
       initialThread={initialThread}
+      locale={locale}
     >
       {children}
     </StreamSession>

@@ -4,6 +4,7 @@ import {
   type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../runtime-capabilities';
+import { resolveLocalizedText } from '../../i18n/localized-text';
 import type {
   ResolvedSlashCommand,
   RuntimeCapabilitiesWithCommands,
@@ -62,18 +63,30 @@ function isCommandAvailable(command: ResolvedSlashCommand) {
   return command.availability?.disabled !== true;
 }
 
-function matchesCommand(command: ResolvedSlashCommand, query: string) {
+function resolveCommandText(
+  value: unknown,
+  language: string | null | undefined,
+  fallback?: string,
+) {
+  return resolveLocalizedText(value, language ?? undefined) ?? fallback;
+}
+
+function matchesCommand(
+  command: ResolvedSlashCommand,
+  query: string,
+  language?: string | null,
+) {
   return matchesQuery(
     [
       command.name,
-      command.label,
-      command.description,
+      resolveCommandText(command.label, language, command.name),
+      resolveCommandText(command.description, language),
       command.category,
       command.argsHint,
       command.kind,
       command.workflow?.name,
-      command.workflow?.label,
-      command.workflow?.description,
+      resolveCommandText(command.workflow?.label, language),
+      resolveCommandText(command.workflow?.description, language),
       ...(command.workflow?.tags ?? []),
       ...command.aliases,
     ],
@@ -81,8 +94,16 @@ function matchesCommand(command: ResolvedSlashCommand, query: string) {
   );
 }
 
-function getCommandPaletteDescription(command: ResolvedSlashCommand) {
-  return [command.argsHint, command.description].filter(Boolean).join(' ');
+function getCommandPaletteDescription(
+  command: ResolvedSlashCommand,
+  language?: string | null,
+) {
+  return [
+    command.argsHint,
+    resolveCommandText(command.description, language),
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 function matchesCapability(
@@ -102,13 +123,16 @@ function matchesCapability(
   );
 }
 
-function getCommandPaletteOption(command: ResolvedSlashCommand) {
+function getCommandPaletteOption(
+  command: ResolvedSlashCommand,
+  language?: string | null,
+) {
   const capabilityType = CAPABILITY_GROUP_COMMANDS[command.name];
   return {
     kind: 'command' as const,
     id: command.id,
-    label: command.label,
-    description: getCommandPaletteDescription(command),
+    label: resolveCommandText(command.label, language, command.name) ?? command.name,
+    description: getCommandPaletteDescription(command, language),
     command,
     ...(capabilityType ? { capabilityType } : {}),
   };
@@ -121,6 +145,7 @@ export function createSlashPaletteOptions({
   runtimeCapabilityOptions,
   runtimeCapabilities,
   recommendedRuntimeCapabilities,
+  language,
 }: {
   palette: RuntimeCapabilityPaletteState | null;
   resolvedCommands: ResolvedSlashCommand[];
@@ -128,6 +153,7 @@ export function createSlashPaletteOptions({
   runtimeCapabilityOptions: RuntimeCapabilityOption[];
   runtimeCapabilities: RuntimeCapabilitiesWithCommands | null;
   recommendedRuntimeCapabilities: RuntimeCapabilitiesSelection | null;
+  language?: string | null;
 }): SlashPaletteOption[] {
   if (!palette) {
     return [];
@@ -173,8 +199,8 @@ export function createSlashPaletteOptions({
     for (const command of resolvedCommands.filter(isCommandAvailable)) {
       const capabilityType = CAPABILITY_GROUP_COMMANDS[command.name];
       if (!capabilityType) {
-        if (matchesCommand(command, query)) {
-          options.push(getCommandPaletteOption(command));
+        if (matchesCommand(command, query, language)) {
+          options.push(getCommandPaletteOption(command, language));
         }
         continue;
       }
@@ -182,14 +208,14 @@ export function createSlashPaletteOptions({
       const expanded = expandedCapabilityTypes.has(capabilityType);
       const childQuery = expanded ? '' : query;
       const children = getCapabilityOptions([capabilityType], childQuery);
-      const commandMatches = matchesCommand(command, query);
+      const commandMatches = matchesCommand(command, query, language);
       const autoExpanded = !expanded && Boolean(query) && children.length > 0;
       if (!commandMatches && !expanded && !autoExpanded) {
         continue;
       }
 
       options.push({
-        ...getCommandPaletteOption(command),
+        ...getCommandPaletteOption(command, language),
         expanded: expanded || autoExpanded,
         childCount: children.length,
       });

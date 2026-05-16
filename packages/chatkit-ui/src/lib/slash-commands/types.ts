@@ -1,7 +1,7 @@
 import type { RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitCommandSource,
-  ChatKitPromptWorkflow,
+  ChatKitI18nText,
   ChatKitSlashCommand,
   ChatKitSlashCommandAction,
   ChatKitSlashCommandCapability,
@@ -33,8 +33,8 @@ export type SlashCommandSource = 'builtin' | 'host' | 'runtime';
 export type ResolvedSlashCommand = {
   id: string;
   name: string;
-  label: string;
-  description?: string;
+  label: ChatKitI18nText;
+  description?: ChatKitI18nText;
   source: SlashCommandSource;
   action: ChatKitSlashCommandAction;
   category?: string;
@@ -43,7 +43,7 @@ export type ResolvedSlashCommand = {
   icon?: ChatKitSlashCommand['icon'];
   availability?: ChatKitSlashCommand['availability'];
   kind: ChatKitSlashCommandKind;
-  workflow?: ChatKitPromptWorkflow;
+  workflow?: ChatKitSlashCommand['workflow'];
 };
 
 export type SlashPaletteOption =

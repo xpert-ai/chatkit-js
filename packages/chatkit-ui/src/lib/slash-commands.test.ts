@@ -56,6 +56,7 @@ function getPaletteOptions(
     plugins: { nodeKeys: [] },
     subAgents: { nodeKeys: [] },
   },
+  language?: string | null,
 ) {
   return createSlashPaletteOptions({
     palette,
@@ -87,6 +88,7 @@ function getPaletteOptions(
     runtimeCapabilityOptions,
     runtimeCapabilities,
     recommendedRuntimeCapabilities: selectedRuntimeCapabilities,
+    language,
   });
 }
 
@@ -160,7 +162,7 @@ describe('slash command registry', () => {
     expect(commands.some((command) => command.name === 'empty')).toBe(false);
   });
 
-  it('normalizes prompt workflow metadata without changing action semantics', () => {
+  it('keeps prompt workflow metadata without changing action semantics', () => {
     const command = resolveSlashCommands(
       [
         {
@@ -185,14 +187,101 @@ describe('slash command registry', () => {
       kind: 'prompt_workflow',
       workflow: {
         type: 'prompt_workflow',
-        name: 'review',
-        label: 'Review',
-        description: 'Review selected files',
-        tags: ['quality'],
+        tags: ['quality', 'quality'],
       },
       action: {
         type: 'submit_prompt',
         template: 'Review {{args}}',
+      },
+    });
+  });
+
+  it('keeps command i18n objects until palette rendering and command execution', () => {
+    const commands = resolveSlashCommands(
+      [
+        {
+          name: 'compact',
+          label: {
+            en_US: 'Compress',
+            zh_Hans: '压缩',
+          },
+          description: {
+            en_US: 'Compress this thread context',
+            zh_Hans: '压缩此线程的上下文',
+          },
+          kind: 'prompt_workflow',
+          workflow: {
+            type: 'prompt_workflow',
+            label: {
+              en_US: 'Context compression',
+              zh_Hans: '上下文压缩',
+            },
+            description: {
+              en_US: 'Compress workflow',
+              zh_Hans: '压缩工作流',
+            },
+          },
+          action: {
+            type: 'submit_prompt',
+            template: '/compact',
+          },
+        },
+      ],
+      undefined,
+    );
+    const command = commands.find((item) => item.name === 'compact');
+
+    expect(command).toMatchObject({
+      label: {
+        en_US: 'Compress',
+        zh_Hans: '压缩',
+      },
+      description: {
+        en_US: 'Compress this thread context',
+        zh_Hans: '压缩此线程的上下文',
+      },
+      workflow: {
+        label: {
+          en_US: 'Context compression',
+          zh_Hans: '上下文压缩',
+        },
+        description: {
+          en_US: 'Compress workflow',
+          zh_Hans: '压缩工作流',
+        },
+      },
+    });
+
+    const paletteOption = createSlashPaletteOptions({
+      palette: resolveRuntimeCapabilityPalette('/', 1),
+      resolvedCommands: commands,
+      runtimeCapabilitiesReady: true,
+      runtimeCapabilityOptions,
+      runtimeCapabilities,
+      recommendedRuntimeCapabilities: {
+        mode: 'allowlist',
+        skills: { workspaceId: 'workspace-1', ids: [] },
+        plugins: { nodeKeys: [] },
+        subAgents: { nodeKeys: [] },
+      },
+      language: 'zh-CN',
+    }).find((item) => item.kind === 'command' && item.command.name === 'compact');
+
+    expect(paletteOption).toMatchObject({
+      label: '压缩',
+      description: '压缩此线程的上下文',
+    });
+
+    if (!command) {
+      throw new Error('Expected /compact to be registered.');
+    }
+
+    expect(createSlashCommandExecutionEffect(command, '', 'zh-CN')).toMatchObject({
+      commandSource: {
+        workflow: {
+          label: '上下文压缩',
+          description: '压缩工作流',
+        },
       },
     });
   });
