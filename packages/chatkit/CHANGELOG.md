@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.7
+
+### Patch Changes
+
+- 9423ff7: compress slash command
+
 ## 0.3.6
 
 ### Patch Changes
