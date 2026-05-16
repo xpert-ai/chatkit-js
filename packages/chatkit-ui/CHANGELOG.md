@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.9
+
+### Patch Changes
+
+- 4f3255c: slash command label i18n
+- Updated dependencies [4f3255c]
+  - @xpert-ai/chatkit-types@0.3.8
+
 ## 0.3.8
 
 ### Patch Changes
