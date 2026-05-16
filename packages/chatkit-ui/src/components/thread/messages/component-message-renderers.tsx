@@ -6,6 +6,7 @@ import type {
 } from '@xpert-ai/chatkit-types';
 
 import type { LocalizedText } from '../../../i18n/localized-text';
+import { isContextCompressionComponent } from './context-compression-message';
 import { knowledgeRetrieverComponentRenderer } from './knowledge-retriever-component-renderer';
 import { webSearchComponentRenderer } from './web-search-component-renderer';
 
@@ -49,6 +50,12 @@ export type ComponentMessageRenderer = {
 };
 
 const COMPONENT_MESSAGE_RENDERERS: ComponentMessageRenderer[] = [
+  {
+    id: 'context-compression',
+    presentation: 'standalone',
+    match: (content) => isContextCompressionComponent(content),
+    hasDetails: () => false,
+  },
   knowledgeRetrieverComponentRenderer,
   webSearchComponentRenderer,
 ];

@@ -304,7 +304,7 @@ export function SandboxShellToolCallCard({ data }: { data: ShellStepData }) {
 
   return (
     <div
-      className="flex max-h-64 min-w-0 flex-col overflow-hidden rounded-md bg-muted/60 px-3 py-2 text-left shadow-sm ring-1 ring-border/30 in-data-[density=compact]:max-h-52 in-data-[density=compact]:px-2 in-data-[density=compact]:py-1.5 in-data-[density=spacious]:max-h-80 in-data-[density=spacious]:px-4 in-data-[density=spacious]:py-3"
+      className="flex max-h-64 min-w-0 flex-col overflow-hidden rounded-md bg-muted/60 px-3 my-1 text-left shadow-sm ring-1 ring-border/30 in-data-[density=compact]:max-h-52 in-data-[density=compact]:px-2 in-data-[density=compact]:py-1.5 in-data-[density=spacious]:max-h-80 in-data-[density=spacious]:px-4 in-data-[density=spacious]:py-3"
       data-slot="sandbox-shell-tool-call"
       aria-label="Shell"
     >

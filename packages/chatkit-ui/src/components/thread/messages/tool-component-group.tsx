@@ -895,7 +895,7 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   const data = getToolStepData(content);
   if (isSandboxShellStep(data)) {
     return (
-      <div className="ml-6 mt-1">
+      <div className="ml-2 mt-1">
         <SandboxShellToolCallCard data={data} />
       </div>
     );
