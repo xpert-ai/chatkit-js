@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.8
+
+### Patch Changes
+
+- 4f3255c: slash command label i18n
+
 ## 0.3.7
 
 ### Patch Changes
