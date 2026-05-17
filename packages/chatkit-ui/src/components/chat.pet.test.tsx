@@ -38,7 +38,7 @@ const mocks = vi.hoisted(() => ({
     messages: [] as Array<{
       id?: string;
       type: string;
-      content: string;
+      content: unknown;
       createdAt?: string;
       updatedAt?: string;
     }>,
@@ -320,6 +320,69 @@ describe('Chat pet integration', () => {
         status: 'completed',
         messageId: 'assistant-1',
         updatedAt: '2026-05-05T00:00:00.000Z',
+      }),
+    );
+  });
+
+  it('uses the latest assistant text segment between tool calls for pet summaries', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.isLoading = true;
+    mocks.threads = [
+      {
+        id: 'thread-1',
+        title: 'Segmented answer',
+        status: 'running',
+      },
+    ];
+
+    const { rerender } = render(
+      <Chat options={{ ...baseOptions, pet: true }} />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
+    );
+    mocks.parentMessengerSendEvent.mockClear();
+
+    mocks.stream.messages = [
+      {
+        id: 'human-1',
+        type: 'human',
+        content: 'Please run a tool and then explain the result.',
+      },
+      {
+        id: 'assistant-1',
+        type: 'assistant',
+        content: [
+          { type: 'text', text: 'I will inspect the data first.' },
+          {
+            type: 'component',
+            data: {
+              category: 'Tool',
+              tool: 'read_file',
+              status: 'success',
+            },
+          },
+          { type: 'text', text: 'The first result is ready.' },
+        ],
+      },
+    ];
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+
+    await waitFor(() =>
+      expect(getThreadSummaryLogData()).toContainEqual(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          message: 'The first result is ready.',
+          messageId: 'assistant-1',
+          status: 'running',
+        }),
+      ),
+    );
+    expect(getThreadSummaryLogData()).not.toContainEqual(
+      expect.objectContaining({
+        message: 'I will inspect the data first.The first result is ready.',
       }),
     );
   });

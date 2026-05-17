@@ -55,6 +55,8 @@ const PET_SUMMARY_GAP = 12;
 const PET_SUMMARY_WIDTH = 320;
 const PET_SUMMARY_MARGIN = 12;
 const PET_CONTEXT_MENU_MARGIN = 8;
+const PET_SUMMARY_FONT_FAMILY =
+  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const PET_OVERLAY_COPY = {
   'en-US': {
     closePetMenuItem: 'Close pet',
@@ -82,6 +84,7 @@ const PET_OVERLAY_COPY = {
   },
 } satisfies Record<string, PetOverlayCopy>;
 type PetOverlayCopyLocale = keyof typeof PET_OVERLAY_COPY;
+type PetOverlayTheme = Exclude<NonNullable<ChatKitOptions['theme']>, string>;
 
 type DragAnimationName = Extract<
   ChatKitPetAnimationName,
@@ -93,6 +96,14 @@ type PetOverlayOptions = {
   onClose?: () => void;
   onReply?: (text: string) => Promise<void>;
   onThreadSummaryActivate?: (threadId: string) => void;
+};
+
+type SummaryDensityMetrics = {
+  padding: string;
+  gap: number;
+  marginTop: number;
+  toggleSize: number;
+  actionSize: number;
 };
 
 function stopEventPropagation(event: Event): void {
@@ -191,6 +202,71 @@ function resolveCopyLocale(locale?: string | null): PetOverlayCopyLocale {
   return 'en-US';
 }
 
+function getSummaryDensityMetrics(
+  density: NonNullable<PetOverlayTheme['density']>,
+): SummaryDensityMetrics {
+  switch (density) {
+    case 'compact':
+      return {
+        padding: '8px 10px',
+        gap: 6,
+        marginTop: 3,
+        toggleSize: 30,
+        actionSize: 22,
+      };
+    case 'spacious':
+      return {
+        padding: '14px 16px',
+        gap: 10,
+        marginTop: 6,
+        toggleSize: 38,
+        actionSize: 28,
+      };
+    case 'normal':
+    default:
+      return {
+        padding: '12px 14px',
+        gap: 8,
+        marginTop: 4,
+        toggleSize: 34,
+        actionSize: 26,
+      };
+  }
+}
+
+function getSummaryRadius(radius: PetOverlayTheme['radius']): number {
+  switch (radius) {
+    case 'pill':
+      return 24;
+    case 'round':
+      return 16;
+    case 'sharp':
+      return 0;
+    case 'soft':
+    default:
+      return 12;
+  }
+}
+
+function getSummaryThemeMetrics(theme?: ChatKitOptions['theme'] | null) {
+  const themeObject = typeof theme === 'string' ? null : theme;
+  const baseSize = themeObject?.typography?.baseSize ?? 16;
+  const density = themeObject?.density ?? 'normal';
+  const densityOffset =
+    density === 'compact' ? -1 : density === 'spacious' ? 1 : 0;
+  const bodySize = clampNumber(baseSize - 2 + densityOffset, 11, 17);
+  const densityMetrics = getSummaryDensityMetrics(density);
+
+  return {
+    ...densityMetrics,
+    bodySize,
+    titleSize: bodySize + 1,
+    iconSize: clampNumber(bodySize + 2, 13, 19),
+    radius: getSummaryRadius(themeObject?.radius),
+    fontFamily: themeObject?.typography?.fontFamily ?? PET_SUMMARY_FONT_FAMILY,
+  };
+}
+
 function isPetState(value: unknown): value is ChatKitPetAnimationName {
   return (
     value === 'idle' ||
@@ -252,6 +328,16 @@ function getThreadSummaryKey(summary: ThreadSummary | null): string | null {
     summary.threadId,
     summary.messageId || summary.updatedAt || summary.message,
   ].join(':');
+}
+
+function getThreadSummaryInteractionKey(
+  summary: ThreadSummary | null,
+): string | null {
+  if (!summary) {
+    return null;
+  }
+
+  return [summary.threadId, summary.messageId ?? ''].join(':');
 }
 
 function parseThreadSummaryPayload(
@@ -332,6 +418,7 @@ export class PetOverlay {
   private summaryToggleElement: HTMLButtonElement | null = null;
   private mediaElement: HTMLElement | null = null;
   private options: NormalizedPetOptions | null = null;
+  private theme: ChatKitOptions['theme'] | null = null;
   private resolved: ResolvedPetCharacter | null = null;
   private summary: ThreadSummary | null = null;
   private summaryRenderKey: string | null = null;
@@ -387,10 +474,14 @@ export class PetOverlay {
     this.render();
   }
 
-  setOptions(pet: ChatKitOptions['pet'] | null): void {
+  setOptions(
+    pet: ChatKitOptions['pet'] | null,
+    theme?: ChatKitOptions['theme'],
+  ): void {
     this.closeContextMenu();
     const nextOptions = normalizePetOptions(pet);
     this.options = nextOptions;
+    this.theme = theme ?? null;
 
     if (!nextOptions) {
       this.isDragging = false;
@@ -455,8 +546,8 @@ export class PetOverlay {
   }
 
   setThreadSummary(summary: ThreadSummary | null): void {
-    const previousKey = getThreadSummaryKey(this.summary);
-    const nextKey = getThreadSummaryKey(summary);
+    const previousKey = getThreadSummaryInteractionKey(this.summary);
+    const nextKey = getThreadSummaryInteractionKey(summary);
     this.summary = summary;
 
     if (!summary) {
@@ -816,10 +907,6 @@ export class PetOverlay {
     }
 
     const nextRenderKey = [
-      summaryKey,
-      summary.title,
-      summary.message,
-      summary.status,
       this.copyLocale,
       this.isSummaryExpanded ? 'expanded' : 'compact',
       this.isSummaryHovering ? 'hover' : 'rest',
@@ -843,6 +930,7 @@ export class PetOverlay {
       }
     }
 
+    this.updateSummaryBubbleContent(summary);
     this.positionSummaryBubble(position, size);
   }
 
@@ -870,7 +958,7 @@ export class PetOverlay {
     }
 
     const viewport = getViewportSize();
-    const badgeSize = 34;
+    const badgeSize = getSummaryThemeMetrics(this.theme).toggleSize;
     const x = clampNumber(
       position.x + size.width - badgeSize * 0.35,
       PET_SUMMARY_MARGIN,
@@ -922,6 +1010,8 @@ export class PetOverlay {
 
   private createSummaryBubble(summary: ThreadSummary): HTMLDivElement {
     const shouldShowReplyButton = this.isSummaryHovering && !this.isReplyOpen;
+    const metrics = getSummaryThemeMetrics(this.theme);
+
     const bubble = document.createElement('div');
     bubble.setAttribute('data-chatkit-pet-summary', '');
     bubble.addEventListener('pointerenter', this.handleSummaryPointerEnter);
@@ -932,21 +1022,19 @@ export class PetOverlay {
     bubble.style.left = '0';
     bubble.style.boxSizing = 'border-box';
     bubble.style.pointerEvents = 'auto';
-    bubble.style.padding = '12px 14px';
-    bubble.style.paddingBottom = '12px';
+    bubble.style.padding = metrics.padding;
     bubble.style.border = '1px solid rgba(148, 163, 184, 0.22)';
-    bubble.style.borderRadius = '22px';
+    bubble.style.borderRadius = `${metrics.radius}px`;
     bubble.style.background = 'rgba(255, 255, 255, 0.94)';
     bubble.style.color = '#1f2937';
     bubble.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.1)';
-    bubble.style.font =
-      '500 14px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    bubble.style.font = `500 ${metrics.bodySize}px/1.35 ${metrics.fontFamily}`;
     bubble.style.backdropFilter = 'blur(10px)';
 
     const header = document.createElement('div');
     header.style.display = 'flex';
     header.style.alignItems = 'center';
-    header.style.gap = '8px';
+    header.style.gap = `${metrics.gap}px`;
 
     if (this.isSummaryHovering || this.isReplyOpen) {
       header.append(
@@ -966,7 +1054,8 @@ export class PetOverlay {
     title.style.textOverflow = 'ellipsis';
     title.style.whiteSpace = 'nowrap';
     title.style.fontWeight = '700';
-    title.style.fontSize = '15px';
+    title.style.fontSize = `${metrics.titleSize}px`;
+    title.dataset.chatkitPetSummaryTitle = '';
     header.append(title);
 
     if (this.isSummaryHovering || this.isReplyOpen) {
@@ -985,7 +1074,7 @@ export class PetOverlay {
 
     const message = document.createElement('div');
     message.textContent = summary.message;
-    message.style.marginTop = '4px';
+    message.style.marginTop = `${metrics.marginTop}px`;
     message.style.fontWeight = '400';
     message.style.color = '#374151';
     message.style.overflow = 'hidden';
@@ -997,6 +1086,7 @@ export class PetOverlay {
       message.style.setProperty('-webkit-line-clamp', '2');
       message.style.setProperty('-webkit-box-orient', 'vertical');
     }
+    message.dataset.chatkitPetSummaryMessage = '';
 
     bubble.append(header, message);
 
@@ -1018,7 +1108,35 @@ export class PetOverlay {
     return bubble;
   }
 
+  private updateSummaryBubbleContent(summary: ThreadSummary): void {
+    const title = this.summaryElement?.querySelector<HTMLElement>(
+      '[data-chatkit-pet-summary-title]',
+    );
+    if (title && title.textContent !== summary.title) {
+      title.textContent = summary.title;
+    }
+
+    const message = this.summaryElement?.querySelector<HTMLElement>(
+      '[data-chatkit-pet-summary-message]',
+    );
+    if (message && message.textContent !== summary.message) {
+      message.textContent = summary.message;
+    }
+
+    const statusIcon = this.summaryElement?.querySelector<HTMLElement>(
+      '[data-chatkit-pet-summary-status]',
+    );
+    if (
+      statusIcon &&
+      statusIcon.dataset.chatkitPetSummaryStatus !== summary.status
+    ) {
+      const nextIcon = this.createStatusIcon(summary.status);
+      statusIcon.replaceWith(nextIcon);
+    }
+  }
+
   private createSummaryToggleButton(label: string): HTMLButtonElement {
+    const metrics = getSummaryThemeMetrics(this.theme);
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -1035,8 +1153,7 @@ export class PetOverlay {
     button.style.color = '#475569';
     button.style.boxShadow = '0 6px 18px rgba(15, 23, 42, 0.1)';
     button.style.cursor = 'pointer';
-    button.style.font =
-      '600 15px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    button.style.font = `600 ${metrics.titleSize}px/1 ${metrics.fontFamily}`;
     button.style.display = 'flex';
     button.style.alignItems = 'center';
     button.style.justifyContent = 'center';
@@ -1044,11 +1161,14 @@ export class PetOverlay {
   }
 
   private createStatusIcon(status: ThreadSummaryStatus): HTMLSpanElement {
+    const metrics = getSummaryThemeMetrics(this.theme);
+    const iconSize = metrics.iconSize;
     const icon = document.createElement('span');
     icon.setAttribute('aria-hidden', 'true');
+    icon.dataset.chatkitPetSummaryStatus = status;
     icon.style.display = 'inline-flex';
-    icon.style.width = '16px';
-    icon.style.height = '16px';
+    icon.style.width = `${iconSize}px`;
+    icon.style.height = `${iconSize}px`;
     icon.style.alignItems = 'center';
     icon.style.justifyContent = 'center';
     icon.style.flex = '0 0 auto';
@@ -1062,7 +1182,7 @@ export class PetOverlay {
     }
 
     icon.style.borderRadius = '999px';
-    icon.style.fontSize = '12px';
+    icon.style.fontSize = `${Math.max(10, iconSize - 4)}px`;
     icon.style.fontWeight = '700';
     if (status === 'failed') {
       icon.textContent = '!';
@@ -1075,8 +1195,8 @@ export class PetOverlay {
     icon.style.border = '2px solid #22c55e';
     icon.style.position = 'relative';
     const check = document.createElement('span');
-    check.style.width = '7px';
-    check.style.height = '4px';
+    check.style.width = `${Math.round(iconSize * 0.44)}px`;
+    check.style.height = `${Math.round(iconSize * 0.25)}px`;
     check.style.borderLeft = '2px solid #22c55e';
     check.style.borderBottom = '2px solid #22c55e';
     check.style.transform = 'rotate(-45deg) translate(1px, -1px)';
@@ -1089,6 +1209,7 @@ export class PetOverlay {
     title: string,
     onClick: () => void,
   ): HTMLButtonElement {
+    const metrics = getSummaryThemeMetrics(this.theme);
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -1098,15 +1219,14 @@ export class PetOverlay {
       event.stopPropagation();
       onClick();
     });
-    button.style.width = '26px';
-    button.style.height = '26px';
+    button.style.width = `${metrics.actionSize}px`;
+    button.style.height = `${metrics.actionSize}px`;
     button.style.border = '0';
     button.style.borderRadius = '999px';
     button.style.background = 'rgba(241, 245, 249, 0.96)';
     button.style.color = '#475569';
     button.style.cursor = 'pointer';
-    button.style.font =
-      '600 15px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    button.style.font = `600 ${metrics.titleSize}px/1 ${metrics.fontFamily}`;
     return button;
   }
 

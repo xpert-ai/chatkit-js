@@ -64,12 +64,45 @@ function formatUnknownMessageContent(content: unknown): string {
   return typeof contentWithText.text === 'string' ? contentWithText.text : '';
 }
 
+function normalizeMessageText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function isSummaryTextBoundary(content: unknown): boolean {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) {
+    return false;
+  }
+
+  return (content as { type?: unknown }).type === 'component';
+}
+
+function getLatestMessageTextSegment(content: unknown): string {
+  if (!Array.isArray(content)) {
+    return formatUnknownMessageContent(content);
+  }
+
+  let currentSegment = '';
+  let latestSegment = '';
+
+  for (const item of content) {
+    if (isSummaryTextBoundary(item)) {
+      if (normalizeMessageText(currentSegment)) {
+        latestSegment = currentSegment;
+      }
+      currentSegment = '';
+      continue;
+    }
+
+    currentSegment += formatUnknownMessageContent(item);
+  }
+
+  return normalizeMessageText(currentSegment) ? currentSegment : latestSegment;
+}
+
 function getMessagePlainText(
   message: ConversationSummarySourceMessage,
 ): string {
-  return formatUnknownMessageContent(message.content)
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeMessageText(getLatestMessageTextSegment(message.content));
 }
 
 function findLatestMessageMatchByType(

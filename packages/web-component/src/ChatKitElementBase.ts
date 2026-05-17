@@ -407,7 +407,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   #syncPetOverlayOptions() {
     const overlayPetOptions = this.#getOverlayPetOptions();
-    this.#petOverlay.setOptions(overlayPetOptions);
+    this.#petOverlay.setOptions(overlayPetOptions, this.#opts?.theme);
     if (!overlayPetOptions) {
       this.#setChatMinimizedToPet(false);
     }
