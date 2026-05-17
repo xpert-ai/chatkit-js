@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-web-component",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Web Component for Xpert Chatkit",
   "type": "module",
   "main": "./dist/xpert-chatkit.js",

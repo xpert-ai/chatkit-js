@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.10
+
+### Patch Changes
+
+- 21d6bd5: pet overlay loading & theme
+
 ## 0.3.9
 
 ### Patch Changes
