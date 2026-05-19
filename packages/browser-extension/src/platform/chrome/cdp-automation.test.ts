@@ -1084,6 +1084,36 @@ describe('CDP host automation', () => {
     });
   });
 
+  it('validates pointer target text inside same-origin iframes', async () => {
+    installSameOriginFrameFixture();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 440,
+          y: 565,
+          targetText: '执行',
+        },
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('success');
+    expect(content).toMatchObject({
+      ok: true,
+      result: {
+        pointer: 'click',
+        point: { x: 440, y: 565 },
+        targetTextMatched: true,
+        hitTarget: { tag: 'button', role: 'button', name: '执行' },
+      },
+    });
+  });
+
   it('returns screenshots through artifacts instead of model-facing base64 content', async () => {
     const screenshotData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
     const sendCommand = vi.fn(async (_target, method) => {

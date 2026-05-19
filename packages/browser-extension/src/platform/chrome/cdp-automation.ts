@@ -1211,7 +1211,51 @@ function pageNormalizePointerPointScript(rawArgs: unknown) {
       .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase();
-  const hitTarget = document.elementFromPoint(point.x, point.y);
+  const isFrameElement = (element: Element): element is HTMLIFrameElement =>
+    element.tagName.toLowerCase() === 'iframe';
+  const getFrameDocument = (frame: Element) => {
+    if (!isFrameElement(frame)) return null;
+    try {
+      return frame.contentDocument;
+    } catch {
+      return null;
+    }
+  };
+  const getFrameOffset = (doc: Document) => {
+    let offsetX = 0;
+    let offsetY = 0;
+    let view = doc.defaultView;
+    while (view?.frameElement) {
+      const frame = view.frameElement;
+      const rect = frame.getBoundingClientRect();
+      offsetX += rect.left;
+      offsetY += rect.top;
+      view = frame.ownerDocument.defaultView;
+    }
+    return { x: offsetX, y: offsetY };
+  };
+  const getDeepHitStack = (
+    hitPoint: { x: number; y: number },
+    doc: Document = document,
+  ): Element[] => {
+    const offset = getFrameOffset(doc);
+    const localX = hitPoint.x - offset.x;
+    const localY = hitPoint.y - offset.y;
+    const stack =
+      typeof doc.elementsFromPoint === 'function'
+        ? doc.elementsFromPoint(localX, localY)
+        : ([doc.elementFromPoint(localX, localY)].filter(Boolean) as Element[]);
+    const result: Element[] = [];
+    for (const hit of stack) {
+      const childDocument = getFrameDocument(hit);
+      if (childDocument) {
+        result.push(...getDeepHitStack(hitPoint, childDocument));
+      }
+      result.push(hit);
+    }
+    return result;
+  };
+  const hitTarget = getDeepHitStack(point)[0];
   let targetTextMatched: boolean | undefined;
   if (targetText && hitTarget) {
     let current: Element | null = hitTarget;
