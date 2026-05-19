@@ -470,6 +470,115 @@ describe('HostPageAutomationExecutor', () => {
     });
   });
 
+  it('supports normalized pointer coordinates and verifies expected field content after click', async () => {
+    document.body.innerHTML = `
+      <button id="department-option">智造技术研究部</button>
+      <label>部门名称 <input id="department-name" value="" /></label>
+    `;
+    const option = document.getElementById('department-option');
+    const field = document.querySelector<HTMLInputElement>('#department-name');
+    if (!option || !field) {
+      throw new Error('Missing department fixture.');
+    }
+    mockRect(option, createDomRect(400, 300, 120, 40));
+    option.addEventListener('click', () => {
+      field.value = '智造技术研究部';
+    });
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 600,
+    });
+    const restoreElementFromPoint = mockElementFromPoint(option);
+    const executor = new HostPageAutomationExecutor();
+
+    try {
+      const result = await executor.execute('host_page_pointer', {
+        coordinateSpace: 'viewport_normalized',
+        x: 0.42,
+        y: 0.57,
+        targetText: '智造技术研究部',
+        expectedAfterClick: {
+          type: 'field_contains',
+          field: '部门名称',
+          value: '智造技术研究部',
+        },
+      });
+
+      expect(result).toMatchObject({
+        pointer: 'click',
+        coordinateSpace: 'viewport-css-px',
+        point: { x: 420, y: 342 },
+        targetTextMatched: true,
+        expectedAfterClick: {
+          ok: true,
+          type: 'field_contains',
+          field: '部门名称',
+          value: '智造技术研究部',
+          actual: '智造技术研究部',
+        },
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('rejects pointer clicks when the hit target does not match targetText', async () => {
+    document.body.innerHTML = `
+      <button id="department-option">项目交付部</button>
+      <button id="itinerary-cell">行程明细</button>
+    `;
+    const option = document.getElementById('department-option');
+    const itineraryCell = document.getElementById('itinerary-cell');
+    if (!option || !itineraryCell) {
+      throw new Error('Missing pointer mismatch fixture.');
+    }
+    const optionClick = vi.fn();
+    option.addEventListener('click', optionClick);
+    const restoreElementFromPoint = mockElementFromPoint(itineraryCell);
+    const executor = new HostPageAutomationExecutor();
+
+    try {
+      await expect(
+        executor.execute('host_page_pointer', {
+          x: 10,
+          y: 10,
+          targetText: '项目交付部',
+        }),
+      ).rejects.toThrow('Pointer target text mismatch');
+      expect(optionClick).not.toHaveBeenCalled();
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('rejects explicit coordinate clicks without targetText', async () => {
+    document.body.innerHTML = `<button id="menu">其他菜单</button>`;
+    const menu = document.getElementById('menu');
+    if (!menu) {
+      throw new Error('Missing menu fixture.');
+    }
+    const menuClick = vi.fn();
+    menu.addEventListener('click', menuClick);
+    const restoreElementFromPoint = mockElementFromPoint(menu);
+    const executor = new HostPageAutomationExecutor();
+
+    try {
+      await expect(
+        executor.execute('host_page_pointer', {
+          x: 10,
+          y: 10,
+        }),
+      ).rejects.toThrow('Pointer coordinate clicks require targetText');
+      expect(menuClick).not.toHaveBeenCalled();
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
   it('fills a target by selector and dispatches input events', async () => {
     document.body.innerHTML = `<input id="name" />`;
     const input = document.querySelector<HTMLInputElement>('#name');

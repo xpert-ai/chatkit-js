@@ -19,6 +19,8 @@ type ResolvableTargetParams = {
   testId?: unknown;
   x?: unknown;
   y?: unknown;
+  coordinateSpace?: unknown;
+  targetText?: unknown;
 };
 
 type FillParams = ResolvableTargetParams & {
@@ -38,6 +40,13 @@ type PointerParams = ResolvableTargetParams & {
   toX?: unknown;
   toY?: unknown;
   button?: unknown;
+  expectedAfterClick?: unknown;
+};
+
+type ExpectedAfterClickFieldContains = {
+  type: 'field_contains';
+  field: string;
+  value: string;
 };
 
 type WaitForParams = ResolvableTargetParams & {
@@ -126,6 +135,29 @@ function readString(value: unknown, field: string): string {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function readCoordinateSpace(value: unknown) {
+  return value === 'viewport_normalized'
+    ? 'viewport_normalized'
+    : 'viewport-css-px';
+}
+
+function readPoint(
+  root: Document | ShadowRoot,
+  params: ResolvableTargetParams,
+): Point {
+  const x = readNumber(params.x, 'x');
+  const y = readNumber(params.y, 'y');
+  if (readCoordinateSpace(params.coordinateSpace) === 'viewport_normalized') {
+    const view = getWindow(root);
+    return {
+      x: Number((x * view.innerWidth).toFixed(3)),
+      y: Number((y * view.innerHeight).toFixed(3)),
+    };
+  }
+
+  return { x, y };
 }
 
 function readOptionalInteger(value: unknown): number | undefined {
@@ -986,8 +1018,112 @@ function findBySemanticTarget(
   );
 }
 
-function collectElements(root: Document | ShadowRoot): Element[] {
-  const doc = getOwnerDocument(root);
+function getElementHitTargetText(element: Element): string {
+  return [
+    getElementName(element),
+    getControlLabel(element),
+    getChoiceGroupLabel(element),
+    getElementText(element),
+    getElementValue(element),
+  ]
+    .filter((text): text is string => Boolean(text))
+    .join(' ')
+    .toLowerCase();
+}
+
+function elementOrAncestorMatchesText(
+  element: Element,
+  targetText: string,
+): boolean {
+  const expected = targetText.trim().toLowerCase();
+  let current: Element | null = element;
+  let depth = 0;
+
+  while (current && depth < 5) {
+    const tag = current.tagName.toLowerCase();
+    if (tag === 'body' || tag === 'html') {
+      return false;
+    }
+
+    if (getElementHitTargetText(current).includes(expected)) {
+      return true;
+    }
+
+    current = current.parentElement;
+    depth += 1;
+  }
+
+  return false;
+}
+
+function readExpectedAfterClick(
+  value: unknown,
+): ExpectedAfterClickFieldContains | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.type === 'field_contains' &&
+    typeof candidate.field === 'string' &&
+    candidate.field.trim() &&
+    typeof candidate.value === 'string'
+  ) {
+    return {
+      type: 'field_contains',
+      field: candidate.field,
+      value: candidate.value,
+    };
+  }
+
+  return undefined;
+}
+
+function findFieldByLabel(
+  root: Document | ShadowRoot,
+  field: string,
+): Element | undefined {
+  const expected = field.trim().toLowerCase();
+  return Array.from(root.querySelectorAll('input,textarea,select')).find(
+    (element) => {
+      const labels = [
+        getControlLabel(element),
+        getElementName(element),
+        element.getAttribute('name') ?? undefined,
+        element.getAttribute('placeholder') ?? undefined,
+        ...getNearbyText(element),
+      ];
+      return labels.some((label) =>
+        label?.trim().toLowerCase().includes(expected),
+      );
+    },
+  );
+}
+
+function evaluateExpectedAfterClick(
+  root: Document | ShadowRoot,
+  expected: ExpectedAfterClickFieldContains | undefined,
+) {
+  if (!expected) {
+    return undefined;
+  }
+
+  const field = findFieldByLabel(root, expected.field);
+  const actual = field ? (getElementValue(field) ?? '') : undefined;
+  return {
+    ...expected,
+    ok:
+      typeof actual === 'string' &&
+      actual.toLowerCase().includes(expected.value.toLowerCase()),
+    actual,
+    matchedField: field ? summarizeElement(field) : undefined,
+  };
+}
+
+function collectElements(root: Document | ShadowRoot | Element): Element[] {
+  const doc =
+    root instanceof Element ? root.ownerDocument : getOwnerDocument(root);
   const start =
     root instanceof Document ? (root.body ?? root.documentElement) : root;
   if (!start) {
@@ -1287,10 +1423,7 @@ export class HostPageAutomationExecutor {
     }
 
     if (typeof params.x !== 'undefined' || typeof params.y !== 'undefined') {
-      const point = {
-        x: readNumber(params.x, 'x'),
-        y: readNumber(params.y, 'y'),
-      };
+      const point = readPoint(this.getRoot(), params);
       const element = getOwnerDocument(this.getRoot()).elementFromPoint(
         point.x,
         point.y,
@@ -1603,6 +1736,14 @@ export class HostPageAutomationExecutor {
       readOptionalEnum(input.action, ['move', 'down', 'up', 'click'] as const) ??
       'click';
     const button = readOptionalInteger(input.button) ?? 0;
+    const hasExplicitPoint =
+      typeof input.x !== 'undefined' || typeof input.y !== 'undefined';
+    const targetText = readOptionalString(input.targetText);
+    if (action === 'click' && hasExplicitPoint && !targetText) {
+      throw new Error(
+        'Pointer coordinate clicks require targetText to avoid unintended navigation.',
+      );
+    }
     const element =
       input.ref ||
       input.selector ||
@@ -1614,10 +1755,7 @@ export class HostPageAutomationExecutor {
         : null;
     const point = element
       ? getActionability(element).center
-      : {
-          x: readNumber(input.x, 'x'),
-          y: readNumber(input.y, 'y'),
-        };
+      : readPoint(this.getRoot(), input);
     if (!point) {
       throw new Error('Target element has no clickable point.');
     }
@@ -1627,6 +1765,15 @@ export class HostPageAutomationExecutor {
 
     if (!target) {
       throw new Error(`No element found at (${point.x}, ${point.y}).`);
+    }
+
+    const targetTextMatched = targetText
+      ? elementOrAncestorMatchesText(target, targetText)
+      : undefined;
+    if (targetText && !targetTextMatched) {
+      throw new Error(
+        `Pointer target text mismatch: expected hit target to contain "${targetText}".`,
+      );
     }
 
     const eventInit = {
@@ -1688,7 +1835,16 @@ export class HostPageAutomationExecutor {
     return {
       pointer: action,
       point,
+      coordinateSpace: 'viewport-css-px',
       target: this.describeElement(target),
+      targetTextMatched,
+      expectedAfterClick:
+        action === 'click'
+          ? evaluateExpectedAfterClick(
+              this.getRoot(),
+              readExpectedAfterClick(input.expectedAfterClick),
+            )
+          : undefined,
     };
   }
 
