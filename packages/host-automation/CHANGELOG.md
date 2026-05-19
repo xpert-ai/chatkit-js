@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-host-automation
 
+## 0.3.5
+
+### Patch Changes
+
+- 7f2a0a4: add safe host pointer coordinates
+
 ## 0.3.4
 
 ### Patch Changes
