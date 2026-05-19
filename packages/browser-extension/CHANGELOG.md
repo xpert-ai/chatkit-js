@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-browser-extension
 
+## 0.3.5
+
+### Patch Changes
+
+- 0c684ac: add safe host pointer coordinates
+
 ## 0.3.4
 
 ### Patch Changes
