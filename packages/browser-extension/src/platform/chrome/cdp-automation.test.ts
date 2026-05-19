@@ -368,6 +368,192 @@ describe('CDP host automation', () => {
     });
   });
 
+  it('uses normalized pointer coordinates and returns click expectation results', async () => {
+    document.body.innerHTML = `
+      <button id="department-option">智造技术研究部</button>
+      <label>部门名称 <input id="department-name" value="" /></label>
+    `;
+    const option = document.getElementById('department-option');
+    const field = document.querySelector<HTMLInputElement>('#department-name');
+    if (!option || !field) {
+      throw new Error('department fixture is unavailable.');
+    }
+    mockRect(option, createDomRect(400, 300, 120, 40));
+    option.addEventListener('click', () => {
+      field.value = '智造技术研究部';
+    });
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 600,
+    });
+    document.elementsFromPoint = vi.fn(() => [option, document.body]);
+    document.elementFromPoint = vi.fn(() => option);
+    const debuggerApi = createDebuggerApi(
+      vi.fn(async (_target, method, commandParams) => {
+        if (method === 'Runtime.evaluate') {
+          const expression =
+            commandParams && typeof commandParams.expression === 'string'
+              ? commandParams.expression
+              : '';
+          return {
+            result: {
+              value: await eval(expression),
+            },
+          };
+        }
+        if (
+          method === 'Input.dispatchMouseEvent' &&
+          commandParams &&
+          typeof commandParams === 'object' &&
+          'type' in commandParams &&
+          commandParams.type === 'mouseReleased'
+        ) {
+          option.click();
+        }
+        return {};
+      }),
+    );
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          coordinateSpace: 'viewport_normalized',
+          x: 0.42,
+          y: 0.57,
+          targetText: '智造技术研究部',
+          expectedAfterClick: {
+            type: 'field_contains',
+            field: '部门名称',
+            value: '智造技术研究部',
+          },
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.result).toMatchObject({
+      pointer: 'click',
+      coordinateSpace: 'viewport-css-px',
+      point: { x: 420, y: 342 },
+      targetTextMatched: true,
+      expectedAfterClick: {
+        ok: true,
+        type: 'field_contains',
+        field: '部门名称',
+        value: '智造技术研究部',
+        actual: '智造技术研究部',
+      },
+    });
+  });
+
+  it('rejects pointer clicks when the hit target does not match targetText', async () => {
+    document.body.innerHTML = `
+      <button id="department-option">项目交付部</button>
+      <button id="itinerary-cell">行程明细</button>
+    `;
+    const option = document.getElementById('department-option');
+    const itineraryCell = document.getElementById('itinerary-cell');
+    if (!option || !itineraryCell) {
+      throw new Error('pointer mismatch fixture is unavailable.');
+    }
+    const optionClick = vi.fn();
+    option.addEventListener('click', optionClick);
+    document.elementFromPoint = vi.fn(() => itineraryCell);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 10,
+          y: 10,
+          targetText: '项目交付部',
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.ok).toBe(false);
+    expect(content.error).toContain('Pointer target text mismatch');
+    expect(optionClick).not.toHaveBeenCalled();
+  });
+
+  it('rejects explicit coordinate clicks without targetText', async () => {
+    document.body.innerHTML = `<button id="menu">其他菜单</button>`;
+    const menu = document.getElementById('menu');
+    if (!menu) {
+      throw new Error('menu fixture is unavailable.');
+    }
+    const menuClick = vi.fn();
+    menu.addEventListener('click', menuClick);
+    document.elementFromPoint = vi.fn(() => menu);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 10,
+          y: 10,
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.ok).toBe(false);
+    expect(content.error).toContain(
+      'Pointer coordinate clicks require targetText',
+    );
+    expect(menuClick).not.toHaveBeenCalled();
+  });
+
+  it('rejects explicit coordinate clicks with blank targetText', async () => {
+    document.body.innerHTML = `<button id="menu">其他菜单</button>`;
+    const menu = document.getElementById('menu');
+    if (!menu) {
+      throw new Error('menu fixture is unavailable.');
+    }
+    const menuClick = vi.fn();
+    menu.addEventListener('click', menuClick);
+    document.elementFromPoint = vi.fn(() => menu);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 10,
+          y: 10,
+          targetText: '   ',
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.ok).toBe(false);
+    expect(content.error).toContain(
+      'Pointer coordinate clicks require targetText',
+    );
+    expect(menuClick).not.toHaveBeenCalled();
+  });
+
   it('uses CDP mouse events for clicks', async () => {
     const sendCommand = vi.fn(async (_target, method) => {
       if (method === 'Runtime.evaluate') {
@@ -609,6 +795,7 @@ describe('CDP host automation', () => {
           action: 'click',
           x: 320,
           y: 480,
+          targetText: 'Execute',
           button: 'right',
           clickCount: 2,
         },
@@ -892,6 +1079,36 @@ describe('CDP host automation', () => {
       result: {
         pointer: 'move',
         point: { x: 440, y: 565 },
+        hitTarget: { tag: 'button', role: 'button', name: '执行' },
+      },
+    });
+  });
+
+  it('validates pointer target text inside same-origin iframes', async () => {
+    installSameOriginFrameFixture();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 440,
+          y: 565,
+          targetText: '执行',
+        },
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('success');
+    expect(content).toMatchObject({
+      ok: true,
+      result: {
+        pointer: 'click',
+        point: { x: 440, y: 565 },
+        targetTextMatched: true,
         hitTarget: { tag: 'button', role: 'button', name: '执行' },
       },
     });

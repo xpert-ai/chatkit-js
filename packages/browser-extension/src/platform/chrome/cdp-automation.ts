@@ -1174,6 +1174,166 @@ function pageSnapshotScript(rawArgs: unknown) {
   };
 }
 
+function pageNormalizePointerPointScript(rawArgs: unknown) {
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  const x = typeof params.x === 'number' ? params.x : Number.NaN;
+  const y = typeof params.y === 'number' ? params.y : Number.NaN;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new Error('x and y must be finite numbers.');
+  }
+  const point =
+    params.coordinateSpace === 'viewport_normalized'
+      ? {
+          x: Number((x * innerWidth).toFixed(3)),
+          y: Number((y * innerHeight).toFixed(3)),
+        }
+      : { x, y };
+  const targetText =
+    typeof params.targetText === 'string' && params.targetText.trim()
+      ? params.targetText.trim().toLowerCase()
+      : undefined;
+  const getText = (element: Element) =>
+    [
+      element.getAttribute('aria-label'),
+      element.getAttribute('title'),
+      element.textContent,
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement ||
+      element instanceof HTMLSelectElement
+        ? element.value
+        : undefined,
+    ]
+      .filter((text): text is string => Boolean(text))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  const isFrameElement = (element: Element): element is HTMLIFrameElement =>
+    element.tagName.toLowerCase() === 'iframe';
+  const getFrameDocument = (frame: Element) => {
+    if (!isFrameElement(frame)) return null;
+    try {
+      return frame.contentDocument;
+    } catch {
+      return null;
+    }
+  };
+  const getFrameOffset = (doc: Document) => {
+    let offsetX = 0;
+    let offsetY = 0;
+    let view = doc.defaultView;
+    while (view?.frameElement) {
+      const frame = view.frameElement;
+      const rect = frame.getBoundingClientRect();
+      offsetX += rect.left;
+      offsetY += rect.top;
+      view = frame.ownerDocument.defaultView;
+    }
+    return { x: offsetX, y: offsetY };
+  };
+  const getDeepHitStack = (
+    hitPoint: { x: number; y: number },
+    doc: Document = document,
+  ): Element[] => {
+    const offset = getFrameOffset(doc);
+    const localX = hitPoint.x - offset.x;
+    const localY = hitPoint.y - offset.y;
+    const stack =
+      typeof doc.elementsFromPoint === 'function'
+        ? doc.elementsFromPoint(localX, localY)
+        : ([doc.elementFromPoint(localX, localY)].filter(Boolean) as Element[]);
+    const result: Element[] = [];
+    for (const hit of stack) {
+      const childDocument = getFrameDocument(hit);
+      if (childDocument) {
+        result.push(...getDeepHitStack(hitPoint, childDocument));
+      }
+      result.push(hit);
+    }
+    return result;
+  };
+  const hitTarget = getDeepHitStack(point)[0];
+  let targetTextMatched: boolean | undefined;
+  if (targetText && hitTarget) {
+    let current: Element | null = hitTarget;
+    let depth = 0;
+    targetTextMatched = false;
+    while (current && depth < 5) {
+      const tag = current.tagName.toLowerCase();
+      if (tag === 'body' || tag === 'html') {
+        break;
+      }
+      if (getText(current).includes(targetText)) {
+        targetTextMatched = true;
+        break;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+  }
+  return { point, targetTextMatched };
+}
+
+function pageExpectedAfterClickScript(rawArgs: unknown) {
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  const expected = params.expectedAfterClick;
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) {
+    return undefined;
+  }
+  const candidate = expected as Record<string, unknown>;
+  if (
+    candidate.type !== 'field_contains' ||
+    typeof candidate.field !== 'string' ||
+    !candidate.field.trim() ||
+    typeof candidate.value !== 'string'
+  ) {
+    return undefined;
+  }
+  const field = candidate.field.trim().toLowerCase();
+  const value = candidate.value;
+  const getControlLabel = (
+    element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  ) => {
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    if (ariaLabel) return ariaLabel;
+    const labels = Array.from(element.labels ?? [])
+      .map((label) => (label.textContent ?? '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    if (labels.length > 0) return labels.join(' ');
+    return element.getAttribute('name') ?? element.getAttribute('placeholder');
+  };
+  const control = Array.from(
+    document.querySelectorAll('input,textarea,select'),
+  ).find((element) => {
+    if (
+      !(
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement ||
+        element instanceof HTMLSelectElement
+      )
+    ) {
+      return false;
+    }
+    return getControlLabel(element)?.toLowerCase().includes(field);
+  }) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | undefined;
+  const actual = control?.value;
+  return {
+    type: 'field_contains',
+    field: candidate.field,
+    value,
+    ok:
+      typeof actual === 'string' &&
+      actual.toLowerCase().includes(value.toLowerCase()),
+    actual,
+  };
+}
+
 function pageResolveTargetScript(rawArgs: unknown) {
   const params =
     typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
@@ -2638,8 +2798,55 @@ export async function runCdpHostAutomation(
             const clickCount = getClickCount(params.clickCount);
             const hasExplicitPoint =
               typeof params.x === 'number' && typeof params.y === 'number';
+            const targetText =
+              typeof params.targetText === 'string' && params.targetText.trim()
+                ? params.targetText.trim()
+                : undefined;
+            if (
+              action === 'click' &&
+              hasExplicitPoint &&
+              !targetText
+            ) {
+              throw new Error(
+                'Pointer coordinate clicks require targetText to avoid unintended navigation.',
+              );
+            }
+            const needsPagePointResolution =
+              params.coordinateSpace === 'viewport_normalized' ||
+              Boolean(targetText);
+            const normalizedPoint =
+              hasExplicitPoint && needsPagePointResolution
+                ? await evaluatePageScript(
+                    sendCommand,
+                    tab.id,
+                    pageNormalizePointerPointScript,
+                    [params],
+                  )
+                : undefined;
+            if (
+              normalizedPoint &&
+              typeof normalizedPoint === 'object' &&
+              'targetTextMatched' in normalizedPoint &&
+              (normalizedPoint as { targetTextMatched?: boolean })
+                .targetTextMatched === false
+            ) {
+              throw new Error(
+                `Pointer target text mismatch: expected hit target to contain "${targetText}".`,
+              );
+            }
             const resolved: CdpResolvedPoint = hasExplicitPoint
-              ? { point: { x: params.x as number, y: params.y as number } }
+              ? {
+                  point:
+                    normalizedPoint &&
+                    typeof normalizedPoint === 'object' &&
+                    'point' in normalizedPoint
+                      ? (
+                          normalizedPoint as {
+                            point: { x: number; y: number };
+                          }
+                        ).point
+                      : { x: params.x as number, y: params.y as number },
+                }
               : await resolvePoint(sendCommand, tab.id, params);
             const eventMap: Record<string, string[]> = {
               move: ['mouseMoved'],
@@ -2702,12 +2909,32 @@ export async function runCdpHostAutomation(
               tab.id,
               latest.point,
             );
+            const expectedAfterClick =
+              action === 'click'
+                ? await evaluatePageScript(
+                    sendCommand,
+                    tab.id,
+                    pageExpectedAfterClickScript,
+                    [params],
+                  ).catch(() => undefined)
+                : undefined;
             return {
               pointer: action,
               point: latest.point,
               button,
               clickCount,
               strategy: 'cdp_mouse',
+              targetTextMatched:
+                normalizedPoint &&
+                typeof normalizedPoint === 'object' &&
+                'targetTextMatched' in normalizedPoint
+                  ? (
+                      normalizedPoint as {
+                        targetTextMatched?: boolean;
+                      }
+                    ).targetTextMatched
+                  : undefined,
+              expectedAfterClick,
               ...hitTest,
             };
           }
