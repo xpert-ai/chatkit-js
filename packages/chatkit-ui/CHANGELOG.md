@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.11
+
+### Patch Changes
+
+- 991df74: Support flat A2UI widget messages while preserving legacy pre-resolved surface rendering.
+- Updated dependencies [991df74]
+  - @xpert-ai/chatkit-types@0.3.9
+
 ## 0.3.10
 
 ### Patch Changes

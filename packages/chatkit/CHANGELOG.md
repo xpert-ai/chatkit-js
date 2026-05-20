@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.9
+
+### Patch Changes
+
+- 991df74: Support flat A2UI widget messages while preserving legacy pre-resolved surface rendering.
+
 ## 0.3.8
 
 ### Patch Changes
