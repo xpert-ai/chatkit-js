@@ -68,7 +68,15 @@ export type TMessageComponent<T extends object = object> = T & {
 
 export type TMessageComponentWidgetItem = {
   name: string;
-  config: Types.Surface;
+  /**
+   * Standard A2UI server-to-client messages. New widget messages should use
+   * this flat protocol shape so the UI can build and isolate surfaces at render time.
+   */
+  messages?: Types.ServerToClientMessage[];
+  /**
+   * @deprecated Legacy pre-resolved surface fallback. Prefer `messages`.
+   */
+  config?: Types.Surface;
   values?: Record<string, unknown>;
 };
 
