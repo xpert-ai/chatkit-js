@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-host-automation
 
+## 0.3.6
+
+### Patch Changes
+
+- f1fb9f2: add readable host page content extraction and paginated read support
+
 ## 0.3.5
 
 ### Patch Changes
