@@ -11,6 +11,8 @@ export type {
   HostPageAutomationElementSnapshot,
   HostPageAutomationOptions,
   HostPageAutomationToolName,
+  HostPageReadableContent,
+  HostPageReadableContentBlock,
   HostPageSnapshot,
 } from './types';
 export { HOST_PAGE_AUTOMATION_TOOL_NAMES } from './types';

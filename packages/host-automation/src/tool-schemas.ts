@@ -2,6 +2,8 @@ export type JsonSchema = {
   type?: string | string[];
   enum?: readonly unknown[];
   const?: unknown;
+  minimum?: number;
+  maximum?: number;
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: readonly string[];
@@ -209,6 +211,42 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
       quality: {
         type: 'number',
         description: 'JPEG quality from 1 to 100.',
+      },
+    },
+    additionalProperties: false,
+  },
+  host_page_read: {
+    type: 'object',
+    properties: {
+      blockId: {
+        type: 'string',
+        description: 'Readable content block id from host_page_snapshot.',
+      },
+      scope: {
+        type: 'string',
+        enum: ['visible'],
+        description: 'Visible content scope. Use blockId when a specific readable block is known.',
+      },
+      query: {
+        type: 'string',
+        description: 'Optional text query for selecting relevant readable blocks.',
+      },
+      page: {
+        type: 'number',
+        minimum: 1,
+        description: '1-based page for long block content.',
+      },
+      pageSize: {
+        type: 'number',
+        minimum: 1,
+        maximum: 100,
+        description: 'Items, fields, rows, or blocks to return per page.',
+      },
+      maxChars: {
+        type: 'number',
+        minimum: 500,
+        maximum: 12000,
+        description: 'Maximum characters to return.',
       },
     },
     additionalProperties: false,

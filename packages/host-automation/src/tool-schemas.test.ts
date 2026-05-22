@@ -47,4 +47,33 @@ describe('host page automation tool schemas', () => {
       HOST_PAGE_AUTOMATION_TOOL_SCHEMAS.host_page_fill.properties,
     ).not.toHaveProperty('coordinateSpace');
   });
+
+  it('exposes paginated readable content parameters', () => {
+    const readSchema = HOST_PAGE_AUTOMATION_TOOL_SCHEMAS.host_page_read;
+
+    expect(readSchema.properties).not.toHaveProperty('snapshotId');
+    expect(readSchema.properties).toMatchObject({
+      blockId: {
+        type: 'string',
+      },
+      query: {
+        type: 'string',
+      },
+      scope: {
+        enum: ['visible'],
+      },
+      page: {
+        type: 'number',
+        minimum: 1,
+      },
+      pageSize: {
+        type: 'number',
+        maximum: 100,
+      },
+      maxChars: {
+        type: 'number',
+        maximum: 12000,
+      },
+    });
+  });
 });
