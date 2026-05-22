@@ -310,8 +310,12 @@ async function evaluatePageScript(
   tabId: number,
   script: (...args: unknown[]) => unknown,
   args: unknown[] = [],
+  dependencies: Array<(...args: unknown[]) => unknown> = [],
 ): Promise<unknown> {
-  const expression = `${pageResolveTargetScript.toString()}; (${script.toString()})(...${JSON.stringify(args)})`;
+  const dependencySource = dependencies
+    .map((dependency) => dependency.toString())
+    .join('; ');
+  const expression = `${dependencySource ? `${dependencySource}; ` : ''}${pageResolveTargetScript.toString()}; (${script.toString()})(...${JSON.stringify(args)})`;
   const evaluation = await sendCdpCommand(
     sendCommand,
     tabId,
@@ -477,6 +481,629 @@ function readViewportFromLayoutMetrics(
   return width !== undefined && height !== undefined
     ? { width, height }
     : undefined;
+}
+
+function pageReadableContentScript(rawArgs: unknown) {
+  type ReadableField = { name: string; value: string };
+  type ReadableBlock = {
+    blockId?: string;
+    type: string;
+    heading?: string;
+    level?: number;
+    text?: string;
+    fields?: ReadableField[];
+    items?: string[];
+    headers?: string[];
+    rows?: string[][];
+    rect?: { x: number; y: number; width: number; height: number };
+    preview?: string[];
+    itemCount?: number;
+    chars?: number;
+    truncated?: boolean;
+    readHint?: { tool: 'host_page_read'; args: { blockId: string } };
+  };
+  type ReadableContent = {
+    blocks: ReadableBlock[];
+    outline?: Array<{
+      index: number;
+      blockId?: string;
+      type: string;
+      heading?: string;
+      level?: number;
+      itemCount?: number;
+      chars?: number;
+      truncated?: boolean;
+    }>;
+    suggestedReads?: Array<{
+      blockId?: string;
+      type: string;
+      heading?: string;
+      reason: string;
+      args: { blockId?: string; pageSize?: number };
+    }>;
+    totalBlocks: number;
+    truncated: boolean;
+    coverage: {
+      status: 'complete' | 'partial';
+      visibleTextCaptured: boolean;
+      truncatedBlocks: number;
+      collapsedSections: number;
+      crossOriginFrames: number;
+      virtualizedListsDetected: number;
+      visualOnlyRegions: number;
+    };
+    warnings?: string[];
+  };
+
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as {
+          mode?: string;
+          blockId?: string;
+          query?: string;
+          page?: number;
+          pageSize?: number;
+          maxChars?: number;
+        })
+      : {};
+  const MAX_BLOCKS = 80;
+  const MAX_SUGGESTED_READS = 12;
+  const MAX_PREVIEW_ITEMS = 2;
+  const MAX_BLOCK_TEXT_CHARS = 4_000;
+  const MAX_TEXT_CHARS = 600;
+  const MAX_ITEMS = 80;
+  const MAX_TABLE_ROWS = 80;
+  const MAX_TABLE_COLUMNS = 12;
+  const normalizeText = (value: string | null | undefined) =>
+    (value ?? '').replace(/\s+/g, ' ').trim();
+  const truncateText = (value: string, maxChars = MAX_TEXT_CHARS) =>
+    value.length > maxChars
+      ? `${value.slice(0, maxChars)}... [truncated ${value.length - maxChars} chars]`
+      : value;
+  const truncateOptionalText = (value: string | undefined, maxChars = MAX_TEXT_CHARS) =>
+    value ? truncateText(value, maxChars) : undefined;
+  const getElementText = (element: Element) => {
+    const text = normalizeText(element.textContent);
+    return text ? truncateText(text) : undefined;
+  };
+  const getOwnText = (element: Element) => {
+    const text = normalizeText(
+      Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent ?? '')
+        .join(' '),
+    );
+    return text ? truncateText(text) : undefined;
+  };
+  const isVisibleElement = (element: Element) => {
+    const view = element.ownerDocument.defaultView ?? window;
+    if (
+      !(element instanceof view.HTMLElement) &&
+      !(element instanceof view.SVGElement)
+    ) {
+      return false;
+    }
+    if (element instanceof view.HTMLElement && element.hidden) return false;
+    const style = view.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.opacity !== '0' &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  };
+  const getRect = (element: Element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  };
+  const findPreviousHeading = (element: Element) => {
+    let current: Element | null = element;
+    while (current) {
+      let sibling = current.previousElementSibling;
+      while (sibling) {
+        if (sibling.matches('h1,h2,h3,h4,h5,h6,[role="heading"]')) {
+          return getElementText(sibling);
+        }
+        const nested = sibling.querySelector(
+          'h1,h2,h3,h4,h5,h6,[role="heading"]',
+        );
+        if (nested) return getElementText(nested);
+        sibling = sibling.previousElementSibling;
+      }
+      current = current.parentElement;
+    }
+    return undefined;
+  };
+  const collectTextParts = (element: Element): string[] => {
+    const directParts = Array.from(element.children)
+      .map((child) => getOwnText(child) ?? getElementText(child))
+      .filter((text): text is string => Boolean(text));
+    if (directParts.length > 1) return directParts;
+    if (element.children.length === 1) {
+      return collectTextParts(element.children[0]);
+    }
+    return directParts;
+  };
+  const getKeyValueField = (element: Element) => {
+    if (
+      Array.from(element.children).some(
+        (child) => collectTextParts(child).length === 2,
+      )
+    ) {
+      return undefined;
+    }
+    const parts = collectTextParts(element);
+    if (parts.length !== 2) return undefined;
+    const [name, value] = parts;
+    if (!name || !value || name === value || name.length > 120) {
+      return undefined;
+    }
+    return { name, value };
+  };
+  const buildPreview = (block: ReadableBlock) => {
+    if (block.fields) {
+      return block.fields
+        .slice(0, MAX_PREVIEW_ITEMS)
+        .map((field) => `${field.name}: ${field.value}`);
+    }
+    if (block.items) return block.items.slice(0, MAX_PREVIEW_ITEMS);
+    if (block.rows) {
+      return block.rows
+        .slice(0, MAX_PREVIEW_ITEMS)
+        .map((row) => row.join(' | '));
+    }
+    return block.text ? [block.text] : [];
+  };
+  const getItemCount = (block: ReadableBlock) => {
+    if (block.fields) return block.fields.length;
+    if (block.items) return block.items.length;
+    if (block.rows) return block.rows.length;
+    return block.text ? 1 : 0;
+  };
+  const getCharCount = (block: ReadableBlock) =>
+    [
+      block.heading,
+      block.text,
+      ...(block.items ?? []),
+      ...(block.fields ?? []).flatMap((field) => [field.name, field.value]),
+      ...(block.headers ?? []),
+      ...(block.rows ?? []).flat(),
+    ].reduce((total, text) => total + (text?.length ?? 0), 0);
+  const finalizeBlocks = (drafts: ReadableBlock[]) =>
+    drafts.slice(0, MAX_BLOCKS).map((block, index) => {
+      const chars = getCharCount(block);
+      const blockId = `b${index + 1}`;
+      return {
+        ...block,
+        blockId,
+        preview: buildPreview(block),
+        itemCount: getItemCount(block),
+        chars,
+        truncated: chars > MAX_BLOCK_TEXT_CHARS,
+        readHint: {
+          tool: 'host_page_read' as const,
+          args: { blockId },
+        },
+      };
+    });
+  const createOutline = (blocks: ReadableBlock[]) =>
+    blocks.map((block, index) => ({
+      index,
+      blockId: block.blockId,
+      type: block.type,
+      heading: block.heading,
+      level: block.level,
+      itemCount: block.itemCount,
+      chars: block.chars,
+      truncated: block.truncated,
+    }));
+  const getSuggestedReadReason = (block: ReadableBlock) => {
+    if (block.truncated) return 'block_truncated';
+    if (block.type === 'keyValueList') return 'structured_fields';
+    if (block.type === 'table') return 'structured_table';
+    if ((block.itemCount ?? 0) > MAX_PREVIEW_ITEMS) return 'preview_incomplete';
+    return 'long_readable_block';
+  };
+  const getSuggestedReadScore = (block: ReadableBlock) => {
+    const typeScore =
+      block.type === 'keyValueList'
+        ? 100
+        : block.type === 'table'
+          ? 90
+          : block.type === 'list'
+            ? 80
+            : block.type === 'paragraph'
+              ? 50
+              : 10;
+    return (
+      typeScore +
+      (block.truncated ? 40 : 0) +
+      Math.min(block.itemCount ?? 0, 20) +
+      Math.min(Math.floor((block.chars ?? 0) / 400), 20)
+    );
+  };
+  const createSuggestedReads = (blocks: ReadableBlock[]) =>
+    blocks
+      .filter(
+        (block) =>
+          block.type !== 'heading' &&
+          (block.truncated ||
+            (block.itemCount ?? 0) > MAX_PREVIEW_ITEMS ||
+            (block.chars ?? 0) > MAX_TEXT_CHARS),
+      )
+      .map((block, index) => ({
+        block,
+        index,
+        score: getSuggestedReadScore(block),
+      }))
+      .sort((left, right) => right.score - left.score || left.index - right.index)
+      .slice(0, MAX_SUGGESTED_READS)
+      .sort((left, right) => left.index - right.index)
+      .map(({ block }) => ({
+        blockId: block.blockId,
+        type: block.type,
+        heading: block.heading,
+        reason: getSuggestedReadReason(block),
+        args: {
+          blockId: block.blockId,
+          pageSize:
+            block.fields || block.items || block.rows
+              ? Math.min(20, Math.max(1, block.itemCount ?? 1))
+              : undefined,
+        },
+      }));
+  const createReadableContentIndex = (
+    readableContent: ReadableContent,
+  ): ReadableContent => ({
+    ...readableContent,
+    outline: createOutline(readableContent.blocks),
+    suggestedReads: createSuggestedReads(readableContent.blocks),
+    blocks: readableContent.blocks.map((block) => ({
+      blockId: block.blockId,
+      type: block.type,
+      heading: block.heading,
+      level: block.level,
+      preview: block.preview,
+      itemCount: block.itemCount,
+      chars: block.chars,
+      truncated: block.truncated,
+      rect: block.rect,
+      readHint: block.readHint,
+    })),
+  });
+  const addKeyValueLists = (root: Element, blocks: ReadableBlock[]) => {
+    const fields: Array<ReadableField & { element: Element }> = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node) {
+      const element = node as Element;
+      if (isVisibleElement(element)) {
+        const field = getKeyValueField(element);
+        if (field) fields.push({ ...field, element });
+      }
+      node = walker.nextNode();
+    }
+    if (fields.length === 0) return;
+    blocks.push({
+      type: 'keyValueList',
+      heading: findPreviousHeading(fields[0].element),
+      fields: fields
+        .slice(0, MAX_ITEMS)
+        .map(({ name, value }) => ({ name, value })),
+      rect: getRect(fields[0].element),
+    });
+  };
+  const addLists = (root: Element, blocks: ReadableBlock[]) => {
+    for (const list of Array.from(
+      root.querySelectorAll('ul,ol,[role="list"]'),
+    )) {
+      if (!isVisibleElement(list)) continue;
+      const items = Array.from(list.children)
+        .map((child) => getElementText(child))
+        .filter((text): text is string => Boolean(text))
+        .slice(0, MAX_ITEMS);
+      if (items.length === 0) continue;
+      blocks.push({
+        type: 'list',
+        heading: findPreviousHeading(list),
+        items,
+        rect: getRect(list),
+      });
+    }
+  };
+  const addTables = (root: Element, blocks: ReadableBlock[]) => {
+    for (const table of Array.from(
+      root.querySelectorAll('table,[role="table"],[role="grid"]'),
+    )) {
+      if (!isVisibleElement(table)) continue;
+      const rows = Array.from(table.querySelectorAll('tr,[role="row"]'))
+        .map((row) =>
+          Array.from(
+            row.querySelectorAll(
+              'th,td,[role="columnheader"],[role="cell"],[role="gridcell"]',
+            ),
+          )
+            .map((cell) => getElementText(cell))
+            .filter((text): text is string => Boolean(text))
+            .slice(0, MAX_TABLE_COLUMNS),
+        )
+        .filter((row) => row.length > 0)
+        .slice(0, MAX_TABLE_ROWS);
+      if (rows.length === 0) continue;
+      const headers = rows[0]?.every((cell) => cell.length <= 120)
+        ? rows[0]
+        : undefined;
+      blocks.push({
+        type: 'table',
+        heading: findPreviousHeading(table),
+        headers,
+        rows: headers ? rows.slice(1) : rows,
+        rect: getRect(table),
+      });
+    }
+  };
+  const addTextBlocks = (root: Element, blocks: ReadableBlock[]) => {
+    const selector = 'h1,h2,h3,h4,h5,h6,[role="heading"],p,article,section';
+    for (const element of Array.from(root.querySelectorAll(selector))) {
+      if (blocks.length >= MAX_BLOCKS) break;
+      if (!isVisibleElement(element)) continue;
+      const tag = element.tagName.toLowerCase();
+      const text = getOwnText(element) ?? getElementText(element);
+      if (!text) continue;
+      if (tag.match(/^h[1-6]$/) || element.getAttribute('role') === 'heading') {
+        const level = tag.match(/^h[1-6]$/)
+          ? Number(tag.slice(1))
+          : Number(element.getAttribute('aria-level') ?? 0) || 2;
+        blocks.push({
+          type: 'heading',
+          level,
+          text,
+          rect: getRect(element),
+        });
+      } else if (text.length >= 24) {
+        blocks.push({
+          type: 'paragraph',
+          text,
+          rect: getRect(element),
+        });
+      }
+    }
+  };
+  const getCollapsedSectionCount = (root: Element) =>
+    root.querySelectorAll(
+      '[aria-expanded="false"],[data-expanded="false"],details:not([open]),[hidden]',
+    ).length;
+  const getCrossOriginFrameCount = (root: Element) =>
+    Array.from(root.querySelectorAll('iframe')).filter((frame) => {
+      try {
+        return !(frame as HTMLIFrameElement).contentDocument;
+      } catch {
+        return true;
+      }
+    }).length;
+  const extract = (): ReadableContent => {
+    const start = document.body ?? document.documentElement;
+    if (!start) {
+      return {
+        blocks: [],
+        totalBlocks: 0,
+        truncated: false,
+        coverage: {
+          status: 'complete',
+          visibleTextCaptured: false,
+          truncatedBlocks: 0,
+          collapsedSections: 0,
+          crossOriginFrames: 0,
+          virtualizedListsDetected: 0,
+          visualOnlyRegions: 0,
+        },
+      };
+    }
+    const drafts: ReadableBlock[] = [];
+    addKeyValueLists(start, drafts);
+    addLists(start, drafts);
+    addTables(start, drafts);
+    addTextBlocks(start, drafts);
+    const blocks = finalizeBlocks(drafts);
+    const truncatedBlocks = blocks.filter((block) => block.truncated).length;
+    const collapsedSections = getCollapsedSectionCount(start);
+    const crossOriginFrames = getCrossOriginFrameCount(start);
+    const partial =
+      drafts.length > blocks.length ||
+      truncatedBlocks > 0 ||
+      collapsedSections > 0 ||
+      crossOriginFrames > 0;
+    const warnings: string[] = [];
+    if (collapsedSections > 0) {
+      warnings.push('Some content is inside collapsed sections.');
+    }
+    if (crossOriginFrames > 0) {
+      warnings.push('Some frame content could not be read from DOM.');
+    }
+    return {
+      blocks,
+      totalBlocks: drafts.length,
+      truncated: drafts.length > blocks.length || truncatedBlocks > 0,
+      coverage: {
+        status: partial ? 'partial' : 'complete',
+        visibleTextCaptured: blocks.length > 0,
+        truncatedBlocks,
+        collapsedSections,
+        crossOriginFrames,
+        virtualizedListsDetected: 0,
+        visualOnlyRegions: 0,
+      },
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
+  };
+  const pageBounds = (total: number, page: number, pageSize: number) => {
+    const safePageSize = Math.max(1, Math.min(100, Math.floor(pageSize)));
+    const pageCount = Math.max(1, Math.ceil(total / safePageSize));
+    const safePage = Math.max(1, Math.min(pageCount, Math.floor(page)));
+    const start = (safePage - 1) * safePageSize;
+    return {
+      page: safePage,
+      pageSize: safePageSize,
+      pageCount,
+      start,
+      end: Math.min(total, start + safePageSize),
+    };
+  };
+  const getSerializedLength = (value: unknown) => JSON.stringify(value).length;
+  const getStringField = (value: Record<string, unknown>, key: string) => {
+    const field = value[key];
+    return typeof field === 'string' && field.trim() ? field : undefined;
+  };
+  const getNumberField = (value: Record<string, unknown>, key: string) => {
+    const field = value[key];
+    return typeof field === 'number' && Number.isFinite(field)
+      ? field
+      : undefined;
+  };
+  const finalizeReadResult = (
+    result: Record<string, unknown>,
+    maxChars: number,
+    forceTruncated = false,
+  ) => {
+    const draft = {
+      ...result,
+      truncated: Boolean(result.truncated) || forceTruncated,
+    };
+    const draftLength = getSerializedLength(draft);
+    const payload = {
+      ...draft,
+      chars: draftLength,
+    };
+    if (getSerializedLength(payload) <= maxChars) {
+      return payload;
+    }
+
+    return {
+      blockId: getStringField(result, 'blockId'),
+      type: getStringField(result, 'type'),
+      heading: truncateOptionalText(getStringField(result, 'heading'), 120),
+      scope: getStringField(result, 'scope'),
+      page: getNumberField(result, 'page'),
+      pageSize: 0,
+      pageCount: getNumberField(result, 'pageCount'),
+      nextPage: getNumberField(result, 'nextPage'),
+      chars: draftLength,
+      truncated: true,
+      budgetExceeded: true,
+      warning:
+        'Read result exceeded maxChars; retry with a smaller pageSize or a narrower blockId/query.',
+    };
+  };
+  const fitReadResult = (
+    maxChars: number,
+    requestedPageSize: number,
+    build: (pageSize: number) => Record<string, unknown>,
+  ) => {
+    let candidatePageSize = requestedPageSize;
+    while (candidatePageSize >= 1) {
+      const result = build(candidatePageSize);
+      const payload = finalizeReadResult(
+        result,
+        maxChars,
+        candidatePageSize < requestedPageSize,
+      );
+      if (getSerializedLength(payload) <= maxChars) {
+        return payload;
+      }
+      candidatePageSize = Math.floor(candidatePageSize / 2);
+    }
+
+    return finalizeReadResult(build(1), maxChars, true);
+  };
+  const read = (readableContent: ReadableContent) => {
+    const page = typeof params.page === 'number' ? params.page : 1;
+    const pageSize = typeof params.pageSize === 'number' ? params.pageSize : 20;
+    const maxChars =
+      typeof params.maxChars === 'number' && Number.isFinite(params.maxChars)
+        ? Math.max(500, Math.min(12_000, Math.floor(params.maxChars)))
+        : 4_000;
+    const query = params.query?.trim().toLowerCase();
+    const candidates = query
+      ? readableContent.blocks.filter((block) =>
+          JSON.stringify(block).toLowerCase().includes(query),
+        )
+      : readableContent.blocks;
+    const block = params.blockId
+      ? readableContent.blocks.find(
+          (candidate) => candidate.blockId === params.blockId,
+        )
+      : undefined;
+    if (block?.fields) {
+      return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
+        const bounds = pageBounds(block.fields?.length ?? 0, page, candidatePageSize);
+        return {
+          ...block,
+          fields: block.fields?.slice(bounds.start, bounds.end),
+          page: bounds.page,
+          pageSize: bounds.pageSize,
+          pageCount: bounds.pageCount,
+          nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+        };
+      });
+    }
+    if (block?.items) {
+      return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
+        const bounds = pageBounds(block.items?.length ?? 0, page, candidatePageSize);
+        return {
+          ...block,
+          items: block.items?.slice(bounds.start, bounds.end),
+          page: bounds.page,
+          pageSize: bounds.pageSize,
+          pageCount: bounds.pageCount,
+          nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+        };
+      });
+    }
+    if (block?.rows) {
+      return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
+        const bounds = pageBounds(block.rows?.length ?? 0, page, candidatePageSize);
+        return {
+          ...block,
+          rows: block.rows?.slice(bounds.start, bounds.end),
+          page: bounds.page,
+          pageSize: bounds.pageSize,
+          pageCount: bounds.pageCount,
+          nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+        };
+      });
+    }
+    if (block) {
+      return finalizeReadResult({ ...block }, maxChars);
+    }
+    return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
+      const bounds = pageBounds(candidates.length, page, candidatePageSize);
+      return {
+        scope: 'visible',
+        blocks: candidates.slice(bounds.start, bounds.end),
+        page: bounds.page,
+        pageSize: bounds.pageSize,
+        pageCount: bounds.pageCount,
+        nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+        coverage: readableContent.coverage,
+        warnings: readableContent.warnings,
+      };
+    });
+  };
+  const readableContent = extract();
+  return params.mode === 'read' ||
+    params.blockId ||
+    params.query ||
+    params.page ||
+    params.pageSize
+    ? read(readableContent)
+    : createReadableContentIndex(readableContent);
 }
 
 function pageSnapshotScript(rawArgs: unknown) {
@@ -1009,6 +1636,26 @@ function pageSnapshotScript(rawArgs: unknown) {
     name: getName(element),
     selector: getSelector(element),
   });
+  const containsOrEquals = (parent: Element, child: Element) =>
+    parent === child || parent.contains(child);
+  const getCandidatePoints = (element: Element) => {
+    const rect = getGlobalRect(element);
+    if (rect.width <= 0 || rect.height <= 0) return [];
+    const insetX = Math.min(8, rect.width / 2);
+    const insetY = Math.min(8, rect.height / 2);
+    return [
+      { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+      { x: rect.x + insetX, y: rect.y + rect.height / 2 },
+      { x: rect.x + rect.width - insetX, y: rect.y + rect.height / 2 },
+      { x: rect.x + rect.width / 2, y: rect.y + insetY },
+      { x: rect.x + rect.width / 2, y: rect.y + rect.height - insetY },
+    ];
+  };
+  const getReceivesEventsPoints = (element: Element) =>
+    getCandidatePoints(element).filter((point) => {
+      const hitTarget = getDeepHitStack(point)[0];
+      return hitTarget ? containsOrEquals(element, hitTarget) : false;
+    });
   const getActionability = (element: Element) => {
     const rect = getGlobalRect(element);
     const center =
@@ -1017,18 +1664,17 @@ function pageSnapshotScript(rawArgs: unknown) {
         : undefined;
     const hitStack = center ? getDeepHitStack(center) : [];
     const hitTarget = hitStack[0];
-    const receivesEvents = Boolean(
-      hitTarget &&
-      (element === hitTarget ||
-        element.contains(hitTarget) ||
-        hitTarget.contains(element)),
-    );
+    const safeClickPoints = getReceivesEventsPoints(element);
+    const receivesEvents = safeClickPoints.length > 0;
     return {
       visible: isVisible(element),
       enabled: !isDisabled(element),
       receivesEvents,
       actionable: isVisible(element) && !isDisabled(element) && receivesEvents,
       center,
+      safeClickPoints,
+      occludedBy:
+        !receivesEvents && hitTarget ? summarize(hitTarget) : undefined,
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
     };
@@ -1074,6 +1720,7 @@ function pageSnapshotScript(rawArgs: unknown) {
           ? element.checked
           : undefined,
       visible: actionability.visible,
+      receivesEvents: actionability.receivesEvents,
       actionable: actionability.actionable,
       rect: {
         x: rect.x,
@@ -1082,6 +1729,8 @@ function pageSnapshotScript(rawArgs: unknown) {
         height: rect.height,
       },
       center: actionability.center,
+      occludedBy: actionability.occludedBy,
+      safeClickPoints: actionability.safeClickPoints,
       hitTarget: actionability.hitTarget,
       hitStack: actionability.hitStack,
     };
@@ -1112,6 +1761,7 @@ function pageSnapshotScript(rawArgs: unknown) {
   if (document.body) {
     visit(document.body);
   }
+  const readableContent = pageReadableContentScript({});
   const navigation = performance.getEntriesByType('navigation')[0] as
     | PerformanceNavigationTiming
     | undefined;
@@ -1170,6 +1820,7 @@ function pageSnapshotScript(rawArgs: unknown) {
         }
       : undefined,
     frames,
+    readableContent,
     elements,
   };
 }
@@ -1626,12 +2277,10 @@ function pageResolveTargetScript(rawArgs: unknown) {
       { x: rect.x + rect.width / 2, y: rect.y + insetY },
       { x: rect.x + rect.width / 2, y: rect.y + rect.height - insetY },
     ];
-    return points.find((point) =>
-      getHitStack(point).some(
-        (hit) =>
-          containsOrEquals(candidate, hit) || containsOrEquals(hit, candidate),
-      ),
-    );
+    return points.find((point) => {
+      const hitTarget = getHitStack(point)[0];
+      return hitTarget ? containsOrEquals(candidate, hitTarget) : false;
+    });
   };
   const findSemanticVisibleFallback = (requested: Element) => {
     const requestedRole = getRole(requested);
@@ -1722,8 +2371,7 @@ function pageResolveTargetScript(rawArgs: unknown) {
       receivesEvents: Boolean(
         hitTarget &&
         (element === hitTarget ||
-          element.contains(hitTarget) ||
-          hitTarget.contains(element)),
+          element.contains(hitTarget)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
@@ -1879,11 +2527,10 @@ function pageResolveElementHandleScript(this: Element) {
       { x: rect.x + rect.width / 2, y: rect.y + insetY },
       { x: rect.x + rect.width / 2, y: rect.y + rect.height - insetY },
     ];
-    return points.find((point) =>
-      getDeepHitStack(point).some(
-        (hit) => containsOrEquals(target, hit) || containsOrEquals(hit, target),
-      ),
-    );
+    return points.find((point) => {
+      const hitTarget = getDeepHitStack(point)[0];
+      return hitTarget ? containsOrEquals(target, hitTarget) : false;
+    });
   };
 
   let target = element;
@@ -1922,8 +2569,7 @@ function pageResolveElementHandleScript(this: Element) {
       receivesEvents: Boolean(
         hitTarget &&
         (target === hitTarget ||
-          target.contains(hitTarget) ||
-          hitTarget.contains(target)),
+          target.contains(hitTarget)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
@@ -2043,12 +2689,10 @@ function pageMeasureLastResolvedTargetScript() {
         ]
       : [center];
   const point =
-    candidates.find((candidate) =>
-      getDeepHitStack(candidate).some(
-        (hit) =>
-          containsOrEquals(target, hit) || containsOrEquals(hit, target),
-      ),
-    ) ?? center;
+    candidates.find((candidate) => {
+      const hitTarget = getDeepHitStack(candidate)[0];
+      return hitTarget ? containsOrEquals(target, hitTarget) : false;
+    }) ?? center;
   const hitStack = getDeepHitStack(point);
   const hitTarget = hitStack[0];
   return {
@@ -2059,8 +2703,7 @@ function pageMeasureLastResolvedTargetScript() {
       receivesEvents: Boolean(
         hitTarget &&
           (target === hitTarget ||
-            target.contains(hitTarget) ||
-            hitTarget.contains(target)),
+            target.contains(hitTarget)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
@@ -2461,6 +3104,7 @@ async function executeSnapshot(
     tabId,
     pageSnapshotScript,
     [params],
+    [pageReadableContentScript],
   );
   const [axTree, domSnapshot] = await Promise.all([
     sendCdpCommand(sendCommand, tabId, 'Accessibility.getFullAXTree').catch(
@@ -2697,6 +3341,13 @@ export async function runCdpHostAutomation(
         switch (call.name) {
           case 'host_page_snapshot':
             return executeSnapshot(sendCommand, tab.id, params);
+          case 'host_page_read':
+            return evaluatePageScript(
+              sendCommand,
+              tab.id,
+              pageReadableContentScript,
+              [{ ...params, mode: 'read' }],
+            );
           case 'host_page_click': {
             const resolved = await resolvePoint(sendCommand, tab.id, params);
             const button = getMouseButton(params.button);

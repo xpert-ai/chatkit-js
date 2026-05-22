@@ -12,6 +12,7 @@ export const HOST_PAGE_AUTOMATION_TOOL_NAMES = [
   'host_page_focus',
   'host_page_pointer',
   'host_page_screenshot',
+  'host_page_read',
   'host_page_wait_for',
 ] as const;
 
@@ -109,6 +110,17 @@ export type HostPageAutomationElementSnapshot = {
   checked?: boolean;
   visible?: boolean;
   actionable?: boolean;
+  receivesEvents?: boolean;
+  occludedBy?: {
+    tag: string;
+    role?: string;
+    name?: string;
+    selector?: string;
+  };
+  safeClickPoints?: Array<{
+    x: number;
+    y: number;
+  }>;
   rect: {
     x: number;
     y: number;
@@ -131,6 +143,84 @@ export type HostPageAutomationElementSnapshot = {
     name?: string;
     selector?: string;
   }>;
+};
+
+export type HostPageReadableContentBlockType =
+  | 'heading'
+  | 'paragraph'
+  | 'list'
+  | 'keyValueList'
+  | 'table';
+
+export type HostPageReadableContentBlock = {
+  blockId: string;
+  type: HostPageReadableContentBlockType;
+  heading?: string;
+  level?: number;
+  text?: string;
+  items?: string[];
+  fields?: Array<{
+    name: string;
+    value: string;
+  }>;
+  headers?: string[];
+  rows?: string[][];
+  preview: string[];
+  itemCount: number;
+  chars: number;
+  truncated: boolean;
+  rect?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  readHint: {
+    tool: 'host_page_read';
+    args: {
+      blockId: string;
+    };
+  };
+};
+
+export type HostPageReadableContentOutlineItem = {
+  index: number;
+  blockId: string;
+  type: HostPageReadableContentBlockType;
+  heading?: string;
+  level?: number;
+  itemCount: number;
+  chars: number;
+  truncated: boolean;
+};
+
+export type HostPageReadableContentSuggestedRead = {
+  blockId: string;
+  type: HostPageReadableContentBlockType;
+  heading?: string;
+  reason: string;
+  args: {
+    blockId: string;
+    pageSize?: number;
+  };
+};
+
+export type HostPageReadableContent = {
+  blocks: HostPageReadableContentBlock[];
+  outline?: HostPageReadableContentOutlineItem[];
+  suggestedReads?: HostPageReadableContentSuggestedRead[];
+  totalBlocks: number;
+  truncated: boolean;
+  coverage: {
+    status: 'complete' | 'partial';
+    visibleTextCaptured: boolean;
+    truncatedBlocks: number;
+    collapsedSections: number;
+    crossOriginFrames: number;
+    virtualizedListsDetected: number;
+    visualOnlyRegions: number;
+  };
+  warnings?: string[];
 };
 
 export type HostPageSnapshot = {
@@ -185,5 +275,6 @@ export type HostPageSnapshot = {
     expanded?: boolean;
     focused?: boolean;
   }>;
+  readableContent?: HostPageReadableContent;
   elements: HostPageAutomationElementSnapshot[];
 };

@@ -4,8 +4,15 @@ import {
   type HostPageAutomationOptions,
   type HostPageAutomationToolName,
   type HostPageAutomationVisualEffectContext,
+  type HostPageReadableContent,
   type HostPageSnapshot,
 } from './types';
+import {
+  createHostPageReadableContentIndex,
+  extractHostPageReadableContent,
+  readHostPageReadableContent,
+  type HostPageReadParams,
+} from './readable-content';
 
 type Point = { x: number; y: number };
 
@@ -66,6 +73,14 @@ type ScrollParams = ResolvableTargetParams & {
   y?: unknown;
 };
 
+type ReadParams = {
+  blockId?: unknown;
+  query?: unknown;
+  page?: unknown;
+  pageSize?: unknown;
+  maxChars?: unknown;
+};
+
 type NavigateParams = {
   url?: unknown;
 };
@@ -78,7 +93,18 @@ type Actionability = {
   center?: Point;
   hitTarget?: Element;
   hitStack: Element[];
+  safeClickPoints: Point[];
+  occludedBy?: Element;
 };
+
+class HostPageAutomationStructuredError extends Error {
+  constructor(
+    message: string,
+    readonly details: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
 
 const AUTOMATION_TOOL_NAME_SET = new Set<string>(
   HOST_PAGE_AUTOMATION_TOOL_NAMES,
@@ -881,9 +907,13 @@ function normalizeSemanticText(value: string | undefined): string {
 }
 
 function getReceivesEventsPoint(element: Element): Point | undefined {
+  return getReceivesEventsPoints(element)[0];
+}
+
+function getReceivesEventsPoints(element: Element): Point[] {
   const rect = element.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) {
-    return undefined;
+    return [];
   }
 
   const doc = element.ownerDocument;
@@ -895,11 +925,10 @@ function getReceivesEventsPoint(element: Element): Point | undefined {
     { x: rect.left + rect.width / 2, y: rect.bottom - Math.min(8, rect.height / 2) },
   ];
 
-  return points.find((point) =>
-    getElementsFromPoint(doc, point).some(
-      (hit) => containsOrEquals(element, hit) || containsOrEquals(hit, element),
-    ),
-  );
+  return points.filter((point) => {
+    const hitTarget = getElementsFromPoint(doc, point)[0];
+    return hitTarget ? containsOrEquals(element, hitTarget) : false;
+  });
 }
 
 function getGlobalPoint(element: Element, point: Point): Point {
@@ -955,11 +984,10 @@ function getActionability(element: Element): Actionability {
   const enabled = isElementEnabled(element);
   const hitStack = center ? getElementsFromPoint(doc, center) : [];
   const hitTarget = hitStack[0];
-  const receivesEvents = Boolean(
-    hitTarget &&
-      (containsOrEquals(element, hitTarget) ||
-        containsOrEquals(hitTarget, element)),
+  const safeClickPoints = getReceivesEventsPoints(element).map((point) =>
+    getGlobalPoint(element, point),
   );
+  const receivesEvents = safeClickPoints.length > 0;
 
   return {
     visible,
@@ -969,6 +997,8 @@ function getActionability(element: Element): Actionability {
     center: getElementCenter(element),
     hitTarget,
     hitStack,
+    safeClickPoints,
+    occludedBy: visible && enabled && !receivesEvents ? hitTarget : undefined,
   };
 }
 
@@ -1209,6 +1239,7 @@ function createPointerLikeEvent(
 export class HostPageAutomationExecutor {
   private refs = new Map<string, Element>();
   private nextRef = 1;
+  private readableContent?: HostPageReadableContent;
 
   constructor(private readonly options: HostPageAutomationOptions = {}) {}
 
@@ -1243,6 +1274,8 @@ export class HostPageAutomationExecutor {
         return this.pointer(params);
       case 'host_page_screenshot':
         return this.screenshot();
+      case 'host_page_read':
+        return this.read(params);
       case 'host_page_wait_for':
         return this.waitFor(params);
     }
@@ -1258,6 +1291,7 @@ export class HostPageAutomationExecutor {
     const elements = collectElements(root).map((element) =>
       this.snapshotElement(element),
     );
+    this.readableContent = extractHostPageReadableContent(root);
 
     return {
       url: view.location.href,
@@ -1298,12 +1332,19 @@ export class HostPageAutomationExecutor {
         checked: element.checked,
         focused: doc.activeElement === this.refs.get(element.ref),
       })),
+      readableContent: createHostPageReadableContentIndex(
+        this.readableContent,
+      ),
       elements,
     };
   }
 
   private getRoot(): Document | ShadowRoot {
     return this.options.root ?? document;
+  }
+
+  private invalidateReadableContent() {
+    this.readableContent = undefined;
   }
 
   private getNavigationState(view: Window): HostPageSnapshot['navigation'] {
@@ -1389,6 +1430,11 @@ export class HostPageAutomationExecutor {
       checked: isChecked(element),
       visible: actionability.visible,
       actionable: actionability.actionable,
+      receivesEvents: actionability.receivesEvents,
+      occludedBy: actionability.occludedBy
+        ? summarizeElement(actionability.occludedBy)
+        : undefined,
+      safeClickPoints: actionability.safeClickPoints,
       rect: getGlobalRect(element),
       center: actionability.center,
       hitTarget: actionability.hitTarget
@@ -1453,8 +1499,30 @@ export class HostPageAutomationExecutor {
       !actionability.actionable &&
       canHitTest(requestedElement.ownerDocument)
     ) {
-      throw new Error(
-        `Target "${getElementName(requestedElement) ?? requestedElement.tagName.toLowerCase()}" is not receiving pointer events. Take a screenshot or use host_page_pointer coordinates.`,
+      throw new HostPageAutomationStructuredError(
+        `Target "${getElementName(requestedElement) ?? requestedElement.tagName.toLowerCase()}" is not receiving pointer events.`,
+        {
+          reason: 'target_occluded',
+          target: this.describeElement(requestedElement),
+          occluder: actionability.occludedBy
+            ? summarizeElement(actionability.occludedBy)
+            : undefined,
+          targetVisible: actionability.visible,
+          targetEnabled: actionability.enabled,
+          targetReceivesEvents: actionability.receivesEvents,
+          recoverable: true,
+          hitStack: actionability.hitStack.slice(0, 5).map(summarizeElement),
+          nextActions: [
+            {
+              tool: 'host_page_press',
+              args: { key: 'Escape' },
+            },
+            {
+              tool: 'host_page_screenshot',
+              args: {},
+            },
+          ],
+        },
       );
     }
 
@@ -1481,6 +1549,7 @@ export class HostPageAutomationExecutor {
     } else {
       target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     }
+    this.invalidateReadableContent();
 
     return {
       clicked: this.describeElement(target),
@@ -1492,8 +1561,28 @@ export class HostPageAutomationExecutor {
         visible: latestRequestedActionability.visible,
         enabled: latestRequestedActionability.enabled,
         receivesEvents: latestRequestedActionability.receivesEvents,
+        occludedBy: latestRequestedActionability.occludedBy
+          ? summarizeElement(latestRequestedActionability.occludedBy)
+          : undefined,
+        safeClickPoints: latestRequestedActionability.safeClickPoints,
       },
     };
+  }
+
+  private read(params: Record<string, unknown>) {
+    const input = normalizeParams(params) as ReadParams;
+    const root = this.getRoot();
+    const readableContent =
+      this.readableContent ?? extractHostPageReadableContent(root);
+    this.readableContent = readableContent;
+    const readParams: HostPageReadParams = {
+      blockId: readOptionalString(input.blockId),
+      query: readOptionalString(input.query),
+      page: readOptionalInteger(input.page),
+      pageSize: readOptionalInteger(input.pageSize),
+      maxChars: readOptionalInteger(input.maxChars),
+    };
+    return readHostPageReadableContent(readableContent, readParams);
   }
 
   private async fill(params: Record<string, unknown>) {
@@ -1516,6 +1605,7 @@ export class HostPageAutomationExecutor {
       });
       setNativeValue(element, value);
       dispatchInputEvents(element);
+      this.invalidateReadableContent();
       return { filled: this.describeElement(element), value };
     }
 
@@ -1530,6 +1620,7 @@ export class HostPageAutomationExecutor {
       });
       element.textContent = value;
       dispatchInputEvents(element);
+      this.invalidateReadableContent();
       return { filled: this.describeElement(element), value };
     }
 
@@ -1566,6 +1657,7 @@ export class HostPageAutomationExecutor {
       element.dispatchEvent(new KeyboardEvent('keypress', eventInit));
     }
     element.dispatchEvent(new KeyboardEvent('keyup', eventInit));
+    this.invalidateReadableContent();
     return { pressed: key, target: this.describeElement(element) };
   }
 
@@ -1593,6 +1685,7 @@ export class HostPageAutomationExecutor {
     }
 
     dispatchInputEvents(element);
+    this.invalidateReadableContent();
     return {
       selected: Array.from(element.selectedOptions).map(
         (option) => option.value,
@@ -1641,6 +1734,7 @@ export class HostPageAutomationExecutor {
       } else {
         element.scrollBy?.(deltaX, deltaY);
       }
+      this.invalidateReadableContent();
       return {
         scrolled: this.describeElement(element),
         scroll: { x: element.scrollLeft, y: element.scrollTop },
@@ -1661,6 +1755,7 @@ export class HostPageAutomationExecutor {
     } else {
       view.scrollBy?.(deltaX, deltaY);
     }
+    this.invalidateReadableContent();
 
     return { scroll: { x: view.scrollX, y: view.scrollY } };
   }
@@ -1680,6 +1775,7 @@ export class HostPageAutomationExecutor {
     }
 
     this.refs.clear();
+    this.invalidateReadableContent();
     view.location.assign(nextUrl.toString());
     return { navigated: nextUrl.toString() };
   }
@@ -1830,6 +1926,7 @@ export class HostPageAutomationExecutor {
       } else {
         target.dispatchEvent(new MouseEvent('click', eventInit));
       }
+      this.invalidateReadableContent();
     }
 
     return {

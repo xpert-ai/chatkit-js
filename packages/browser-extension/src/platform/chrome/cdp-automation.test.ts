@@ -44,6 +44,12 @@ function mockRect(element: Element, rect: DOMRect) {
   });
 }
 
+function mockVisibleTree(root: ParentNode = document.body) {
+  Array.from(root.querySelectorAll('*')).forEach((element, index) => {
+    mockRect(element, createDomRect(10, 10 + index * 24, 320, 20));
+  });
+}
+
 function findVisualEffectEvaluationIndex(
   sendCommand: ReturnType<typeof vi.fn>,
 ): number {
@@ -368,6 +374,178 @@ describe('CDP host automation', () => {
     });
   });
 
+  it('captures readable content and reads a block through CDP', async () => {
+    document.body.innerHTML = `
+      <section id="facts">
+        <div><strong>布料類型</strong><span>100% 棉</span></div>
+        <div><strong>保養說明</strong><span>機洗</span></div>
+      </section>
+      <h3>關於這個商品</h3>
+      <ul id="about">
+        <li>這款孔眼上衣採用 100% 優質棉製成。</li>
+        <li>可愛的前綁帶設計,精緻孔眼。</li>
+        <li>寬鬆剪裁,提供不受限制的舒適度。</li>
+      </ul>
+    `;
+    mockVisibleTree();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-1' },
+    );
+    const snapshotContent = parseContent(snapshotResponse);
+    const readableContent = snapshotContent.result
+      .readableContent as Record<string, unknown>;
+    const blocks = readableContent.blocks as Array<Record<string, unknown>>;
+    const listBlock = blocks.find((block) => block.type === 'list');
+    const listBlockId = listBlock?.blockId;
+
+    expect(readableContent.coverage).toMatchObject({
+      visibleTextCaptured: true,
+    });
+    expect(blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'keyValueList',
+          preview: expect.arrayContaining([
+            '布料類型: 100% 棉',
+            '保養說明: 機洗',
+          ]),
+        }),
+      ]),
+    );
+    expect(
+      blocks.some(
+        (block) =>
+          'text' in block ||
+          'items' in block ||
+          'fields' in block ||
+          'headers' in block ||
+          'rows' in block ||
+          'selector' in block,
+      ),
+    ).toBe(false);
+    expect(readableContent.outline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          blockId: listBlockId,
+          type: 'list',
+          heading: '關於這個商品',
+          itemCount: 3,
+        }),
+      ]),
+    );
+    expect(
+      (readableContent.outline as Array<Record<string, unknown>>).some(
+        (item) =>
+          'text' in item ||
+          'items' in item ||
+          'fields' in item ||
+          'headers' in item ||
+          'rows' in item,
+      ),
+    ).toBe(false);
+    expect(readableContent.suggestedReads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          blockId: listBlockId,
+          type: 'list',
+          reason: 'preview_incomplete',
+          args: {
+            blockId: listBlockId,
+            pageSize: 3,
+          },
+        }),
+      ]),
+    );
+    expect(listBlock).toMatchObject({
+      heading: '關於這個商品',
+      readHint: {
+        tool: 'host_page_read',
+        args: {
+          blockId: expect.any(String),
+        },
+      },
+    });
+
+    const readResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_read',
+        params: {
+          blockId: listBlock?.blockId,
+          pageSize: 2,
+        },
+        id: 'call-2',
+      },
+    );
+    const readContent = parseContent(readResponse);
+
+    expect(readContent.result).toMatchObject({
+      blockId: listBlock?.blockId,
+      type: 'list',
+      items: [
+        '這款孔眼上衣採用 100% 優質棉製成。',
+        '可愛的前綁帶設計,精緻孔眼。',
+      ],
+      page: 1,
+      pageSize: 2,
+      pageCount: 2,
+      nextPage: 2,
+    });
+  });
+
+  it('keeps CDP readable content reads within maxChars', async () => {
+    document.body.innerHTML = `
+      <h3>關於這個商品</h3>
+      <ul id="about">
+        ${Array.from(
+          { length: 24 },
+          (_, index) =>
+            `<li>第 ${index + 1} 条商品描述 ${'長內容'.repeat(80)}</li>`,
+        ).join('')}
+      </ul>
+    `;
+    mockVisibleTree();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-1' },
+    );
+    const snapshotContent = parseContent(snapshotResponse);
+    const readableContent = snapshotContent.result
+      .readableContent as Record<string, unknown>;
+    const blocks = readableContent.blocks as Array<Record<string, unknown>>;
+    const listBlock = blocks.find((block) => block.type === 'list');
+
+    const readResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_read',
+        params: {
+          blockId: listBlock?.blockId,
+          pageSize: 24,
+          maxChars: 500,
+        },
+        id: 'call-2',
+      },
+    );
+    const readContent = parseContent(readResponse);
+
+    expect(JSON.stringify(readContent.result).length).toBeLessThanOrEqual(500);
+    expect(readContent.result).toMatchObject({
+      blockId: listBlock?.blockId,
+      type: 'list',
+      truncated: true,
+    });
+  });
+
   it('uses normalized pointer coordinates and returns click expectation results', async () => {
     document.body.innerHTML = `
       <button id="department-option">智造技术研究部</button>
@@ -596,6 +774,50 @@ describe('CDP host automation', () => {
       'Input.dispatchMouseEvent',
       expect.objectContaining({ type: 'mouseReleased', button: 'left' }),
     );
+  });
+
+  it('does not inject readable content extraction into non-reading CDP actions', async () => {
+    const runtimeExpressions: string[] = [];
+    const sendCommand = vi.fn(async (_target, method, commandParams) => {
+      if (method === 'Runtime.evaluate') {
+        const expression =
+          commandParams && typeof commandParams.expression === 'string'
+            ? commandParams.expression
+            : '';
+        runtimeExpressions.push(expression);
+        if (expression.includes('data-xpertai-chatkit-visual-effect')) {
+          return { result: { value: undefined } };
+        }
+        return {
+          result: {
+            value: {
+              point: { x: 120, y: 40 },
+              target: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_click', params: { role: 'button', name: 'Save' } },
+    );
+
+    expect(runtimeExpressions.length).toBeGreaterThan(0);
+    expect(
+      runtimeExpressions.some((expression) =>
+        expression.includes('pageResolveTargetScript'),
+      ),
+    ).toBe(true);
+    expect(
+      runtimeExpressions.some((expression) =>
+        expression.includes('pageReadableContentScript'),
+      ),
+    ).toBe(false);
   });
 
   it('re-measures the CDP click point after the target-anchored effect', async () => {

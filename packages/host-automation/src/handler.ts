@@ -37,6 +37,17 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function getStructuredErrorDetails(error: unknown): Record<string, unknown> {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) {
+    return {};
+  }
+
+  const details = Reflect.get(error, 'details');
+  return details && typeof details === 'object' && !Array.isArray(details)
+    ? (details as Record<string, unknown>)
+    : {};
+}
+
 export function createHostPageAutomationClientToolHandler(
   options: HostPageAutomationOptions = {},
 ): HostPageAutomationClientToolHandler {
@@ -60,6 +71,7 @@ export function createHostPageAutomationClientToolHandler(
       return createToolMessage(call, 'error', {
         ok: false,
         error: getErrorMessage(error),
+        ...getStructuredErrorDetails(error),
       });
     }
   };
