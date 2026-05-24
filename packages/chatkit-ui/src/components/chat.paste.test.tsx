@@ -10,17 +10,30 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const uploadFile = vi.fn();
+  const getFileStatus = vi.fn();
+  const fetchContextFile = vi.fn(
+    async (path: string, options?: { body?: BodyInit | null }) => {
+      if (path.includes('/status')) {
+        return getFileStatus(path, options);
+      }
+      const body = options?.body;
+      const file = body instanceof FormData ? body.get('file') : null;
+      return uploadFile(file);
+    },
+  );
   const deleteFile = vi.fn();
   const refreshThreads = vi.fn().mockResolvedValue(undefined);
 
   return {
     uploadFile,
+    getFileStatus,
     deleteFile,
     refreshThreads,
     stream: {
       client: {
         contexts: {
           uploadFile,
+          fetch: fetchContextFile,
           deleteFile,
         },
         assistants: {
@@ -94,7 +107,11 @@ vi.mock('../hooks/useThreads', () => ({
 
 vi.mock('../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string) =>
+      ({
+        'chat.attachmentStatus.parsing': 'Parsing',
+        'chat.attachmentStatus.ready': 'Ready',
+      })[key] ?? key,
     i18n: {
       language: 'en-US',
     },
@@ -185,7 +202,20 @@ function createClipboardImageItem(file: File) {
   };
 }
 
-describe('Chat composer paste behavior', () => {
+function createFileDataTransfer(files: File[]) {
+  return {
+    files,
+    items: files.map((file) => ({
+      kind: 'file',
+      type: file.type,
+      getAsFile: () => file,
+    })),
+    types: ['Files'],
+    dropEffect: 'none',
+  } as unknown as DataTransfer;
+}
+
+describe('Chat composer paste and drop behavior', () => {
   const originalCreateObjectUrl = URL.createObjectURL;
   const originalRevokeObjectUrl = URL.revokeObjectURL;
   const originalImage = window.Image;
@@ -194,6 +224,18 @@ describe('Chat composer paste behavior', () => {
   beforeEach(() => {
     globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
     mocks.uploadFile.mockReset();
+    mocks.getFileStatus.mockReset();
+    mocks.stream.client.contexts.fetch.mockReset();
+    mocks.stream.client.contexts.fetch.mockImplementation(
+      async (path: string, options?: { body?: BodyInit | null }) => {
+        if (path.includes('/status')) {
+          return mocks.getFileStatus(path, options);
+        }
+        const body = options?.body;
+        const file = body instanceof FormData ? body.get('file') : null;
+        return mocks.uploadFile(file);
+      },
+    );
     mocks.deleteFile.mockReset();
     mocks.stream.client.assistants.getRuntimeCapabilities.mockClear();
     mocks.refreshThreads.mockClear();
@@ -319,11 +361,15 @@ describe('Chat composer paste behavior', () => {
 
   it('deletes uploaded attachments through the SDK client when removed', async () => {
     mocks.uploadFile.mockResolvedValueOnce({
-      id: 'file-1',
+      id: 'asset-1',
+      fileId: 'asset-1',
+      storageFileId: 'file-1',
       file: 'uploads/report.pdf',
       originalName: 'report.pdf',
-      mimetype: 'application/pdf',
+      mimeType: 'application/pdf',
       size: 1024,
+      status: 'ready',
+      parseStatus: 'ready',
     });
     mocks.deleteFile.mockResolvedValueOnce(undefined);
 
@@ -368,6 +414,67 @@ describe('Chat composer paste behavior', () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it('refreshes parsing attachment status until the file is ready', async () => {
+    mocks.uploadFile.mockResolvedValueOnce({
+      id: 'asset-1',
+      fileId: 'asset-1',
+      storageFileId: 'storage-1',
+      originalName: 'deck.pdf',
+      mimeType: 'application/pdf',
+      size: 1024,
+      status: 'parsing',
+      parseStatus: 'parsing',
+      purpose: 'chat_attachment',
+      parseMode: 'auto',
+      capabilities: ['preview'],
+    });
+    mocks.getFileStatus.mockResolvedValueOnce({
+      fileId: 'asset-1',
+      storageFileId: 'storage-1',
+      status: 'ready',
+      parseStatus: 'ready',
+      capabilities: ['preview', 'read', 'search'],
+    });
+
+    const { container } = render(
+      <Chat
+        clientSecret="secret"
+        options={{
+          api: {
+            apiUrl: 'https://api.example.com',
+            getClientSecret: async () => 'secret',
+          },
+          composer: {
+            attachments: {
+              enabled: true,
+            },
+          },
+        }}
+      />,
+    );
+
+    const input = container.querySelector('input[type="file"]');
+    expect(input).toBeTruthy();
+
+    const file = new File(['content'], 'deck.pdf', {
+      type: 'application/pdf',
+    });
+    fireEvent.change(input as HTMLInputElement, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('Parsing')).toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(mocks.getFileStatus).toHaveBeenCalledWith(
+        '/files/asset-1/status',
+        { method: 'GET' },
+      ),
+    );
+    await waitFor(() => expect(screen.getByText('Ready')).toBeInTheDocument());
+  });
+
   it('uploads multiple pasted images in order and creates one reference per image', async () => {
     mocks.uploadFile
       .mockResolvedValueOnce({
@@ -407,5 +514,64 @@ describe('Chat composer paste behavior', () => {
       expect(screen.getByText('first.png')).toBeInTheDocument();
       expect(screen.getByText('second.png')).toBeInTheDocument();
     });
+  });
+
+  it('uploads files dropped anywhere on the chat root when attachments are enabled', async () => {
+    mocks.uploadFile.mockResolvedValueOnce({
+      id: 'asset-1',
+      fileId: 'asset-1',
+      storageFileId: 'storage-1',
+      originalName: 'report.pdf',
+      mimeType: 'application/pdf',
+      size: 1024,
+      status: 'ready',
+      parseStatus: 'ready',
+      purpose: 'chat_attachment',
+      parseMode: 'auto',
+      capabilities: ['preview', 'read'],
+    });
+
+    const { container } = render(
+      <Chat
+        clientSecret="secret"
+        options={{
+          api: {
+            apiUrl: 'https://api.example.com',
+            getClientSecret: async () => 'secret',
+          },
+          composer: {
+            attachments: {
+              enabled: true,
+              maxCount: 10,
+              maxSize: 5 * 1024 * 1024,
+            },
+          },
+        }}
+      />,
+    );
+
+    const root = container.querySelector('[data-chatkit-root]');
+    expect(root).toBeTruthy();
+
+    const file = new File(['content'], 'report.pdf', {
+      type: 'application/pdf',
+    });
+    fireEvent.dragEnter(root as HTMLElement, {
+      dataTransfer: createFileDataTransfer([file]),
+    });
+    expect(screen.getByText('chat.dropFilesTitle')).toBeInTheDocument();
+    expect(
+      screen
+        .getByText('chat.dropFilesTitle')
+        .closest('[data-chatkit-drop-overlay]'),
+    ).toHaveClass('fixed');
+
+    fireEvent.drop(root as HTMLElement, {
+      dataTransfer: createFileDataTransfer([file]),
+    });
+
+    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledWith(file));
+    expect(screen.queryByText('chat.dropFilesTitle')).not.toBeInTheDocument();
+    expect(await screen.findByText('report.pdf')).toBeInTheDocument();
   });
 });

@@ -262,10 +262,15 @@ export type RuntimeCapabilitiesSelection = RuntimeCapabilitiesSelectionSet & {
 };
 
 /**
- * Human input message, include parameters and attachments
+ * Human input message, including uploaded file handles and references.
  */
 export type TChatRequestHuman = {
   input?: string;
+  /**
+   * Uploaded file handles submitted with the message. ChatKit UI now sends
+   * AgentFile/FileAsset-shaped objects here; raw browser File objects should be
+   * uploaded before submission.
+   */
   files?: Partial<File>[];
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
