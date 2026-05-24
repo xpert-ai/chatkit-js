@@ -19,6 +19,16 @@
     "youLabel": "你",
     "scrollToBottom": "回到底部",
     "retryUpload": "重新上传",
+    "dropFilesTitle": "松手上传文件",
+    "dropFilesHint": "文件会附加到你的下一条消息。",
+    "attachmentStatus": {
+      "uploaded": "已上传",
+      "scanning": "扫描中",
+      "parsing": "解析中",
+      "ready": "已就绪",
+      "partial": "部分就绪",
+      "failed": "解析失败"
+    },
     "poweredBy": "由 Xpert AI 驱动",
     "followUps": {
       "label": "Follow-up 模式",

@@ -3,11 +3,9 @@ import {
   ArrowDown,
   FileText,
   ImageIcon,
-  Loader2,
   Minus,
   Pencil,
   Quote,
-  RefreshCw,
   Settings,
   X,
 } from 'lucide-react';
@@ -36,7 +34,7 @@ import {
   hasRenderableAssistantMessage,
 } from '../lib/message';
 import { isNearBottom } from '../lib/scroll';
-import { type StorageFile, type UploadingFile } from '../lib/types';
+import { type AgentFile, type StorageFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { SendButton } from './composer/SendButton';
@@ -48,6 +46,14 @@ import { PendingTodos } from './composer/pending-todos';
 import { HITLApprovalPanel } from './composer/hitl-approval-panel';
 import { RequestUserInputPanel } from './composer/request-user-input-panel';
 import { useConversationSummaryEvent } from './chat/useConversationSummaryEvent';
+import {
+  ChatAttachments,
+  type AttachmentFileStatus,
+  type ChatAttachmentFile,
+  type ChatAttachmentsHandle,
+  type ChatAttachmentsState,
+} from './chat/attachments';
+import { UploadDroppedFiles } from './chat/upload-dropped-files';
 import { usePetAutoState } from './chat/usePetAutoState';
 import { useSlashCommands } from './chat/useSlashCommands';
 import {
@@ -157,13 +163,11 @@ const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 
-type UploadedMessageFile = {
-  originalName: string;
-  mimetype: string;
-};
+type UploadedMessageFile = ChatAttachmentFile;
 
 type HumanMessageWithMeta = Message & {
   attachments?: UploadedMessageFile[];
+  fileAssets?: UploadedMessageFile[];
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
@@ -284,20 +288,20 @@ async function readImageDimensions(file: File): Promise<{
   });
 }
 
-function getStorageFileUrl(file: StorageFile): string | undefined {
+function getUploadedFileUrl(file: AgentFile | StorageFile): string | undefined {
   return file.url ?? file.fileUrl ?? file.thumbUrl;
 }
 
 function buildPastedImageReference(
   file: File,
-  storageFile: StorageFile,
+  uploadedFile: AgentFile,
   dimensions?: { width?: number; height?: number },
 ): ChatKitImageReference {
   const name =
-    storageFile.originalName?.trim() || file.name.trim() || 'Pasted image';
+    uploadedFile.originalName?.trim() || file.name.trim() || 'Pasted image';
   const mimeType =
-    storageFile.mimetype?.trim() || file.type.trim() || 'image/*';
-  const size = storageFile.size ?? file.size;
+    uploadedFile.mimeType?.trim() || file.type.trim() || 'image/*';
+  const size = uploadedFile.size ?? file.size;
   const width = dimensions?.width;
   const height = dimensions?.height;
   const metaParts = [
@@ -308,9 +312,9 @@ function buildPastedImageReference(
 
   return {
     type: 'image',
-    id: storageFile.id,
-    fileId: storageFile.id,
-    url: getStorageFileUrl(storageFile),
+    id: uploadedFile.id,
+    fileId: uploadedFile.storageFileId,
+    url: getUploadedFileUrl(uploadedFile),
     mimeType,
     name,
     ...(typeof size === 'number' ? { size } : {}),
@@ -557,7 +561,12 @@ export function Chat({
     );
   const [runtimeCapabilityPalette, setRuntimeCapabilityPalette] =
     React.useState<RuntimeCapabilityPaletteState | null>(null);
-  const [attachments, setAttachments] = React.useState<UploadingFile[]>([]);
+  const [attachmentState, setAttachmentState] =
+    React.useState<ChatAttachmentsState>({
+      uploadedFiles: [],
+      hasUploadingFiles: false,
+      hasParsingFiles: false,
+    });
   const [references, setReferences] = React.useState<ChatKitReference[]>([]);
   const [isUploadingReferenceImages, setIsUploadingReferenceImages] =
     React.useState(false);
@@ -572,7 +581,7 @@ export function Chat({
     isLoading: isThreadsLoading,
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const attachmentsRef = React.useRef<ChatAttachmentsHandle>(null);
   const composerInputRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
@@ -1154,8 +1163,8 @@ export function Chat({
     }
   }, [missingConfigKind, t]);
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
-  // Check if any files are still uploading (moved up for use in isSendDisabled)
-  const hasUploadingFiles = attachments.some((a) => a.status === 'uploading');
+  // File parsing can continue after submit; only the transport upload blocks send.
+  const hasUploadingFiles = attachmentState.hasUploadingFiles;
   const isSendDisabled =
     (!trimmedDraft && !hasReferences) ||
     hasPendingInteractiveRequest ||
@@ -1380,17 +1389,9 @@ export function Chat({
     stream.threadId,
   ]);
 
-  // Get successfully uploaded files (matching IStorageFile interface)
-  const uploadedFiles = attachments
-    .filter((a) => a.status === 'success' && a.storageFile)
-    .map((a) => ({
-      id: a.storageFile?.id,
-      file: a.storageFile?.file,
-      url: a.storageFile?.url,
-      originalName: a.storageFile?.originalName ?? a.file.name,
-      mimetype: a.storageFile?.mimetype ?? a.file.type,
-      size: a.storageFile?.size ?? a.file.size,
-    }));
+  // Submit only FileAsset handles. Parsed summaries/content stay server-side and
+  // are fetched later by built-in file-understanding tools.
+  const uploadedFiles = attachmentState.uploadedFiles;
 
   const handleSessionRuntimeCapabilityToggle = React.useCallback(
     (type: RuntimeCapabilityOption['type'], id: string, selected: boolean) => {
@@ -1565,7 +1566,7 @@ export function Chat({
         ...(runtimeCapabilityOptionsForMessage.length > 0
           ? { runtimeCapabilityOptions: runtimeCapabilityOptionsForMessage }
           : {}),
-        ...(filesToSend ? { attachments: filesToSend } : {}),
+        ...(filesToSend ? { fileAssets: filesToSend } : {}),
         ...(referencesToSend ? { references: referencesToSend } : {}),
       };
 
@@ -1646,7 +1647,7 @@ export function Chat({
       if (selectedTool && !selectedTool.pinned) {
         setSelectedTool(null);
       }
-      setAttachments([]);
+      attachmentsRef.current?.clear();
       setReferences([]);
       setRunRuntimeCapabilities(
         createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
@@ -1870,11 +1871,55 @@ export function Chat({
   }, [clearQuoteSelection, quoteSelection]);
 
   const handleAttachmentClick = () => {
-    fileInputRef.current?.click();
+    attachmentsRef.current?.openFilePicker();
   };
 
   const uploadContextFile = React.useCallback(
-    (file: File) => stream.client.contexts.uploadFile<StorageFile>(file),
+    (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file, file.name || 'upload');
+      // The backend creates a StorageFile for object storage, then returns an
+      // AgentFile/FileAsset handle for chat runtime and file tools.
+      formData.append('purpose', 'chat_attachment');
+      formData.append('parseMode', 'auto');
+      if (stream.assistantId) {
+        formData.append('xpertId', stream.assistantId);
+      }
+      if (stream.threadId) {
+        formData.append('threadId', stream.threadId);
+      }
+      return (
+        stream.client.contexts as unknown as {
+          fetch<TResponse>(
+            path: string,
+            options: RequestInit,
+          ): Promise<TResponse>;
+        }
+      ).fetch<AgentFile>('/contexts/file', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+    [stream.assistantId, stream.client, stream.threadId],
+  );
+
+  const getContextFileStatus = React.useCallback(
+    (fileId: string) =>
+      (
+        stream.client.contexts as unknown as {
+          fetch<TResponse>(
+            path: string,
+            options?: RequestInit,
+          ): Promise<TResponse>;
+        }
+      ).fetch<AttachmentFileStatus>(`/files/${fileId}/status`, {
+        method: 'GET',
+      }),
+    [stream.client],
+  );
+
+  const deleteContextFile = React.useCallback(
+    (storageFileId: string) => stream.client.contexts.deleteFile(storageFileId),
     [stream.client],
   );
 
@@ -2040,12 +2085,12 @@ export function Chat({
         setIsUploadingReferenceImages(true);
         void Promise.allSettled(
           nextFiles.map(async (file) => {
-            const [dimensions, storageFile] = await Promise.all([
+            const [dimensions, uploadedFile] = await Promise.all([
               readImageDimensions(file),
               uploadContextFile(file),
             ]);
 
-            return buildPastedImageReference(file, storageFile, dimensions);
+            return buildPastedImageReference(file, uploadedFile, dimensions);
           }),
         )
           .then((results) => {
@@ -2150,107 +2195,6 @@ export function Chat({
     () => getComposerFollowUpShortcutLabels(alternateFollowUpShortcutLabel),
     [alternateFollowUpShortcutLabel],
   );
-
-  // Upload a single file to the server
-  const uploadFile = React.useCallback(
-    async (localId: string, file: File) => {
-      try {
-        const result = await uploadContextFile(file);
-        setAttachments((prev) =>
-          prev.map((item) =>
-            item.localId === localId
-              ? { ...item, status: 'success' as const, storageFile: result }
-              : item,
-          ),
-        );
-      } catch (error) {
-        setAttachments((prev) =>
-          prev.map((item) =>
-            item.localId === localId
-              ? {
-                  ...item,
-                  status: 'error' as const,
-                  error:
-                    error instanceof Error ? error.message : 'Upload failed',
-                }
-              : item,
-          ),
-        );
-      }
-    },
-    [uploadContextFile],
-  );
-
-  // Retry uploading a failed file
-  const handleRetryUpload = React.useCallback(
-    (localId: string) => {
-      const attachment = attachments.find((a) => a.localId === localId);
-      if (!attachment || attachment.status !== 'error') return;
-
-      setAttachments((prev) =>
-        prev.map((item) =>
-          item.localId === localId
-            ? { ...item, status: 'uploading' as const, error: undefined }
-            : item,
-        ),
-      );
-      void uploadFile(localId, attachment.file);
-    },
-    [attachments, uploadFile],
-  );
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    const maxCount = composer?.attachments?.maxCount ?? 10;
-    const maxSize = composer?.attachments?.maxSize ?? 100 * 1024 * 1024; // 100MB default
-
-    const newAttachments: UploadingFile[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (file.size > maxSize) {
-        console.warn(`File ${file.name} exceeds max size of ${maxSize} bytes`);
-        continue;
-      }
-      const localId = createMessageId();
-      newAttachments.push({
-        localId,
-        file,
-        status: 'uploading',
-      });
-    }
-
-    // Add new attachments and limit to maxCount
-    setAttachments((prev) => {
-      const combined = [...prev, ...newAttachments];
-      return combined.slice(0, maxCount);
-    });
-
-    // Start uploading each file
-    newAttachments.forEach((attachment) => {
-      void uploadFile(attachment.localId, attachment.file);
-    });
-
-    // Reset the input so the same file can be selected again
-    event.target.value = '';
-  };
-
-  const handleRemoveAttachment = async (localId: string) => {
-    const attachment = attachments.find((a) => a.localId === localId);
-    if (!attachment) return;
-
-    // If file was uploaded successfully, delete from server
-    if (attachment.status === 'success' && attachment.storageFile?.id) {
-      try {
-        await stream.client.contexts.deleteFile(attachment.storageFile.id);
-      } catch {
-        // Still remove from local state even if server delete fails
-      }
-    }
-
-    setAttachments((prev) => prev.filter((item) => item.localId !== localId));
-  };
 
   const handleToolSelect = (tool: ToolOption) => {
     setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
@@ -2451,6 +2395,14 @@ export function Chat({
         .map(([mime, exts]) => [mime, ...exts.map((e) => `.${e}`)].join(','))
         .join(',')
     : undefined;
+  const canUploadDroppedFiles =
+    composer?.attachments?.enabled === true &&
+    !missingConfig &&
+    !isHistoryLoading &&
+    !hasPendingInteractiveRequest;
+  const handleDroppedFiles = React.useCallback((files: ArrayLike<File>) => {
+    return attachmentsRef.current?.queueFiles(files) ?? false;
+  }, []);
 
   const currentThread = React.useMemo(
     () => threads.find((item) => item.id === stream.threadId),
@@ -2497,11 +2449,16 @@ export function Chat({
   const assistantTitle = assistantName || resolvedTitle;
 
   return (
-    <div
+    <UploadDroppedFiles
       ref={viewportRef}
       data-chatkit-root=""
+      enabled={canUploadDroppedFiles}
+      dropTitle={t('chat.dropFilesTitle')}
+      dropHint={t('chat.dropFilesHint')}
+      activeClassName="ring-2 ring-primary/40 ring-inset"
+      onFiles={handleDroppedFiles}
       className={cn(
-        'relative flex h-full w-full flex-col flex-1 overflow-y-auto bg-background shadow-sm',
+        'relative flex h-full w-full flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
         className,
       )}
     >
@@ -2678,7 +2635,10 @@ export function Chat({
                 messageContent.trim().length > 0;
               const humanMessage = message as HumanMessageWithMeta;
               const humanReferences = humanMessage.references ?? [];
-              const humanAttachments = humanMessage.attachments ?? [];
+              const humanAttachments = [
+                ...(humanMessage.fileAssets ?? []),
+                ...(humanMessage.attachments ?? []),
+              ];
               const humanRuntimeCapabilityOptions =
                 message.type === 'human'
                   ? (humanMessage.runtimeCapabilityOptions ??
@@ -2804,7 +2764,7 @@ export function Chat({
                                   >
                                     <FileText size={12} />
                                     <span className="max-w-[100px] truncate">
-                                      {file.originalName}
+                                      {file.originalName ?? file.id}
                                     </span>
                                   </div>
                                 ))}
@@ -2937,82 +2897,17 @@ export function Chat({
             {threadErrorMessage}
           </div>
         )}
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
+        <ChatAttachments
+          ref={attachmentsRef}
           accept={acceptMimes}
-          onChange={handleFileChange}
-          className="hidden"
+          maxCount={composer?.attachments?.maxCount ?? 10}
+          maxSize={composer?.attachments?.maxSize ?? 100 * 1024 * 1024}
+          retryUploadLabel={t('chat.retryUpload')}
+          uploadFile={uploadContextFile}
+          deleteFile={deleteContextFile}
+          getFileStatus={getContextFileStatus}
+          onStateChange={setAttachmentState}
         />
-
-        {/* Attachments preview */}
-        {attachments.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {attachments.map((item) => (
-              <div
-                key={item.localId}
-                className={cn(
-                  'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
-                  item.status === 'error'
-                    ? 'bg-destructive/10 border border-destructive/30'
-                    : 'bg-muted',
-                )}
-              >
-                {/* Status icon */}
-                {item.status === 'uploading' && (
-                  <Loader2
-                    size={14}
-                    className="animate-spin text-muted-foreground"
-                  />
-                )}
-                {item.status === 'success' && (
-                  <FileText size={14} className="text-muted-foreground" />
-                )}
-                {item.status === 'error' && (
-                  <FileText size={14} className="text-destructive" />
-                )}
-
-                {/* File name */}
-                <span
-                  className={cn(
-                    'max-w-30 truncate',
-                    item.status === 'error' && 'text-destructive',
-                  )}
-                >
-                  {item.file.name}
-                </span>
-
-                {/* Retry button for failed uploads */}
-                {item.status === 'error' && (
-                  <button
-                    type="button"
-                    onClick={() => handleRetryUpload(item.localId)}
-                    className="ml-1 rounded-full p-0.5 text-destructive hover:bg-destructive/20"
-                    title={t('chat.retryUpload')}
-                  >
-                    <RefreshCw size={12} />
-                  </button>
-                )}
-
-                {/* Remove button */}
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAttachment(item.localId)}
-                  className={cn(
-                    'ml-1 rounded-full p-0.5',
-                    item.status === 'error'
-                      ? 'text-destructive hover:bg-destructive/20'
-                      : 'hover:bg-muted-foreground/20',
-                  )}
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
 
         {references.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-2">
@@ -3296,6 +3191,6 @@ export function Chat({
         onSave={savePetLocalSettings}
       />
       <PetBridge pet={effectivePet} state={petAutoState} />
-    </div>
+    </UploadDroppedFiles>
   );
 }

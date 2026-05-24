@@ -140,6 +140,8 @@ export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
   executionId?: string;
+  attachments?: Record<string, unknown>[];
+  fileAssets?: Record<string, unknown>[];
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
@@ -418,6 +420,8 @@ function getStreamEventErrorMessage(
 
 type PersistedChatMessage = ChatMessage &
   MessageMetadataContainer & {
+    attachments?: unknown;
+    fileAssets?: unknown;
     followUpMode?: FollowUpBehavior;
     followUpStatus?: FollowUpStatus;
     targetExecutionId?: string | null;
@@ -428,6 +432,35 @@ type PersistedChatMessage = ChatMessage &
 function normalizeThreadIdentifier(threadId?: string | null): string | null {
   const normalized = typeof threadId === 'string' ? threadId.trim() : '';
   return normalized ? normalized : null;
+}
+
+function normalizeMessageFiles(value: unknown): Record<string, unknown>[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const files = value.filter(isRecord).map((file) => {
+    const originalName =
+      typeof file.originalName === 'string'
+        ? file.originalName
+        : typeof file.name === 'string'
+          ? file.name
+          : undefined;
+    const mimeType =
+      typeof file.mimeType === 'string'
+        ? file.mimeType
+        : typeof file.mimetype === 'string'
+          ? file.mimetype
+          : undefined;
+
+    return {
+      ...file,
+      ...(originalName ? { originalName } : {}),
+      ...(mimeType ? { mimeType } : {}),
+    };
+  });
+
+  return files.length > 0 ? files : undefined;
 }
 
 function getConversationThreadId(conversation: unknown): string | null {
@@ -474,6 +507,8 @@ function mapChatMessageToUiMessage(
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(message);
   const runtimeCapabilities = extractRuntimeCapabilities(message);
+  const attachments = normalizeMessageFiles(message.attachments);
+  const fileAssets = normalizeMessageFiles(message.fileAssets);
 
   return {
     id: message.id ?? createMessageId(),
@@ -482,6 +517,8 @@ function mapChatMessageToUiMessage(
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
     ...(references.length > 0 ? { references } : {}),
+    ...(attachments ? { attachments } : {}),
+    ...(fileAssets ? { fileAssets } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
@@ -743,6 +780,8 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
   const toolCalls = extractClientToolCalls(raw);
+  const attachments = normalizeMessageFiles((raw as { attachments?: unknown }).attachments);
+  const fileAssets = normalizeMessageFiles((raw as { fileAssets?: unknown }).fileAssets);
   const rawAgentRuns = (raw as { agentRuns?: unknown }).agentRuns;
   const agentRuns = Array.isArray(rawAgentRuns)
     ? rawAgentRuns
@@ -757,6 +796,8 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     executionId,
     ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
     ...(references.length > 0 ? { references } : {}),
+    ...(attachments ? { attachments } : {}),
+    ...(fileAssets ? { fileAssets } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
@@ -773,6 +814,8 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
     submittedInput?: string;
     referenceComposition?: ChatKitReferenceCompositionMode;
     runtimeCapabilities?: RuntimeCapabilitiesSelection;
+    attachments?: Record<string, unknown>[];
+    fileAssets?: Record<string, unknown>[];
     clientToolCalls?: ToolCall[];
   } = {};
 
@@ -785,6 +828,8 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
   const submittedInput = extractSubmittedInput(raw);
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const attachments = normalizeMessageFiles((raw as { attachments?: unknown }).attachments);
+  const fileAssets = normalizeMessageFiles((raw as { fileAssets?: unknown }).fileAssets);
   const clientToolCalls = extractClientToolCalls(raw);
   if (references.length > 0) {
     meta.references = references;
@@ -797,6 +842,12 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
   }
   if (runtimeCapabilities) {
     meta.runtimeCapabilities = runtimeCapabilities;
+  }
+  if (attachments) {
+    meta.attachments = attachments;
+  }
+  if (fileAssets) {
+    meta.fileAssets = fileAssets;
   }
   if (clientToolCalls) {
     meta.clientToolCalls = clientToolCalls;
@@ -1275,6 +1326,8 @@ export function applyStreamEvent(
           content: meta.content ?? '',
           executionId,
           ...(meta.references ? { references: meta.references } : {}),
+          ...(meta.attachments ? { attachments: meta.attachments } : {}),
+          ...(meta.fileAssets ? { fileAssets: meta.fileAssets } : {}),
           ...(meta.submittedInput !== undefined
             ? { submittedInput: meta.submittedInput }
             : {}),
@@ -1304,6 +1357,8 @@ export function applyStreamEvent(
                 ...(meta.id ? { id: meta.id } : {}),
                 ...(meta.type ? { type: meta.type } : {}),
                 ...(meta.references ? { references: meta.references } : {}),
+                ...(meta.attachments ? { attachments: meta.attachments } : {}),
+                ...(meta.fileAssets ? { fileAssets: meta.fileAssets } : {}),
                 ...(meta.submittedInput !== undefined
                   ? { submittedInput: meta.submittedInput }
                   : {}),

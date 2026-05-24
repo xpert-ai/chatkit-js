@@ -19,6 +19,16 @@
     "youLabel": "You",
     "scrollToBottom": "Scroll to bottom",
     "retryUpload": "Retry upload",
+    "dropFilesTitle": "Drop files to upload",
+    "dropFilesHint": "They will be attached to your next message.",
+    "attachmentStatus": {
+      "uploaded": "Uploaded",
+      "scanning": "Scanning",
+      "parsing": "Parsing",
+      "ready": "Ready",
+      "partial": "Partially ready",
+      "failed": "Failed"
+    },
     "poweredBy": "Powered by Xpert AI",
     "followUps": {
       "label": "Follow-up behavior",
