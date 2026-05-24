@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.12
+
+### Patch Changes
+
+- a369072: new composer attachments
+- Updated dependencies [a369072]
+  - @xpert-ai/chatkit-types@0.3.10
+
 ## 0.3.11
 
 ### Patch Changes

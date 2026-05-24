@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.10
+
+### Patch Changes
+
+- a369072: new composer attachments
+
 ## 0.3.9
 
 ### Patch Changes
