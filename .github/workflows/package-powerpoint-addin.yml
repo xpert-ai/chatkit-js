@@ -1,0 +1,69 @@
+name: Package PowerPoint Add-in
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packages/powerpoint-addin/**'
+      - '.github/workflows/package-powerpoint-addin.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/powerpoint-addin/**'
+      - '.github/workflows/package-powerpoint-addin.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  package-powerpoint-addin:
+    name: Build PowerPoint add-in
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @xpert-ai/chatkit-powerpoint-addin type-check
+
+      - name: Test
+        run: pnpm --filter @xpert-ai/chatkit-powerpoint-addin test
+
+      - name: Build
+        env:
+          ADDIN_BASE_URL: https://localhost:3000
+        run: pnpm --filter @xpert-ai/chatkit-powerpoint-addin build
+
+      - name: Validate manifest
+        run: pnpm --filter @xpert-ai/chatkit-powerpoint-addin validate:manifest
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatkit-powerpoint-addin
+          path: |
+            packages/powerpoint-addin/dist/manifest.xml
+            packages/powerpoint-addin/dist/taskpane/**
+            packages/powerpoint-addin/dist/server/**
+            packages/powerpoint-addin/README.md
+            packages/powerpoint-addin/env.example

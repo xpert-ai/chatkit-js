@@ -1,0 +1,69 @@
+{
+  "name": "@xpert-ai/chatkit-word-addin",
+  "version": "0.1.0",
+  "description": "Word task pane add-in that embeds Xpert ChatKit and exposes Office.js client tools.",
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "env.example",
+    "!**/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "rimraf dist && pnpm build:lib && pnpm build:taskpane && pnpm build:server && pnpm manifest",
+    "build:lib": "vite build --config vite.lib.config.ts",
+    "build:taskpane": "vite build --config vite.config.ts",
+    "build:server": "tsc -p tsconfig.server.json",
+    "dev": "vite --host 0.0.0.0 --port 3001",
+    "manifest": "node scripts/generate-manifest.mjs",
+    "preview": "vite preview --host 0.0.0.0 --port 3001",
+    "server": "node dist/server/index.js",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "validate:manifest": "office-addin-manifest validate dist/manifest.xml"
+  },
+  "dependencies": {
+    "@xpert-ai/chatkit-react": "workspace:~",
+    "@xpert-ai/chatkit-types": "workspace:~",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/office-js": "^1.0.591",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "office-addin-manifest": "^2.1.5",
+    "office-addin-dev-certs": "^2.0.9",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.0",
+    "vite-plugin-dts": "^3.7.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^3.2.4"
+  },
+  "keywords": [
+    "chatkit",
+    "office-addin",
+    "word",
+    "xpert"
+  ],
+  "repository": {
+    "directory": "packages/word-addin",
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  }
+}

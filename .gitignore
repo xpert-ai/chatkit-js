@@ -16,3 +16,4 @@ pnpm-publish-summary.json
 __pycache__/
 *.pyc
 *.timestamp-*.mjs
+.env*
