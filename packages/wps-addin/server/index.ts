@@ -5,14 +5,14 @@ import { fileURLToPath } from 'node:url';
 
 type JsonObject = Record<string, unknown>;
 
-const SESSION_COOKIE_NAME = 'chatkit_word_session_id';
+const SESSION_COOKIE_NAME = 'chatkit_wps_session_id';
 const SESSION_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-const DEFAULT_PORT = 8788;
+const DEFAULT_PORT = 8789;
 const DEFAULT_XPERTAI_API_URL = 'https://api.xpertai.cn/api/ai';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const packageRoot = resolve(__dirname, '../..');
-const taskpaneRoot = resolve(packageRoot, 'dist/taskpane');
+const staticRoot = resolve(packageRoot, 'dist');
 
 function loadEnvFile(path: string): void {
   if (!existsSync(path)) {
@@ -228,8 +228,12 @@ function getContentType(path: string): string {
       return 'text/css; charset=utf-8';
     case '.svg':
       return 'image/svg+xml';
+    case '.png':
+      return 'image/png';
     case '.json':
       return 'application/json; charset=utf-8';
+    case '.xml':
+      return 'application/xml; charset=utf-8';
     default:
       return 'application/octet-stream';
   }
@@ -242,14 +246,18 @@ function serveStatic(request: IncomingMessage, response: ServerResponse): boolea
   }
 
   const url = new URL(request.url, 'http://localhost');
-  const pathname = url.pathname === '/' ? '/taskpane.html' : url.pathname;
-  const target = resolve(join(taskpaneRoot, pathname));
-  if (!target.startsWith(taskpaneRoot) || !existsSync(target) || !statSync(target).isFile()) {
+  const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+  const target = resolve(join(staticRoot, pathname));
+  if (!target.startsWith(staticRoot) || !existsSync(target) || !statSync(target).isFile()) {
     return false;
   }
 
   response.statusCode = 200;
   response.setHeader('Content-Type', getContentType(target));
+  if (request.method === 'HEAD') {
+    response.end();
+    return true;
+  }
   createReadStream(target).pipe(response);
   return true;
 }
@@ -274,7 +282,10 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  if (request.method === 'GET' && serveStatic(request, response)) {
+  if (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    serveStatic(request, response)
+  ) {
     return;
   }
 
@@ -283,5 +294,5 @@ const server = createServer(async (request, response) => {
 
 const config = getConfig();
 server.listen(config.port, () => {
-  console.log(`Word ChatKit session proxy listening on http://localhost:${config.port}`);
+  console.log(`WPS ChatKit session proxy listening on http://localhost:${config.port}`);
 });
