@@ -34,6 +34,8 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
         'composer.capabilities.knowledge': 'Knowledge',
         'composer.planModeActive': 'Plan',
         'composer.disablePlanMode': 'Turn off plan mode',
+        'chat.goal.label': 'Goal',
+        'chat.goal.hide': 'Hide goal',
       };
       return labels[key] ?? key;
     },
@@ -114,6 +116,57 @@ describe('ComposerMenu', () => {
 
     fireEvent.click(planMode);
     expect(onPlanModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it('renders goal as a switch only when the runtime command is available', () => {
+    const onGoalPanelOpenChange = vi.fn();
+
+    const { rerender } = render(
+      <ComposerMenu onGoalPanelOpenChange={onGoalPanelOpenChange} />,
+    );
+
+    openMenu();
+    expect(
+      screen.queryByRole('switch', { name: 'Goal' }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ComposerMenu
+        goalCommandAvailable
+        goalPanelOpen={false}
+        onGoalPanelOpenChange={onGoalPanelOpenChange}
+      />,
+    );
+
+    const goalSwitch = screen.getByRole('switch', { name: 'Goal' });
+    expect(goalSwitch).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(goalSwitch);
+    expect(onGoalPanelOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it('renders an active goal indicator that disables goal mode', () => {
+    const onGoalPanelOpenChange = vi.fn();
+
+    render(
+      <ComposerMenu
+        goalCommandAvailable
+        goalPanelOpen
+        onGoalPanelOpenChange={onGoalPanelOpenChange}
+      />,
+    );
+
+    const activeGoal = screen.getByRole('button', { name: 'Hide goal' });
+    expect(activeGoal).toHaveTextContent('Goal');
+    expect(
+      activeGoal.querySelector('[data-slot="goal-indicator-icon"]'),
+    ).toBeInTheDocument();
+    expect(
+      activeGoal.querySelector('[data-slot="goal-remove-icon"]'),
+    ).toHaveClass('opacity-0', 'group-hover:opacity-100');
+
+    fireEvent.click(activeGoal);
+    expect(onGoalPanelOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('renders an active plan mode indicator that disables plan mode', () => {

@@ -17,6 +17,7 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Target,
   X,
 } from 'lucide-react';
 import type {
@@ -63,6 +64,9 @@ export type ComposerMenuProps = {
   selectedTool?: ToolOption | null;
   planModeEnabled?: boolean;
   onPlanModeChange?: (enabled: boolean) => void;
+  goalCommandAvailable?: boolean;
+  goalPanelOpen?: boolean;
+  onGoalPanelOpenChange?: (open: boolean) => void;
   runtimeCapabilities?: RuntimeCapabilitiesResponse | null;
   selectedRuntimeCapabilities?: RuntimeCapabilitiesSelection | null;
   onRuntimeCapabilityToggle?: (
@@ -97,6 +101,9 @@ export function ComposerMenu({
   selectedTool,
   planModeEnabled = false,
   onPlanModeChange,
+  goalCommandAvailable = false,
+  goalPanelOpen = false,
+  onGoalPanelOpenChange,
   runtimeCapabilities,
   selectedRuntimeCapabilities,
   onRuntimeCapabilityToggle,
@@ -140,6 +147,10 @@ export function ComposerMenu({
 
   const handlePlanModeToggle = () => {
     onPlanModeChange?.(!planModeEnabled);
+  };
+
+  const handleGoalCommandClick = () => {
+    onGoalPanelOpenChange?.(!goalPanelOpen);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -513,6 +524,43 @@ export function ComposerMenu({
               </span>
             </DropdownMenuItem>
 
+            {goalCommandAvailable && (
+              <DropdownMenuItem
+                role="switch"
+                aria-checked={goalPanelOpen}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  handleGoalCommandClick();
+                }}
+                className={cn(
+                  'gap-3 px-3 py-2',
+                  menuItemRoundedClass,
+                  goalPanelOpen && 'bg-muted',
+                )}
+              >
+                <span className="flex h-6 w-6 items-center justify-center text-muted-foreground">
+                  <Target size={16} />
+                </span>
+                <span className="min-w-0 flex-1 text-left">
+                  {t('chat.goal.label')}
+                </span>
+                <span
+                  className={cn(
+                    'relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors',
+                    goalPanelOpen ? 'bg-primary' : 'bg-muted-foreground/20',
+                  )}
+                  aria-hidden="true"
+                >
+                  <span
+                    className={cn(
+                      'inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform',
+                      goalPanelOpen ? 'translate-x-[18px]' : 'translate-x-0.5',
+                    )}
+                  />
+                </span>
+              </DropdownMenuItem>
+            )}
+
             {hasRuntimeCapabilities && (
               <>
                 <DropdownMenuSeparator />
@@ -633,6 +681,32 @@ export function ComposerMenu({
             />
           </span>
           <span>{t('composer.planModeActive')}</span>
+        </button>
+      )}
+      {goalCommandAvailable && goalPanelOpen && (
+        <button
+          type="button"
+          aria-label={t('chat.goal.hide')}
+          disabled={disabled}
+          onClick={() => onGoalPanelOpenChange?.(false)}
+          className={cn(
+            'group inline-flex h-8 shrink-0 items-center gap-1.5 border border-primary/30 bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200 hover:bg-primary/15',
+            roundedClass,
+          )}
+        >
+          <span className="relative inline-flex h-4 w-4 items-center justify-center">
+            <Target
+              data-slot="goal-indicator-icon"
+              size={14}
+              className="absolute transition-all duration-150 group-hover:scale-75 group-hover:opacity-0"
+            />
+            <X
+              data-slot="goal-remove-icon"
+              size={14}
+              className="absolute scale-75 opacity-0 transition-all duration-150 group-hover:scale-100 group-hover:opacity-100"
+            />
+          </span>
+          <span>{t('chat.goal.label')}</span>
         </button>
       )}
     </DropdownMenu>
