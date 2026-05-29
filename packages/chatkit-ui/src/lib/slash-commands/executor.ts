@@ -69,6 +69,9 @@ export function parseSlashCommandInvocation(value: string): {
 export function shouldSubmitRawSlashInvocation(
   command: ResolvedSlashCommand,
 ): boolean {
+  if (command.name === 'goal' && command.source === 'runtime') {
+    return false;
+  }
   return command.action.type === 'insert_invocation';
 }
 
@@ -126,6 +129,15 @@ export function createSlashCommandExecutionEffect(
     ...(command.kind === 'prompt_workflow' ? { kind: command.kind } : {}),
     ...(workflow ? { workflow } : {}),
   };
+
+  if (command.name === 'goal' && command.source === 'runtime') {
+    return {
+      type: 'goal',
+      args: args.trim(),
+      commandSource,
+      runtimeCapabilities: getActionRuntimeCapabilities(action) ?? undefined,
+    };
+  }
 
   if (command.source === 'builtin' && action.type === 'client_action') {
     if (command.name === 'plan') {

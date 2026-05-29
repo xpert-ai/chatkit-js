@@ -553,4 +553,39 @@ describe('slash command executor', () => {
       text: '/review ',
     });
   });
+
+  it('keeps /goal gated by runtime capabilities and handles it as a goal action', () => {
+    expect(
+      resolveSlashCommands(undefined, undefined).some(
+        (command) => command.name === 'goal',
+      ),
+    ).toBe(false);
+
+    const goal = resolveSlashCommands(undefined, [
+      {
+        name: 'goal',
+        label: 'Goal',
+        action: {
+          type: 'insert_invocation',
+          template: '/goal {{args}}',
+        },
+      },
+    ]).find((command) => command.name === 'goal');
+    if (!goal) {
+      throw new Error('Expected runtime /goal to be registered.');
+    }
+
+    expect(goal.source).toBe('runtime');
+    expect(shouldSubmitRawSlashInvocation(goal)).toBe(false);
+    expect(createSlashCommandExecutionEffect(goal, 'ship feature')).toMatchObject({
+      type: 'goal',
+      args: 'ship feature',
+      commandSource: {
+        type: 'slash_command',
+        name: 'goal',
+        source: 'runtime',
+        executionType: 'insert_invocation',
+      },
+    });
+  });
 });

@@ -7,6 +7,7 @@ import {
   REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
   REQUEST_USER_INPUT_RESULT_TYPE,
   normalizeRequestLanguage,
+  type ThreadGoal,
   type TThreadContextUsageEvent,
 } from '@xpert-ai/chatkit-types';
 
@@ -880,6 +881,79 @@ describe('applyStreamEvent', () => {
     expect(setError).not.toHaveBeenCalled();
   });
 
+  it('preserves local optimistic messages when replaying server message lists', () => {
+    const optimisticMessage = {
+      id: 'goal-human-1',
+      type: 'human',
+      content: 'find the top AI repos',
+      submittedInput: 'find the top AI repos',
+    };
+    let state = {
+      messages: [
+        {
+          id: 'history-1',
+          type: 'ai',
+          content: 'Previous answer',
+        },
+        optimisticMessage,
+      ],
+    } as any;
+    const setValues = vi.fn((next) => {
+      state = typeof next === 'function' ? next(state) : next;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CONVERSATION_END,
+          data: {
+            messages: [
+              {
+                id: 'history-1',
+                role: 'assistant',
+                content: 'Previous answer',
+              },
+              {
+                id: 'assistant-2',
+                role: 'assistant',
+                content: 'Here are the top AI repos.',
+              },
+            ],
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [optimisticMessage],
+    );
+
+    expect(state.messages).toEqual([
+      expect.objectContaining({ id: 'history-1' }),
+      expect.objectContaining({
+        id: 'goal-human-1',
+        type: 'human',
+        content: 'find the top AI repos',
+      }),
+      expect.objectContaining({ id: 'assistant-2' }),
+    ]);
+  });
+
   it('keeps message metadata when replaying top-level messages arrays', () => {
     let state = { messages: [] as any[] };
     const setValues = vi.fn((next) => {
@@ -1053,6 +1127,134 @@ describe('applyStreamEvent', () => {
     );
     expect(setValues).not.toHaveBeenCalled();
     expect(setError).not.toHaveBeenCalled();
+  });
+
+  it('routes thread goal chat events to goal callbacks without appending messages', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+    const onThreadGoalUpdated = vi.fn();
+    const onThreadGoalCleared = vi.fn();
+    const onThreadGoalPatched = vi.fn();
+    const goal: ThreadGoal = {
+      id: 'goal-1',
+      conversationId: 'conversation-1',
+      threadId: 'thread-1',
+      objective: 'ship feature',
+      status: 'active',
+      tokensUsed: 12,
+      elapsedSeconds: 3,
+      continuationCount: 1,
+    };
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: 'thread_goal_updated',
+            conversationId: 'conversation-1',
+            threadId: 'thread-1',
+            goal,
+            updatedAt: '2026-03-12T00:00:00.000Z',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onThreadGoalUpdated,
+      onThreadGoalCleared,
+      onThreadGoalPatched,
+    );
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: 'thread_goal_cleared',
+            conversationId: 'conversation-1',
+            threadId: 'thread-1',
+            updatedAt: '2026-03-12T00:00:01.000Z',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onThreadGoalUpdated,
+      onThreadGoalCleared,
+      onThreadGoalPatched,
+    );
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: 'thread_goal_updated',
+            goal: {
+              id: 'goal-1',
+              status: 'complete',
+            },
+            updatedAt: '2026-03-12T00:00:02.000Z',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onThreadGoalUpdated,
+      onThreadGoalCleared,
+      onThreadGoalPatched,
+    );
+
+    expect(onThreadGoalUpdated).toHaveBeenCalledWith(goal);
+    expect(onThreadGoalCleared).toHaveBeenCalledWith('thread-1');
+    expect(onThreadGoalPatched).toHaveBeenCalledWith(
+      expect.objectContaining({
+        goalId: 'goal-1',
+        goal: expect.objectContaining({ status: 'complete' }),
+      }),
+    );
+    expect(setValues).not.toHaveBeenCalled();
   });
 
   it('routes follow-up consumed chat events to the steer callback without appending messages', () => {
