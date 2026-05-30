@@ -1,0 +1,69 @@
+name: Package Excel Add-in
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'packages/excel-addin/**'
+      - '.github/workflows/package-excel-addin.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/excel-addin/**'
+      - '.github/workflows/package-excel-addin.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  package-excel-addin:
+    name: Build Excel add-in
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @xpert-ai/chatkit-excel-addin type-check
+
+      - name: Test
+        run: pnpm --filter @xpert-ai/chatkit-excel-addin test
+
+      - name: Build
+        env:
+          ADDIN_BASE_URL: https://localhost:3002
+        run: pnpm --filter @xpert-ai/chatkit-excel-addin build
+
+      - name: Validate manifest
+        run: pnpm --filter @xpert-ai/chatkit-excel-addin validate:manifest
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatkit-excel-addin
+          path: |
+            packages/excel-addin/dist/manifest.xml
+            packages/excel-addin/dist/taskpane/**
+            packages/excel-addin/dist/server/**
+            packages/excel-addin/README.md
+            packages/excel-addin/env.example

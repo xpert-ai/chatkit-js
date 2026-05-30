@@ -32,7 +32,20 @@ const mocks = vi.hoisted(() => {
       threadId: null as string | null,
       contextUsageByAgentKey: {},
       values: { messages: [] },
-      messages: [],
+      messages: [] as Array<{
+        id?: string;
+        type: string;
+        content: unknown;
+        createdAt?: string;
+        updatedAt?: string;
+      }>,
+      historyMessagePagination: {
+        conversationId: null as string | null,
+        loadedCount: 0,
+        total: 0,
+        hasMore: false,
+        isLoadingMore: false,
+      },
       todos: null,
       runtimeActivities: {
         sandboxServices: {
@@ -52,7 +65,8 @@ const mocks = vi.hoisted(() => {
       error: null as unknown,
       loadThread: vi.fn(),
       loadConversationMessages: vi.fn(),
-      submit: vi.fn().mockResolvedValue(undefined),
+      loadMoreConversationMessages: vi.fn(),
+      submit: vi.fn(),
       stop: vi.fn(),
       reset: vi.fn(),
       setFollowUpBehavior: vi.fn(),
@@ -100,6 +114,8 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
         'composer.slashCommands.commands.plugins.description':
           'Localized runtime plugins',
         'composer.slashCommands.empty.plugins': 'No localized plugins to add',
+        'chat.loadMoreMessages': 'Load more',
+        'chat.loadingMoreMessages': 'Loading...',
       };
       return labels[key] ?? options?.defaultValue ?? key;
     },
@@ -411,9 +427,17 @@ describe('Chat plan mode payload', () => {
     mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
     mocks.stream.client.conversations.update.mockClear();
     mocks.stream.submit.mockClear();
-    mocks.stream.reset.mockClear();
+    mocks.stream.loadMoreConversationMessages.mockClear();
+    mocks.stream.loadMoreConversationMessages.mockResolvedValue([]);
     mocks.stream.threadId = null;
     mocks.stream.messages = [];
+    mocks.stream.historyMessagePagination = {
+      conversationId: null,
+      loadedCount: 0,
+      total: 0,
+      hasMore: false,
+      isLoadingMore: false,
+    };
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.isLoading = false;
@@ -470,6 +494,60 @@ describe('Chat plan mode payload', () => {
         ),
       ).toHaveLength(1);
     });
+  });
+
+  it('loads older messages from the top history divider', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.messages = [
+      {
+        id: 'message-1',
+        type: 'human',
+        content: 'Hello from the latest page',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    mocks.stream.historyMessagePagination = {
+      conversationId: 'conversation-1',
+      loadedCount: 50,
+      total: 75,
+      hasMore: true,
+      isLoadingMore: false,
+    };
+
+    renderChat();
+
+    const loadMore = screen.getByRole('button', { name: 'Load more' });
+    expect(loadMore).not.toBeDisabled();
+    fireEvent.click(loadMore);
+
+    await waitFor(() =>
+      expect(mocks.stream.loadMoreConversationMessages).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it('disables the top history divider while older messages are loading', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.messages = [
+      {
+        id: 'message-1',
+        type: 'human',
+        content: 'Hello from the latest page',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    mocks.stream.historyMessagePagination = {
+      conversationId: 'conversation-1',
+      loadedCount: 50,
+      total: 75,
+      hasMore: true,
+      isLoadingMore: true,
+    };
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Loading...' })).toBeDisabled(),
+    );
   });
 
   it('loads runtime capabilities through the SDK client and submits the default allow-list', async () => {

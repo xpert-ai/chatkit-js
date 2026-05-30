@@ -14,6 +14,12 @@
         "packages/host-automation/src/index.ts"
       ],
       "@xpert-ai/chatkit-js": ["packages/chatkit-js/src/index.ts"],
+      "@xpert-ai/chatkit-powerpoint-addin": [
+        "packages/powerpoint-addin/src/index.ts"
+      ],
+      "@xpert-ai/chatkit-wps-addin": ["packages/wps-addin/src/index.ts"],
+      "@xpert-ai/chatkit-word-addin": ["packages/word-addin/src/index.ts"],
+      "@xpert-ai/chatkit-excel-addin": ["packages/excel-addin/src/index.ts"],
       "@xpert-ai/chatkit-react": ["packages/chatkit-react/src/index.ts"],
       "@xpert-ai/chatkit-types": ["packages/chatkit/src/index.ts"],
       "@xpert-ai/chatkit-vue": ["packages/chatkit-vue/src/index.ts"],

@@ -666,6 +666,7 @@ export function Chat({
   const forceFollowRef = React.useRef(false);
   const previousMessageCountRef = React.useRef(0);
   const previousScrollTopRef = React.useRef(0);
+  const isPrependingHistoryMessagesRef = React.useRef(false);
   const autoScrollFrameRef = React.useRef<number | null>(null);
   const isPointerDownRef = React.useRef(false);
   const lastTouchYRef = React.useRef<number | null>(null);
@@ -737,6 +738,11 @@ export function Chat({
     () => stream.messages ?? [],
     [stream.messages],
   );
+  const historyMessagePagination = stream.historyMessagePagination;
+  const isLoadingMoreMessages = Boolean(
+    historyMessagePagination?.isLoadingMore,
+  );
+  const canLoadMoreMessages = Boolean(historyMessagePagination?.hasMore);
   const draft = React.useMemo(
     () => getComposerPlainText(composerParts),
     [composerParts],
@@ -1216,6 +1222,11 @@ export function Chat({
     const messageCountChanged =
       messages.length !== previousMessageCountRef.current;
     previousMessageCountRef.current = messages.length;
+
+    if (isPrependingHistoryMessagesRef.current) {
+      setHasUpdatesBelow(false);
+      return;
+    }
 
     if (!shouldAutoScrollRef.current) {
       if (messageCountChanged || stream.isLoading) {
@@ -2638,6 +2649,46 @@ export function Chat({
     [missingConfig, missingConfigShortMessage, stream, t],
   );
 
+  const handleLoadMoreMessages = React.useCallback(async () => {
+    if (!canLoadMoreMessages || isLoadingMoreMessages) {
+      return;
+    }
+
+    const viewport = viewportRef.current;
+    const previousScrollHeight = viewport?.scrollHeight ?? 0;
+    const previousScrollTop = viewport?.scrollTop ?? 0;
+
+    isPrependingHistoryMessagesRef.current = true;
+    shouldAutoScrollRef.current = false;
+    forceFollowRef.current = false;
+    setHasUpdatesBelow(false);
+    setHistoryError(null);
+
+    const restoreScrollPosition = () => {
+      requestAnimationFrame(() => {
+        const nextViewport = viewportRef.current;
+        if (nextViewport) {
+          const nextScrollTop =
+            nextViewport.scrollHeight - previousScrollHeight + previousScrollTop;
+          nextViewport.scrollTop = Math.max(0, nextScrollTop);
+          previousScrollTopRef.current = nextViewport.scrollTop;
+        }
+        isPrependingHistoryMessagesRef.current = false;
+      });
+    };
+
+    try {
+      await stream.loadMoreConversationMessages();
+      restoreScrollPosition();
+    } catch (err) {
+      isPrependingHistoryMessagesRef.current = false;
+      console.warn('Failed to load more thread messages', err);
+      setHistoryError(
+        err instanceof Error ? err.message : t('chat.errors.loadMessages'),
+      );
+    }
+  }, [canLoadMoreMessages, isLoadingMoreMessages, stream, t]);
+
   const handleNewThread = async () => {
     if (missingConfig || isHistoryLoading) return;
     setHistoryError(null);
@@ -2939,13 +2990,31 @@ export function Chat({
             {t('chat.loadingThread')}
           </div>
         )}
-        {messages.length === 0 ? (
+        {messages.length === 0 && !canLoadMoreMessages ? (
           <StartScreen
             startScreen={startScreen}
             onPromptClick={handlePromptClick}
           />
         ) : (
           <div className="space-y-4">
+            {canLoadMoreMessages && (
+              <div className="flex items-center gap-3 py-1">
+                <div className="h-px min-w-8 flex-1 bg-border" />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLoadMoreMessages}
+                  disabled={isLoadingMoreMessages}
+                  className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  {isLoadingMoreMessages
+                    ? t('chat.loadingMoreMessages')
+                    : t('chat.loadMoreMessages')}
+                </Button>
+                <div className="h-px min-w-8 flex-1 bg-border" />
+              </div>
+            )}
             {messages.map((message, index) => {
               const messageType = String(message.type);
               const isAssistantMessage =
