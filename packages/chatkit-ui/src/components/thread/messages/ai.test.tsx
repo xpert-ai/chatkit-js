@@ -1045,8 +1045,8 @@ describe('AssistantMessage tool components', () => {
     const output = container.querySelector(
       '[data-slot="sandbox-shell-output"]',
     );
+    expect(output?.parentElement).toHaveClass('overflow-auto');
     expect(output).toHaveClass(
-      'overflow-auto',
       'whitespace-pre',
       'text-muted-foreground/85',
       'in-data-[density=compact]:text-xs',

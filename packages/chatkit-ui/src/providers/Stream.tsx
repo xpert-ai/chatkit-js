@@ -3230,7 +3230,14 @@ const StreamSession = ({
               ),
           );
           preservedMessages = (optimisticValues.messages ?? []).filter(
-            (message) => Boolean(message.id) && !previousIds.has(message.id),
+            (message) => {
+              const messageId = message.id;
+              return (
+                typeof messageId === 'string' &&
+                messageId.length > 0 &&
+                !previousIds.has(messageId)
+              );
+            },
           );
         }
         setValues(optimisticValues);

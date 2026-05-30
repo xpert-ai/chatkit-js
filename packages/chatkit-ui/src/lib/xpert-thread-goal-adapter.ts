@@ -1,41 +1,21 @@
 import type { Client, ChatConversation } from '@xpert-ai/xpert-sdk';
-import type {
-  ChatKitGoalAdapter,
-  ChatKitGoalCommandStatus,
-  ThreadGoal,
-} from '@xpert-ai/chatkit-types';
+import type { ChatKitGoalAdapter } from '@xpert-ai/chatkit-types';
 import { findConversationByThreadIdWithRetry } from './conversation-runtime-capabilities';
 
-type XpertGoalConversationClient = {
-  search: Client<unknown>['conversations']['search'];
-  create: Client<unknown>['conversations']['create'];
-  getGoal?: (
-    conversationId: string,
-    options?: { signal?: AbortSignal },
-  ) => Promise<ThreadGoal | null>;
-  setGoal?: (
-    conversationId: string,
-    request: { objective: string },
-    options?: { signal?: AbortSignal },
-  ) => Promise<ThreadGoal>;
-  updateGoal?: (
-    conversationId: string,
-    request: {
-      objective?: string;
-      status?: ChatKitGoalCommandStatus;
-    },
-    options?: { signal?: AbortSignal },
-  ) => Promise<ThreadGoal>;
-  clearGoal?: (
-    conversationId: string,
-    options?: { signal?: AbortSignal },
-  ) => Promise<ThreadGoal | null>;
-};
+type XpertGoalConversationClient = Partial<
+  Pick<
+    Client<unknown>['conversations'],
+    | 'search'
+    | 'create'
+    | 'getGoal'
+    | 'setGoal'
+    | 'updateGoal'
+    | 'clearGoal'
+  >
+>;
 
 export type XpertGoalClient = {
-  threads?: {
-    create: Client<unknown>['threads']['create'];
-  };
+  threads?: Partial<Pick<Client<unknown>['threads'], 'create'>>;
   conversations: XpertGoalConversationClient;
 };
 
@@ -55,13 +35,14 @@ function requireBoundGoalMethod<T extends (...args: never[]) => unknown>(
 export function supportsXpertThreadGoalAdapter(
   client: XpertGoalClient,
 ): boolean {
+  const conversations = client.conversations;
   return Boolean(
-    client.conversations?.search &&
-      client.conversations.create &&
-      client.conversations.getGoal &&
-      client.conversations.setGoal &&
-      client.conversations.updateGoal &&
-      client.conversations.clearGoal,
+    conversations?.search &&
+      conversations.create &&
+      conversations.getGoal &&
+      conversations.setGoal &&
+      conversations.updateGoal &&
+      conversations.clearGoal,
   );
 }
 
