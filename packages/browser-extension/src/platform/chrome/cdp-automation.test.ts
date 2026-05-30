@@ -44,6 +44,12 @@ function mockRect(element: Element, rect: DOMRect) {
   });
 }
 
+function mockVisibleTree(root: ParentNode = document.body) {
+  Array.from(root.querySelectorAll('*')).forEach((element, index) => {
+    mockRect(element, createDomRect(10, 10 + index * 24, 320, 20));
+  });
+}
+
 function findVisualEffectEvaluationIndex(
   sendCommand: ReturnType<typeof vi.fn>,
 ): number {
@@ -368,6 +374,364 @@ describe('CDP host automation', () => {
     });
   });
 
+  it('captures readable content and reads a block through CDP', async () => {
+    document.body.innerHTML = `
+      <section id="facts">
+        <div><strong>布料類型</strong><span>100% 棉</span></div>
+        <div><strong>保養說明</strong><span>機洗</span></div>
+      </section>
+      <h3>關於這個商品</h3>
+      <ul id="about">
+        <li>這款孔眼上衣採用 100% 優質棉製成。</li>
+        <li>可愛的前綁帶設計,精緻孔眼。</li>
+        <li>寬鬆剪裁,提供不受限制的舒適度。</li>
+      </ul>
+    `;
+    mockVisibleTree();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-1' },
+    );
+    const snapshotContent = parseContent(snapshotResponse);
+    const readableContent = snapshotContent.result
+      .readableContent as Record<string, unknown>;
+    const blocks = readableContent.blocks as Array<Record<string, unknown>>;
+    const listBlock = blocks.find((block) => block.type === 'list');
+    const listBlockId = listBlock?.blockId;
+
+    expect(readableContent.coverage).toMatchObject({
+      visibleTextCaptured: true,
+    });
+    expect(blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'keyValueList',
+          preview: expect.arrayContaining([
+            '布料類型: 100% 棉',
+            '保養說明: 機洗',
+          ]),
+        }),
+      ]),
+    );
+    expect(
+      blocks.some(
+        (block) =>
+          'text' in block ||
+          'items' in block ||
+          'fields' in block ||
+          'headers' in block ||
+          'rows' in block ||
+          'selector' in block,
+      ),
+    ).toBe(false);
+    expect(readableContent.outline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          blockId: listBlockId,
+          type: 'list',
+          heading: '關於這個商品',
+          itemCount: 3,
+        }),
+      ]),
+    );
+    expect(
+      (readableContent.outline as Array<Record<string, unknown>>).some(
+        (item) =>
+          'text' in item ||
+          'items' in item ||
+          'fields' in item ||
+          'headers' in item ||
+          'rows' in item,
+      ),
+    ).toBe(false);
+    expect(readableContent.suggestedReads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          blockId: listBlockId,
+          type: 'list',
+          reason: 'preview_incomplete',
+          args: {
+            blockId: listBlockId,
+            pageSize: 3,
+          },
+        }),
+      ]),
+    );
+    expect(listBlock).toMatchObject({
+      heading: '關於這個商品',
+      readHint: {
+        tool: 'host_page_read',
+        args: {
+          blockId: expect.any(String),
+        },
+      },
+    });
+
+    const readResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_read',
+        params: {
+          blockId: listBlock?.blockId,
+          pageSize: 2,
+        },
+        id: 'call-2',
+      },
+    );
+    const readContent = parseContent(readResponse);
+
+    expect(readContent.result).toMatchObject({
+      blockId: listBlock?.blockId,
+      type: 'list',
+      items: [
+        '這款孔眼上衣採用 100% 優質棉製成。',
+        '可愛的前綁帶設計,精緻孔眼。',
+      ],
+      page: 1,
+      pageSize: 2,
+      pageCount: 2,
+      nextPage: 2,
+    });
+  });
+
+  it('keeps CDP readable content reads within maxChars', async () => {
+    document.body.innerHTML = `
+      <h3>關於這個商品</h3>
+      <ul id="about">
+        ${Array.from(
+          { length: 24 },
+          (_, index) =>
+            `<li>第 ${index + 1} 条商品描述 ${'長內容'.repeat(80)}</li>`,
+        ).join('')}
+      </ul>
+    `;
+    mockVisibleTree();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-1' },
+    );
+    const snapshotContent = parseContent(snapshotResponse);
+    const readableContent = snapshotContent.result
+      .readableContent as Record<string, unknown>;
+    const blocks = readableContent.blocks as Array<Record<string, unknown>>;
+    const listBlock = blocks.find((block) => block.type === 'list');
+
+    const readResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_read',
+        params: {
+          blockId: listBlock?.blockId,
+          pageSize: 24,
+          maxChars: 500,
+        },
+        id: 'call-2',
+      },
+    );
+    const readContent = parseContent(readResponse);
+
+    expect(JSON.stringify(readContent.result).length).toBeLessThanOrEqual(500);
+    expect(readContent.result).toMatchObject({
+      blockId: listBlock?.blockId,
+      type: 'list',
+      truncated: true,
+    });
+  });
+
+  it('uses normalized pointer coordinates and returns click expectation results', async () => {
+    document.body.innerHTML = `
+      <button id="department-option">智造技术研究部</button>
+      <label>部门名称 <input id="department-name" value="" /></label>
+    `;
+    const option = document.getElementById('department-option');
+    const field = document.querySelector<HTMLInputElement>('#department-name');
+    if (!option || !field) {
+      throw new Error('department fixture is unavailable.');
+    }
+    mockRect(option, createDomRect(400, 300, 120, 40));
+    option.addEventListener('click', () => {
+      field.value = '智造技术研究部';
+    });
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 600,
+    });
+    document.elementsFromPoint = vi.fn(() => [option, document.body]);
+    document.elementFromPoint = vi.fn(() => option);
+    const debuggerApi = createDebuggerApi(
+      vi.fn(async (_target, method, commandParams) => {
+        if (method === 'Runtime.evaluate') {
+          const expression =
+            commandParams && typeof commandParams.expression === 'string'
+              ? commandParams.expression
+              : '';
+          return {
+            result: {
+              value: await eval(expression),
+            },
+          };
+        }
+        if (
+          method === 'Input.dispatchMouseEvent' &&
+          commandParams &&
+          typeof commandParams === 'object' &&
+          'type' in commandParams &&
+          commandParams.type === 'mouseReleased'
+        ) {
+          option.click();
+        }
+        return {};
+      }),
+    );
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          coordinateSpace: 'viewport_normalized',
+          x: 0.42,
+          y: 0.57,
+          targetText: '智造技术研究部',
+          expectedAfterClick: {
+            type: 'field_contains',
+            field: '部门名称',
+            value: '智造技术研究部',
+          },
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.result).toMatchObject({
+      pointer: 'click',
+      coordinateSpace: 'viewport-css-px',
+      point: { x: 420, y: 342 },
+      targetTextMatched: true,
+      expectedAfterClick: {
+        ok: true,
+        type: 'field_contains',
+        field: '部门名称',
+        value: '智造技术研究部',
+        actual: '智造技术研究部',
+      },
+    });
+  });
+
+  it('rejects pointer clicks when the hit target does not match targetText', async () => {
+    document.body.innerHTML = `
+      <button id="department-option">项目交付部</button>
+      <button id="itinerary-cell">行程明细</button>
+    `;
+    const option = document.getElementById('department-option');
+    const itineraryCell = document.getElementById('itinerary-cell');
+    if (!option || !itineraryCell) {
+      throw new Error('pointer mismatch fixture is unavailable.');
+    }
+    const optionClick = vi.fn();
+    option.addEventListener('click', optionClick);
+    document.elementFromPoint = vi.fn(() => itineraryCell);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 10,
+          y: 10,
+          targetText: '项目交付部',
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.ok).toBe(false);
+    expect(content.error).toContain('Pointer target text mismatch');
+    expect(optionClick).not.toHaveBeenCalled();
+  });
+
+  it('rejects explicit coordinate clicks without targetText', async () => {
+    document.body.innerHTML = `<button id="menu">其他菜单</button>`;
+    const menu = document.getElementById('menu');
+    if (!menu) {
+      throw new Error('menu fixture is unavailable.');
+    }
+    const menuClick = vi.fn();
+    menu.addEventListener('click', menuClick);
+    document.elementFromPoint = vi.fn(() => menu);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 10,
+          y: 10,
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.ok).toBe(false);
+    expect(content.error).toContain(
+      'Pointer coordinate clicks require targetText',
+    );
+    expect(menuClick).not.toHaveBeenCalled();
+  });
+
+  it('rejects explicit coordinate clicks with blank targetText', async () => {
+    document.body.innerHTML = `<button id="menu">其他菜单</button>`;
+    const menu = document.getElementById('menu');
+    if (!menu) {
+      throw new Error('menu fixture is unavailable.');
+    }
+    const menuClick = vi.fn();
+    menu.addEventListener('click', menuClick);
+    document.elementFromPoint = vi.fn(() => menu);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 10,
+          y: 10,
+          targetText: '   ',
+        },
+        id: 'call-1',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(content.ok).toBe(false);
+    expect(content.error).toContain(
+      'Pointer coordinate clicks require targetText',
+    );
+    expect(menuClick).not.toHaveBeenCalled();
+  });
+
   it('uses CDP mouse events for clicks', async () => {
     const sendCommand = vi.fn(async (_target, method) => {
       if (method === 'Runtime.evaluate') {
@@ -410,6 +774,50 @@ describe('CDP host automation', () => {
       'Input.dispatchMouseEvent',
       expect.objectContaining({ type: 'mouseReleased', button: 'left' }),
     );
+  });
+
+  it('does not inject readable content extraction into non-reading CDP actions', async () => {
+    const runtimeExpressions: string[] = [];
+    const sendCommand = vi.fn(async (_target, method, commandParams) => {
+      if (method === 'Runtime.evaluate') {
+        const expression =
+          commandParams && typeof commandParams.expression === 'string'
+            ? commandParams.expression
+            : '';
+        runtimeExpressions.push(expression);
+        if (expression.includes('data-xpertai-chatkit-visual-effect')) {
+          return { result: { value: undefined } };
+        }
+        return {
+          result: {
+            value: {
+              point: { x: 120, y: 40 },
+              target: { tag: 'button', name: 'Save' },
+            },
+          },
+        };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      { name: 'host_page_click', params: { role: 'button', name: 'Save' } },
+    );
+
+    expect(runtimeExpressions.length).toBeGreaterThan(0);
+    expect(
+      runtimeExpressions.some((expression) =>
+        expression.includes('pageResolveTargetScript'),
+      ),
+    ).toBe(true);
+    expect(
+      runtimeExpressions.some((expression) =>
+        expression.includes('pageReadableContentScript'),
+      ),
+    ).toBe(false);
   });
 
   it('re-measures the CDP click point after the target-anchored effect', async () => {
@@ -609,6 +1017,7 @@ describe('CDP host automation', () => {
           action: 'click',
           x: 320,
           y: 480,
+          targetText: 'Execute',
           button: 'right',
           clickCount: 2,
         },
@@ -892,6 +1301,36 @@ describe('CDP host automation', () => {
       result: {
         pointer: 'move',
         point: { x: 440, y: 565 },
+        hitTarget: { tag: 'button', role: 'button', name: '执行' },
+      },
+    });
+  });
+
+  it('validates pointer target text inside same-origin iframes', async () => {
+    installSameOriginFrameFixture();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 42, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          x: 440,
+          y: 565,
+          targetText: '执行',
+        },
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('success');
+    expect(content).toMatchObject({
+      ok: true,
+      result: {
+        pointer: 'click',
+        point: { x: 440, y: 565 },
+        targetTextMatched: true,
         hitTarget: { tag: 'button', role: 'button', name: '执行' },
       },
     });

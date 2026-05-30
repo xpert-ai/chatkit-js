@@ -1,5 +1,29 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.10
+
+### Patch Changes
+
+- a369072: new composer attachments
+
+## 0.3.9
+
+### Patch Changes
+
+- 991df74: Support flat A2UI widget messages while preserving legacy pre-resolved surface rendering.
+
+## 0.3.8
+
+### Patch Changes
+
+- 4f3255c: slash command label i18n
+
+## 0.3.7
+
+### Patch Changes
+
+- 9423ff7: compress slash command
+
 ## 0.3.6
 
 ### Patch Changes

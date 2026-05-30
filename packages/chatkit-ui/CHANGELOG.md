@@ -1,5 +1,43 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.12
+
+### Patch Changes
+
+- a369072: new composer attachments
+- Updated dependencies [a369072]
+  - @xpert-ai/chatkit-types@0.3.10
+
+## 0.3.11
+
+### Patch Changes
+
+- 991df74: Support flat A2UI widget messages while preserving legacy pre-resolved surface rendering.
+- Updated dependencies [991df74]
+  - @xpert-ai/chatkit-types@0.3.9
+
+## 0.3.10
+
+### Patch Changes
+
+- 21d6bd5: pet overlay loading & theme
+
+## 0.3.9
+
+### Patch Changes
+
+- 4f3255c: slash command label i18n
+- Updated dependencies [4f3255c]
+  - @xpert-ai/chatkit-types@0.3.8
+
+## 0.3.8
+
+### Patch Changes
+
+- 9423ff7: compress slash command
+- Updated dependencies [9423ff7]
+  - @xpert-ai/chatkit-types@0.3.7
+
 ## 0.3.7
 
 ### Patch Changes

@@ -3,4 +3,4 @@
 '@xpert-ai/chatkit-types': patch
 ---
 
-new composer attachments
+add conversation goal controls and thread goal event types

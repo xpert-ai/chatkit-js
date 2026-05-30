@@ -1,12 +1,18 @@
 import * as React from 'react';
 import {
   ArrowDown,
+  ChevronDown,
   FileText,
   ImageIcon,
+  Loader2,
   Minus,
+  Pause,
   Pencil,
+  Play,
   Quote,
   Settings,
+  Target,
+  Trash2,
   X,
 } from 'lucide-react';
 
@@ -20,6 +26,8 @@ import type {
   ChatKitCommandSource,
   FollowUpBehavior,
   ToolOption,
+  ThreadGoal,
+  ChatKitGoalAdapter,
 } from '@xpert-ai/chatkit-types';
 
 import {
@@ -122,6 +130,15 @@ import {
   type MissingRuntimeCapabilityReferences,
 } from '../lib/conversation-runtime-capabilities';
 import {
+  executeThreadGoalCommand,
+  loadThreadGoal,
+  parseGoalCommand,
+} from '../lib/thread-goals';
+import {
+  createXpertThreadGoalAdapter,
+  supportsXpertThreadGoalAdapter,
+} from '../lib/xpert-thread-goal-adapter';
+import {
   createComposerCapabilityPart,
   createComposerTextParts,
   findAdjacentComposerCapability,
@@ -162,6 +179,36 @@ const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | undefined;
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
+const GOAL_RUN_INPUT = 'Continue working toward the active goal.';
+
+function hasRuntimeGoalCommand(
+  runtimeCapabilities: RuntimeCapabilitiesWithCommands | null,
+): boolean {
+  return (
+    runtimeCapabilities?.commands?.some((command) => command.name === 'goal') ??
+    false
+  );
+}
+
+function isGoalAdapter(value: unknown): value is ChatKitGoalAdapter {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    typeof (value as Partial<ChatKitGoalAdapter>).getGoal === 'function' &&
+    typeof (value as Partial<ChatKitGoalAdapter>).setGoal === 'function' &&
+    typeof (value as Partial<ChatKitGoalAdapter>).updateGoal === 'function' &&
+    typeof (value as Partial<ChatKitGoalAdapter>).clearGoal === 'function'
+  );
+}
+
+function formatGoalElapsed(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+}
 
 type UploadedMessageFile = ChatAttachmentFile;
 
@@ -468,6 +515,15 @@ export function Chat({
   const [assistantName, setAssistantName] = React.useState<string | null>(null);
   const [assistantAvatar, setAssistantAvatar] =
     React.useState<ChatkitAvatarData | null>(null);
+  const [threadGoal, setThreadGoal] = React.useState<ThreadGoal | null>(null);
+  const [goalError, setGoalError] = React.useState<string | null>(null);
+  const [isGoalLoading, setIsGoalLoading] = React.useState(false);
+  const [isGoalPanelOpen, setIsGoalPanelOpen] = React.useState(false);
+  const [isGoalObjectiveExpanded, setIsGoalObjectiveExpanded] =
+    React.useState(false);
+  const [goalElapsedStartedAt, setGoalElapsedStartedAt] = React.useState<
+    number | null
+  >(null);
 
   // Minimum loading dots display time (ms)
   const LOADING_DOTS_MIN_DURATION = 800;
@@ -534,6 +590,23 @@ export function Chat({
 
     return () => window.clearInterval(timer);
   }, [stream.isLoading]);
+
+  React.useEffect(() => {
+    if (threadGoal?.status === 'active' && stream.isLoading) {
+      setGoalElapsedStartedAt(Date.now());
+      return;
+    }
+    setGoalElapsedStartedAt(null);
+  }, [
+    stream.isLoading,
+    threadGoal?.elapsedSeconds,
+    threadGoal?.id,
+    threadGoal?.status,
+  ]);
+
+  React.useEffect(() => {
+    setIsGoalObjectiveExpanded(false);
+  }, [threadGoal?.id]);
 
   const [composerParts, setComposerParts] = React.useState<ComposerPart[]>([]);
   const [renderedComposerParts, setRenderedComposerParts] = React.useState<
@@ -676,7 +749,10 @@ export function Chat({
   );
   const trimmedDraft = draft.trim();
   const hasReferences = references.length > 0;
-  const isComposerStacked = planModeEnabled || Boolean(selectedTool);
+  const hasCompletedGoal = threadGoal?.status === 'complete';
+  const isGoalModeOpen = isGoalPanelOpen;
+  const isComposerStacked =
+    planModeEnabled || isGoalModeOpen || Boolean(selectedTool);
   const isComposerInputEmpty = getComposerEditingLength(composerParts) === 0;
   const composerInputRoundedClass = getComposerInputRoundedClass(theme.radius, {
     isEmpty: isComposerInputEmpty,
@@ -699,6 +775,29 @@ export function Chat({
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
     [runtimeCapabilities],
   );
+  const goalCommandAvailable = hasRuntimeGoalCommand(runtimeCapabilities);
+  const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(
+    () => {
+      if (isGoalAdapter(options?.goal)) {
+        return options.goal;
+      }
+      return supportsXpertThreadGoalAdapter(stream.client)
+        ? createXpertThreadGoalAdapter(stream.client)
+        : null;
+    },
+    [options?.goal, stream.client],
+  );
+  const showGoalStatus =
+    goalCommandAvailable &&
+    !hasCompletedGoal &&
+    (Boolean(goalError) ||
+      (threadGoal?.status === 'active' && stream.isLoading));
+  const displayedGoalElapsedSeconds = threadGoal
+    ? (threadGoal.elapsedSeconds ?? 0) +
+      (goalElapsedStartedAt
+        ? Math.max(0, Math.floor((streamingNow - goalElapsedStartedAt) / 1000))
+        : 0)
+    : 0;
   const effectiveSessionRuntimeCapabilities = React.useMemo(
     () =>
       runtimeCapabilitiesReady && runtimeCapabilities
@@ -1400,6 +1499,57 @@ export function Chat({
     stream.threadId,
   ]);
 
+  React.useEffect(() => {
+    setThreadGoal(stream.threadGoal);
+  }, [stream.threadGoal]);
+
+  React.useEffect(() => {
+    const threadId = stream.threadId?.trim();
+    if (!threadId || !goalCommandAvailable) {
+      setThreadGoal(null);
+      setGoalError(null);
+      setIsGoalLoading(false);
+      setIsGoalPanelOpen(false);
+      return;
+    }
+    if (!goalAdapter) {
+      setThreadGoal(null);
+      setGoalError(null);
+      setIsGoalLoading(false);
+      setIsGoalPanelOpen(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsGoalLoading(true);
+    setGoalError(null);
+
+    void loadThreadGoal({
+      goal: goalAdapter,
+      threadId,
+      signal: controller.signal,
+    })
+      .then((goal) => {
+        if (!controller.signal.aborted) {
+          setThreadGoal(goal);
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setGoalError(error instanceof Error ? error.message : String(error));
+        setThreadGoal(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsGoalLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [goalAdapter, goalCommandAvailable, stream.threadId]);
+
   // Submit only FileAsset handles. Parsed summaries/content stay server-side and
   // are fetched later by built-in file-understanding tools.
   const uploadedFiles = attachmentState.uploadedFiles;
@@ -1686,6 +1836,163 @@ export function Chat({
     ],
   );
 
+  const handleGoalCommand = React.useCallback(
+    async ({
+      args,
+      commandSource,
+      runtimeCapabilities: commandRuntimeCapabilities,
+      visibleInput,
+    }: {
+      args: string;
+      commandSource: ChatKitCommandSource;
+      runtimeCapabilities?: RuntimeCapabilitiesSelection;
+      visibleInput?: string;
+    }) => {
+      const command = parseGoalCommand(args);
+      const threadId = stream.threadId?.trim();
+      setGoalError(null);
+
+      if (!threadId) {
+        if (command.type === 'show') {
+          setThreadGoal(null);
+          setIsGoalLoading(false);
+          return;
+        }
+        if (command.type !== 'set' && command.type !== 'edit') {
+          setGoalError(t('chat.goal.startThreadRequired'));
+          return;
+        }
+      }
+      if (!goalAdapter) {
+        setGoalError(t('chat.goal.unavailable'));
+        return;
+      }
+
+      setIsGoalLoading(true);
+      try {
+        const result = await executeThreadGoalCommand({
+          goal: goalAdapter,
+          threadId,
+          assistantId: stream.assistantId,
+          command,
+          runtimeCapabilities: commandRuntimeCapabilities,
+        });
+        if (!threadId && result.threadId) {
+          stream.reset(result.threadId, []);
+          void refreshThreads();
+        }
+        const startsGoalRun =
+          result.goal?.status === 'active' &&
+          (command.type === 'set' ||
+            command.type === 'edit' ||
+            command.type === 'resume');
+
+        setThreadGoal(command.type === 'clear' ? null : result.goal);
+        if (command.type === 'clear' || startsGoalRun) {
+          setIsGoalPanelOpen(false);
+        }
+        if (startsGoalRun) {
+          const goalRunThreadId = result.threadId ?? threadId;
+          const runtimeCapabilitiesForGoalRun =
+            runtimeCapabilities && runtimeCapabilitiesReady
+              ? createRuntimeCapabilitiesForSubmit({
+                  capabilities: runtimeCapabilities,
+                  available: effectiveSessionRuntimeCapabilities,
+                  recommended: commandRuntimeCapabilities,
+                })
+              : (commandRuntimeCapabilities ?? null);
+          const inputPayload: {
+            input: string;
+            runtimeCapabilities?: RuntimeCapabilitiesSelection;
+            commandSource: ChatKitCommandSource;
+            goalRun: true;
+          } = {
+            input: GOAL_RUN_INPUT,
+            commandSource,
+            goalRun: true,
+            ...(runtimeCapabilitiesForGoalRun
+              ? { runtimeCapabilities: runtimeCapabilitiesForGoalRun }
+              : {}),
+          };
+          const requestOptions = buildInjectedRequestOptions({
+            defaults: options?.request,
+            humanInput: inputPayload,
+          });
+          const visibleGoalMessage: HumanMessageWithMeta | null = visibleInput
+            ? {
+                id: createMessageId(),
+                type: 'human',
+                content: visibleInput,
+                submittedInput: visibleInput,
+              }
+            : null;
+
+          void stream
+            .submit(
+              {
+                input: inputPayload,
+                ...(requestOptions.state
+                  ? { state: requestOptions.state }
+                  : {}),
+              },
+              {
+                ...(goalRunThreadId && !threadId
+                  ? {
+                      threadId: goalRunThreadId,
+                      joinExistingThread: true,
+                    }
+                  : {}),
+                ...(requestOptions.context
+                  ? { context: requestOptions.context }
+                  : {}),
+                ...(requestOptions.config
+                  ? { config: requestOptions.config }
+                  : {}),
+                ...(visibleGoalMessage
+                  ? {
+                      preserveOptimisticMessages: true,
+                      optimisticValues: (prev) => {
+                        const prevMessages = prev?.messages ?? [];
+                        return {
+                          ...prev,
+                          messages: [...prevMessages, visibleGoalMessage],
+                        };
+                      },
+                    }
+                  : {}),
+              },
+            )
+            .catch((error: unknown) => {
+              setGoalError(
+                error instanceof Error ? error.message : String(error),
+              );
+            });
+        }
+      } catch (error) {
+        setGoalError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setIsGoalLoading(false);
+      }
+    },
+    [
+      effectiveSessionRuntimeCapabilities,
+      goalAdapter,
+      options?.request,
+      refreshThreads,
+      runtimeCapabilities,
+      runtimeCapabilitiesReady,
+      stream,
+      t,
+    ],
+  );
+
+  const handleGoalPanelOpenChange = React.useCallback(
+    (open: boolean) => {
+      setIsGoalPanelOpen(open);
+    },
+    [],
+  );
+
   const addRunRuntimeCapabilities = React.useCallback(
     (selection: RuntimeCapabilitiesSelection) => {
       setRunRuntimeCapabilities((previous) =>
@@ -1756,7 +2063,9 @@ export function Chat({
     setComposerText,
     focusComposerAt,
     setPlanModeEnabled,
+    setGoalPanelOpen: setIsGoalPanelOpen,
     onPetCommand: handlePetCommand,
+    onGoalCommand: handleGoalCommand,
     addRunRuntimeCapabilities,
     setRunRuntimeCapabilities,
     insertComposerCapabilityToken,
@@ -1827,9 +2136,42 @@ export function Chat({
     }
   }, [runtimeCapabilityPalette, slashPaletteOptions.length]);
 
+  const submitGoalModeDraft = React.useCallback(() => {
+    const objective = getComposerPlainText(composerPartsRef.current).trim();
+    if (!isGoalModeOpen || !goalCommandAvailable || !objective) {
+      return false;
+    }
+
+    setComposerText('', 0);
+    setRuntimeCapabilityPalette(null);
+    focusComposerAt(0);
+    void handleGoalCommand({
+      args: objective,
+      commandSource: {
+        type: 'slash_command',
+        name: 'goal',
+        source: 'runtime',
+        executionType: 'insert_invocation',
+      },
+      runtimeCapabilities: runRuntimeCapabilities,
+      visibleInput: objective,
+    });
+    return true;
+  }, [
+    focusComposerAt,
+    goalCommandAvailable,
+    handleGoalCommand,
+    isGoalModeOpen,
+    runRuntimeCapabilities,
+    setComposerText,
+  ]);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (executeSlashCommandFromDraft()) {
+      return;
+    }
+    if (submitGoalModeDraft()) {
       return;
     }
     submitDraft();
@@ -2047,6 +2389,9 @@ export function Chat({
       if (executeSlashCommandFromDraft()) {
         return;
       }
+      if (submitGoalModeDraft()) {
+        return;
+      }
       submitDraft(
         getBusyComposerShortcutFollowUpMode(event.metaKey || event.ctrlKey),
       );
@@ -2054,6 +2399,9 @@ export function Chat({
     }
 
     if (executeSlashCommandFromDraft()) {
+      return;
+    }
+    if (submitGoalModeDraft()) {
       return;
     }
     submitDraft();
@@ -3025,6 +3373,163 @@ export function Chat({
           </div>
         )}
 
+        {showGoalStatus && (
+          <div
+            className={cn(
+              'mb-2 flex min-h-10 gap-2 rounded-md border border-border bg-background px-2.5 py-2 text-xs text-foreground shadow-sm',
+              isGoalObjectiveExpanded ? 'items-start' : 'items-center',
+            )}
+          >
+            <Target
+              className={cn(
+                'size-4 shrink-0 text-muted-foreground',
+                isGoalObjectiveExpanded && 'mt-1',
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-medium">{t('chat.goal.label')}</span>
+                {threadGoal && (
+                  <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                    {t(`chat.goal.status.${threadGoal.status}`)}
+                  </span>
+                )}
+                {isGoalLoading && (
+                  <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              <div
+                className={cn(
+                  'mt-0.5 text-muted-foreground',
+                  threadGoal?.objective && !goalError && isGoalObjectiveExpanded
+                    ? 'whitespace-pre-wrap break-words'
+                    : 'truncate',
+                )}
+              >
+                {goalError || threadGoal?.objective}
+              </div>
+              {threadGoal && (
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                  <span>
+                    {t('chat.goal.elapsed', {
+                      elapsed: formatGoalElapsed(displayedGoalElapsedSeconds),
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+            {threadGoal && (
+              <div className="flex shrink-0 items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isGoalLoading}
+                      onClick={() => {
+                        const prefix = '/goal edit ';
+                        setComposerText(`${prefix}${threadGoal.objective}`);
+                      }}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t('chat.goal.edit')}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isGoalLoading}
+                      onClick={() =>
+                        void handleGoalCommand({
+                          args: threadGoal.status === 'paused' ? 'resume' : 'pause',
+                          commandSource: {
+                            type: 'slash_command',
+                            name: 'goal',
+                            source: 'runtime',
+                            executionType: 'insert_invocation',
+                          },
+                        })
+                      }
+                    >
+                      {threadGoal.status === 'paused' ? (
+                        <Play className="size-3" />
+                      ) : (
+                        <Pause className="size-3" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {threadGoal.status === 'paused'
+                      ? t('chat.goal.resume')
+                      : t('chat.goal.pause')}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isGoalLoading}
+                      onClick={() =>
+                        void handleGoalCommand({
+                          args: 'clear',
+                          commandSource: {
+                            type: 'slash_command',
+                            name: 'goal',
+                            source: 'runtime',
+                            executionType: 'insert_invocation',
+                          },
+                        })
+                      }
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{t('chat.goal.clear')}</TooltipContent>
+                </Tooltip>
+                {threadGoal.objective && !goalError && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-expanded={isGoalObjectiveExpanded}
+                        aria-label={
+                          isGoalObjectiveExpanded
+                            ? t('chat.goal.collapseObjective')
+                            : t('chat.goal.expandObjective')
+                        }
+                        onClick={() =>
+                          setIsGoalObjectiveExpanded((expanded) => !expanded)
+                        }
+                      >
+                        <ChevronDown
+                          className={cn(
+                            'size-3 transition-transform',
+                            isGoalObjectiveExpanded && 'rotate-180',
+                          )}
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {isGoalObjectiveExpanded
+                        ? t('chat.goal.collapseObjective')
+                        : t('chat.goal.expandObjective')}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <PendingRuntimeServices
           state={stream.runtimeActivities.sandboxServices}
           onStopService={(serviceId) =>
@@ -3169,6 +3674,9 @@ export function Chat({
                     selectedTool={selectedTool}
                     planModeEnabled={planModeEnabled}
                     onPlanModeChange={setPlanModeEnabled}
+                    goalCommandAvailable={goalCommandAvailable}
+                    goalPanelOpen={isGoalModeOpen}
+                    onGoalPanelOpenChange={handleGoalPanelOpenChange}
                     runtimeCapabilities={
                       runtimeCapabilitiesReady ? runtimeCapabilities : null
                     }

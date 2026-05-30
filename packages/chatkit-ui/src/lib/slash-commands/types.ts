@@ -84,6 +84,12 @@ export type CommandExecutionEffect =
       planMode?: boolean;
     }
   | {
+      type: 'goal';
+      args: string;
+      commandSource: ChatKitCommandSource;
+      runtimeCapabilities?: RuntimeCapabilitiesSelection;
+    }
+  | {
       type: 'set_composer_text';
       text: string;
       caretOffset?: number;

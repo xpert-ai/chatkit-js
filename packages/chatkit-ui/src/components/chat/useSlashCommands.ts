@@ -31,6 +31,12 @@ type SubmitSlashPromptOptions = {
   planMode?: boolean;
 };
 
+type GoalCommandOptions = {
+  args: string;
+  commandSource: ChatKitCommandSource;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
+};
+
 type ComposerReplaceRange = { start: number; end: number };
 
 const BUILTIN_SLASH_COMMAND_I18N_KEYS: Record<
@@ -79,7 +85,9 @@ export function useSlashCommands({
   setComposerText,
   focusComposerAt,
   setPlanModeEnabled,
+  setGoalPanelOpen,
   onPetCommand,
+  onGoalCommand,
   addRunRuntimeCapabilities,
   setRunRuntimeCapabilities,
   insertComposerCapabilityToken,
@@ -100,7 +108,9 @@ export function useSlashCommands({
   setComposerText: (text: string, caretOffset?: number) => void;
   focusComposerAt: (offset: number) => void;
   setPlanModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  setGoalPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onPetCommand?: (mode: 'toggle' | 'on' | 'off' | 'settings') => void;
+  onGoalCommand?: (options: GoalCommandOptions) => void | Promise<void>;
   addRunRuntimeCapabilities: (selection: RuntimeCapabilitiesSelection) => void;
   setRunRuntimeCapabilities: React.Dispatch<
     React.SetStateAction<RuntimeCapabilitiesSelection>
@@ -331,6 +341,18 @@ export function useSlashCommands({
         return true;
       }
 
+      if (effect.type === 'goal') {
+        void onGoalCommand?.({
+          args: effect.args,
+          commandSource: effect.commandSource,
+          runtimeCapabilities: effect.runtimeCapabilities,
+        });
+        setComposerText('', 0);
+        setPalette(null);
+        focusComposerAt(0);
+        return true;
+      }
+
       if (effect.type === 'client_action') {
         if (parentMessenger) {
           void parentMessenger
@@ -362,6 +384,7 @@ export function useSlashCommands({
       i18n.language,
       parentMessenger,
       onPetCommand,
+      onGoalCommand,
       selectCapabilityById,
       setComposerText,
       setPalette,
@@ -391,12 +414,27 @@ export function useSlashCommands({
         return;
       }
 
+      if (
+        option.command.name === 'goal' &&
+        option.command.source === 'runtime'
+      ) {
+        setGoalPanelOpen((open) => !open);
+        setComposerText('', 0);
+        setPalette(null);
+        focusComposerAt(0);
+        return;
+      }
+
       executeSlashCommand(option.command, '');
     },
     [
       executeSlashCommand,
+      focusComposerAt,
       insertComposerCapabilityToken,
       palette,
+      setGoalPanelOpen,
+      setComposerText,
+      setPalette,
       toggleCapabilityGroup,
     ],
   );

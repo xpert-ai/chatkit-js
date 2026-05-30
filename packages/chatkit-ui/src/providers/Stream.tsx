@@ -47,6 +47,7 @@ import {
   type TMessageContentComplex,
   type TMessageContentComponent,
   type TThreadContextUsageEvent,
+  type ThreadGoal,
   normalizeRequestLanguage,
 } from '@xpert-ai/chatkit-types';
 import { appendMessageContent } from '../lib/message';
@@ -77,6 +78,12 @@ import {
   parseThreadContextUsageEvent,
   type ThreadContextUsageByAgentKey,
 } from '../lib/thread-context-usage';
+import {
+  parseThreadGoalClearedEvent,
+  parseThreadGoalUpdatedPatchEvent,
+  parseThreadGoalUpdatedEvent,
+  type ThreadGoalUpdatedPatchEvent,
+} from '../lib/thread-goals';
 import {
   parseFollowUpConsumedEvent,
   resolveFollowUpConsumedIds,
@@ -183,6 +190,7 @@ export type StreamSubmitOptions = {
   optimisticValues?:
     | Partial<StateType>
     | ((prev: StateType) => Partial<StateType>);
+  preserveOptimisticMessages?: boolean;
   context?: Record<string, unknown>;
   config?: Config & Record<string, unknown>;
   checkpoint?: Omit<Checkpoint, 'thread_id'> | null;
@@ -220,6 +228,7 @@ export type StreamContextType = {
   apiKey: string;
   organizationId?: string;
   threadId: string | null;
+  threadGoal: ThreadGoal | null;
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
   values: StateType;
   messages: ChatKitAIMessage[];
@@ -381,6 +390,79 @@ function applyOptimisticValues(
   const update =
     typeof optimistic === 'function' ? optimistic(prev) : optimistic;
   return { ...prev, ...update };
+}
+
+function mergePreservedMessages(
+  messages: ChatKitAIMessage[],
+  preservedMessages: ChatKitAIMessage[] | undefined,
+  previousMessages: ChatKitAIMessage[],
+): ChatKitAIMessage[] {
+  if (!preservedMessages?.length) {
+    return messages;
+  }
+
+  const nextMessages = [...messages];
+  const nextMessageIds = new Set(
+    nextMessages
+      .map((message) => message.id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+  );
+
+  for (const preservedMessage of preservedMessages) {
+    if (preservedMessage.id && nextMessageIds.has(preservedMessage.id)) {
+      continue;
+    }
+
+    const previousIndex = preservedMessage.id
+      ? previousMessages.findIndex(
+          (message) => message.id === preservedMessage.id,
+        )
+      : -1;
+    let insertAt = 0;
+
+    if (previousIndex >= 0) {
+      for (let index = previousIndex - 1; index >= 0; index -= 1) {
+        const previousId = previousMessages[index]?.id;
+        if (!previousId) {
+          continue;
+        }
+        const nextIndex = nextMessages.findIndex(
+          (message) => message.id === previousId,
+        );
+        if (nextIndex >= 0) {
+          insertAt = nextIndex + 1;
+          break;
+        }
+      }
+
+      if (insertAt === 0) {
+        for (
+          let index = previousIndex + 1;
+          index < previousMessages.length;
+          index += 1
+        ) {
+          const previousId = previousMessages[index]?.id;
+          if (!previousId) {
+            continue;
+          }
+          const nextIndex = nextMessages.findIndex(
+            (message) => message.id === previousId,
+          );
+          if (nextIndex >= 0) {
+            insertAt = nextIndex;
+            break;
+          }
+        }
+      }
+    }
+
+    nextMessages.splice(insertAt, 0, preservedMessage);
+    if (preservedMessage.id) {
+      nextMessageIds.add(preservedMessage.id);
+    }
+  }
+
+  return nextMessages;
 }
 
 function parseEventData(raw: string): ChatEventEnvelope | null {
@@ -1303,6 +1385,10 @@ export function applyStreamEvent(
   getCurrentTodos?: () => TodoListSnapshot | null,
   onTodosChange?: (snapshot: TodoListSnapshot | null) => void,
   onRuntimeActivityTrigger?: (trigger: RuntimeActivityTrigger) => void,
+  onThreadGoalUpdated?: (goal: ThreadGoal) => void,
+  onThreadGoalCleared?: (threadId: string) => void,
+  onThreadGoalPatched?: (event: ThreadGoalUpdatedPatchEvent) => void,
+  preservedMessages?: ChatKitAIMessage[],
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -1318,7 +1404,14 @@ export function applyStreamEvent(
     const normalizedMessages = parsed.messages
       .map((item) => createMessageFromData(item))
       .filter((item): item is ChatKitAIMessage => Boolean(item));
-    setValues((prev) => ({ ...prev, messages: normalizedMessages }));
+    setValues((prev) => ({
+      ...prev,
+      messages: mergePreservedMessages(
+        normalizedMessages,
+        preservedMessages,
+        prev.messages ?? [],
+      ),
+    }));
     return;
   }
 
@@ -1419,7 +1512,11 @@ export function applyStreamEvent(
             .filter((item): item is ChatKitAIMessage => Boolean(item));
           setValues((prev) => ({
             ...prev,
-            messages: normalizedMessages,
+            messages: mergePreservedMessages(
+              normalizedMessages,
+              preservedMessages,
+              prev.messages ?? [],
+            ),
           }));
         }
         break;
@@ -1578,6 +1675,24 @@ export function applyStreamEvent(
           break;
         }
 
+        const goalUpdatedEvent = parseThreadGoalUpdatedEvent(payload.data);
+        if (goalUpdatedEvent) {
+          onThreadGoalUpdated?.(goalUpdatedEvent.goal);
+          break;
+        }
+
+        const goalPatchEvent = parseThreadGoalUpdatedPatchEvent(payload.data);
+        if (goalPatchEvent) {
+          onThreadGoalPatched?.(goalPatchEvent);
+          break;
+        }
+
+        const goalClearedEvent = parseThreadGoalClearedEvent(payload.data);
+        if (goalClearedEvent) {
+          onThreadGoalCleared?.(goalClearedEvent.threadId);
+          break;
+        }
+
         const followUpConsumedEvent = parseFollowUpConsumedEvent(payload.data);
         if (followUpConsumedEvent) {
           onFollowUpConsumed?.(followUpConsumedEvent);
@@ -1657,6 +1772,7 @@ const StreamSession = ({
     );
   const [contextUsageByAgentKey, setContextUsageByAgentKey] =
     useState<ThreadContextUsageByAgentKey>({});
+  const [threadGoal, setThreadGoal] = useState<ThreadGoal | null>(null);
   const [runtimeClientSecret, setRuntimeClientSecret] = useState(apiKey);
   const [runtimeOrganizationId, setRuntimeOrganizationId] = useState<
     string | undefined
@@ -2398,6 +2514,7 @@ const StreamSession = ({
       updateTodos(null);
       clearRuntimeActivities();
       setContextUsageByAgentKey({});
+      setThreadGoal(null);
       setValues({ messages: initialMessages ?? [] });
       updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
       conversationIdRef.current = null;
@@ -2713,6 +2830,7 @@ const StreamSession = ({
       input?: StreamRunInput | null,
       options?: StreamSubmitOptions,
       runId?: string,
+      preservedMessages?: ChatKitAIMessage[],
     ) => {
       const abortController = new AbortController();
       abortRef.current?.abort();
@@ -2787,6 +2905,41 @@ const StreamSession = ({
               updateTodos(snapshot);
             },
             handleRuntimeActivityTrigger,
+            (goal) => {
+              if (goal.threadId === nextThreadId) {
+                setThreadGoal(goal);
+              }
+            },
+            (goalThreadId) => {
+              if (goalThreadId === nextThreadId) {
+                setThreadGoal(null);
+              }
+            },
+            (event) => {
+              setThreadGoal((previous) => {
+                if (!previous) {
+                  return previous;
+                }
+                if (event.threadId && event.threadId !== nextThreadId) {
+                  return previous;
+                }
+                if (
+                  event.goalId &&
+                  previous.id &&
+                  event.goalId !== previous.id
+                ) {
+                  return previous;
+                }
+                return {
+                  ...previous,
+                  ...event.goal,
+                  threadId: event.goal.threadId ?? previous.threadId,
+                  objective: event.goal.objective ?? previous.objective,
+                  status: event.goal.status,
+                };
+              });
+            },
+            preservedMessages,
           );
         }
 
@@ -3061,8 +3214,26 @@ const StreamSession = ({
         lastEventIdRef.current = null;
       }
       const optimistic = options?.optimisticValues;
+      let preservedMessages: ChatKitAIMessage[] | undefined;
       if (optimistic) {
-        setValues((prev) => applyOptimisticValues(prev, optimistic));
+        const previousValues = valuesRef.current;
+        const optimisticValues = applyOptimisticValues(
+          previousValues,
+          optimistic,
+        );
+        if (options?.preserveOptimisticMessages) {
+          const previousIds = new Set(
+            (previousValues.messages ?? [])
+              .map((message) => message.id)
+              .filter(
+                (id): id is string => typeof id === 'string' && id.length > 0,
+              ),
+          );
+          preservedMessages = (optimisticValues.messages ?? []).filter(
+            (message) => Boolean(message.id) && !previousIds.has(message.id),
+          );
+        }
+        setValues(optimisticValues);
       }
 
       let nextThreadId = threadId ?? null;
@@ -3083,6 +3254,11 @@ const StreamSession = ({
         conversationIdRef.current = input.conversationId;
         activeThreadIdRef.current = resumeThreadId;
         setThreadId(resumeThreadId);
+      }
+      if (!nextThreadId && desiredThreadId && options?.joinExistingThread) {
+        nextThreadId = desiredThreadId;
+        activeThreadIdRef.current = desiredThreadId;
+        setThreadId(desiredThreadId);
       }
       if (!nextThreadId && desiredThreadId) {
         const created = await client.threads.create({
@@ -3116,7 +3292,13 @@ const StreamSession = ({
       }
       activeThreadIdRef.current = nextThreadId;
 
-      await runStream(nextThreadId, input, options);
+      await runStream(
+        nextThreadId,
+        input,
+        options,
+        undefined,
+        preservedMessages,
+      );
     },
     [
       client,
@@ -3146,6 +3328,7 @@ const StreamSession = ({
     apiKey: runtimeClientSecret,
     organizationId: runtimeOrganizationId,
     threadId: threadId ?? null,
+    threadGoal,
     contextUsageByAgentKey,
     values,
     messages: values.messages ?? [],

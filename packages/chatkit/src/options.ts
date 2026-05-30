@@ -1,5 +1,10 @@
 import type { ClientToolMessageInput } from './interrupt';
 import type { ChatKitSlashCommand } from './commands';
+import type {
+  RuntimeCapabilitiesSelection,
+  ThreadGoal,
+  ThreadGoalStatus,
+} from './message';
 import type * as Widgets from './widgets';
 
 export * from './widgets';
@@ -419,6 +424,40 @@ export type ChatKitRequestOptions<
   config?: TConfig;
 };
 
+export type ChatKitGoalCommandStatus = Extract<
+  ThreadGoalStatus,
+  'active' | 'paused'
+>;
+
+export type ChatKitGoalSetResult = {
+  threadId: string;
+  goal: ThreadGoal;
+};
+
+export type ChatKitGoalAdapter = {
+  getGoal: (params: {
+    threadId: string;
+    signal?: AbortSignal;
+  }) => Promise<ThreadGoal | null>;
+  setGoal: (params: {
+    threadId?: string | null;
+    assistantId: string;
+    objective: string;
+    runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+    signal?: AbortSignal;
+  }) => Promise<ChatKitGoalSetResult>;
+  updateGoal: (params: {
+    threadId: string;
+    objective?: string;
+    status?: ChatKitGoalCommandStatus;
+    signal?: AbortSignal;
+  }) => Promise<ThreadGoal>;
+  clearGoal: (params: {
+    threadId: string;
+    signal?: AbortSignal;
+  }) => Promise<ThreadGoal | null>;
+};
+
 export type ChatKitOptions = {
   /**
    * ChatKit iframe URL for web component integrations.
@@ -441,6 +480,13 @@ export type ChatKitOptions = {
    * from this ChatKit instance.
    */
   request?: ChatKitRequestOptions;
+
+  /**
+   * Optional persistent goal adapter used by runtime `/goal` commands.
+   * When omitted, ChatKit may use a platform-specific default adapter if the
+   * active client exposes one.
+   */
+  goal?: ChatKitGoalAdapter;
 
   /**
    * Locale override for ChatKit UI. If not provided, the browser's locale

@@ -375,6 +375,44 @@ export type TThreadContextUsageEvent = {
   usage: TThreadContextUsageMetrics;
 };
 
+export type ThreadGoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  // Reserved for future usage-quota enforcement. The backend does not emit this status yet.
+  | 'usage_limited'
+  | 'budget_limited'
+  | 'complete';
+
+export type ThreadGoal = {
+  id?: string;
+  conversationId?: string;
+  threadId: string;
+  objective: string;
+  status: ThreadGoalStatus;
+  tokensUsed: number;
+  elapsedSeconds: number;
+  continuationCount: number;
+  statusUpdatedAt?: string | Date | null;
+  completedAt?: string | Date | null;
+  blockedAt?: string | Date | null;
+};
+
+export type TThreadGoalUpdatedEvent = {
+  type: 'thread_goal_updated';
+  conversationId?: string;
+  threadId: string;
+  goal: ThreadGoal;
+  updatedAt: string;
+};
+
+export type TThreadGoalClearedEvent = {
+  type: 'thread_goal_cleared';
+  conversationId?: string;
+  threadId: string;
+  updatedAt: string;
+};
+
 export type TFollowUpConsumedEvent = TChatEventMessage & {
   type: typeof CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED;
   mode: 'queue' | 'steer';

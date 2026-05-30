@@ -142,12 +142,18 @@ vi.mock('./composer/ComposerMenu', () => ({
   ComposerMenu: ({
     planModeEnabled,
     onPlanModeChange,
+    goalCommandAvailable,
+    goalPanelOpen,
+    onGoalPanelOpenChange,
     runtimeCapabilities,
     selectedRuntimeCapabilities,
     onRuntimeCapabilityToggle,
   }: {
     planModeEnabled?: boolean;
     onPlanModeChange?: (enabled: boolean) => void;
+    goalCommandAvailable?: boolean;
+    goalPanelOpen?: boolean;
+    onGoalPanelOpenChange?: (open: boolean) => void;
     runtimeCapabilities?: unknown;
     selectedRuntimeCapabilities?: {
       plugins: { nodeKeys: string[] };
@@ -176,6 +182,16 @@ vi.mock('./composer/ComposerMenu', () => ({
       <span data-testid="runtime-capabilities-ready">
         {runtimeCapabilities ? 'ready' : 'not-ready'}
       </span>
+      <span data-testid="goal-command-available">
+        {goalCommandAvailable ? 'goal-ready' : 'goal-hidden'}
+      </span>
+      <button
+        type="button"
+        data-testid="goal-command"
+        onClick={() => onGoalPanelOpenChange?.(!goalPanelOpen)}
+      >
+        {goalPanelOpen ? 'goal-on' : 'goal-off'}
+      </button>
       <button
         type="button"
         data-testid="select-plugin"
@@ -241,7 +257,9 @@ vi.mock('./thread/messages/ai', () => ({
 }));
 
 vi.mock('./thread/MessageActions', () => ({
-  MessageActions: () => null,
+  MessageActions: ({ content }: { content: string }) => (
+    <div data-testid={`message-actions-${content}`} />
+  ),
 }));
 
 vi.mock('./thread/StartScreen', () => ({
@@ -269,22 +287,92 @@ vi.mock('./ui/button', () => ({
   ),
 }));
 
-import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitGoalAdapter,
+  ChatKitOptions,
+  ThreadGoal,
+} from '@xpert-ai/chatkit-types';
 import { Chat } from './chat';
+
+const baseChatOptions: ChatKitOptions = {
+  api: {
+    apiUrl: 'https://api.example.com',
+    getClientSecret: async () => ({ secret: 'secret' }),
+  },
+};
 
 function renderChat(extraOptions: Partial<ChatKitOptions> = {}) {
   return render(
     <Chat
       clientSecret="secret"
       options={{
-        api: {
-          apiUrl: 'https://api.example.com',
-          getClientSecret: vi.fn(async () => ({ secret: 'secret' })),
-        },
+        ...baseChatOptions,
         ...extraOptions,
       }}
     />,
   );
+}
+
+const goalRuntimeCapabilities = {
+  skills: [],
+  plugins: [],
+  subAgents: [],
+  commands: [
+    {
+      name: 'goal',
+      label: 'Goal',
+      action: {
+        type: 'insert_invocation',
+        template: '/goal {{args}}',
+      },
+    },
+  ],
+};
+
+function enableGoalRuntimeCommand() {
+  mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValue(
+    goalRuntimeCapabilities,
+  );
+}
+
+function createGoalAdapter(
+  overrides: Partial<ChatKitGoalAdapter> = {},
+): ChatKitGoalAdapter {
+  return {
+    getGoal: vi.fn(async () => null),
+    setGoal: vi.fn(async ({ threadId, objective }) => ({
+      threadId: threadId ?? 'thread-1',
+      goal: {
+        id: 'goal-1',
+        threadId: threadId ?? 'thread-1',
+        objective,
+        status: 'active',
+        tokensUsed: 0,
+        elapsedSeconds: 0,
+        continuationCount: 0,
+      },
+    })),
+    updateGoal: vi.fn(async ({ threadId, objective, status }) => ({
+      id: 'goal-1',
+      threadId,
+      objective: objective ?? 'ship feature',
+      status: status ?? 'active',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    })),
+    clearGoal: vi.fn(async () => null),
+    ...overrides,
+  };
+}
+
+function getSubmittedOptimisticMessages(callIndex = 0) {
+  const submitOptions = mocks.stream.submit.mock.calls[callIndex]?.[1];
+  const optimisticValues = submitOptions?.optimisticValues;
+
+  expect(optimisticValues).toBeTypeOf('function');
+
+  return optimisticValues({ messages: [] }).messages;
 }
 
 function setComposerText(element: HTMLElement, value: string) {
@@ -331,7 +419,10 @@ describe('Chat plan mode payload', () => {
 
   beforeEach(() => {
     globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
-    mocks.stream.client.assistants.getRuntimeCapabilities.mockClear();
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockReset();
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockRejectedValue({
+      status: 404,
+    });
     mocks.stream.client.conversations.search.mockClear();
     mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
     mocks.stream.client.conversations.update.mockClear();
@@ -351,6 +442,7 @@ describe('Chat plan mode payload', () => {
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.isLoading = false;
     mocks.stream.error = null;
+    (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal = null;
   });
 
   afterEach(() => {
@@ -622,6 +714,582 @@ describe('Chat plan mode payload', () => {
         },
       }),
       expect.any(Object),
+    );
+  });
+
+  it('does not show a goal card when /goal returns no existing goal', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(adapter.getGoal).toHaveBeenCalledWith({
+        threadId: 'thread-1',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText('chat.goal.label')).toBeNull(),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/goal');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(adapter.getGoal).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('chat.goal.label')).toBeNull();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+  });
+
+  it('does not show a goal card for /goal before a thread exists', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/goal');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    expect(screen.queryByText('chat.goal.label')).toBeNull();
+    expect(screen.queryByText('chat.goal.startThreadRequired')).toBeNull();
+    expect(adapter.getGoal).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+  });
+
+  it('starts a hidden goal run after creating a goal on a new thread', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/goal ship feature');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: null,
+          objective: 'ship feature',
+        }),
+      ),
+    );
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+
+    expect(mocks.stream.reset).toHaveBeenCalledWith('thread-1', []);
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: 'Continue working toward the active goal.',
+      commandSource: expect.objectContaining({
+        type: 'slash_command',
+        name: 'goal',
+        source: 'runtime',
+      }),
+      goalRun: true,
+    });
+    expect(mocks.stream.submit.mock.calls[0][1]).toMatchObject({
+      threadId: 'thread-1',
+      joinExistingThread: true,
+    });
+    expect(mocks.stream.submit.mock.calls[0][1]).not.toHaveProperty(
+      'optimisticValues',
+    );
+    expect(screen.queryByText('ship feature')).toBeNull();
+  });
+
+  it('toggles the goal switch without showing an empty card when no goal exists', async () => {
+    enableGoalRuntimeCommand();
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-on');
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
+    expect(screen.queryByText('chat.goal.label')).toBeNull();
+    expect(screen.getByRole('textbox').textContent).toBe('');
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+  });
+
+  it('submits goal mode input as a goal instead of a regular prompt', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+    setComposerText(screen.getByRole('textbox'), 'find the top AI repos');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          objective: 'find the top AI repos',
+        }),
+      ),
+    );
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: 'Continue working toward the active goal.',
+      goalRun: true,
+    });
+    expect(mocks.stream.submit.mock.calls[0][0].input.input).not.toBe(
+      'find the top AI repos',
+    );
+    expect(getSubmittedOptimisticMessages()).toEqual([
+      expect.objectContaining({
+        type: 'human',
+        content: 'find the top AI repos',
+        submittedInput: 'find the top AI repos',
+      }),
+    ]);
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+    expect(screen.getByRole('textbox').textContent).toBe('');
+  });
+
+  it('submits goal mode input as a goal before a thread exists', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+    setComposerText(screen.getByRole('textbox'), 'find the top AI repos');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: null,
+          objective: 'find the top AI repos',
+        }),
+      ),
+    );
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+
+    expect(mocks.stream.reset).toHaveBeenCalledWith('thread-1', []);
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: 'Continue working toward the active goal.',
+      goalRun: true,
+    });
+    expect(mocks.stream.submit.mock.calls[0][1]).toMatchObject({
+      threadId: 'thread-1',
+      joinExistingThread: true,
+    });
+    expect(mocks.stream.submit.mock.calls[0][0].input.input).not.toBe(
+      'find the top AI repos',
+    );
+    expect(getSubmittedOptimisticMessages()).toEqual([
+      expect.objectContaining({
+        type: 'human',
+        content: 'find the top AI repos',
+        submittedInput: 'find the top AI repos',
+      }),
+    ]);
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+    expect(screen.getByRole('textbox').textContent).toBe('');
+  });
+
+  it('submits goal mode input as a goal when pressing Enter', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+    setComposerText(screen.getByRole('textbox'), 'find the top AI repos');
+    fireEvent.keyDown(screen.getByRole('textbox'), {
+      key: 'Enter',
+      code: 'Enter',
+    });
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          objective: 'find the top AI repos',
+        }),
+      ),
+    );
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: 'Continue working toward the active goal.',
+      goalRun: true,
+    });
+    expect(mocks.stream.submit.mock.calls[0][0].input.input).not.toBe(
+      'find the top AI repos',
+    );
+    expect(getSubmittedOptimisticMessages()).toEqual([
+      expect.objectContaining({
+        type: 'human',
+        content: 'find the top AI repos',
+        submittedInput: 'find the top AI repos',
+      }),
+    ]);
+  });
+
+  it('keeps the goal switch as input mode without showing an existing goal summary', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const activeGoal: ThreadGoal = {
+      id: 'goal-1',
+      threadId: 'thread-1',
+      objective: 'ship the feature',
+      status: 'active',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    };
+    const adapter = createGoalAdapter({
+      getGoal: vi.fn(async () => activeGoal),
+    });
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() => expect(adapter.getGoal).toHaveBeenCalled());
+    expect(screen.queryByText('ship the feature')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-on');
+    expect(screen.queryByText('ship the feature')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+    expect(screen.queryByText('ship the feature')).toBeNull();
+  });
+
+  it('hides the goal status when the stream marks the goal complete', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const adapter = createGoalAdapter();
+    const options = { goal: adapter };
+    const view = renderChat(options);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+    setComposerText(screen.getByRole('textbox'), 'find the top AI repos');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off'),
+    );
+
+    (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal = {
+      id: 'goal-1',
+      threadId: 'thread-1',
+      objective: 'find the top AI repos',
+      status: 'complete',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    };
+    mocks.stream.isLoading = false;
+
+    view.rerender(
+      <Chat
+        clientSecret="secret"
+        options={{
+          ...baseChatOptions,
+          ...options,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off'),
+    );
+    expect(screen.queryByText('chat.goal.status.complete')).toBeNull();
+  });
+
+  it('keeps the active goal card while the goal run is loading and hides it when loading ends', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const activeGoal: ThreadGoal = {
+      id: 'goal-1',
+      threadId: 'thread-1',
+      objective: 'find the top AI repos',
+      status: 'active',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    };
+    const adapter = createGoalAdapter({
+      getGoal: vi.fn(async () => activeGoal),
+    });
+    const options = { goal: adapter };
+    const view = renderChat(options);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+    setComposerText(screen.getByRole('textbox'), 'find the top AI repos');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off'),
+    );
+
+    (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal =
+      activeGoal;
+    mocks.stream.isLoading = true;
+
+    view.rerender(
+      <Chat
+        clientSecret="secret"
+        options={{
+          ...baseChatOptions,
+          ...options,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText('find the top AI repos')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+
+    mocks.stream.isLoading = false;
+
+    view.rerender(
+      <Chat
+        clientSecret="secret"
+        options={{
+          ...baseChatOptions,
+          ...options,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText('find the top AI repos')).toBeNull(),
+    );
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+  });
+
+  it('allows goal mode to be enabled again after a previous goal completes', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    const completedGoal: ThreadGoal = {
+      id: 'goal-1',
+      threadId: 'thread-1',
+      objective: 'find the top AI repos',
+      status: 'complete',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    };
+    const adapter = createGoalAdapter({
+      getGoal: vi.fn(async () => completedGoal),
+    });
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() => expect(adapter.getGoal).toHaveBeenCalled());
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+    expect(screen.queryByText('chat.goal.status.complete')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('goal-command'));
+
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-on');
+    expect(screen.queryByText('chat.goal.status.complete')).toBeNull();
+
+    setComposerText(screen.getByRole('textbox'), 'ship the next goal');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: 'thread-1',
+          objective: 'ship the next goal',
+        }),
+      ),
+    );
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+  });
+
+  it('expands and collapses the active goal objective', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.isLoading = true;
+    const activeGoal: ThreadGoal = {
+      id: 'goal-1',
+      threadId: 'thread-1',
+      objective:
+        'ship the feature with a long objective that should be collapsible',
+      status: 'active',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    };
+    (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal =
+      activeGoal;
+    const adapter = createGoalAdapter({
+      getGoal: vi.fn(async () => activeGoal),
+    });
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() => expect(adapter.getGoal).toHaveBeenCalled());
+
+    const objective = screen.getByText(activeGoal.objective);
+    expect(objective).toHaveClass('truncate');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'chat.goal.expandObjective' }),
+    );
+
+    expect(objective).not.toHaveClass('truncate');
+    expect(objective).toHaveClass('whitespace-pre-wrap');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'chat.goal.collapseObjective' }),
+    );
+
+    expect(objective).toHaveClass('truncate');
+  });
+
+  it('toggles goal mode from the slash palette without inserting /goal', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter();
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    let textarea = screen.getByRole('textbox');
+    textarea = setComposerText(textarea, '/go');
+    fireEvent.mouseDown(await screen.findByText('Goal'));
+
+    expect(screen.getByRole('textbox').textContent).toBe('');
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-on');
+    expect(screen.queryByText('chat.goal.label')).toBeNull();
+    expect(adapter.getGoal).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+
+    textarea = setComposerText(screen.getByRole('textbox'), '/go');
+    fireEvent.mouseDown(await screen.findByText('Goal'));
+
+    expect(screen.getByRole('textbox').textContent).toBe('');
+    expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
+  });
+
+  it('clears stale goal UI when the goal adapter becomes unavailable', async () => {
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.isLoading = true;
+    const activeGoal: ThreadGoal = {
+      id: 'goal-1',
+      threadId: 'thread-1',
+      objective: 'ship feature',
+      status: 'active',
+      tokensUsed: 0,
+      elapsedSeconds: 0,
+      continuationCount: 0,
+    };
+    const adapter = createGoalAdapter({
+      getGoal: vi.fn(async () => activeGoal),
+    });
+
+    const { rerender } = render(
+      <Chat
+        clientSecret="secret"
+        options={{
+          ...baseChatOptions,
+          goal: adapter,
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText('ship feature')).toBeInTheDocument(),
+    );
+
+    rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+
+    await waitFor(() =>
+      expect(screen.queryByText('ship feature')).toBeNull(),
     );
   });
 

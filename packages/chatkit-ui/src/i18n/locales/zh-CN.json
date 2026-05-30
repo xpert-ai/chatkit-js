@@ -67,6 +67,27 @@
       "label": "上下文窗口",
       "full": "已使用 {{usedPercent}}%（剩余 {{remainingPercent}}%）",
       "tokensUsed": "已使用 {{used}} / {{max}} tokens"
+    },
+    "goal": {
+      "label": "目标",
+      "unavailable": "当前客户端不支持目标控制。",
+      "startThreadRequired": "请先开始一个会话再修改目标。",
+      "elapsed": "已运行 {{elapsed}}",
+      "edit": "编辑目标",
+      "pause": "暂停目标",
+      "resume": "恢复目标",
+      "clear": "清除目标",
+      "hide": "隐藏目标",
+      "expandObjective": "显示完整目标",
+      "collapseObjective": "隐藏完整目标",
+      "status": {
+        "active": "运行中",
+        "paused": "已暂停",
+        "blocked": "已阻塞",
+        "usage_limited": "用量受限",
+        "budget_limited": "预算耗尽",
+        "complete": "已完成"
+      }
     }
   },
   "history": {

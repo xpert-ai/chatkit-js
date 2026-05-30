@@ -67,6 +67,27 @@
       "label": "Context window",
       "full": "{{usedPercent}}% used ({{remainingPercent}}% left)",
       "tokensUsed": "{{used}} / {{max}} tokens used"
+    },
+    "goal": {
+      "label": "Goal",
+      "unavailable": "Goal controls are not available for this client.",
+      "startThreadRequired": "Start a conversation before changing the goal.",
+      "elapsed": "{{elapsed}} elapsed",
+      "edit": "Edit goal",
+      "pause": "Pause goal",
+      "resume": "Resume goal",
+      "clear": "Clear goal",
+      "hide": "Hide goal",
+      "expandObjective": "Show full goal",
+      "collapseObjective": "Hide full goal",
+      "status": {
+        "active": "active",
+        "paused": "paused",
+        "blocked": "blocked",
+        "usage_limited": "usage limited",
+        "budget_limited": "budget limited",
+        "complete": "complete"
+      }
     }
   },
   "history": {
