@@ -336,13 +336,13 @@ export function SandboxShellToolCallCard({ data }: { data: ShellStepData }) {
       {output ? (
         <div
           className={cn(
-            'group/shell-copy relative min-h-0 flex-1',
+            'group/shell-copy relative min-h-0 flex-1 overflow-auto',
             SANDBOX_SHELL_SECTION_GAP_CLASS,
           )}
         >
           <pre
             className={cn(
-              'min-h-0 overflow-auto whitespace-pre pr-8 font-mono text-muted-foreground/85 in-data-[density=compact]:pr-6 in-data-[density=spacious]:pr-10',
+              'min-h-0 whitespace-pre pr-8 font-mono text-muted-foreground/85 in-data-[density=compact]:pr-6 in-data-[density=spacious]:pr-10',
               SANDBOX_SHELL_TEXT_CLASS,
             )}
             data-slot="sandbox-shell-output"
