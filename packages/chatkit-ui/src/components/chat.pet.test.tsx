@@ -42,6 +42,13 @@ const mocks = vi.hoisted(() => ({
       createdAt?: string;
       updatedAt?: string;
     }>,
+    historyMessagePagination: {
+      conversationId: null as string | null,
+      loadedCount: 0,
+      total: 0,
+      hasMore: false,
+      isLoadingMore: false,
+    },
     todos: null,
     runtimeActivities: {
       sandboxServices: {
@@ -61,6 +68,7 @@ const mocks = vi.hoisted(() => ({
     error: null as unknown,
     loadThread: vi.fn(),
     loadConversationMessages: vi.fn(),
+    loadMoreConversationMessages: vi.fn(),
     submit: vi.fn(),
     stop: vi.fn(),
     reset: vi.fn(),
@@ -218,6 +226,13 @@ describe('Chat pet integration', () => {
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
     mocks.stream.historyMessageLoadVersion = 0;
+    mocks.stream.historyMessagePagination = {
+      conversationId: null,
+      loadedCount: 0,
+      total: 0,
+      hasMore: false,
+      isLoadingMore: false,
+    };
     mocks.stream.isLoading = false;
     mocks.stream.isReady = true;
     mocks.stream.error = null;

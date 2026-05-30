@@ -18,6 +18,8 @@
     "referencedContentOnly": "已引用内容",
     "youLabel": "你",
     "scrollToBottom": "回到底部",
+    "loadMoreMessages": "加载更多",
+    "loadingMoreMessages": "正在加载...",
     "retryUpload": "重新上传",
     "dropFilesTitle": "松手上传文件",
     "dropFilesHint": "文件会附加到你的下一条消息。",

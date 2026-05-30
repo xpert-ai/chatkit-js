@@ -49,6 +49,13 @@ const mocks = vi.hoisted(() => {
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [],
+      historyMessagePagination: {
+        conversationId: null as string | null,
+        loadedCount: 0,
+        total: 0,
+        hasMore: false,
+        isLoadingMore: false,
+      },
       todos: null,
       runtimeActivities: {
         sandboxServices: {
@@ -68,6 +75,7 @@ const mocks = vi.hoisted(() => {
       error: null,
       loadThread: vi.fn(),
       loadConversationMessages: vi.fn(),
+      loadMoreConversationMessages: vi.fn(),
       submit: vi.fn(),
       stop: vi.fn(),
       reset: vi.fn(),
@@ -240,6 +248,13 @@ describe('Chat composer paste and drop behavior', () => {
     mocks.stream.client.assistants.getRuntimeCapabilities.mockClear();
     mocks.refreshThreads.mockClear();
     mocks.stream.messages = [];
+    mocks.stream.historyMessagePagination = {
+      conversationId: null,
+      loadedCount: 0,
+      total: 0,
+      hasMore: false,
+      isLoadingMore: false,
+    };
     mocks.stream.pendingFollowUps = [];
     mocks.stream.isLoading = false;
 

@@ -140,6 +140,8 @@ export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
   executionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
   attachments?: Record<string, unknown>[];
   fileAssets?: Record<string, unknown>[];
   references?: ChatKitReference[];
@@ -161,6 +163,14 @@ type ChatKitMessageContentPart = NonNullable<
 export type StateType = { messages: ChatKitAIMessage[] };
 
 type StreamRunInput = TChatRequest | TXpertChatResumeRequest;
+
+export type HistoryMessagePaginationState = {
+  conversationId: string | null;
+  loadedCount: number;
+  total: number;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+};
 
 export type PendingRequestUserInput = {
   id: string;
@@ -214,6 +224,7 @@ export type StreamContextType = {
   values: StateType;
   messages: ChatKitAIMessage[];
   historyMessageLoadVersion: number;
+  historyMessagePagination: HistoryMessagePaginationState;
   todos: TodoListSnapshot | null;
   runtimeActivities: RuntimeActivitiesState;
   pendingFollowUps: PendingFollowUp[];
@@ -225,6 +236,7 @@ export type StreamContextType = {
   error: unknown;
   loadThread: (threadId: string) => Promise<void>;
   loadConversationMessages: (recordId: string) => Promise<ChatKitAIMessage[]>;
+  loadMoreConversationMessages: () => Promise<ChatKitAIMessage[]>;
   submit: (
     values?: StreamRunInput | null,
     options?: StreamSubmitOptions,
@@ -255,7 +267,25 @@ const defaultApiUrl =
   (import.meta.env.VITE_XPERTAI_API_URL as string | undefined) ??
   'https://api.xpertai.cn/api/ai';
 
-const DEFAULT_HISTORY_LIMIT = 200;
+const DEFAULT_HISTORY_PAGE_SIZE = 50;
+
+function createEmptyHistoryMessagePagination(): HistoryMessagePaginationState {
+  return {
+    conversationId: null,
+    loadedCount: 0,
+    total: 0,
+    hasMore: false,
+    isLoadingMore: false,
+  };
+}
+
+export function createConversationMessagesPageQuery(offset: number) {
+  return {
+    order: { createdAt: 'DESC' as const },
+    limit: DEFAULT_HISTORY_PAGE_SIZE,
+    offset: Math.max(0, offset),
+  };
+}
 
 export function createLanguageHeaders(
   locale?: string | null,
@@ -516,6 +546,8 @@ function mapChatMessageToUiMessage(
     content,
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
+    ...(message.createdAt ? { createdAt: message.createdAt } : {}),
+    ...(message.updatedAt ? { updatedAt: message.updatedAt } : {}),
     ...(references.length > 0 ? { references } : {}),
     ...(attachments ? { attachments } : {}),
     ...(fileAssets ? { fileAssets } : {}),
@@ -535,15 +567,106 @@ function mapChatMessageToUiMessage(
   } as ChatKitAIMessage;
 }
 
-function sortMessagesByCreatedAt<T extends ChatMessage>(items: T[]): T[] {
-  return [...items].sort((a, b) => {
-    const aTime = Date.parse(a.createdAt ?? '');
-    const bTime = Date.parse(b.createdAt ?? '');
-    if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
-    if (Number.isNaN(aTime)) return -1;
-    if (Number.isNaN(bTime)) return 1;
-    return aTime - bTime;
-  });
+function parseMessageCreatedAt(message: { createdAt?: string }): number | null {
+  const time = Date.parse(message.createdAt ?? '');
+  return Number.isNaN(time) ? null : time;
+}
+
+function sortMessagesByCreatedAt<T extends { createdAt?: string }>(
+  items: T[],
+): T[] {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      time: parseMessageCreatedAt(item),
+    }))
+    .sort((a, b) => {
+      if (a.time !== null && b.time !== null) {
+        if (a.time !== b.time) return a.time - b.time;
+        return a.index - b.index;
+      }
+      if (a.time === null && b.time === null) {
+        return a.index - b.index;
+      }
+      return a.time === null ? 1 : -1;
+    })
+    .map(({ item }) => item);
+}
+
+function normalizeHistoryTotal(total: unknown, loadedCount: number): number {
+  return typeof total === 'number' && Number.isFinite(total) && total >= 0
+    ? total
+    : loadedCount;
+}
+
+export function normalizeConversationMessagesPage(
+  response: { items?: ChatMessage[]; total?: number },
+  previousLoadedCount = 0,
+) {
+  const persistedMessages =
+    (response.items as PersistedChatMessage[] | undefined) ?? [];
+  const pendingFollowUps = persistedMessages
+    .filter((message) => isHiddenPendingFollowUpMessage(message))
+    .map((message) => mapPersistedPendingFollowUp(message))
+    .filter((item): item is PendingFollowUp => Boolean(item));
+  const messages = sortMessagesByCreatedAt(
+    persistedMessages.filter(
+      (message) => !isHiddenPendingFollowUpMessage(message),
+    ),
+  ).map(mapChatMessageToUiMessage);
+  const loadedCount = previousLoadedCount + persistedMessages.length;
+  const total = normalizeHistoryTotal(response.total, loadedCount);
+
+  return {
+    messages,
+    pendingFollowUps,
+    loadedCount,
+    total,
+    hasMore: loadedCount < total,
+  };
+}
+
+export function mergeHistoryUiMessages(
+  existingMessages: ChatKitAIMessage[],
+  nextMessages: ChatKitAIMessage[],
+): ChatKitAIMessage[] {
+  if (nextMessages.length === 0) {
+    return existingMessages;
+  }
+
+  const messagesById = new Map<string, ChatKitAIMessage>();
+  const anonymousMessages: ChatKitAIMessage[] = [];
+
+  for (const message of [...nextMessages, ...existingMessages]) {
+    const id = message.id ? String(message.id) : null;
+    if (!id) {
+      anonymousMessages.push(message);
+      continue;
+    }
+    messagesById.set(id, message);
+  }
+
+  return sortMessagesByCreatedAt([
+    ...messagesById.values(),
+    ...anonymousMessages,
+  ]);
+}
+
+function mergePendingFollowUps(
+  existingItems: PendingFollowUp[],
+  nextItems: PendingFollowUp[],
+): PendingFollowUp[] {
+  if (nextItems.length === 0) {
+    return existingItems;
+  }
+
+  const itemsById = new Map<string, PendingFollowUp>();
+  for (const item of [...existingItems, ...nextItems]) {
+    itemsById.set(item.id, item);
+  }
+
+  return [...itemsById.values()].sort((a, b) => a.createdAt - b.createdAt);
 }
 
 function isAssistantMessage(message: ChatKitAIMessage | undefined) {
@@ -773,6 +896,8 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const id = typeof raw.id === 'string' ? raw.id : createMessageId();
   const executionId =
     typeof raw.executionId === 'string' ? raw.executionId : undefined;
+  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : undefined;
+  const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined;
   const references = extractMessageReferences(raw);
   const submittedInput =
     extractSubmittedInput(raw) ??
@@ -794,6 +919,8 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     type,
     content,
     executionId,
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
     ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
     ...(references.length > 0 ? { references } : {}),
     ...(attachments ? { attachments } : {}),
@@ -1508,6 +1635,10 @@ const StreamSession = ({
   const [threadId, setThreadId] = useQueryState('threadId');
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
+  const [historyMessagePagination, setHistoryMessagePagination] =
+    useState<HistoryMessagePaginationState>(() =>
+      createEmptyHistoryMessagePagination(),
+    );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [todos, setTodos] = useState<TodoListSnapshot | null>(null);
@@ -1561,6 +1692,9 @@ const StreamSession = ({
   const lastExecutionIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const historyMessagePaginationRef = useRef<HistoryMessagePaginationState>(
+    createEmptyHistoryMessagePagination(),
+  );
   const activeThreadIdRef = useRef<string | null>(threadId ?? null);
   const clientRef = useRef<Client<StateType> | null>(null);
   const shouldStartFreshAssistantMessageAfterSteerRef = useRef(false);
@@ -1579,6 +1713,23 @@ const StreamSession = ({
   useEffect(() => {
     activeThreadIdRef.current = threadId ?? null;
   }, [threadId]);
+  const updateHistoryMessagePagination = useCallback(
+    (
+      next:
+        | HistoryMessagePaginationState
+        | ((
+            previous: HistoryMessagePaginationState,
+          ) => HistoryMessagePaginationState),
+    ) => {
+      setHistoryMessagePagination((previous) => {
+        const resolved =
+          typeof next === 'function' ? next(previous) : next;
+        historyMessagePaginationRef.current = resolved;
+        return resolved;
+      });
+    },
+    [],
+  );
   const updateTodos = useCallback((nextTodos: TodoListSnapshot | null) => {
     todosRef.current = nextTodos;
     setTodos(nextTodos);
@@ -2081,6 +2232,10 @@ const StreamSession = ({
       activeThreadIdRef.current = null;
       clearRuntimeActivities();
       conversationIdRef.current = recordId;
+      updateHistoryMessagePagination({
+        ...createEmptyHistoryMessagePagination(),
+        conversationId: recordId,
+      });
       const [conversationDetail, response] = await Promise.all([
         client.conversations.get(recordId).catch((detailError) => {
           console.warn(
@@ -2089,41 +2244,40 @@ const StreamSession = ({
           );
           return null;
         }),
-        client.conversations.listMessages(recordId, {
-          limit: DEFAULT_HISTORY_LIMIT,
-          offset: 0,
-        }),
-      ]);
-      const persistedMessages =
-        (response.items as PersistedChatMessage[] | undefined) ?? [];
-      const persistedPendingFollowUps = persistedMessages
-        .filter((message) => isHiddenPendingFollowUpMessage(message))
-        .map((message) => mapPersistedPendingFollowUp(message))
-        .filter((item): item is PendingFollowUp => Boolean(item));
-      setAutoQueuedFollowUpIds(
-        getAutoDrainQueuedFollowUpIds(persistedPendingFollowUps),
-      );
-      setPendingFollowUps(persistedPendingFollowUps);
-      const sorted = sortMessagesByCreatedAt(
-        persistedMessages.filter(
-          (message) => !isHiddenPendingFollowUpMessage(message),
+        client.conversations.searchMessages(
+          recordId,
+          createConversationMessagesPageQuery(0),
         ),
+      ]);
+      if (conversationIdRef.current !== recordId) {
+        return [];
+      }
+      const page = normalizeConversationMessagesPage(response);
+      setAutoQueuedFollowUpIds(
+        getAutoDrainQueuedFollowUpIds(page.pendingFollowUps),
       );
-      const mapped = sorted.map(mapChatMessageToUiMessage);
-      const latestExecutionId = getLatestExecutionIdFromMessages(mapped);
+      setPendingFollowUps(page.pendingFollowUps);
+      const latestExecutionId = getLatestExecutionIdFromMessages(page.messages);
       lastExecutionIdRef.current = latestExecutionId;
       const loadedThreadId = getConversationThreadId(conversationDetail);
       if (loadedThreadId) {
         activeThreadIdRef.current = loadedThreadId;
         setThreadId(loadedThreadId);
       }
-      setValues({ messages: mapped ?? [] });
+      updateHistoryMessagePagination({
+        conversationId: recordId,
+        loadedCount: page.loadedCount,
+        total: page.total,
+        hasMore: page.hasMore,
+        isLoadingMore: false,
+      });
+      setValues({ messages: page.messages ?? [] });
       setHistoryMessageLoadVersion((version) => version + 1);
       hydratePendingHITLRequestFromOperation(
         (conversationDetail as { operation?: unknown } | null)?.operation,
         latestExecutionId,
       );
-      return mapped as ChatKitAIMessage[];
+      return page.messages as ChatKitAIMessage[];
     },
     [
       apiUrl,
@@ -2131,10 +2285,97 @@ const StreamSession = ({
       client,
       hydratePendingHITLRequestFromOperation,
       runtimeClientSecret,
+      setThreadId,
       stop,
+      updateHistoryMessagePagination,
       updateTodos,
     ],
   );
+
+  const loadMoreConversationMessages = useCallback(async () => {
+    const pagination = historyMessagePaginationRef.current;
+    const recordId = pagination.conversationId;
+    if (!recordId || !pagination.hasMore || pagination.isLoadingMore) {
+      return [];
+    }
+
+    const configError = createMissingApiConfigurationError({
+      apiUrl,
+      clientSecret: runtimeClientSecret,
+    });
+    if (configError) {
+      throw configError;
+    }
+
+    updateHistoryMessagePagination((previous) =>
+      previous.conversationId === recordId
+        ? { ...previous, isLoadingMore: true }
+        : previous,
+    );
+
+    try {
+      const response = await client.conversations.searchMessages(
+        recordId,
+        createConversationMessagesPageQuery(pagination.loadedCount),
+      );
+      const page = normalizeConversationMessagesPage(
+        response,
+        pagination.loadedCount,
+      );
+
+      if (conversationIdRef.current !== recordId) {
+        updateHistoryMessagePagination((previous) =>
+          previous.conversationId === recordId
+            ? { ...previous, isLoadingMore: false }
+            : previous,
+        );
+        return [];
+      }
+
+      if (page.pendingFollowUps.length > 0) {
+        setPendingFollowUps((previous) =>
+          mergePendingFollowUps(previous, page.pendingFollowUps),
+        );
+        addAutoQueuedFollowUpIds(
+          getAutoDrainQueuedFollowUpIds(page.pendingFollowUps),
+        );
+      }
+
+      setValues((previous) => ({
+        ...previous,
+        messages: mergeHistoryUiMessages(
+          previous.messages ?? [],
+          page.messages,
+        ),
+      }));
+      updateHistoryMessagePagination((previous) =>
+        previous.conversationId === recordId
+          ? {
+              conversationId: recordId,
+              loadedCount: page.loadedCount,
+              total: page.total,
+              hasMore: page.hasMore,
+              isLoadingMore: false,
+            }
+          : previous,
+      );
+      setHistoryMessageLoadVersion((version) => version + 1);
+      return page.messages as ChatKitAIMessage[];
+    } catch (error) {
+      updateHistoryMessagePagination((previous) =>
+        previous.conversationId === recordId
+          ? { ...previous, isLoadingMore: false }
+          : previous,
+      );
+      throw error;
+    }
+  }, [
+    addAutoQueuedFollowUpIds,
+    apiUrl,
+    client,
+    runtimeClientSecret,
+    updateHistoryMessagePagination,
+  ]);
 
   const reset = useCallback(
     (
@@ -2158,6 +2399,7 @@ const StreamSession = ({
       clearRuntimeActivities();
       setContextUsageByAgentKey({});
       setValues({ messages: initialMessages ?? [] });
+      updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
       conversationIdRef.current = null;
       activeThreadIdRef.current = newThreadId ?? null;
       shouldStartFreshAssistantMessageAfterSteerRef.current = false;
@@ -2176,6 +2418,7 @@ const StreamSession = ({
       clearRuntimeActivities,
       setThreadId,
       threadId,
+      updateHistoryMessagePagination,
       updateTodos,
     ],
   );
@@ -2627,6 +2870,7 @@ const StreamSession = ({
       if (!conversation?.id) {
         conversationIdRef.current = null;
         setPendingFollowUps([]);
+        updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
         setValues({ messages: [] });
         return;
       }
@@ -2695,6 +2939,7 @@ const StreamSession = ({
       clearRuntimeActivities,
       refreshSandboxServices,
       setThreadId,
+      updateHistoryMessagePagination,
       updateTodos,
     ],
   );
@@ -2811,6 +3056,7 @@ const StreamSession = ({
         setContextUsageByAgentKey({});
         updateTodos(null);
         clearRuntimeActivities();
+        updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
         lastExecutionIdRef.current = null;
         lastEventIdRef.current = null;
       }
@@ -2881,6 +3127,7 @@ const StreamSession = ({
       sendSteerFollowUp,
       setThreadId,
       threadId,
+      updateHistoryMessagePagination,
       updateTodos,
     ],
   );
@@ -2903,6 +3150,7 @@ const StreamSession = ({
     values,
     messages: values.messages ?? [],
     historyMessageLoadVersion,
+    historyMessagePagination,
     todos,
     runtimeActivities,
     pendingFollowUps,
@@ -2914,6 +3162,7 @@ const StreamSession = ({
     error,
     loadThread,
     loadConversationMessages,
+    loadMoreConversationMessages,
     submit,
     stop,
     reset,

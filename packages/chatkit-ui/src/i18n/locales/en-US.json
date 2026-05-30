@@ -18,6 +18,8 @@
     "referencedContentOnly": "Referenced content",
     "youLabel": "You",
     "scrollToBottom": "Scroll to bottom",
+    "loadMoreMessages": "Load more",
+    "loadingMoreMessages": "Loading...",
     "retryUpload": "Retry upload",
     "dropFilesTitle": "Drop files to upload",
     "dropFilesHint": "They will be attached to your next message.",

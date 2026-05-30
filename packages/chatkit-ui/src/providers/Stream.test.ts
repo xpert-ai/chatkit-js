@@ -15,6 +15,7 @@ import { createLangGraphEventState } from './langGraphEventMapper';
 import {
   applyStreamEvent,
   buildSteerFollowUpRunInput,
+  createConversationMessagesPageQuery,
   createLanguageHeaders,
   createFetchWithClientSecretRefresh,
   getAutoDrainQueuedFollowUpIds,
@@ -23,7 +24,9 @@ import {
   getPendingSteerFollowUpIds,
   getRequestUserInputResultPurpose,
   mergeFollowUpHumanInputs,
+  mergeHistoryUiMessages,
   mergeQueuedFollowUpGroup,
+  normalizeConversationMessagesPage,
   normalizeRequestUserInputParams,
   normalizeRequestUserInputToolCall,
   normalizeToolMessagesResponse,
@@ -31,6 +34,96 @@ import {
   resolveClientToolCallResponse,
   shouldBroadcastThreadChange,
 } from './Stream';
+
+describe('conversation message history pagination', () => {
+  it('builds reverse-created-at page queries for conversation messages', () => {
+    expect(createConversationMessagesPageQuery(0)).toEqual({
+      order: { createdAt: 'DESC' },
+      limit: 50,
+      offset: 0,
+    });
+    expect(createConversationMessagesPageQuery(-10).offset).toBe(0);
+  });
+
+  it('normalizes reverse pages into chronological UI messages', () => {
+    const page = normalizeConversationMessagesPage({
+      total: 3,
+      items: [
+        {
+          id: 'newer',
+          role: 'ai',
+          content: 'Newer',
+          createdAt: '2026-01-03T00:00:00.000Z',
+        },
+        {
+          id: 'pending-follow-up',
+          role: 'human',
+          content: 'Queued follow-up',
+          followUpStatus: 'pending',
+          followUpMode: 'queue',
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+          id: 'older',
+          role: 'human',
+          content: 'Older',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ] as any,
+    });
+
+    expect(page.messages.map((message) => message.id)).toEqual([
+      'older',
+      'newer',
+    ]);
+    expect(page.pendingFollowUps).toHaveLength(1);
+    expect(page.loadedCount).toBe(3);
+    expect(page.total).toBe(3);
+    expect(page.hasMore).toBe(false);
+  });
+
+  it('prepends older pages in order while preserving existing duplicates', () => {
+    const merged = mergeHistoryUiMessages(
+      [
+        {
+          id: 'middle',
+          type: 'human',
+          content: 'Existing middle',
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+        {
+          id: 'newer',
+          type: 'ai',
+          content: 'Newer',
+          createdAt: '2026-01-03T00:00:00.000Z',
+        },
+      ] as any,
+      [
+        {
+          id: 'older',
+          type: 'human',
+          content: 'Older',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'middle',
+          type: 'human',
+          content: 'Duplicate middle',
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+      ] as any,
+    );
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'older',
+      'middle',
+      'newer',
+    ]);
+    expect(merged.find((message) => message.id === 'middle')?.content).toBe(
+      'Existing middle',
+    );
+  });
+});
 
 describe('request language headers', () => {
   it('normalizes ChatKit locales to Xpert language headers', () => {
