@@ -346,7 +346,7 @@ function createGoalAdapter(
         id: 'goal-1',
         threadId: threadId ?? 'thread-1',
         objective,
-        status: 'active',
+        status: 'active' as const,
         tokensUsed: 0,
         elapsedSeconds: 0,
         continuationCount: 0,
@@ -356,7 +356,7 @@ function createGoalAdapter(
       id: 'goal-1',
       threadId,
       objective: objective ?? 'ship feature',
-      status: status ?? 'active',
+      status: (status ?? 'active') as ThreadGoal['status'],
       tokensUsed: 0,
       elapsedSeconds: 0,
       continuationCount: 0,
@@ -429,6 +429,10 @@ describe('Chat plan mode payload', () => {
     mocks.stream.submit.mockClear();
     mocks.stream.loadMoreConversationMessages.mockClear();
     mocks.stream.loadMoreConversationMessages.mockResolvedValue([]);
+    mocks.stream.reset.mockClear();
+    mocks.stream.reset.mockImplementation((threadId?: string | null) => {
+      mocks.stream.threadId = threadId ?? null;
+    });
     mocks.stream.threadId = null;
     mocks.stream.messages = [];
     mocks.stream.historyMessagePagination = {
@@ -442,6 +446,7 @@ describe('Chat plan mode payload', () => {
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.isLoading = false;
     mocks.stream.error = null;
+    mocks.stream.submit.mockResolvedValue(undefined);
     (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal = null;
   });
 
@@ -1238,8 +1243,8 @@ describe('Chat plan mode payload', () => {
       ).toHaveTextContent('ready'),
     );
 
-    let textarea = screen.getByRole('textbox');
-    textarea = setComposerText(textarea, '/go');
+    const textarea = screen.getByRole('textbox');
+    setComposerText(textarea, '/go');
     fireEvent.mouseDown(await screen.findByText('Goal'));
 
     expect(screen.getByRole('textbox').textContent).toBe('');
@@ -1248,7 +1253,7 @@ describe('Chat plan mode payload', () => {
     expect(adapter.getGoal).not.toHaveBeenCalled();
     expect(mocks.stream.submit).not.toHaveBeenCalled();
 
-    textarea = setComposerText(screen.getByRole('textbox'), '/go');
+    setComposerText(screen.getByRole('textbox'), '/go');
     fireEvent.mouseDown(await screen.findByText('Goal'));
 
     expect(screen.getByRole('textbox').textContent).toBe('');

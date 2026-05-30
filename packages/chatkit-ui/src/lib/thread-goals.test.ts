@@ -1,4 +1,4 @@
-import type { ChatKitGoalAdapter } from '@xpert-ai/chatkit-types';
+import type { ChatKitGoalAdapter, ThreadGoal } from '@xpert-ai/chatkit-types';
 import { describe, expect, it, vi } from 'vitest';
 import {
   executeThreadGoalCommand,
@@ -12,6 +12,18 @@ import {
   type XpertGoalClient,
 } from './xpert-thread-goal-adapter';
 
+function sdkThreadFixture(threadId = 'thread-1') {
+  return {
+    thread_id: threadId,
+    created_at: '2026-05-31T00:00:00.000Z',
+    updated_at: '2026-05-31T00:00:00.000Z',
+    metadata: {},
+    status: 'idle' as const,
+    values: {},
+    interrupts: {},
+  };
+}
+
 function goalFixture(overrides: Partial<ChatKitGoalAdapter> = {}) {
   const adapter: ChatKitGoalAdapter = {
     getGoal: vi.fn(async () => null),
@@ -22,7 +34,7 @@ function goalFixture(overrides: Partial<ChatKitGoalAdapter> = {}) {
         conversationId: 'conversation-1',
         threadId: threadId ?? 'thread-new',
         objective,
-        status: 'active',
+        status: 'active' as const,
         tokensUsed: 0,
         elapsedSeconds: 0,
         continuationCount: 0,
@@ -33,7 +45,7 @@ function goalFixture(overrides: Partial<ChatKitGoalAdapter> = {}) {
       conversationId: 'conversation-1',
       threadId,
       objective: objective ?? 'ship feature',
-      status: status ?? 'active',
+      status: (status ?? 'active') as ThreadGoal['status'],
       tokensUsed: 0,
       elapsedSeconds: 0,
       continuationCount: 0,
@@ -47,7 +59,7 @@ function goalFixture(overrides: Partial<ChatKitGoalAdapter> = {}) {
 function xpertGoalClientFixture(): XpertGoalClient {
   return {
     threads: {
-      create: vi.fn(async () => ({ thread_id: 'thread-1' })),
+      create: vi.fn(async () => sdkThreadFixture('thread-1')),
     },
     conversations: {
       search: vi.fn(async () => ({
@@ -71,7 +83,7 @@ function xpertGoalClientFixture(): XpertGoalClient {
         conversationId: 'conversation-1',
         threadId: 'thread-1',
         objective: request.objective,
-        status: 'active',
+        status: 'active' as const,
         tokensUsed: 0,
         elapsedSeconds: 0,
         continuationCount: 0,
@@ -81,7 +93,7 @@ function xpertGoalClientFixture(): XpertGoalClient {
         conversationId: 'conversation-1',
         threadId: 'thread-1',
         objective: request.objective ?? 'ship feature',
-        status: request.status ?? 'active',
+        status: (request.status ?? 'active') as ThreadGoal['status'],
         tokensUsed: 0,
         elapsedSeconds: 0,
         continuationCount: 0,
@@ -186,6 +198,7 @@ describe('thread goals', () => {
       command: { type: 'set', objective: 'ship feature' },
       runtimeCapabilities: {
         mode: 'allowlist',
+        skills: { ids: [] },
         plugins: { nodeKeys: ['ralph-loop'] },
       },
     });
@@ -197,6 +210,7 @@ describe('thread goals', () => {
       objective: 'ship feature',
       runtimeCapabilities: {
         mode: 'allowlist',
+        skills: { ids: [] },
         plugins: { nodeKeys: ['ralph-loop'] },
       },
       signal: undefined,
@@ -292,10 +306,7 @@ describe('xpert thread goal adapter', () => {
 
     const conversations: BoundConversationClient = {
       calls: [],
-      async search(
-        this: BoundConversationClient,
-        _query: Parameters<XpertGoalClient['conversations']['search']>[0],
-      ) {
+      async search(this: BoundConversationClient) {
         this.calls.push('search');
         return {
           items: [{ id: 'conversation-1', threadId: 'thread-1' }],
@@ -304,7 +315,9 @@ describe('xpert thread goal adapter', () => {
       },
       async create(
         this: BoundConversationClient,
-        request: Parameters<XpertGoalClient['conversations']['create']>[0],
+        request: Parameters<
+          NonNullable<XpertGoalClient['conversations']['create']>
+        >[0],
       ) {
         this.calls.push('create');
         return {
@@ -361,7 +374,7 @@ describe('xpert thread goal adapter', () => {
       calls: [],
       async create(this: BoundThreadsClient) {
         this.calls.push('create-thread');
-        return { thread_id: 'thread-new' };
+        return sdkThreadFixture('thread-new');
       },
     };
     const adapter = createXpertThreadGoalAdapter({
@@ -408,6 +421,7 @@ describe('xpert thread goal adapter', () => {
       objective: 'ship feature',
       runtimeCapabilities: {
         mode: 'allowlist',
+        skills: { ids: [] },
         plugins: { nodeKeys: ['ralph-loop'] },
       },
     });
@@ -419,6 +433,7 @@ describe('xpert thread goal adapter', () => {
       options: {
         runtimeCapabilities: {
           mode: 'allowlist',
+          skills: { ids: [] },
           plugins: { nodeKeys: ['ralph-loop'] },
         },
       },
