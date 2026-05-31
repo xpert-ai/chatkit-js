@@ -319,6 +319,22 @@
         }
       }
     },
+    "middlewareEvent": {
+      "title": {
+        "default": "中间件",
+        "ModelFallbackMiddleware": "模型回退",
+        "ModelRetryMiddleware": "模型重试"
+      },
+      "phase": {
+        "fallback_started": "正在尝试备用模型 {{attempt}}/{{total}}",
+        "fallback_succeeded": "备用模型调用成功 {{attempt}}/{{total}}",
+        "fallback_failed": "备用模型调用失败 {{attempt}}/{{total}}",
+        "retry_scheduled": "准备重试模型调用 {{attempt}}/{{total}}",
+        "retry_started": "正在重试模型调用 {{attempt}}/{{total}}",
+        "retry_succeeded": "模型重试成功 {{attempt}}/{{total}}",
+        "retry_failed": "模型重试失败 {{attempt}}/{{total}}"
+      }
+    },
     "toolGroup": {
       "status": {
         "running": "正在处理",

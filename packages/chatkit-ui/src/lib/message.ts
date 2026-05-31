@@ -7,6 +7,7 @@ import type {
   TMessageContentText,
 } from '@xpert-ai/chatkit-types'
 import { isNil, omitBy } from 'lodash-es'
+import type { AgentEventContent } from './agent-runs'
 
 export type AssistantStreamingStatus = 'loading' | 'thinking' | 'answering'
 export const ASSISTANT_STREAM_IDLE_TO_THINKING_MS = 2000
@@ -194,6 +195,18 @@ export function appendMessageContent(
           } else {
             _content.push(content)
           }
+        } else if (content.type === 'agent_event' && content.id) {
+          const index = _content.findIndex(
+            (_) => _.type === 'agent_event' && _.id === content.id,
+          )
+          if (index > -1) {
+            _content[index] = mergeMessageAgentEvent(
+              _content[index] as AgentEventContent,
+              content as AgentEventContent,
+            )
+          } else {
+            _content.push(content)
+          }
         } else {
           const index = _content.findIndex(
             (_) => _.type === 'component' && _.id === content.id,
@@ -323,5 +336,26 @@ function mergeMessageComponent(
     parentExecutionId: previous.parentExecutionId ?? incoming.parentExecutionId,
     runId: previous.runId ?? incoming.runId,
     data: mergeComponentStepData(previous.data, incoming.data),
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeMessageAgentEvent(
+  previous: AgentEventContent,
+  incoming: AgentEventContent,
+): AgentEventContent {
+  return {
+    ...previous,
+    ...incoming,
+    id: previous.id ?? incoming.id,
+    type: 'agent_event',
+    created_date: previous.created_date ?? incoming.created_date,
+    data:
+      isRecord(previous.data) && isRecord(incoming.data)
+        ? { ...previous.data, ...incoming.data }
+        : (incoming.data ?? previous.data),
   }
 }

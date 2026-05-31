@@ -8,6 +8,7 @@ import type {
 
 import {
   isAgentEventContent,
+  isMiddlewareAgentRunInfo,
   readContentAgentKey,
   readContentExecutionId,
   readContentParentExecutionId,
@@ -243,6 +244,14 @@ function getEntryRunTarget(
   rootExecutionId?: string,
 ) {
   const item = entry.item;
+  if (
+    typeof item !== 'string' &&
+    isAgentEventContent(item) &&
+    item.event === 'middleware_event'
+  ) {
+    return null;
+  }
+
   const executionId = readContentExecutionId(item);
   const parentExecutionId = readContentParentExecutionId(item);
   const agentKey = readContentAgentKey(item);
@@ -341,7 +350,9 @@ export function buildAssistantRenderTree(
   message: AssistantMessageWithAgentRuns,
 ) {
   const rootExecutionId = message.executionId;
-  const runs = message.agentRuns ?? [];
+  const runs = (message.agentRuns ?? []).filter(
+    (run) => !isMiddlewareAgentRunInfo(run),
+  );
   const entries = normalizeAssistantEntries(message);
   const nodes = new Map<string, AgentRunRenderNode>();
   const rootEntries: AssistantContentEntry[] = [];
