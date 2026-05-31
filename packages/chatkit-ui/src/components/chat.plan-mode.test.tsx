@@ -1214,7 +1214,7 @@ describe('Chat plan mode payload', () => {
 
     await waitFor(() => expect(adapter.getGoal).toHaveBeenCalled());
 
-    const objective = screen.getByText(activeGoal.objective);
+    const objective = await screen.findByText(activeGoal.objective);
     expect(objective).toHaveClass('truncate');
 
     fireEvent.click(
