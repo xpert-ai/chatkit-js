@@ -319,6 +319,22 @@
         }
       }
     },
+    "middlewareEvent": {
+      "title": {
+        "default": "Middleware",
+        "ModelFallbackMiddleware": "Model fallback",
+        "ModelRetryMiddleware": "Model retry"
+      },
+      "phase": {
+        "fallback_started": "Trying fallback model {{attempt}}/{{total}}",
+        "fallback_succeeded": "Fallback model succeeded {{attempt}}/{{total}}",
+        "fallback_failed": "Fallback model failed {{attempt}}/{{total}}",
+        "retry_scheduled": "Scheduling model retry {{attempt}}/{{total}}",
+        "retry_started": "Retrying model call {{attempt}}/{{total}}",
+        "retry_succeeded": "Model retry succeeded {{attempt}}/{{total}}",
+        "retry_failed": "Model retry failed {{attempt}}/{{total}}"
+      }
+    },
     "toolGroup": {
       "status": {
         "running": "Processing",

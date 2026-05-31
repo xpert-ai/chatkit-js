@@ -53,6 +53,7 @@ import {
 import { appendMessageContent } from '../lib/message';
 import {
   createAgentEventContent,
+  isMiddlewareAgentRunInfo,
   normalizeAgentRunInfo,
   type AgentRunInfo,
 } from '../lib/agent-runs';
@@ -1524,7 +1525,7 @@ export function applyStreamEvent(
       case ChatMessageEventTypeEnum.ON_AGENT_START:
       case ChatMessageEventTypeEnum.ON_AGENT_END: {
         const agentRun = normalizeAgentRunInfo(eventPayloadData, eventType);
-        if (agentRun) {
+        if (agentRun && !isMiddlewareAgentRunInfo(agentRun)) {
           upsertAgentRunOnLatestMessage(
             setValues,
             agentRun,

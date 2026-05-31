@@ -636,6 +636,164 @@ describe('applyStreamEvent', () => {
     ]);
   });
 
+  it('ignores legacy middleware lifecycle events as agent runs', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'root-exec',
+          content: '',
+        },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_AGENT_START,
+          data: {
+            id: 'middleware-exec',
+            parentId: 'root-exec',
+            type: 'middleware',
+            category: 'workflow',
+            agentKey: 'model-retry-node',
+            title: 'Model Retry Middleware',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages[0].agentRuns).toBeUndefined();
+  });
+
+  it('appends middleware chat events as ordinary event content', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'root-exec',
+          content: [],
+        },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            type: 'middleware_event',
+            middlewareName: 'ModelRetryMiddleware',
+            middlewareKey: 'model-retry-node',
+            title: 'Model retry',
+            message: 'Retrying model call, attempt 2/3',
+            status: 'running',
+            phase: 'retry_started',
+            executionId: 'root-exec',
+            threadId: 'thread-1',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages[0].agentRuns).toBeUndefined();
+    expect(state.messages[0].content).toEqual([
+      expect.objectContaining({
+        id: 'middleware:root-exec:model-retry-node:retry:default',
+        type: 'agent_event',
+        event: 'middleware_event',
+        title: 'Model retry',
+        message: 'Retrying model call, attempt 2/3',
+        executionId: 'root-exec',
+      }),
+    ]);
+  });
+
+  it('updates middleware chat events in place for the same attempt', () => {
+    let state = {
+      messages: [
+        {
+          id: 'ai-1',
+          type: 'ai',
+          executionId: 'root-exec',
+          content: [],
+        },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+    const pushMiddlewareEvent = (data: Record<string, unknown>) =>
+      applyStreamEvent(
+        {
+          event: 'message',
+          data: JSON.stringify({
+            type: ChatMessageTypeEnum.EVENT,
+            event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+            data: {
+              type: 'middleware_event',
+              middlewareName: 'ModelFallbackMiddleware',
+              middlewareKey: 'model-fallback-node',
+              title: 'Model fallback',
+              executionId: 'root-exec',
+              threadId: 'thread-1',
+              data: { attempt: 1, totalAttempts: 1, model: 'glm-5.1' },
+              ...data,
+            },
+          }),
+        },
+        setValues,
+        vi.fn(),
+        vi.fn(),
+        [],
+        createLangGraphEventState(),
+      );
+
+    pushMiddlewareEvent({
+      phase: 'fallback_started',
+      message: 'Trying fallback model 1/1',
+      status: 'running',
+    });
+    pushMiddlewareEvent({
+      phase: 'fallback_succeeded',
+      message: 'Fallback model succeeded 1/1',
+      status: 'success',
+    });
+
+    expect(state.messages[0].content).toEqual([
+      expect.objectContaining({
+        id: 'middleware:root-exec:model-fallback-node:fallback:1',
+        type: 'agent_event',
+        event: 'middleware_event',
+        title: 'Model fallback',
+        message: 'Fallback model succeeded 1/1',
+        status: 'success',
+      }),
+    ]);
+  });
+
   it('keeps agent run state when message start replaces an empty placeholder', () => {
     let state = { messages: [] } as any;
     const setValues = vi.fn((updater) => {

@@ -9,6 +9,8 @@ export type AgentRunInfo = {
   id: string;
   parentId?: string;
   parentExecutionId?: string;
+  nodeType?: string;
+  category?: string;
   agentKey?: string;
   xpertName?: string;
   title?: string;
@@ -90,6 +92,36 @@ function readNestedName(value: unknown): string | undefined {
   );
 }
 
+function readNestedAttempt(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const attempt = value.attempt;
+  if (typeof attempt === 'number' && Number.isFinite(attempt)) {
+    return String(attempt);
+  }
+
+  return readTrimmedString(attempt) ?? undefined;
+}
+
+function getMiddlewareEventId(
+  data: Record<string, unknown>,
+  executionId: string,
+) {
+  if (readTrimmedString(data.type) !== 'middleware_event') {
+    return null;
+  }
+
+  const middlewareKey =
+    readTrimmedString(data.middlewareKey) ??
+    readTrimmedString(data.middlewareName) ??
+    'middleware';
+  const phase = readTrimmedString(data.phase) ?? 'event';
+  const phaseGroup = phase.split('_')[0] || phase;
+  const attempt =
+    readNestedAttempt(data.data) ?? readNestedAttempt(data) ?? 'default';
+
+  return `middleware:${executionId}:${middlewareKey}:${phaseGroup}:${attempt}`;
+}
+
 export function normalizeAgentRunInfo(
   value: unknown,
   eventType?: ChatMessageEventTypeEnum,
@@ -111,6 +143,8 @@ export function normalizeAgentRunInfo(
     eventType === ChatMessageEventTypeEnum.ON_AGENT_START
       ? 'running'
       : (readTrimmedString(value.status) ?? undefined);
+  const nodeType = readTrimmedString(value.type);
+  const category = readTrimmedString(value.category);
   const agentKey = readTrimmedString(value.agentKey);
   const title = readTrimmedString(value.title);
   const elapsedTime = readOptionalNumber(value.elapsedTime);
@@ -123,6 +157,8 @@ export function normalizeAgentRunInfo(
   return {
     id,
     ...(parentId ? { parentId, parentExecutionId: parentId } : {}),
+    ...(nodeType ? { nodeType } : {}),
+    ...(category ? { category } : {}),
     ...(agentKey ? { agentKey } : {}),
     ...(xpertName ? { xpertName } : {}),
     ...(title ? { title } : {}),
@@ -150,6 +186,8 @@ export function mergeAgentRunInfo(
     id: previous.id || incoming.id,
     parentId: incoming.parentId ?? previous.parentId,
     parentExecutionId: incoming.parentExecutionId ?? previous.parentExecutionId,
+    nodeType: incoming.nodeType ?? previous.nodeType,
+    category: incoming.category ?? previous.category,
     agentKey: incoming.agentKey ?? previous.agentKey,
     xpertName: incoming.xpertName ?? previous.xpertName,
     title: incoming.title ?? previous.title,
@@ -158,6 +196,10 @@ export function mergeAgentRunInfo(
     error: incoming.error ?? previous.error,
     inputs: incoming.inputs ?? previous.inputs,
   };
+}
+
+export function isMiddlewareAgentRunInfo(info: AgentRunInfo | null | undefined) {
+  return info?.nodeType?.trim().toLowerCase() === 'middleware';
 }
 
 export function upsertAgentRun(
@@ -190,6 +232,7 @@ export function createAgentEventContent(
   const id =
     readTrimmedString(data.eventId) ??
     readTrimmedString(data.id) ??
+    getMiddlewareEventId(data, executionId) ??
     createMessageId();
   const agentKey = readTrimmedString(data.agentKey) ?? undefined;
   const xpertName = readTrimmedString(data.xpertName) ?? undefined;

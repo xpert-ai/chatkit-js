@@ -31,6 +31,9 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
     },
     t: (key: string, values?: Record<string, unknown>) => {
       const count = Number(values?.count ?? 0);
+      const isZh = chatkitLanguage.value.toLowerCase().startsWith('zh');
+      const attempt = values?.attempt ?? '';
+      const total = values?.total ?? '';
 
       switch (key) {
         case 'message.contextCompression.running':
@@ -89,6 +92,40 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return `${count} child agent`;
         case 'message.agentRun.counts.children.other':
           return `${count} child agents`;
+        case 'message.middlewareEvent.title.default':
+          return isZh ? '中间件' : 'Middleware';
+        case 'message.middlewareEvent.title.ModelFallbackMiddleware':
+          return isZh ? '模型回退' : 'Model fallback';
+        case 'message.middlewareEvent.title.ModelRetryMiddleware':
+          return isZh ? '模型重试' : 'Model retry';
+        case 'message.middlewareEvent.phase.fallback_started':
+          return isZh
+            ? `正在尝试备用模型 ${attempt}/${total}`
+            : `Trying fallback model ${attempt}/${total}`;
+        case 'message.middlewareEvent.phase.fallback_succeeded':
+          return isZh
+            ? `备用模型调用成功 ${attempt}/${total}`
+            : `Fallback model succeeded ${attempt}/${total}`;
+        case 'message.middlewareEvent.phase.fallback_failed':
+          return isZh
+            ? `备用模型调用失败 ${attempt}/${total}`
+            : `Fallback model failed ${attempt}/${total}`;
+        case 'message.middlewareEvent.phase.retry_scheduled':
+          return isZh
+            ? `准备重试模型调用 ${attempt}/${total}`
+            : `Scheduling model retry ${attempt}/${total}`;
+        case 'message.middlewareEvent.phase.retry_started':
+          return isZh
+            ? `正在重试模型调用 ${attempt}/${total}`
+            : `Retrying model call ${attempt}/${total}`;
+        case 'message.middlewareEvent.phase.retry_succeeded':
+          return isZh
+            ? `模型重试成功 ${attempt}/${total}`
+            : `Model retry succeeded ${attempt}/${total}`;
+        case 'message.middlewareEvent.phase.retry_failed':
+          return isZh
+            ? `模型重试失败 ${attempt}/${total}`
+            : `Model retry failed ${attempt}/${total}`;
         case 'message.toolGroup.status.running':
           return 'Processing';
         case 'message.toolGroup.status.success':
@@ -156,7 +193,9 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
         case 'message.toolGroup.categories.tools.other':
           return `${count} tools`;
         default:
-          return key;
+          return typeof values?.defaultValue === 'string'
+            ? values.defaultValue
+            : key;
       }
     },
   }),
@@ -1476,6 +1515,92 @@ describe('AssistantMessage tool components', () => {
       'in-data-[density=compact]:space-y-2',
       'in-data-[density=spacious]:space-y-4',
     );
+  });
+
+  it('does not render middleware executions as sub-agent groups', () => {
+    renderAssistant([{ id: 'answer', type: 'text', text: 'Root answer.' }], {
+      executionId: 'root-exec',
+      agentRuns: [
+        {
+          id: 'middleware-run',
+          parentId: 'root-exec',
+          nodeType: 'middleware',
+          agentKey: 'model-retry-node',
+          title: 'Model Retry Middleware',
+          status: 'success',
+        },
+      ],
+    });
+
+    expect(screen.getByText('Root answer.')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Model Retry Middleware/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders middleware chat events as compact status rows', () => {
+    renderAssistant([
+      {
+        id: 'middleware:root-exec:model-fallback-node:fallback:1',
+        type: 'agent_event',
+        event: 'middleware_event',
+        title: 'Model fallback',
+        message: 'Fallback model succeeded 1/1',
+        status: 'success',
+        executionId: 'root-exec',
+        data: {
+          type: 'middleware_event',
+          middlewareName: 'ModelFallbackMiddleware',
+          middlewareKey: 'model-fallback-node',
+          phase: 'fallback_succeeded',
+          data: {
+            attempt: 1,
+            totalAttempts: 1,
+          },
+        },
+      } as any,
+      { id: 'answer', type: 'text', text: 'Root answer.' },
+    ]);
+
+    const row = screen.getByTestId('middleware-event-row');
+    expect(row).toHaveTextContent('Model fallback');
+    expect(row).toHaveTextContent('Fallback model succeeded 1/1');
+    expect(row).toHaveClass('rounded-full');
+    expect(row).not.toHaveClass('rounded-md');
+    expect(screen.getByText('Root answer.')).toBeInTheDocument();
+  });
+
+  it('localizes middleware chat event text from structured event data', () => {
+    chatkitLanguage.value = 'zh-CN';
+
+    renderAssistant([
+      {
+        id: 'middleware:root-exec:model-fallback-node:fallback:1',
+        type: 'agent_event',
+        event: 'middleware_event',
+        title: 'Model fallback',
+        message: 'Fallback model succeeded 1/1',
+        status: 'success',
+        executionId: 'root-exec',
+        data: {
+          type: 'middleware_event',
+          middlewareName: 'ModelFallbackMiddleware',
+          middlewareKey: 'model-fallback-node',
+          phase: 'fallback_succeeded',
+          data: {
+            attempt: 1,
+            totalAttempts: 1,
+          },
+        },
+      } as any,
+      { id: 'answer', type: 'text', text: 'Root answer.' },
+    ]);
+
+    const row = screen.getByTestId('middleware-event-row');
+    expect(row).toHaveTextContent('模型回退');
+    expect(row).toHaveTextContent('备用模型调用成功 1/1');
+    expect(row).not.toHaveTextContent('Model fallback');
+    expect(row).not.toHaveTextContent('Fallback model succeeded 1/1');
   });
 
   it('uses agent event titles and xpert names before agent keys in run headers', () => {

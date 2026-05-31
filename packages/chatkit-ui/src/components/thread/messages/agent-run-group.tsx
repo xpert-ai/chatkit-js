@@ -43,6 +43,116 @@ function formatDisplayValue(value: unknown) {
   return typeof value === 'string' ? value : safeJson(value);
 }
 
+function getAgentEventData(content: AgentEventContent) {
+  return content.data && typeof content.data === 'object'
+    ? (content.data as Record<string, unknown>)
+    : {};
+}
+
+function readTrimmedString(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function readDisplayToken(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return readTrimmedString(value);
+}
+
+function getMiddlewareEventDetailData(data: Record<string, unknown>) {
+  return data.data && typeof data.data === 'object' && !Array.isArray(data.data)
+    ? (data.data as Record<string, unknown>)
+    : {};
+}
+
+function isMiddlewareEventContent(content: AgentEventContent) {
+  return content.event === 'middleware_event';
+}
+
+function getMiddlewareEventIcon(status?: string | null) {
+  const normalized = normalizeRunStatus(status);
+  if (normalized === 'running') {
+    return { icon: Loader2, spin: true };
+  }
+  if (isFailedRunStatus(status)) {
+    return { icon: XCircle, spin: false };
+  }
+  return { icon: CheckCircle2, spin: false };
+}
+
+function MiddlewareEventRow({ content }: { content: AgentEventContent }) {
+  const { t } = useChatkitTranslation();
+  const eventData = getAgentEventData(content);
+  const detailData = getMiddlewareEventDetailData(eventData);
+  const middlewareName = readTrimmedString(eventData.middlewareName);
+  const phase = readTrimmedString(eventData.phase);
+  const fallbackTitle =
+    readTrimmedString(content.title) ||
+    middlewareName ||
+    t('message.middlewareEvent.title.default');
+  const label = middlewareName
+    ? t(`message.middlewareEvent.title.${middlewareName}`, {
+        defaultValue: fallbackTitle,
+      })
+    : fallbackTitle;
+  const fallbackMessage =
+    readTrimmedString(content.message) || phase || null;
+  const attempt =
+    readDisplayToken(detailData.attempt) ?? readDisplayToken(eventData.attempt);
+  const total =
+    readDisplayToken(detailData.totalAttempts) ??
+    readDisplayToken(detailData.total) ??
+    readDisplayToken(eventData.totalAttempts) ??
+    readDisplayToken(eventData.total);
+  const detail =
+    phase && attempt && total
+      ? t(`message.middlewareEvent.phase.${phase}`, {
+          attempt,
+          total,
+          defaultValue: fallbackMessage ?? phase,
+        })
+      : fallbackMessage;
+  const isError =
+    content.error !== undefined || isFailedRunStatus(content.status);
+  const isRunning = isRunningRunStatus(content.status);
+  const statusIcon = getMiddlewareEventIcon(content.status);
+  const StatusIcon = statusIcon.icon;
+
+  return (
+    <div
+      data-testid="middleware-event-row"
+      className={cn(
+        'my-1 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] leading-4',
+        isError
+          ? 'border-destructive/20 bg-destructive/5 text-destructive'
+          : isRunning
+            ? 'border-border/60 bg-muted/20 text-muted-foreground'
+            : 'border-emerald-500/20 bg-emerald-500/5 text-muted-foreground',
+      )}
+    >
+      <StatusIcon
+        className={cn(
+          'h-3.5 w-3.5 shrink-0',
+          isRunning && 'text-blue-700',
+          !isRunning && !isError && 'text-emerald-600',
+          statusIcon.spin && 'animate-spin',
+        )}
+      />
+      <span className="min-w-0 truncate font-medium">{label}</span>
+      {detail ? (
+        <>
+          <span className="text-muted-foreground/50">·</span>
+          <span className="min-w-0 truncate">{detail}</span>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function formatStepDuration(durationMs: number): string {
   if (durationMs < 1_000) {
     return `${durationMs}ms`;
@@ -158,6 +268,10 @@ function getAgentNodeUnits(node: AgentRunRenderNode): AssistantRenderUnit[] {
 }
 
 export function AgentEventRow({ content }: { content: AgentEventContent }) {
+  if (isMiddlewareEventContent(content)) {
+    return <MiddlewareEventRow content={content} />;
+  }
+
   const label =
     content.title?.trim() ||
     content.message?.trim() ||
