@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.14
+
+### Patch Changes
+
+- 489a372: middleware chat event
+
 ## 0.3.13
 
 ### Patch Changes
