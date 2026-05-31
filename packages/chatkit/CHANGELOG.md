@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.11
+
+### Patch Changes
+
+- 4eb160f: add conversation goal controls and thread goal event types
+- 619739d: paging messages & goal
+
 ## 0.3.10
 
 ### Patch Changes
