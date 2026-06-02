@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.15
+
+### Patch Changes
+
+- ca6b238: Handle invalid widget surfaces without crashing message rendering.
+
 ## 0.3.14
 
 ### Patch Changes
