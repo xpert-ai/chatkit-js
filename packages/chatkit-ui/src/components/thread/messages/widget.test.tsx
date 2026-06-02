@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { A2UIProvider, Types } from '@xpert-ai/a2ui-react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { WidgetMessage } from './widget';
 
 function renderWidget(data: Parameters<typeof WidgetMessage>[0]['data']) {
@@ -114,6 +114,28 @@ describe('WidgetMessage', () => {
     expect(await screen.findByText('42734.32')).toBeInTheDocument();
   });
 
+  it('shows fallback when flat widget messages contain invalid component references', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      renderWidget({
+        type: 'Widget',
+        widgets: [
+          {
+            name: 'generated_surface',
+            messages: createInvalidGeneratedSurfaceMessages(),
+          },
+        ],
+      });
+
+      expect(
+        await screen.findByText('Widget failed to render.'),
+      ).toBeInTheDocument();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('keeps rendering legacy pre-resolved surfaces', async () => {
     renderWidget({
       type: 'Widget',
@@ -157,6 +179,44 @@ function createTextSurfaceMessages(
               Text: { text: { literalString: text } },
             },
           },
+        ],
+      },
+    },
+    {
+      beginRendering: {
+        surfaceId: '@default',
+        root: 'root',
+      },
+    },
+  ];
+}
+
+function createInvalidGeneratedSurfaceMessages(): Types.ServerToClientMessage[] {
+  return [
+    {
+      dataModelUpdate: {
+        surfaceId: '@default',
+        path: '/',
+        contents: [
+          { key: 'title', valueString: 'CEO Daily Brief' },
+          { key: 'summary', valueString: 'Daily operating summary.' },
+          { key: 'section1_title', valueString: '1. Key findings' },
+          { key: 'section1_content', valueString: 'Revenue increased today.' },
+        ],
+      },
+    },
+    {
+      surfaceUpdate: {
+        surfaceId: '@default',
+        components: [
+          column('root', [
+            'title',
+            'summary',
+            'divider1',
+            'section1_title',
+            'section1_content',
+          ]),
+          divider('divider1'),
         ],
       },
     },

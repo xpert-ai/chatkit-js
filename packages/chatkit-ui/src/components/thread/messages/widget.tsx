@@ -1,5 +1,5 @@
 import type { TMessageComponentWidgetData } from '@xpert-ai/chatkit-types';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   A2UIRenderer,
   SurfaceRenderer,
@@ -64,6 +64,7 @@ function FlatWidgetSurface({
   surfaceId: string;
 }) {
   const { processMessages } = useA2UI();
+  const [renderError, setRenderError] = useState(false);
   const normalizedMessages = useMemo(
     () => normalizeFlatWidgetMessages(messages, surfaceId),
     [messages, surfaceId],
@@ -72,13 +73,39 @@ function FlatWidgetSurface({
   useEffect(() => {
     if (normalizedMessages.length === 0) return;
 
-    processMessages(normalizedMessages);
+    setRenderError(false);
+    try {
+      processMessages(normalizedMessages);
+    } catch (error) {
+      console.warn('[chatkit-ui] Failed to render widget surface', {
+        surfaceId,
+        error,
+      });
+      setRenderError(true);
+      return;
+    }
+
     return () => {
       processMessages([{ deleteSurface: { surfaceId } }]);
     };
   }, [normalizedMessages, processMessages, surfaceId]);
 
+  if (renderError) {
+    return <WidgetRenderErrorFallback />;
+  }
+
   return <A2UIRenderer surfaceId={surfaceId} />;
+}
+
+function WidgetRenderErrorFallback() {
+  return (
+    <div
+      role="alert"
+      className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+    >
+      Widget failed to render.
+    </div>
+  );
 }
 
 /**
