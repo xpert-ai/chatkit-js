@@ -55,6 +55,7 @@ export type ChatKitSlashCommandAction =
         type: string;
         payload?: Record<string, unknown>;
       };
+      runtimeCapabilities?: unknown;
     }
   | {
       type: 'select_capability';

@@ -1,3 +1,4 @@
+export * from './availability';
 export * from './builtins';
 export * from './executor';
 export * from './palette';

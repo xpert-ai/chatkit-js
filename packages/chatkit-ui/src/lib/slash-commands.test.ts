@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createSlashCommandExecutionEffect,
   createSlashPaletteOptions,
+  hasSelectedRuntimeSlashCommand,
   resolveRuntimeCapabilityPalette,
   resolveSlashCommands,
   shouldSubmitRawSlashInvocation,
+  type RuntimeCapabilitiesWithCommands,
   type RuntimeCapabilityPaletteState,
 } from './slash-commands';
 import type {
@@ -416,6 +418,67 @@ describe('slash command palette', () => {
     expect(options.map((option) => option.label)).not.toContain('Review Skill');
   });
 
+  it('hides runtime commands whose required capabilities are not selected', () => {
+    const goalRuntimeCapabilities = {
+      mode: 'allowlist' as const,
+      skills: { workspaceId: 'workspace-1', ids: [] },
+      plugins: { nodeKeys: ['plugin-search'] },
+      subAgents: { nodeKeys: [] },
+    };
+    const palette = {
+      query: 'goal',
+      start: 0,
+      end: 5,
+      activeIndex: 0,
+      atMessageStart: true,
+    };
+    const resolvedCommands = resolveSlashCommands(undefined, [
+      {
+        name: 'goal',
+        label: 'Goal',
+        action: {
+          type: 'client_action',
+          action: {
+            type: 'chatkit.conversation_goal.command',
+          },
+          runtimeCapabilities: goalRuntimeCapabilities,
+        },
+      },
+    ]);
+
+    expect(
+      createSlashPaletteOptions({
+        palette,
+        resolvedCommands,
+        runtimeCapabilitiesReady: true,
+        runtimeCapabilityOptions,
+        runtimeCapabilities,
+        recommendedRuntimeCapabilities: {
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: [] },
+          plugins: { nodeKeys: [] },
+          subAgents: { nodeKeys: [] },
+        },
+      }).map((option) => option.label),
+    ).toEqual([]);
+
+    expect(
+      createSlashPaletteOptions({
+        palette,
+        resolvedCommands,
+        runtimeCapabilitiesReady: true,
+        runtimeCapabilityOptions,
+        runtimeCapabilities,
+        recommendedRuntimeCapabilities: {
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: [] },
+          plugins: { nodeKeys: ['plugin-search'] },
+          subAgents: { nodeKeys: [] },
+        },
+      }).map((option) => option.label),
+    ).toEqual(['Goal']);
+  });
+
   it('nests runtime capabilities under expanded built-in groups', () => {
     const options = getPaletteOptions({
       query: '',
@@ -442,6 +505,58 @@ describe('slash command palette', () => {
       depth: 1,
       label: 'Review Skill',
     });
+  });
+});
+
+describe('slash command availability', () => {
+  it('checks whether a named runtime command has its required capabilities selected', () => {
+    const runtimeCapabilitiesWithCommands: RuntimeCapabilitiesWithCommands = {
+      ...runtimeCapabilities,
+      commands: [
+        {
+          name: 'goal',
+          label: 'Goal',
+          action: {
+            type: 'client_action',
+            action: {
+              type: 'chatkit.conversation_goal.command',
+            },
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { workspaceId: 'workspace-1', ids: [] },
+              plugins: { nodeKeys: ['plugin-search'] },
+              subAgents: { nodeKeys: [] },
+            },
+          },
+        },
+      ],
+    };
+
+    expect(
+      hasSelectedRuntimeSlashCommand(
+        runtimeCapabilitiesWithCommands,
+        {
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: [] },
+          plugins: { nodeKeys: [] },
+          subAgents: { nodeKeys: [] },
+        },
+        'goal',
+      ),
+    ).toBe(false);
+
+    expect(
+      hasSelectedRuntimeSlashCommand(
+        runtimeCapabilitiesWithCommands,
+        {
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: [] },
+          plugins: { nodeKeys: ['plugin-search'] },
+          subAgents: { nodeKeys: [] },
+        },
+        'goal',
+      ),
+    ).toBe(true);
   });
 });
 
@@ -566,8 +681,22 @@ describe('slash command executor', () => {
         name: 'goal',
         label: 'Goal',
         action: {
-          type: 'insert_invocation',
-          template: '/goal {{args}}',
+          type: 'client_action',
+          action: {
+            type: 'chatkit.conversation_goal.command',
+          },
+          runtimeCapabilities: {
+            mode: 'allowlist',
+            skills: {
+              ids: [],
+            },
+            plugins: {
+              nodeKeys: ['middleware-1'],
+            },
+            subAgents: {
+              nodeKeys: [],
+            },
+          },
         },
       },
     ]).find((command) => command.name === 'goal');
@@ -584,7 +713,19 @@ describe('slash command executor', () => {
         type: 'slash_command',
         name: 'goal',
         source: 'runtime',
-        executionType: 'insert_invocation',
+        executionType: 'client_action',
+      },
+      runtimeCapabilities: {
+        mode: 'allowlist',
+        skills: {
+          ids: [],
+        },
+        plugins: {
+          nodeKeys: ['middleware-1'],
+        },
+        subAgents: {
+          nodeKeys: [],
+        },
       },
     });
   });

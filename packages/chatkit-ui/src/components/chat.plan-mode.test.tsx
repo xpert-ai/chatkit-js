@@ -329,9 +329,51 @@ const goalRuntimeCapabilities = {
   ],
 };
 
+const selectableGoalRuntimeCapabilities = {
+  skills: [],
+  plugins: [
+    {
+      nodeKey: 'middleware-1',
+      provider: 'ralph-loop',
+      label: 'Ralph Loop',
+    },
+  ],
+  subAgents: [],
+  commands: [
+    {
+      name: 'goal',
+      label: 'Goal',
+      action: {
+        type: 'client_action',
+        action: {
+          type: 'chatkit.conversation_goal.command',
+        },
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: {
+            ids: [],
+          },
+          plugins: {
+            nodeKeys: ['middleware-1'],
+          },
+          subAgents: {
+            nodeKeys: [],
+          },
+        },
+      },
+    },
+  ],
+};
+
 function enableGoalRuntimeCommand() {
   mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValue(
     goalRuntimeCapabilities,
+  );
+}
+
+function enableSelectableGoalRuntimeCommand() {
+  mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValue(
+    selectableGoalRuntimeCapabilities,
   );
 }
 
@@ -848,6 +890,41 @@ describe('Chat plan mode payload', () => {
 
     expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
     expect(composerShell).toHaveAttribute('data-layout', 'inline');
+  });
+
+  it('shows the goal switch only when the runtime goal plugin is selected', async () => {
+    enableSelectableGoalRuntimeCommand();
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+    expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+      'goal-hidden',
+    );
+
+    fireEvent.click(screen.getByTestId('select-plugin'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('selected-plugins')).toHaveTextContent(
+        'middleware-1',
+      ),
+    );
+    expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+      'goal-ready',
+    );
+
+    fireEvent.click(screen.getByTestId('clear-plugin'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('selected-plugins')).toHaveTextContent(''),
+    );
+    expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+      'goal-hidden',
+    );
   });
 
   it('submits goal mode input as a goal instead of a regular prompt', async () => {

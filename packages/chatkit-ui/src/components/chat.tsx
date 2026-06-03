@@ -160,6 +160,7 @@ import {
   type ComposerPart,
 } from '../lib/composer-parts';
 import {
+  hasSelectedRuntimeSlashCommand,
   resolveRuntimeCapabilityPalette,
   type RuntimeCapabilitiesWithCommands,
   type RuntimeCapabilityPaletteState,
@@ -180,15 +181,6 @@ const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 const GOAL_RUN_INPUT = 'Continue working toward the active goal.';
-
-function hasRuntimeGoalCommand(
-  runtimeCapabilities: RuntimeCapabilitiesWithCommands | null,
-): boolean {
-  return (
-    runtimeCapabilities?.commands?.some((command) => command.name === 'goal') ??
-    false
-  );
-}
 
 function isGoalAdapter(value: unknown): value is ChatKitGoalAdapter {
   return (
@@ -775,7 +767,6 @@ export function Chat({
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
     [runtimeCapabilities],
   );
-  const goalCommandAvailable = hasRuntimeGoalCommand(runtimeCapabilities);
   const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(
     () => {
       if (isGoalAdapter(options?.goal)) {
@@ -787,11 +778,6 @@ export function Chat({
     },
     [options?.goal, stream.client],
   );
-  const showGoalStatus =
-    goalCommandAvailable &&
-    !hasCompletedGoal &&
-    (Boolean(goalError) ||
-      (threadGoal?.status === 'active' && stream.isLoading));
   const displayedGoalElapsedSeconds = threadGoal
     ? (threadGoal.elapsedSeconds ?? 0) +
       (goalElapsedStartedAt
@@ -808,6 +794,16 @@ export function Chat({
         : null,
     [runtimeCapabilities, runtimeCapabilitiesReady, sessionRuntimeCapabilities],
   );
+  const goalCommandAvailable = hasSelectedRuntimeSlashCommand(
+    runtimeCapabilities,
+    effectiveSessionRuntimeCapabilities,
+    'goal',
+  );
+  const showGoalStatus =
+    goalCommandAvailable &&
+    !hasCompletedGoal &&
+    (Boolean(goalError) ||
+      (threadGoal?.status === 'active' && stream.isLoading));
   const runRuntimeCapabilityOptions = React.useMemo(
     () =>
       runtimeCapabilityOptions.filter((option) =>

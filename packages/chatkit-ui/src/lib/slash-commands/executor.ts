@@ -1,11 +1,10 @@
 import type {
   ChatKitCommandSource,
   ChatKitPromptWorkflow,
-  ChatKitSlashCommandAction,
 } from '@xpert-ai/chatkit-types';
 
-import { isRuntimeCapabilitiesSelection } from '../message-metadata';
 import { resolveLocalizedText } from '../../i18n/localized-text';
+import { getActionRuntimeCapabilities } from './availability';
 import type { CommandExecutionEffect, ResolvedSlashCommand } from './types';
 
 function resolvePetCommandMode(
@@ -38,15 +37,6 @@ export function renderSlashCommandTemplate(
 ): string {
   const rendered = template.replace(/\{\{\s*args\s*\}\}/g, args);
   return options?.trim === false ? rendered : rendered.trim();
-}
-
-export function getActionRuntimeCapabilities(
-  action: ChatKitSlashCommandAction,
-) {
-  return 'runtimeCapabilities' in action &&
-    isRuntimeCapabilitiesSelection(action.runtimeCapabilities)
-    ? action.runtimeCapabilities
-    : null;
 }
 
 export function parseSlashCommandInvocation(value: string): {
