@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-ui",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "description": "ChatKit UI.",
   "type": "module",
   "sideEffects": false,

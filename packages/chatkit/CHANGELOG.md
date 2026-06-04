@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.12
+
+### Patch Changes
+
+- 46c1eb6: Gate the goal composer switch by selected runtime plugins and allow client actions to carry runtime capability metadata.
+
 ## 0.3.11
 
 ### Patch Changes
