@@ -5,6 +5,7 @@ import {
   type RuntimeCapabilityOption,
 } from '../runtime-capabilities';
 import { resolveLocalizedText } from '../../i18n/localized-text';
+import { isSlashCommandRuntimeSelectionSatisfied } from './availability';
 import type {
   ResolvedSlashCommand,
   RuntimeCapabilitiesWithCommands,
@@ -59,8 +60,24 @@ function matchesQuery(values: Array<string | undefined>, query: string) {
     .some((value) => value?.toLowerCase().includes(query));
 }
 
-function isCommandAvailable(command: ResolvedSlashCommand) {
-  return command.availability?.disabled !== true;
+function isCommandAvailable(
+  command: ResolvedSlashCommand,
+  runtimeCapabilities: RuntimeCapabilitiesWithCommands | null,
+  selectedRuntimeCapabilities: RuntimeCapabilitiesSelection | null,
+) {
+  if (command.availability?.disabled === true) {
+    return false;
+  }
+
+  if (command.action.type !== 'client_action') {
+    return true;
+  }
+
+  return isSlashCommandRuntimeSelectionSatisfied(
+    command,
+    runtimeCapabilities,
+    selectedRuntimeCapabilities,
+  );
 }
 
 function resolveCommandText(
@@ -196,7 +213,9 @@ export function createSlashPaletteOptions({
 
   if (palette.atMessageStart && !capabilityTypesOnly) {
     const options: SlashPaletteOption[] = [];
-    for (const command of resolvedCommands.filter(isCommandAvailable)) {
+    for (const command of resolvedCommands.filter((item) =>
+      isCommandAvailable(item, runtimeCapabilities, selection),
+    )) {
       const capabilityType = CAPABILITY_GROUP_COMMANDS[command.name];
       if (!capabilityType) {
         if (matchesCommand(command, query, language)) {
