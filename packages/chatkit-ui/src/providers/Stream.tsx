@@ -111,12 +111,11 @@ import {
   isHiddenPendingFollowUpMessage,
   mapPersistedPendingFollowUp,
   mergeQueuedFollowUpGroup,
+  movePendingFollowUpBeforeQueuedItems,
   pendingFollowUpToUiMessage,
-  readPersistedFollowUpBehavior,
   toQueuedSendRequest,
   type FollowUpStatus,
   type PendingFollowUp,
-  writePersistedFollowUpBehavior,
 } from '../lib/follow-ups';
 import {
   resolveTodoListSnapshotFromMessageComponent,
@@ -240,7 +239,6 @@ export type StreamContextType = {
   pendingFollowUps: PendingFollowUp[];
   pendingRequestUserInput: PendingRequestUserInput | null;
   pendingHITLRequest: PendingHITLRequest | null;
-  followUpBehavior: FollowUpBehavior;
   isLoading: boolean;
   isReady: boolean;
   error: unknown;
@@ -257,7 +255,6 @@ export type StreamContextType = {
     initialMessages?: ChatKitAIMessage[],
     options?: { suppressThreadChange?: boolean },
   ) => void;
-  setFollowUpBehavior: (behavior: FollowUpBehavior) => void;
   removePendingFollowUp: (id: string) => void;
   canSendPendingFollowUpNow: (id: string) => boolean;
   sendPendingFollowUpNow: (id: string) => Promise<void>;
@@ -736,7 +733,7 @@ export function mergeHistoryUiMessages(
   ]);
 }
 
-function mergePendingFollowUps(
+export function mergePendingFollowUps(
   existingItems: PendingFollowUp[],
   nextItems: PendingFollowUp[],
 ): PendingFollowUp[] {
@@ -745,7 +742,28 @@ function mergePendingFollowUps(
   }
 
   const itemsById = new Map<string, PendingFollowUp>();
-  for (const item of [...existingItems, ...nextItems]) {
+  for (const item of existingItems) {
+    itemsById.set(item.id, item);
+  }
+  for (const item of nextItems) {
+    const existingItem = itemsById.get(item.id);
+    if (existingItem?.queuedFromSteer) {
+      itemsById.set(item.id, {
+        ...item,
+        request: {
+          ...item.request,
+          ...(existingItem.request.executionId
+            ? { executionId: existingItem.request.executionId }
+            : {}),
+          followUpMode: item.mode,
+        },
+        targetExecutionId:
+          existingItem.targetExecutionId ?? item.targetExecutionId,
+        queuedFromSteer: true,
+      });
+      continue;
+    }
+
     itemsById.set(item.id, item);
   }
 
@@ -1766,11 +1784,6 @@ const StreamSession = ({
   const [autoQueuedFollowUpIds, setAutoQueuedFollowUpIds] = useState<string[]>(
     [],
   );
-  const [followUpBehavior, setFollowUpBehaviorState] =
-    useState<FollowUpBehavior>(
-      () =>
-        readPersistedFollowUpBehavior(assistantId, organizationId) ?? 'queue',
-    );
   const [contextUsageByAgentKey, setContextUsageByAgentKey] =
     useState<ThreadContextUsageByAgentKey>({});
   const [threadGoal, setThreadGoal] = useState<ThreadGoal | null>(null);
@@ -1792,6 +1805,7 @@ const StreamSession = ({
     reject: (error: unknown) => void;
   } | null>(null);
   const autoQueuedFollowUpIdsRef = useRef<Set<string>>(new Set());
+  const steerPriorityFollowUpIdsRef = useRef<Set<string>>(new Set());
   const queueDrainPromiseRef = useRef<Promise<void> | null>(null);
   const runtimeClientSecretRef = useRef(apiKey);
   const runtimeOrganizationIdRef = useRef<string | undefined>(organizationId);
@@ -2012,12 +2026,6 @@ const StreamSession = ({
   }, [values]);
 
   useEffect(() => {
-    setFollowUpBehaviorState(
-      readPersistedFollowUpBehavior(assistantId, organizationId) ?? 'queue',
-    );
-  }, [assistantId, organizationId]);
-
-  useEffect(() => {
     isLoadingRef.current = isLoading;
   }, [isLoading]);
 
@@ -2191,7 +2199,7 @@ const StreamSession = ({
   }, [clearPendingHITLRequest, clearPendingRequestUserInput, threadId]);
 
   const stop = useCallback(() => {
-    const activeThreadId = threadId ?? null;
+    const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
     const activeRunId = lastExecutionIdRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
@@ -2211,6 +2219,13 @@ const StreamSession = ({
 
   const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
+    const nextQueuedIds = new Set(autoQueuedFollowUpIdsRef.current);
+    for (const id of ids) {
+      if (id) {
+        nextQueuedIds.add(id);
+      }
+    }
+    autoQueuedFollowUpIdsRef.current = nextQueuedIds;
     setAutoQueuedFollowUpIds((prev) => {
       const next = new Set(prev);
       for (const id of ids) {
@@ -2225,17 +2240,45 @@ const StreamSession = ({
   const removeAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
+    autoQueuedFollowUpIdsRef.current = new Set(
+      [...autoQueuedFollowUpIdsRef.current].filter((id) => !idSet.has(id)),
+    );
     setAutoQueuedFollowUpIds((prev) => prev.filter((id) => !idSet.has(id)));
+  }, []);
+
+  const addSteerPriorityFollowUpIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const nextIds = new Set(steerPriorityFollowUpIdsRef.current);
+    for (const id of ids) {
+      if (id) {
+        nextIds.add(id);
+      }
+    }
+    steerPriorityFollowUpIdsRef.current = nextIds;
+  }, []);
+
+  const removeSteerPriorityFollowUpIds = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    steerPriorityFollowUpIdsRef.current = new Set(
+      [...steerPriorityFollowUpIdsRef.current].filter(
+        (id) => !idSet.has(id),
+      ),
+    );
   }, []);
 
   const removePendingFollowUps = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return;
       const idSet = new Set(ids);
+      pendingFollowUpsRef.current = pendingFollowUpsRef.current.filter(
+        (item) => !idSet.has(item.id),
+      );
       setPendingFollowUps((prev) => prev.filter((item) => !idSet.has(item.id)));
       removeAutoQueuedFollowUpIds(ids);
+      removeSteerPriorityFollowUpIds(ids);
     },
-    [removeAutoQueuedFollowUpIds],
+    [removeAutoQueuedFollowUpIds, removeSteerPriorityFollowUpIds],
   );
 
   const removePendingFollowUp = useCallback(
@@ -2252,36 +2295,27 @@ const StreamSession = ({
     [removePendingFollowUps],
   );
 
-  const setFollowUpBehavior = useCallback(
-    (behavior: FollowUpBehavior) => {
-      if (followUpBehavior === behavior) {
-        return;
-      }
-
-      setFollowUpBehaviorState(behavior);
-      writePersistedFollowUpBehavior(behavior, assistantId, organizationId);
-    },
-    [assistantId, followUpBehavior, organizationId],
-  );
-
   const markPendingFollowUpsAsQueued = useCallback(
-    (ids: string[], options?: { autoDrain?: boolean }) => {
+    (
+      ids: string[],
+      options?: { autoDrain?: boolean; queuedFromSteer?: boolean },
+    ) => {
       if (ids.length === 0) return;
       const idSet = new Set(ids);
-      setPendingFollowUps((prev) =>
-        prev.map((item) =>
-          idSet.has(item.id)
-            ? {
-                ...item,
-                mode: 'queue' as const,
-                request: {
-                  ...item.request,
-                  followUpMode: 'queue',
-                },
-              }
-            : item,
-        ),
-      );
+      const markQueued = (item: PendingFollowUp): PendingFollowUp =>
+        idSet.has(item.id)
+          ? {
+              ...item,
+              mode: 'queue' as const,
+              request: {
+                ...item.request,
+                followUpMode: 'queue',
+              },
+              queuedFromSteer: options?.queuedFromSteer ?? item.queuedFromSteer,
+            }
+          : item;
+      pendingFollowUpsRef.current = pendingFollowUpsRef.current.map(markQueued);
+      setPendingFollowUps((prev) => prev.map(markQueued));
       if (options?.autoDrain === true) {
         addAutoQueuedFollowUpIds(ids);
       } else if (options?.autoDrain === false) {
@@ -2370,9 +2404,13 @@ const StreamSession = ({
         return [];
       }
       const page = normalizeConversationMessagesPage(response);
-      setAutoQueuedFollowUpIds(
-        getAutoDrainQueuedFollowUpIds(page.pendingFollowUps),
+      steerPriorityFollowUpIdsRef.current = new Set();
+      const autoDrainIds = getAutoDrainQueuedFollowUpIds(
+        page.pendingFollowUps,
       );
+      autoQueuedFollowUpIdsRef.current = new Set(autoDrainIds);
+      pendingFollowUpsRef.current = page.pendingFollowUps;
+      setAutoQueuedFollowUpIds(autoDrainIds);
       setPendingFollowUps(page.pendingFollowUps);
       const latestExecutionId = getLatestExecutionIdFromMessages(page.messages);
       lastExecutionIdRef.current = latestExecutionId;
@@ -2450,8 +2488,13 @@ const StreamSession = ({
       }
 
       if (page.pendingFollowUps.length > 0) {
+        const mergeLoadedPendingFollowUps = (previous: PendingFollowUp[]) =>
+          mergePendingFollowUps(previous, page.pendingFollowUps);
+        pendingFollowUpsRef.current = mergeLoadedPendingFollowUps(
+          pendingFollowUpsRef.current,
+        );
         setPendingFollowUps((previous) =>
-          mergePendingFollowUps(previous, page.pendingFollowUps),
+          mergeLoadedPendingFollowUps(previous),
         );
         addAutoQueuedFollowUpIds(
           getAutoDrainQueuedFollowUpIds(page.pendingFollowUps),
@@ -2512,6 +2555,9 @@ const StreamSession = ({
       );
       setPendingFollowUps([]);
       setAutoQueuedFollowUpIds([]);
+      pendingFollowUpsRef.current = [];
+      autoQueuedFollowUpIdsRef.current = new Set();
+      steerPriorityFollowUpIdsRef.current = new Set();
       updateTodos(null);
       clearRuntimeActivities();
       setContextUsageByAgentKey({});
@@ -2661,11 +2707,6 @@ const StreamSession = ({
         return;
       }
 
-      const activeThreadId = threadId ?? null;
-      if (!activeThreadId) {
-        return;
-      }
-
       const currentItem = pendingFollowUpsRef.current.find(
         (item) => item.id === id && item.mode === 'queue',
       );
@@ -2673,6 +2714,7 @@ const StreamSession = ({
         return;
       }
       removeAutoQueuedFollowUpIds([id]);
+      addSteerPriorityFollowUpIds([id]);
 
       const targetExecutionId =
         lastExecutionIdRef.current ??
@@ -2686,18 +2728,30 @@ const StreamSession = ({
         followUpMode: 'steer',
       };
 
-      setPendingFollowUps((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                mode: 'steer',
-                request: nextRequest,
-                targetExecutionId: targetExecutionId ?? null,
-              }
-            : item,
-        ),
+      const steerItem: PendingFollowUp = {
+        ...currentItem,
+        mode: 'steer',
+        request: nextRequest,
+        targetExecutionId: targetExecutionId ?? null,
+        queuedFromSteer: true,
+      };
+      pendingFollowUpsRef.current = movePendingFollowUpBeforeQueuedItems(
+        pendingFollowUpsRef.current,
+        id,
+        steerItem,
       );
+      setPendingFollowUps((prev) =>
+        movePendingFollowUpBeforeQueuedItems(prev, id, steerItem),
+      );
+
+      const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
+      if (!activeThreadId) {
+        markPendingFollowUpsAsQueued([id], {
+          autoDrain: true,
+          queuedFromSteer: true,
+        });
+        return;
+      }
 
       try {
         await sendSteerFollowUp(activeThreadId, nextRequest, {
@@ -2706,23 +2760,18 @@ const StreamSession = ({
         });
       } catch (followUpError) {
         setError(followUpError);
-        markPendingFollowUpsAsQueued([id], { autoDrain: true });
-        setPendingFollowUps((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  targetExecutionId: targetExecutionId ?? null,
-                }
-              : item,
-          ),
-        );
+        markPendingFollowUpsAsQueued([id], {
+          autoDrain: true,
+          queuedFromSteer: true,
+        });
       }
     },
     [
+      addSteerPriorityFollowUpIds,
       markPendingFollowUpsAsQueued,
       removeAutoQueuedFollowUpIds,
       sendSteerFollowUp,
+      setError,
       threadId,
     ],
   );
@@ -2774,7 +2823,7 @@ const StreamSession = ({
       await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
         ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
         ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
-        threadId: threadId ?? undefined,
+        threadId: activeThreadIdRef.current ?? threadId ?? undefined,
       });
     },
     [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId],
@@ -2790,6 +2839,7 @@ const StreamSession = ({
         const nextItem = getNextAutoQueuedFollowUp(
           pendingFollowUpsRef.current,
           autoQueuedFollowUpIdsRef.current,
+          steerPriorityFollowUpIdsRef.current,
         );
 
         if (!nextItem) {
@@ -2812,7 +2862,7 @@ const StreamSession = ({
         await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
           ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
           ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
-          threadId: threadId ?? undefined,
+          threadId: activeThreadIdRef.current ?? threadId ?? undefined,
         });
       }
     })().finally(() => {
@@ -2962,14 +3012,18 @@ const StreamSession = ({
         if (abortRef.current === abortController) {
           abortRef.current = null;
         }
-        setIsLoading(false);
         shouldStartFreshAssistantMessageAfterSteerRef.current = false;
         const staleSteerIds = getPendingSteerFollowUpIds(
           pendingFollowUpsRef.current,
+          steerPriorityFollowUpIdsRef.current,
         );
         if (staleSteerIds.length > 0) {
-          markPendingFollowUpsAsQueued(staleSteerIds, { autoDrain: true });
+          markPendingFollowUpsAsQueued(staleSteerIds, {
+            autoDrain: true,
+            queuedFromSteer: true,
+          });
         }
+        setIsLoading(false);
       }
     },
     [
@@ -3182,21 +3236,38 @@ const StreamSession = ({
           return;
         }
 
-        setPendingFollowUps((prev) => {
+        const addPending = (prev: PendingFollowUp[]) => {
           const remaining = prev.filter((item) => item.id !== pending.id);
+          if (pending.mode === 'steer') {
+            return movePendingFollowUpBeforeQueuedItems(
+              remaining,
+              pending.id,
+              {
+                ...pending,
+                queuedFromSteer: true,
+              },
+            );
+          }
+
           return [...remaining, pending];
-        });
+        };
+        pendingFollowUpsRef.current = addPending(pendingFollowUpsRef.current);
+        setPendingFollowUps(addPending);
         if (followUpMode === 'queue') {
           addAutoQueuedFollowUpIds([pending.id]);
         }
 
-        const activeThreadId = threadId ?? null;
+        const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
         if (followUpMode === 'steer' && activeThreadId) {
+          addSteerPriorityFollowUpIds([pending.id]);
           try {
             await sendSteerFollowUp(activeThreadId, pending.request, options);
           } catch (followUpError) {
             setError(followUpError);
-            markPendingFollowUpsAsQueued([pending.id], { autoDrain: true });
+            markPendingFollowUpsAsQueued([pending.id], {
+              autoDrain: true,
+              queuedFromSteer: true,
+            });
           }
         }
         return;
@@ -3311,6 +3382,7 @@ const StreamSession = ({
     [
       client,
       addAutoQueuedFollowUpIds,
+      addSteerPriorityFollowUpIds,
       markPendingFollowUpsAsQueued,
       runStream,
       clearRuntimeActivities,
@@ -3347,7 +3419,6 @@ const StreamSession = ({
     pendingFollowUps,
     pendingRequestUserInput,
     pendingHITLRequest,
-    followUpBehavior,
     isLoading,
     isReady,
     error,
@@ -3357,7 +3428,6 @@ const StreamSession = ({
     submit,
     stop,
     reset,
-    setFollowUpBehavior,
     removePendingFollowUp,
     canSendPendingFollowUpNow,
     sendPendingFollowUpNow,

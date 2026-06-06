@@ -42,10 +42,9 @@ export type PendingFollowUp = {
   config?: Record<string, unknown>;
   targetExecutionId?: string | null;
   transcriptInserted?: boolean;
+  queuedFromSteer?: boolean;
   createdAt: number;
 };
-
-const FOLLOW_UP_BEHAVIOR_STORAGE_PREFIX = 'xpert:chatkit:follow-up-behavior';
 
 type PersistedChatMessage = ChatMessage &
   MessageMetadataContainer & {
@@ -81,80 +80,6 @@ export type MergedQueuedFollowUpGroup = {
   config?: Record<string, unknown>;
   targetExecutionId?: string | null;
 };
-
-export function normalizeFollowUpBehavior(
-  value: unknown,
-): FollowUpBehavior | null {
-  return value === 'queue' || value === 'steer' ? value : null;
-}
-
-export function getComposerFollowUpShortcutLabels(
-  queueShortcutLabel: string,
-): Record<FollowUpBehavior, string> {
-  return {
-    steer: 'Enter',
-    queue: queueShortcutLabel,
-  };
-}
-
-export function getBusyComposerShortcutFollowUpMode(
-  useQueueShortcut: boolean,
-): FollowUpBehavior {
-  return useQueueShortcut ? 'queue' : 'steer';
-}
-
-export function getFollowUpBehaviorStorageKey(
-  assistantId?: string | null,
-  organizationId?: string | null,
-) {
-  const normalizedAssistantId = assistantId?.trim();
-  if (!normalizedAssistantId) {
-    return null;
-  }
-
-  return `${FOLLOW_UP_BEHAVIOR_STORAGE_PREFIX}:${normalizedAssistantId}:${organizationId?.trim() || 'default'}`;
-}
-
-export function readPersistedFollowUpBehavior(
-  assistantId?: string | null,
-  organizationId?: string | null,
-) {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const storageKey = getFollowUpBehaviorStorageKey(assistantId, organizationId);
-  if (!storageKey) {
-    return null;
-  }
-
-  try {
-    return normalizeFollowUpBehavior(window.localStorage.getItem(storageKey));
-  } catch {
-    return null;
-  }
-}
-
-export function writePersistedFollowUpBehavior(
-  behavior: FollowUpBehavior,
-  assistantId?: string | null,
-  organizationId?: string | null,
-) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  const storageKey = getFollowUpBehaviorStorageKey(assistantId, organizationId);
-  if (!storageKey) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(storageKey, behavior);
-  } catch {
-    // Ignore localStorage failures for embedded or restricted environments.
-  }
-}
 
 export function extractRequestHumanInput(
   input?: TChatRequest | null,
@@ -214,6 +139,41 @@ function normalizeTargetExecutionId(value: unknown): string | null {
 
 function sortPendingFollowUps(items: PendingFollowUp[]) {
   return [...items].sort((left, right) => left.createdAt - right.createdAt);
+}
+
+function getVisiblePendingFollowUpPriority(item: PendingFollowUp) {
+  return item.mode === 'steer' || item.queuedFromSteer ? 0 : 1;
+}
+
+export function sortVisiblePendingFollowUps(items: PendingFollowUp[]) {
+  return [...items].sort((left, right) => {
+    const priority =
+      getVisiblePendingFollowUpPriority(left) -
+      getVisiblePendingFollowUpPriority(right);
+
+    return priority || left.createdAt - right.createdAt;
+  });
+}
+
+export function movePendingFollowUpBeforeQueuedItems(
+  items: PendingFollowUp[],
+  id: string,
+  nextItem: PendingFollowUp,
+) {
+  const remainingItems = items.filter((item) => item.id !== id);
+  const firstQueuedIndex = remainingItems.findIndex(
+    (item) => item.mode === 'queue',
+  );
+
+  if (firstQueuedIndex < 0) {
+    return [...remainingItems, nextItem];
+  }
+
+  return [
+    ...remainingItems.slice(0, firstQueuedIndex),
+    nextItem,
+    ...remainingItems.slice(firstQueuedIndex),
+  ];
 }
 
 export function mergeFollowUpHumanInputs(
@@ -309,16 +269,7 @@ export function getQueuedFollowUpGroup(
   const sortedQueueItems = sortPendingFollowUps(
     items.filter((item) => item.mode === 'queue'),
   );
-  const targetExecutionId = resolvePendingFollowUpTargetExecutionId(targetItem);
-
-  if (!targetExecutionId) {
-    return sortedQueueItems.filter((item) => item.id === targetItem.id);
-  }
-
-  return sortedQueueItems.filter(
-    (item) =>
-      resolvePendingFollowUpTargetExecutionId(item) === targetExecutionId,
-  );
+  return sortedQueueItems.filter((item) => item.id === targetItem.id);
 }
 
 export function mergeQueuedFollowUpGroup(
@@ -402,19 +353,46 @@ export function toQueuedSendRequest(request: TChatRequest): TChatRequest {
 export function getNextAutoQueuedFollowUp(
   items: PendingFollowUp[],
   autoQueuedIds: Iterable<string>,
+  priorityQueuedIds?: Iterable<string>,
 ) {
   const autoQueuedIdSet = new Set(autoQueuedIds);
+  const priorityQueuedIdSet = new Set(priorityQueuedIds ?? []);
   return [...items]
     .filter((item) => item.mode === 'queue' && autoQueuedIdSet.has(item.id))
-    .sort((a, b) => a.createdAt - b.createdAt)[0];
+    .sort((a, b) => {
+      const leftPriority =
+        a.queuedFromSteer ||
+        priorityQueuedIdSet.has(a.id) ||
+        priorityQueuedIdSet.has(a.clientMessageId)
+          ? 0
+          : 1;
+      const rightPriority =
+        b.queuedFromSteer ||
+        priorityQueuedIdSet.has(b.id) ||
+        priorityQueuedIdSet.has(b.clientMessageId)
+          ? 0
+          : 1;
+      return leftPriority - rightPriority || a.createdAt - b.createdAt;
+    })[0];
 }
 
 export function getAutoDrainQueuedFollowUpIds(items: PendingFollowUp[]) {
   return items.filter((item) => item.mode === 'queue').map((item) => item.id);
 }
 
-export function getPendingSteerFollowUpIds(items: PendingFollowUp[]) {
-  return items.filter((item) => item.mode === 'steer').map((item) => item.id);
+export function getPendingSteerFollowUpIds(
+  items: PendingFollowUp[],
+  prioritySteerIds?: Iterable<string>,
+) {
+  const prioritySteerIdSet = new Set(prioritySteerIds ?? []);
+  return items
+    .filter(
+      (item) =>
+        item.mode === 'steer' ||
+        prioritySteerIdSet.has(item.id) ||
+        prioritySteerIdSet.has(item.clientMessageId),
+    )
+    .map((item) => item.id);
 }
 
 export function isHiddenPendingFollowUpMessage(message: PersistedChatMessage) {

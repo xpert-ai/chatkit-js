@@ -59,7 +59,6 @@ const mocks = vi.hoisted(() => {
       pendingFollowUps: [],
       pendingRequestUserInput: null,
       pendingHITLRequest: null,
-      followUpBehavior: 'queue',
       isLoading: false,
       isReady: true,
       error: null as unknown,
@@ -69,7 +68,6 @@ const mocks = vi.hoisted(() => {
       submit: vi.fn(),
       stop: vi.fn(),
       reset: vi.fn(),
-      setFollowUpBehavior: vi.fn(),
       removePendingFollowUp: vi.fn(),
       canSendPendingFollowUpNow: vi.fn().mockReturnValue(false),
       sendPendingFollowUpNow: vi.fn(),
@@ -525,6 +523,27 @@ describe('Chat plan mode payload', () => {
       'planMode',
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('queues composer sends by default while a run is active', async () => {
+    mocks.stream.isLoading = true;
+    renderChat();
+
+    setComposerText(screen.getByRole('textbox'), 'follow up');
+
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0]).toMatchObject({
+      input: {
+        input: 'follow up',
+      },
+    });
+    expect(mocks.stream.submit.mock.calls[0][1]).toMatchObject({
+      followUpMode: 'queue',
+    });
   });
 
   it('shows active stream errors in the thread error area', async () => {

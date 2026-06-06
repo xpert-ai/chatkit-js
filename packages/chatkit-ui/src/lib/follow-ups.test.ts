@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSteerFollowUpRunInput,
   createPendingFollowUp,
-  getBusyComposerShortcutFollowUpMode,
-  getComposerFollowUpShortcutLabels,
   mapPersistedPendingFollowUp,
+  movePendingFollowUpBeforeQueuedItems,
   pendingFollowUpToUiMessage,
+  sortVisiblePendingFollowUps,
 } from './follow-ups';
 
 describe('createPendingFollowUp', () => {
@@ -166,18 +166,68 @@ describe('buildSteerFollowUpRunInput', () => {
   });
 });
 
-describe('getBusyComposerShortcutFollowUpMode', () => {
-  it('maps Enter to steer and the modifier shortcut to queue', () => {
-    expect(getBusyComposerShortcutFollowUpMode(false)).toBe('steer');
-    expect(getBusyComposerShortcutFollowUpMode(true)).toBe('queue');
-  });
-});
+describe('pending follow-up ordering', () => {
+  it('shows steer follow-ups before older queued follow-ups', () => {
+    const items = [
+      {
+        id: 'queue-3',
+        clientMessageId: 'queue-3',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-3',
+          input: { input: '3-500' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 1,
+      },
+      {
+        id: 'steer-4',
+        clientMessageId: 'steer-4',
+        mode: 'steer' as const,
+        request: {
+          id: 'steer-4',
+          input: { input: '4-500' },
+          followUpMode: 'steer' as const,
+        },
+        createdAt: 2,
+      },
+    ];
 
-describe('getComposerFollowUpShortcutLabels', () => {
-  it('always shows Enter for steer and the modifier shortcut for queue', () => {
-    expect(getComposerFollowUpShortcutLabels('\u2318Enter')).toEqual({
-      steer: 'Enter',
-      queue: '\u2318Enter',
-    });
+    expect(sortVisiblePendingFollowUps(items).map((item) => item.id)).toEqual([
+      'steer-4',
+      'queue-3',
+    ]);
+  });
+
+  it('moves a promoted steer follow-up before existing queued follow-ups', () => {
+    const items = ['a', 'b', 'c', 'd'].map((suffix, index) => ({
+      id: `queue-${suffix}`,
+      clientMessageId: `queue-${suffix}`,
+      mode: 'queue' as const,
+      request: {
+        id: `queue-${suffix}`,
+        input: { input: suffix },
+        followUpMode: 'queue' as const,
+      },
+      createdAt: index + 1,
+    }));
+
+    const promotedItem = {
+      ...items[3],
+      mode: 'steer' as const,
+      request: {
+        ...items[3].request,
+        followUpMode: 'steer' as const,
+      },
+      queuedFromSteer: true,
+    };
+
+    expect(
+      movePendingFollowUpBeforeQueuedItems(
+        items,
+        promotedItem.id,
+        promotedItem,
+      ).map((item) => item.id),
+    ).toEqual(['queue-d', 'queue-a', 'queue-b', 'queue-c']);
   });
 });

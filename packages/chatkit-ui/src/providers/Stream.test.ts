@@ -26,6 +26,7 @@ import {
   getRequestUserInputResultPurpose,
   mergeFollowUpHumanInputs,
   mergeHistoryUiMessages,
+  mergePendingFollowUps,
   mergeQueuedFollowUpGroup,
   normalizeConversationMessagesPage,
   normalizeRequestUserInputParams,
@@ -2135,6 +2136,217 @@ describe('getNextAutoQueuedFollowUp', () => {
       mode: 'queue',
     });
   });
+
+  it('drains stale steer follow-ups before older queued follow-ups', () => {
+    expect(
+      getNextAutoQueuedFollowUp(
+        [
+          {
+            id: 'older-queue',
+            clientMessageId: 'older-queue',
+            mode: 'queue',
+            request: {
+              id: 'older-queue',
+              input: { input: 'older queue' },
+              followUpMode: 'queue',
+            },
+            createdAt: 1,
+          },
+          {
+            id: 'stale-steer',
+            clientMessageId: 'stale-steer',
+            mode: 'queue',
+            request: {
+              id: 'stale-steer',
+              input: { input: 'stale steer' },
+              followUpMode: 'queue',
+            },
+            queuedFromSteer: true,
+            createdAt: 2,
+          },
+        ],
+        ['older-queue', 'stale-steer'],
+      ),
+    ).toMatchObject({
+      id: 'stale-steer',
+      mode: 'queue',
+    });
+  });
+
+  it('prioritizes promoted steer ids even before queued state has refreshed', () => {
+    expect(
+      getNextAutoQueuedFollowUp(
+        [
+          {
+            id: 'older-queue',
+            clientMessageId: 'older-queue',
+            mode: 'queue',
+            request: {
+              id: 'older-queue',
+              input: { input: 'older queue' },
+              followUpMode: 'queue',
+            },
+            createdAt: 1,
+          },
+          {
+            id: 'promoted-steer',
+            clientMessageId: 'promoted-steer',
+            mode: 'queue',
+            request: {
+              id: 'promoted-steer',
+              input: { input: 'promoted steer' },
+              followUpMode: 'queue',
+            },
+            createdAt: 2,
+          },
+        ],
+        ['older-queue', 'promoted-steer'],
+        ['promoted-steer'],
+      ),
+    ).toMatchObject({
+      id: 'promoted-steer',
+      mode: 'queue',
+    });
+  });
+
+  it('drains a queued item promoted by steer before older queued items', () => {
+    const items = ['a', 'b', 'c', 'd'].map((suffix, index) => ({
+      id: `queue-${suffix}`,
+      clientMessageId: `queue-${suffix}`,
+      mode: 'queue' as const,
+      request: {
+        id: `queue-${suffix}`,
+        input: { input: suffix },
+        followUpMode: 'queue' as const,
+      },
+      queuedFromSteer: suffix === 'd',
+      createdAt: index + 1,
+    }));
+
+    expect(
+      getNextAutoQueuedFollowUp(
+        items,
+        items.map((item) => item.id),
+        ['queue-d'],
+      ),
+    ).toMatchObject({
+      id: 'queue-d',
+      mode: 'queue',
+    });
+  });
+
+  it('preserves a locally promoted queue item when pending follow-ups refresh from the server', () => {
+    const existingItems = [
+      {
+        id: 'queue-3',
+        clientMessageId: 'queue-3',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-3',
+          input: { input: '3-500' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 1,
+      },
+      {
+        id: 'queue-4',
+        clientMessageId: 'queue-4',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-4',
+          input: { input: '4-500' },
+          executionId: 'local-target',
+          followUpMode: 'queue' as const,
+        },
+        targetExecutionId: 'local-target',
+        queuedFromSteer: true,
+        createdAt: 2,
+      },
+    ];
+    const serverItems = [
+      {
+        id: 'queue-3',
+        clientMessageId: 'queue-3',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-3',
+          input: { input: '3-500' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 1,
+      },
+      {
+        id: 'queue-4',
+        clientMessageId: 'queue-4',
+        mode: 'queue' as const,
+        request: {
+          id: 'queue-4',
+          input: { input: '4-500' },
+          followUpMode: 'queue' as const,
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const mergedItems = mergePendingFollowUps(existingItems, serverItems);
+
+    expect(mergedItems.find((item) => item.id === 'queue-4')).toMatchObject({
+      queuedFromSteer: true,
+      request: {
+        executionId: 'local-target',
+        followUpMode: 'queue',
+      },
+      targetExecutionId: 'local-target',
+    });
+    expect(
+      getNextAutoQueuedFollowUp(mergedItems, ['queue-3', 'queue-4']),
+    ).toMatchObject({
+      id: 'queue-4',
+      mode: 'queue',
+    });
+  });
+
+  it('keeps a refreshed steer item internally consistent when preserving local priority metadata', () => {
+    const existingItems = [
+      {
+        id: 'queue-4',
+        clientMessageId: 'queue-4',
+        mode: 'steer' as const,
+        request: {
+          id: 'queue-4',
+          input: { input: '4-500' },
+          executionId: 'local-target',
+          followUpMode: 'steer' as const,
+        },
+        targetExecutionId: 'local-target',
+        queuedFromSteer: true,
+        createdAt: 1,
+      },
+    ];
+    const serverItems = [
+      {
+        id: 'queue-4',
+        clientMessageId: 'queue-4',
+        mode: 'steer' as const,
+        request: {
+          id: 'queue-4',
+          input: { input: '4-500' },
+          followUpMode: 'steer' as const,
+        },
+        createdAt: 1,
+      },
+    ];
+
+    expect(mergePendingFollowUps(existingItems, serverItems)[0]).toMatchObject({
+      mode: 'steer',
+      queuedFromSteer: true,
+      request: {
+        executionId: 'local-target',
+        followUpMode: 'steer',
+      },
+      targetExecutionId: 'local-target',
+    });
+  });
 });
 
 describe('mergeFollowUpHumanInputs', () => {
@@ -2169,7 +2381,7 @@ describe('mergeFollowUpHumanInputs', () => {
 });
 
 describe('getQueuedFollowUpGroup', () => {
-  it('returns queued follow-ups for the same target execution in created order', () => {
+  it('returns only the selected queued follow-up for the same target execution', () => {
     const items = [
       {
         id: 'queue-2',
@@ -2211,7 +2423,7 @@ describe('getQueuedFollowUpGroup', () => {
 
     expect(
       getQueuedFollowUpGroup(items, items[0]).map((item) => item.id),
-    ).toEqual(['queue-1', 'queue-2']);
+    ).toEqual(['queue-2']);
   });
 
   it('does not merge queued follow-ups without a target execution id', () => {
@@ -2386,6 +2598,38 @@ describe('getPendingSteerFollowUpIds', () => {
         },
       ]),
     ).toEqual(['steer-1']);
+  });
+
+  it('keeps promoted steer ids stale when state has already fallen back to queue', () => {
+    expect(
+      getPendingSteerFollowUpIds(
+        [
+          {
+            id: 'queue-1',
+            clientMessageId: 'queue-1',
+            mode: 'queue',
+            request: {
+              id: 'queue-1',
+              input: { input: 'queued' },
+              followUpMode: 'queue',
+            },
+            createdAt: 1,
+          },
+          {
+            id: 'promoted-steer',
+            clientMessageId: 'promoted-steer',
+            mode: 'queue',
+            request: {
+              id: 'promoted-steer',
+              input: { input: 'steered' },
+              followUpMode: 'queue',
+            },
+            createdAt: 2,
+          },
+        ],
+        ['promoted-steer'],
+      ),
+    ).toEqual(['promoted-steer']);
   });
 });
 
