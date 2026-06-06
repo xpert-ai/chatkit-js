@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.17
+
+### Patch Changes
+
+- de48fec: Queue busy-run follow-ups by default, let guided follow-ups take priority over queued items, and send queued follow-ups one at a time instead of merging items that target the same execution.
+
 ## 0.3.16
 
 ### Patch Changes
