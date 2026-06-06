@@ -320,7 +320,7 @@ export function ParentMessengerProvider({
         const activeFollowUpMode = stream?.isLoading
           ? params.followUpMode && params.followUpMode !== 'default'
             ? params.followUpMode
-            : (stream.followUpBehavior ?? 'queue')
+            : 'queue'
           : undefined;
         const requestOptions = buildInjectedRequestOptions({
           defaults: latestOptionsRef.current?.request,

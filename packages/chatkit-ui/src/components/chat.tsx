@@ -24,7 +24,6 @@ import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   ChatKitCommandSource,
-  FollowUpBehavior,
   ToolOption,
   ThreadGoal,
   ChatKitGoalAdapter,
@@ -95,8 +94,7 @@ import {
 } from '../lib/references';
 import { getMissingApiConfigurationKind } from '../lib/api-config';
 import {
-  getBusyComposerShortcutFollowUpMode,
-  getComposerFollowUpShortcutLabels,
+  sortVisiblePendingFollowUps,
 } from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
@@ -252,7 +250,6 @@ type QuoteSelectionState = {
 };
 
 type SubmitDraftOptions = {
-  followUpOverride?: FollowUpBehavior;
   inputText?: string;
   displayText?: string;
   commandSource?: ChatKitCommandSource;
@@ -751,10 +748,7 @@ export function Chat({
     isStacked: isComposerStacked,
   });
   const pendingFollowUps = React.useMemo(
-    () =>
-      [...(stream.pendingFollowUps ?? [])].sort(
-        (a, b) => a.createdAt - b.createdAt,
-      ),
+    () => sortVisiblePendingFollowUps(stream.pendingFollowUps ?? []),
     [stream.pendingFollowUps],
   );
   const hasPendingFollowUps = pendingFollowUps.length > 0;
@@ -1654,21 +1648,15 @@ export function Chat({
   );
 
   const submitDraft = React.useCallback(
-    (optionsOrFollowUp?: FollowUpBehavior | SubmitDraftOptions) => {
+    (submitOptions: SubmitDraftOptions = {}) => {
       if (isSendDisabled) return;
 
-      const submitOptions =
-        typeof optionsOrFollowUp === 'string'
-          ? { followUpOverride: optionsOrFollowUp }
-          : (optionsOrFollowUp ?? {});
       const contentToSubmit = (submitOptions.inputText ?? trimmedDraft).trim();
       const filesToSend =
         uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
       const referencesToSend =
         references.length > 0 ? [...references] : undefined;
-      const nextFollowUpMode = stream.isLoading
-        ? (submitOptions.followUpOverride ?? stream.followUpBehavior)
-        : undefined;
+      const nextFollowUpMode = stream.isLoading ? 'queue' : undefined;
       const effectivePlanMode = submitOptions.planMode ?? planModeEnabled;
       const humanInput = buildHumanMessageInputPayload({
         content: contentToSubmit,
@@ -2388,9 +2376,7 @@ export function Chat({
       if (submitGoalModeDraft()) {
         return;
       }
-      submitDraft(
-        getBusyComposerShortcutFollowUpMode(event.metaKey || event.ctrlKey),
-      );
+      submitDraft();
       return;
     }
 
@@ -2535,22 +2521,6 @@ export function Chat({
     ],
   );
 
-  const alternateFollowUpShortcutLabel = React.useMemo(() => {
-    if (typeof navigator === 'undefined') {
-      return '\u2318Enter';
-    }
-
-    const platform = navigator.platform || navigator.userAgent;
-    return /Mac|iPhone|iPad|iPod/i.test(platform)
-      ? '\u2318Enter'
-      : 'Ctrl+Enter';
-  }, []);
-
-  const followUpShortcutLabels = React.useMemo(
-    () => getComposerFollowUpShortcutLabels(alternateFollowUpShortcutLabel),
-    [alternateFollowUpShortcutLabel],
-  );
-
   const handleToolSelect = (tool: ToolOption) => {
     setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
   };
@@ -2564,9 +2534,7 @@ export function Chat({
       content: prompt,
     };
 
-    const nextFollowUpMode = stream.isLoading
-      ? stream.followUpBehavior
-      : undefined;
+    const nextFollowUpMode = stream.isLoading ? 'queue' : undefined;
     const inputPayload: {
       input: string;
       planMode?: boolean;
@@ -3546,8 +3514,6 @@ export function Chat({
         <PendingFollowUps
           items={pendingFollowUps}
           isLoading={stream.isLoading}
-          followUpBehavior={stream.followUpBehavior}
-          onBehaviorChange={stream.setFollowUpBehavior}
           onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
           canSendNow={stream.canSendPendingFollowUpNow}
           onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
@@ -3721,12 +3687,8 @@ export function Chat({
                     stream.isLoading && trimmedDraft
                       ? [
                           {
-                            label: t('chat.followUps.steer'),
-                            keys: followUpShortcutLabels.steer,
-                          },
-                          {
                             label: t('chat.followUps.queue'),
-                            keys: followUpShortcutLabels.queue,
+                            keys: 'Enter',
                           },
                         ]
                       : undefined

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   stream: {
     isLoading: false,
-    followUpBehavior: 'queue',
     submit: vi.fn(),
   },
 }));
@@ -157,6 +156,42 @@ describe('ParentMessengerProvider', () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it('queues parent sendUserMessage commands while the stream is loading', async () => {
+    mocks.stream.isLoading = true;
+
+    render(
+      <ParentMessengerProvider>
+        <div />
+      </ParentMessengerProvider>,
+    );
+
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onSendUserMessage',
+        nonce: 'queued-follow-up-test',
+        data: {
+          text: 'Send after the current run',
+        },
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: parentWindow,
+    });
+
+    window.dispatchEvent(event);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    const [, submitOptions] = mocks.stream.submit.mock.calls[0];
+    expect(submitOptions).toMatchObject({
+      followUpMode: 'queue',
+    });
+    expect(submitOptions).not.toHaveProperty('optimisticValues');
   });
 
   it('dispatches setPetEnabled commands to registered handlers', async () => {
