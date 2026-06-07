@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.18
+
+### Patch Changes
+
+- 95125c0: filter thread usage in sub flow
+
 ## 0.3.17
 
 ### Patch Changes
