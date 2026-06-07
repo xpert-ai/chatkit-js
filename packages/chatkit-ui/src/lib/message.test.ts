@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import {
   ASSISTANT_STREAM_IDLE_TO_THINKING_MS,
   appendMessageContent,
+  filterInternalMessageContentArtifacts,
   getAssistantStreamingStatus,
   hasRenderableAssistantMessage,
   hasRenderableMessageContent,
   hasRenderableReasoning,
 } from './message';
+import { THREAD_CONTEXT_USAGE_EVENT_TYPE } from './thread-context-usage';
 
 describe('message visibility helpers', () => {
   it('treats empty assistant placeholders as non-renderable', () => {
@@ -45,6 +47,54 @@ describe('message visibility helpers', () => {
     expect(
       hasRenderableReasoning([{ type: 'reasoning', text: 'thinking' }] as any),
     ).toBe(true);
+  });
+
+  it('ignores thread context usage artifacts when checking renderability', () => {
+    const usageArtifact = {
+      type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+      threadId: 'thread-1',
+      agentKey: 'agent-1',
+      usage: { totalTokens: 120 },
+    };
+
+    expect(hasRenderableMessageContent([usageArtifact] as any)).toBe(false);
+    expect(
+      hasRenderableMessageContent([
+        {
+          id: 'agent-event-1',
+          type: 'agent_event',
+          event: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+        },
+      ] as any),
+    ).toBe(false);
+    expect(
+      hasRenderableMessageContent([
+        {
+          id: 'component-1',
+          type: 'component',
+          data: { type: THREAD_CONTEXT_USAGE_EVENT_TYPE },
+        },
+      ] as any),
+    ).toBe(false);
+    expect(
+      hasRenderableMessageContent([
+        usageArtifact,
+        { type: 'text', text: 'Visible output.' },
+      ] as any),
+    ).toBe(true);
+  });
+
+  it('removes thread context usage artifacts from content arrays', () => {
+    expect(
+      filterInternalMessageContentArtifacts([
+        {
+          id: 'component-1',
+          type: 'component',
+          data: { type: THREAD_CONTEXT_USAGE_EVENT_TYPE },
+        },
+        { type: 'text', text: 'Visible output.' },
+      ] as any),
+    ).toEqual([{ type: 'text', text: 'Visible output.' }]);
   });
 
   it('maps streaming assistant states to loading, thinking, and answering', () => {
@@ -130,6 +180,26 @@ describe('message visibility helpers', () => {
 });
 
 describe('appendMessageContent', () => {
+  it('does not append nested thread context usage artifacts', () => {
+    const message = {
+      id: 'assistant-1',
+      type: 'assistant',
+      content: [],
+    } as any;
+
+    appendMessageContent(message, {
+      id: 'component-1',
+      type: 'component',
+      data: {
+        type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+        title: 'Thread context usage',
+      },
+    } as any);
+
+    expect(message.content).toEqual([]);
+    expect(message.status).toBeUndefined();
+  });
+
   it('preserves tool metadata when a component update arrives with the same id', () => {
     const message = {
       id: 'assistant-1',

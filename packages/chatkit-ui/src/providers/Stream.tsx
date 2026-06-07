@@ -50,7 +50,10 @@ import {
   type ThreadGoal,
   normalizeRequestLanguage,
 } from '@xpert-ai/chatkit-types';
-import { appendMessageContent } from '../lib/message';
+import {
+  appendMessageContent,
+  filterInternalMessageContentArtifacts,
+} from '../lib/message';
 import {
   createAgentEventContent,
   isMiddlewareAgentRunInfo,
@@ -76,7 +79,8 @@ import {
 import { createMessageId } from '../lib/utils';
 import {
   applyThreadContextUsageEvent,
-  parseThreadContextUsageEvent,
+  extractThreadContextUsageEvent,
+  isThreadContextUsageRenderArtifact,
   type ThreadContextUsageByAgentKey,
 } from '../lib/thread-context-usage';
 import {
@@ -608,7 +612,7 @@ function mapChatMessageToUiMessage(
   message: PersistedChatMessage,
 ): ChatKitAIMessage {
   const references = extractMessageReferences(message);
-  const content = message.content ?? '';
+  const content = filterInternalMessageContentArtifacts(message.content ?? '');
   const type = normalizeRoleToMessageType(
     typeof message.role === 'string' ? message.role : undefined,
   );
@@ -967,13 +971,14 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     return { id: createMessageId(), type: 'ai', content: data };
   }
   if (!isMessageMetadataContainer(data)) return null;
+  if (isThreadContextUsageRenderArtifact(data)) return null;
 
   const raw = data;
   const content: ChatKitAIMessage['content'] = (() => {
     if ('content' in raw) {
       const rawContent = (raw as { content?: Message['content'] }).content;
       if (typeof rawContent === 'string' || Array.isArray(rawContent)) {
-        return rawContent;
+        return filterInternalMessageContentArtifacts(rawContent) ?? '';
       }
       if (rawContent == null) {
         return '';
@@ -983,14 +988,18 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     if ('text' in raw) {
       const textContent = (raw as { text?: Message['content'] }).text;
       if (typeof textContent === 'string' || Array.isArray(textContent)) {
-        return textContent;
+        return filterInternalMessageContentArtifacts(textContent) ?? '';
       }
       if (textContent == null) {
         return '';
       }
     }
 
-    return [raw as unknown as ChatKitMessageContentPart];
+    return (
+      filterInternalMessageContentArtifacts([
+        raw as unknown as ChatKitMessageContentPart,
+      ]) ?? []
+    );
   })();
   const type =
     normalizeMessageType(raw.type) ?? normalizeMessageType(raw.role) ?? 'ai';
@@ -1050,7 +1059,9 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
   if (typeof raw.id === 'string') meta.id = raw.id;
   meta.type = normalizeMessageType(raw.type ?? raw.role);
   if ('content' in raw) {
-    meta.content = (raw as { content?: Message['content'] }).content;
+    meta.content = filterInternalMessageContentArtifacts(
+      (raw as { content?: Message['content'] }).content,
+    );
   }
   const references = extractMessageReferences(raw);
   const submittedInput = extractSubmittedInput(raw);
@@ -1688,9 +1699,12 @@ export function applyStreamEvent(
         break;
       }
       case ChatMessageEventTypeEnum.ON_CHAT_EVENT: {
-        const contextUsageEvent = parseThreadContextUsageEvent(payload.data);
+        const contextUsageEvent = extractThreadContextUsageEvent(payload.data);
         if (contextUsageEvent) {
           onThreadContextUsage?.(contextUsageEvent);
+          break;
+        }
+        if (isThreadContextUsageRenderArtifact(payload.data)) {
           break;
         }
 

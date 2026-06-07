@@ -1381,6 +1381,41 @@ describe('applyStreamEvent', () => {
     expect(setError).not.toHaveBeenCalled();
   });
 
+  it('drops incomplete thread context usage chat events without appending agent events', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+    const onThreadContextUsage = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CHAT_EVENT,
+          data: {
+            id: 'usage-event-1',
+            type: 'thread_context_usage',
+            title: 'Thread context usage',
+            status: 'running',
+          },
+        }),
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-1' },
+      undefined,
+      onThreadContextUsage,
+    );
+
+    expect(onThreadContextUsage).not.toHaveBeenCalled();
+    expect(setValues).not.toHaveBeenCalled();
+    expect(setError).not.toHaveBeenCalled();
+  });
+
   it('routes thread goal chat events to goal callbacks without appending messages', () => {
     const setValues = vi.fn();
     const setError = vi.fn();

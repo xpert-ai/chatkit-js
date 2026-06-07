@@ -20,6 +20,7 @@ import {
   hasRenderableReasoning,
 } from '../../../lib/message';
 import { isAgentEventContent } from '../../../lib/agent-runs';
+import { isThreadContextUsageRenderArtifact } from '../../../lib/thread-context-usage';
 import {
   buildAssistantRenderTree,
   type AssistantContentEntry,
@@ -424,6 +425,10 @@ function renderContentItem(
         <MarkdownText>{content}</MarkdownText>
       </div>
     );
+  }
+
+  if (isThreadContextUsageRenderArtifact(content)) {
+    return null;
   }
 
   if (isTextContent(content)) {

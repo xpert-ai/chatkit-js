@@ -8,6 +8,7 @@ import type {
 } from '@xpert-ai/chatkit-types'
 import { isNil, omitBy } from 'lodash-es'
 import type { AgentEventContent } from './agent-runs'
+import { isThreadContextUsageRenderArtifact } from './thread-context-usage'
 
 export type AssistantStreamingStatus = 'loading' | 'thinking' | 'answering'
 export const ASSISTANT_STREAM_IDLE_TO_THINKING_MS = 2000
@@ -16,6 +17,25 @@ export function hasRenderableReasoning(
   reasoning: ChatkitMessage['reasoning'] | undefined,
 ): boolean {
   return Array.isArray(reasoning) && reasoning.some((item) => item.text?.trim())
+}
+
+export function isRenderableMessageContentItem(
+  item: TMessageContentComplex | string | undefined,
+): item is TMessageContentComplex | string {
+  if (item === undefined) return false
+  if (typeof item === 'string') return true
+  return !isThreadContextUsageRenderArtifact(item)
+}
+
+export function filterInternalMessageContentArtifacts<T>(content: T): T {
+  if (!Array.isArray(content)) return content
+
+  const filtered = content.filter((item) =>
+    isRenderableMessageContentItem(
+      item as TMessageContentComplex | string | undefined,
+    ),
+  )
+  return filtered.length === content.length ? content : (filtered as T)
 }
 
 export function hasRenderableMessageContent(
@@ -32,11 +52,15 @@ export function hasRenderableMessageContent(
   const items = content as Array<TMessageContentComplex | string>
 
   return items.some((item) => {
+    if (!isRenderableMessageContentItem(item)) {
+      return false
+    }
+
     if (typeof item === 'string') {
       return item.trim().length > 0
     }
 
-    if (!item || typeof item !== 'object') {
+    if (typeof item !== 'object') {
       return false
     }
 
@@ -116,6 +140,10 @@ export function appendMessageContent(
   aiMessage: ChatkitMessage,
   content: string | TMessageContentComplex,
 ) {
+  if (typeof content !== 'string' && isThreadContextUsageRenderArtifact(content)) {
+    return
+  }
+
   aiMessage.status = 'answering'
   const _content = aiMessage.content
   if (typeof content === 'string') {

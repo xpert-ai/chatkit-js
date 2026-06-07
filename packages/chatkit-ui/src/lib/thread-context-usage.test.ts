@@ -2,15 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyThreadContextUsageEvent,
+  extractThreadContextUsageEvent,
   isThreadContextUsageEvent,
+  isThreadContextUsageRenderArtifact,
   parseThreadContextUsageEvent,
   resolveUsedContextSize,
+  THREAD_CONTEXT_USAGE_EVENT_TYPE,
   upsertThreadContextUsage,
 } from './thread-context-usage';
 import type { TThreadContextUsageEvent } from '@xpert-ai/chatkit-types';
 
 const usageEvent: TThreadContextUsageEvent = {
-  type: 'thread_context_usage',
+  type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
   threadId: 'thread-1',
   agentKey: 'agent-1',
   runId: 'run-1',
@@ -38,6 +41,61 @@ describe('thread context usage helpers', () => {
 
     expect(parsed).toEqual(usageEvent);
     expect(isThreadContextUsageEvent(parsed)).toBe(true);
+  });
+
+  it('extracts direct and wrapped thread context usage events', () => {
+    expect(extractThreadContextUsageEvent(usageEvent)).toEqual(usageEvent);
+    expect(
+      extractThreadContextUsageEvent({
+        id: 'agent-event-1',
+        type: 'agent_event',
+        event: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+        data: usageEvent,
+      }),
+    ).toEqual(usageEvent);
+    expect(
+      extractThreadContextUsageEvent({
+        id: 'component-1',
+        type: 'component',
+        data: usageEvent,
+      }),
+    ).toEqual(usageEvent);
+  });
+
+  it('identifies usage events as internal render artifacts', () => {
+    expect(isThreadContextUsageRenderArtifact(usageEvent)).toBe(true);
+    expect(
+      isThreadContextUsageRenderArtifact({
+        id: 'agent-event-1',
+        type: 'agent_event',
+        event: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+      }),
+    ).toBe(true);
+    expect(
+      isThreadContextUsageRenderArtifact({
+        id: 'agent-event-2',
+        type: 'agent_event',
+        data: { type: THREAD_CONTEXT_USAGE_EVENT_TYPE },
+      }),
+    ).toBe(true);
+    expect(
+      isThreadContextUsageRenderArtifact({
+        id: 'component-1',
+        type: 'component',
+        data: { type: THREAD_CONTEXT_USAGE_EVENT_TYPE },
+      }),
+    ).toBe(true);
+    expect(
+      isThreadContextUsageRenderArtifact({
+        id: 'tool-1',
+        type: 'component',
+        data: {
+          category: 'Tool',
+          title: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+          message: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+        },
+      }),
+    ).toBe(false);
   });
 
   it('rejects invalid thread context usage payloads', () => {
