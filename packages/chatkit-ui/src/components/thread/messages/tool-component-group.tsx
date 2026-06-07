@@ -31,6 +31,7 @@ import {
 
 import { type LocalizedText, resolveLocalizedText } from '../../../i18n/localized-text';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
+import { isThreadContextUsageRenderArtifact } from '../../../lib/thread-context-usage';
 import { cn } from '../../../lib/utils';
 import {
   detectJsonValue,
@@ -296,6 +297,7 @@ function isGroupableStepComponent(
   content: TMessageContentComplex | string | undefined,
 ): content is TMessageContentComponent {
   if (!content || typeof content === 'string') return false;
+  if (isThreadContextUsageRenderArtifact(content)) return false;
   if (!isComponentContent(content) || isWidgetComponent(content)) return false;
 
   const data = getToolStepData(content);
@@ -437,6 +439,10 @@ export function buildToolComponentRenderUnits(
   const pendingTools: PendingToolComponent[] = [];
 
   content.forEach((item, index) => {
+    if (isThreadContextUsageRenderArtifact(item)) {
+      return;
+    }
+
     if (
       isGroupableStepComponent(item) &&
       options?.shouldGroupComponent?.(item) !== false

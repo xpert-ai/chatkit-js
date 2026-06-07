@@ -18,6 +18,7 @@ import {
   normalizeAgentRunInfo,
   type AgentRunInfo,
 } from '../../../lib/agent-runs';
+import { THREAD_CONTEXT_USAGE_EVENT_TYPE } from '../../../lib/thread-context-usage';
 
 const chatkitLanguage = vi.hoisted(() => ({ value: 'en-US' }));
 const writeTextMock = vi.fn(() => Promise.resolve());
@@ -1817,6 +1818,63 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getByRole('button', { name: /Processed 1 file, 1 command/ }),
     ).toBeInTheDocument();
+  });
+
+  it('hides nested thread context usage artifacts inside sub-agent output', () => {
+    renderAssistant(
+      [
+        {
+          id: 'worker-text',
+          type: 'text',
+          text: 'Visible worker output.',
+          executionId: 'usage-worker-run',
+          parentExecutionId: 'root-exec',
+        },
+        {
+          id: 'usage-raw',
+          type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+          threadId: 'thread-1',
+          agentKey: 'Agent_UsageWorker',
+          usage: { totalTokens: 120 },
+          executionId: 'usage-worker-run',
+          parentExecutionId: 'root-exec',
+        } as any,
+        {
+          id: 'usage-agent-event',
+          type: 'agent_event',
+          event: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+          title: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+          executionId: 'usage-worker-run',
+          parentExecutionId: 'root-exec',
+        } as any,
+        {
+          ...createToolComponent('usage-component', {
+            type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+            title: THREAD_CONTEXT_USAGE_EVENT_TYPE,
+          }),
+          executionId: 'usage-worker-run',
+          parentExecutionId: 'root-exec',
+        },
+      ],
+      {
+        executionId: 'root-exec',
+        agentRuns: [
+          {
+            id: 'usage-worker-run',
+            parentId: 'root-exec',
+            title: 'Usage worker',
+            status: 'success',
+          },
+        ],
+      },
+    );
+
+    const workerToggle = screen.getByRole('button', { name: /Usage worker/ });
+    expect(workerToggle).toHaveAccessibleName(/1 message/);
+    expect(workerToggle).not.toHaveAccessibleName(/tool/);
+    expect(workerToggle).not.toHaveAccessibleName(/event/);
+    expect(screen.getByText('Visible worker output.')).toBeInTheDocument();
+    expect(screen.queryByText(THREAD_CONTEXT_USAGE_EVENT_TYPE)).not.toBeInTheDocument();
   });
 
   it('expands running sub-agent groups while keeping older completed groups collapsed', () => {

@@ -1,9 +1,15 @@
 import type { TThreadContextUsageEvent } from '@xpert-ai/chatkit-types';
 
+export const THREAD_CONTEXT_USAGE_EVENT_TYPE = 'thread_context_usage' as const;
+
 export type ThreadContextUsageByAgentKey = Record<
   string,
   TThreadContextUsageEvent
 >;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
 function normalizeNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -50,10 +56,10 @@ function normalizeOptionalFiniteNumber(value: unknown): number {
 export function parseThreadContextUsageEvent(
   value: unknown,
 ): TThreadContextUsageEvent | null {
-  if (!value || typeof value !== 'object') return null;
+  if (!isRecord(value)) return null;
 
-  const raw = value as Record<string, unknown>;
-  if (raw.type !== 'thread_context_usage') return null;
+  const raw = value;
+  if (raw.type !== THREAD_CONTEXT_USAGE_EVENT_TYPE) return null;
 
   const threadId = normalizeNonEmptyString(raw.threadId);
   const agentKey = normalizeNonEmptyString(raw.agentKey);
@@ -68,7 +74,7 @@ export function parseThreadContextUsageEvent(
   if (totalTokens == null) return null;
 
   return {
-    type: 'thread_context_usage',
+    type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
     threadId,
     agentKey,
     runId: normalizeNullableString(raw.runId),
@@ -88,6 +94,35 @@ export function parseThreadContextUsageEvent(
             : undefined,
     },
   };
+}
+
+export function extractThreadContextUsageEvent(
+  value: unknown,
+): TThreadContextUsageEvent | null {
+  const direct = parseThreadContextUsageEvent(value);
+  if (direct) return direct;
+
+  if (!isRecord(value)) return null;
+  return parseThreadContextUsageEvent(value.data);
+}
+
+function isThreadContextUsageType(value: unknown) {
+  return (
+    typeof value === 'string' &&
+    value.trim() === THREAD_CONTEXT_USAGE_EVENT_TYPE
+  );
+}
+
+export function isThreadContextUsageRenderArtifact(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+
+  if (isThreadContextUsageType(value.type)) return true;
+  if (isThreadContextUsageType(value.event)) return true;
+
+  const data = value.data;
+  if (!isRecord(data)) return false;
+
+  return isThreadContextUsageType(data.type) || isThreadContextUsageType(data.event);
 }
 
 export function isThreadContextUsageEvent(
