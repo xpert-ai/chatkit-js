@@ -1405,6 +1405,60 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('2.5s')).toBeInTheDocument();
   });
 
+  it('updates the running agent run duration over time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-24T12:24:54.398Z'));
+
+    renderAssistant([], {
+      executionId: 'root-exec',
+      agentRuns: [
+        {
+          id: 'exec-a',
+          parentId: 'root-exec',
+          title: 'Researcher',
+          status: 'running',
+          createdAt: '2026-04-24T12:24:52.898Z',
+          updatedAt: '2026-04-24T12:24:52.898Z',
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole('button', { name: /Researcher/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('1.5s')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByText('2.5s')).toBeInTheDocument();
+  });
+
+  it('does not start an agent run duration timer without a start timestamp', () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+
+    renderAssistant([], {
+      executionId: 'root-exec',
+      agentRuns: [
+        {
+          id: 'exec-a',
+          parentId: 'root-exec',
+          title: 'Researcher',
+          status: 'running',
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole('button', { name: /Researcher/ }),
+    ).toBeInTheDocument();
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+
+    setIntervalSpy.mockRestore();
+  });
+
   it('groups interleaved sub-agent output by execution id', () => {
     renderAssistant(
       [

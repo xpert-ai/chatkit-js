@@ -329,15 +329,41 @@ export function AgentRunGroup({
   );
   const StatusIcon = statusConfig.icon;
   const isRunning = isRunningRunStatus(node.info.status);
+  const hasStaticDuration =
+    typeof node.info.elapsedTime === 'number' &&
+    Number.isFinite(node.info.elapsedTime);
+  const hasDurationStartTimestamp =
+    node.info.startedAt !== undefined || node.info.createdAt !== undefined;
+  const shouldUpdateDuration =
+    isRunning && hasDurationStartTimestamp && !hasStaticDuration;
+  const [durationNow, setDurationNow] = React.useState(() => Date.now());
   const [isExpanded, setIsExpanded] = React.useState(
     () => isRunning || !hasFollowingItem,
   );
   const title = getAgentRunTitle(node.info, t('message.agentRun.defaultTitle'));
-  const duration = getAgentRunDuration(node.info);
+  const duration = getAgentRunDuration(
+    node.info,
+    shouldUpdateDuration ? durationNow : undefined,
+  );
   const statusLabel = t(`message.agentRun.status.${statusConfig.labelKey}`, {
     defaultValue: node.info.status ?? statusConfig.labelKey,
   });
   const detailsId = React.useId();
+
+  React.useEffect(() => {
+    if (!shouldUpdateDuration) {
+      return;
+    }
+
+    setDurationNow(Date.now());
+    const timer = window.setInterval(() => {
+      setDurationNow(Date.now());
+    }, 100);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [shouldUpdateDuration]);
 
   React.useEffect(() => {
     if (isRunning) {
