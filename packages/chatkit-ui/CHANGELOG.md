@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.19
+
+### Patch Changes
+
+- 0e70773: Fix persisted agent run status and duration rendering in ChatKit history.
+
 ## 0.3.18
 
 ### Patch Changes
