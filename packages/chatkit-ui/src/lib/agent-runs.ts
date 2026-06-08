@@ -80,9 +80,17 @@ function readTrimmedString(value: unknown): string | null {
 }
 
 function readOptionalNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+
+  if (typeof value !== 'string') return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const numberValue = Number(trimmed);
+  return Number.isFinite(numberValue) ? numberValue : undefined;
 }
 
 function readNestedName(value: unknown): string | undefined {

@@ -130,7 +130,7 @@ export function getAgentRunTitle(info: AgentRunInfo, fallback?: string) {
   );
 }
 
-export function getAgentRunDuration(info: AgentRunInfo) {
+export function getAgentRunDuration(info: AgentRunInfo, now?: number) {
   if (
     typeof info.elapsedTime === 'number' &&
     Number.isFinite(info.elapsedTime)
@@ -140,9 +140,16 @@ export function getAgentRunDuration(info: AgentRunInfo) {
 
   const startedAt =
     parseDateValue(info.startedAt) ?? parseDateValue(info.createdAt);
-  const endedAt = parseDateValue(info.endedAt) ?? parseDateValue(info.updatedAt);
+  if (startedAt === null) return null;
 
-  if (startedAt === null || endedAt === null) return null;
+  if (isRunningRunStatus(info.status)) {
+    return typeof now === 'number' && Number.isFinite(now)
+      ? Math.max(0, now - startedAt)
+      : null;
+  }
+
+  const endedAt = parseDateValue(info.endedAt) ?? parseDateValue(info.updatedAt);
+  if (endedAt === null) return null;
   return Math.max(0, endedAt - startedAt);
 }
 
@@ -353,6 +360,14 @@ function refreshAgentNodeOrder(node: AgentRunRenderNode): number {
   return order;
 }
 
+function markIncompleteAgentRunStatusSuccess(node: AgentRunRenderNode) {
+  if (normalizeRunStatus(node.info.status) === 'pending') {
+    node.info.status = 'success';
+  }
+
+  node.children.forEach(markIncompleteAgentRunStatusSuccess);
+}
+
 export function buildAssistantRenderTree(
   message: AssistantMessageWithAgentRuns,
 ) {
@@ -415,6 +430,9 @@ export function buildAssistantRenderTree(
   }
 
   roots.forEach(refreshAgentNodeOrder);
+  if (normalizeRunStatus(message.status) === 'success') {
+    roots.forEach(markIncompleteAgentRunStatusSuccess);
+  }
   roots.sort((a, b) => a.firstOrder - b.firstOrder);
 
   const units: AssistantRenderUnit[] = [

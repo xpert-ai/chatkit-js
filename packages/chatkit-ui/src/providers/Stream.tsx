@@ -150,6 +150,7 @@ export {
 export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
+  status?: string;
   executionId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -628,6 +629,7 @@ function mapChatMessageToUiMessage(
     id: message.id ?? createMessageId(),
     type,
     content,
+    ...(typeof message.status === 'string' ? { status: message.status } : {}),
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
     ...(message.createdAt ? { createdAt: message.createdAt } : {}),

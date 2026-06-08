@@ -84,6 +84,28 @@ describe('conversation message history pagination', () => {
     expect(page.hasMore).toBe(false);
   });
 
+  it('preserves persisted assistant message status', () => {
+    const page = normalizeConversationMessagesPage({
+      items: [
+        {
+          id: 'assistant-1',
+          role: 'ai',
+          content: 'Done',
+          status: 'success',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ] as any,
+    });
+
+    expect(page.messages[0]).toEqual(
+      expect.objectContaining({
+        id: 'assistant-1',
+        type: 'ai',
+        status: 'success',
+      }),
+    );
+  });
+
   it('prepends older pages in order while preserving existing duplicates', () => {
     const merged = mergeHistoryUiMessages(
       [
@@ -616,7 +638,7 @@ describe('applyStreamEvent', () => {
             agentKey: 'Agent_A',
             title: 'Researcher',
             status: 'success',
-            elapsedTime: 1234,
+            elapsedTime: '1234',
           },
         }),
       },
