@@ -80,6 +80,7 @@ chatkit-js/
 │   ├── chatkit-js/           # Vanilla JS integration helpers
 │   ├── chatkit-react/        # React bindings
 │   ├── chatkit-vue/          # Vue bindings
+│   ├── chatkit-vue2/         # Vue 2 bindings
 │   ├── chatkit-angular/      # Angular bindings
 │   ├── chatkit-ui5/          # SAP UI5 bindings
 │   ├── chatkit-ui/           # Iframe chat UI application
@@ -101,6 +102,7 @@ chatkit-js/
 - [@xpert-ai/chatkit-js](./packages/chatkit-js/)
 - [@xpert-ai/chatkit-react](./packages/chatkit-react/)
 - [@xpert-ai/chatkit-vue](./packages/chatkit-vue/)
+- [@xpert-ai/chatkit-vue2](./packages/chatkit-vue2/)
 - [@xpert-ai/chatkit-angular](./packages/chatkit-angular/)
 - [@xpert-ai/chatkit-ui5](./packages/chatkit-ui5/)
 - [@xpert-ai/chatkit-ui](./packages/chatkit-ui/)
