@@ -1,0 +1,52 @@
+{
+  "name": "@xpert-ai/chatkit-vue2",
+  "version": "0.3.0",
+  "description": "Vue 2 bindings for Xpert Chatkit",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "vue": ">=2.6 <3"
+  },
+  "dependencies": {
+    "@xpert-ai/chatkit-types": "workspace:~",
+    "@xpert-ai/chatkit-web-component": "workspace:~"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^5.0.0",
+    "vite-plugin-dts": "^3.7.0",
+    "vue": "2.7.16"
+  },
+  "keywords": [
+    "chatkit",
+    "vue",
+    "vue2",
+    "xpert"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/chatkit-vue2",
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  }
+}

@@ -23,6 +23,7 @@
       "@xpert-ai/chatkit-react": ["packages/chatkit-react/src/index.ts"],
       "@xpert-ai/chatkit-types": ["packages/chatkit/src/index.ts"],
       "@xpert-ai/chatkit-vue": ["packages/chatkit-vue/src/index.ts"],
+      "@xpert-ai/chatkit-vue2": ["packages/chatkit-vue2/src/index.ts"],
       "@xpert-ai/chatkit-web-component": [
         "packages/web-component/src/index.ts"
       ],
