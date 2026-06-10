@@ -98,7 +98,8 @@
     "regenerate": "重新生成回复"
   },
   "startScreen": {
-    "greeting": "今天我能帮你什么？"
+    "greeting": "今天我能帮你什么？",
+    "editPrompt": "编辑常用问题"
   },
   "composer": {
     "openMenu": "打开菜单",
