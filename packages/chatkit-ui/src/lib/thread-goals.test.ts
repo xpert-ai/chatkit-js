@@ -137,6 +137,36 @@ describe('thread goals', () => {
     ).not.toHaveProperty(removedBudgetField);
   });
 
+  it('preserves optional goal specs from parsed goal payloads', () => {
+    expect(
+      parseThreadGoal({
+        id: 'goal-1',
+        conversationId: 'conversation-1',
+        threadId: 'thread-1',
+        objective: 'ship feature',
+        status: 'active',
+        tokensUsed: 0,
+        elapsedSeconds: 0,
+        continuationCount: 0,
+        goalSpec: {
+          originalObjective: 'ship feature',
+          executableGoal: 'Work toward this goal: ship feature',
+          successCriteria: ['The feature is shipped.'],
+          constraints: ['Do not change unrelated behavior.'],
+          verificationChecklist: ['Verify the feature is shipped.'],
+          recommendedStrategy: 'act_then_verify',
+          source: 'system',
+          generatedAt: '2026-06-11T00:00:00.000Z',
+        },
+      }),
+    ).toMatchObject({
+      goalSpec: {
+        originalObjective: 'ship feature',
+        executableGoal: 'Work toward this goal: ship feature',
+      },
+    });
+  });
+
   it('maps goal commands to a host goal adapter', async () => {
     const adapter = goalFixture();
 
