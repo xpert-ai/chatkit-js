@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.3.13
+
+### Patch Changes
+
+- ac09330: Preserve thread goal specs in parsed goal payloads.
+
 ## 0.3.12
 
 ### Patch Changes

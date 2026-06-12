@@ -1,5 +1,12 @@
 # managed-chatkit-frontend
 
+## 0.0.27
+
+### Patch Changes
+
+- Updated dependencies [ac09330]
+  - @xpert-ai/chatkit-types@0.3.13
+
 ## 0.0.26
 
 ### Patch Changes
