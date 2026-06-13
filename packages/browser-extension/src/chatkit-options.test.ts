@@ -10,11 +10,14 @@ describe('createChatKitOptions', () => {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
         assistants: [
-          { id: 'assistant-1', name: 'Researcher' },
-          { id: 'assistant-2', name: 'Writer' },
+          {
+            id: 'assistant-1',
+            name: 'Researcher',
+            clientSecret: 'secret-1',
+          },
+          { id: 'assistant-2', name: 'Writer', clientSecret: 'secret-2' },
         ],
         activeAssistantId: 'assistant-2',
-        clientSecret: 'secret',
         locale: 'zh-Hans',
         displayMode: 'chat',
         theme: { colorScheme: 'dark' },
@@ -36,7 +39,7 @@ describe('createChatKitOptions', () => {
     }
 
     await expect(options.api.getClientSecret(null)).resolves.toEqual({
-      secret: 'secret',
+      secret: 'secret-2',
     });
   });
 
@@ -45,7 +48,6 @@ describe('createChatKitOptions', () => {
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
       }),
     );
 
@@ -60,28 +62,44 @@ describe('createChatKitOptions', () => {
     });
   });
 
-  it('updates xpertId when the active assistant changes', () => {
+  it('updates xpertId and client secret when the active assistant changes', async () => {
     const firstOptions = createChatKitOptions(
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        assistants: [{ id: 'assistant-1' }, { id: 'assistant-2' }],
+        assistants: [
+          { id: 'assistant-1', clientSecret: 'secret-1' },
+          { id: 'assistant-2', clientSecret: 'secret-2' },
+        ],
         activeAssistantId: 'assistant-1',
-        clientSecret: 'secret',
       }),
     );
     const secondOptions = createChatKitOptions(
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        assistants: [{ id: 'assistant-1' }, { id: 'assistant-2' }],
+        assistants: [
+          { id: 'assistant-1', clientSecret: 'secret-1' },
+          { id: 'assistant-2', clientSecret: 'secret-2' },
+        ],
         activeAssistantId: 'assistant-2',
-        clientSecret: 'secret',
       }),
     );
 
     expect(firstOptions.api).toMatchObject({ xpertId: 'assistant-1' });
     expect(secondOptions.api).toMatchObject({ xpertId: 'assistant-2' });
+    if (
+      !('getClientSecret' in firstOptions.api) ||
+      !('getClientSecret' in secondOptions.api)
+    ) {
+      throw new Error('Expected hosted API config.');
+    }
+    await expect(firstOptions.api.getClientSecret(null)).resolves.toEqual({
+      secret: 'secret-1',
+    });
+    await expect(secondOptions.api.getClientSecret(null)).resolves.toEqual({
+      secret: 'secret-2',
+    });
   });
 
   it('can override display mode for a specific extension surface', () => {
@@ -89,7 +107,7 @@ describe('createChatKitOptions', () => {
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         displayMode: 'pet',
       }),
       { displayMode: 'chat' },
@@ -105,7 +123,7 @@ describe('createChatKitOptions', () => {
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
       }),
       { onClientTool },
     );
@@ -119,7 +137,7 @@ describe('createChatKitOptions', () => {
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: false },
       }),
       { onClientTool },

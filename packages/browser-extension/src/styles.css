@@ -224,7 +224,9 @@ select {
 
 .ck-assistant-row {
   display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns:
+    minmax(72px, auto) minmax(0, 1fr) minmax(0, 1fr)
+    minmax(0, 1fr) auto;
   align-items: end;
   gap: 10px;
 }

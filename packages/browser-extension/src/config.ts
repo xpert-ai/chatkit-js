@@ -37,6 +37,7 @@ type HostAutomationInput = {
 type AssistantInput = {
   id?: unknown;
   name?: unknown;
+  clientSecret?: unknown;
 };
 
 type ConfigInput = {
@@ -62,7 +63,6 @@ export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
   apiUrl: 'https://api.xpertai.cn/api/ai',
   assistants: [],
   activeAssistantId: undefined,
-  clientSecret: '',
   locale: undefined,
   displayMode: 'pet',
   theme: { colorScheme: 'light' },
@@ -230,6 +230,7 @@ function normalizePetBoundsPadding(value: unknown): number {
 function normalizeAssistants(
   value: unknown,
   legacyXpertId?: string,
+  legacyClientSecret = '',
 ): ChatKitAssistantConfig[] {
   const sourceAssistants = Array.isArray(value) ? value : [];
   const seen = new Set<string>();
@@ -247,8 +248,11 @@ function normalizeAssistants(
 
     seen.add(id);
     const name = optionalString(entry.name);
+    const clientSecret =
+      normalizeString(entry.clientSecret) || legacyClientSecret;
     assistants.push({
       id,
+      clientSecret,
       ...(name ? { name } : {}),
     });
   }
@@ -257,7 +261,7 @@ function normalizeAssistants(
     return assistants;
   }
 
-  return [{ id: legacyXpertId }];
+  return [{ id: legacyXpertId, clientSecret: legacyClientSecret }];
 }
 
 function normalizeActiveAssistantId(
@@ -288,7 +292,12 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
     : {};
   const colorScheme = normalizeColorScheme(sourceTheme.colorScheme);
   const legacyXpertId = optionalString(source.xpertId);
-  const assistants = normalizeAssistants(source.assistants, legacyXpertId);
+  const legacyClientSecret = normalizeString(source.clientSecret);
+  const assistants = normalizeAssistants(
+    source.assistants,
+    legacyXpertId,
+    legacyClientSecret,
+  );
   const activeAssistantId = normalizeActiveAssistantId(
     source.activeAssistantId ?? legacyXpertId,
     assistants,
@@ -305,7 +314,6 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
     ),
     assistants,
     activeAssistantId,
-    clientSecret: normalizeString(source.clientSecret),
     locale: normalizeLocale(source.locale),
     displayMode: normalizeDisplayMode(source.displayMode),
     theme: {
@@ -381,10 +389,13 @@ export function validateConfig(
     });
   }
 
-  if (!config.clientSecret) {
+  if (
+    config.assistants.length === 0 ||
+    config.assistants.some((assistant) => !assistant.clientSecret)
+  ) {
     issues.push({
       field: 'clientSecret',
-      message: 'Client Secret / API Key is required.',
+      message: 'Client Secret / API Key is required for each assistant.',
     });
   }
 

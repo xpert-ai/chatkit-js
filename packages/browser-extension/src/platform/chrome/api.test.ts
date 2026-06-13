@@ -67,7 +67,7 @@ describe('chrome extension platform', () => {
         normalizeConfig({
           frameUrl: 'https://chat.example/frame',
           apiUrl: 'https://api.example/api/ai',
-          clientSecret: 'secret',
+          assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
           displayMode: 'pet',
           surfaces: { pageOverlay: true, autoPageOverlay: true },
         }),
@@ -79,7 +79,7 @@ describe('chrome extension platform', () => {
         normalizeConfig({
           frameUrl: 'https://chat.example/frame',
           apiUrl: 'https://api.example/api/ai',
-          clientSecret: 'secret',
+          assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
           displayMode: 'chat',
           surfaces: { pageOverlay: true, autoPageOverlay: true },
         }),
@@ -136,7 +136,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         displayMode: 'pet',
         surfaces: { pageOverlay: true, autoPageOverlay: true },
       },
@@ -176,7 +176,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: true },
       },
     }));
@@ -227,7 +227,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: true },
       },
     }));
@@ -271,7 +271,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: true },
       },
     }));
@@ -317,7 +317,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: true },
       },
     }));
@@ -354,7 +354,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: true },
       },
     }));
@@ -415,7 +415,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: true },
       },
     }));
@@ -454,7 +454,7 @@ describe('chrome extension platform', () => {
       [STORAGE_KEY]: {
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
         hostAutomation: { enabled: false },
       },
     }));

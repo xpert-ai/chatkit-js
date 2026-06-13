@@ -32,7 +32,7 @@ const MESSAGES = {
     apiUrl: 'Xpert API URL',
     assistants: 'Assistants',
     assistantsHelp:
-      'Configure one or more published assistant / Xpert IDs and choose the active assistant.',
+      'Configure one or more published assistant / Xpert IDs, each with its own Client Secret / API Key, and choose the active assistant.',
     assistantName: 'Display name',
     assistantNamePlaceholder: 'Optional name',
     assistantId: 'Assistant ID / Xpert ID',
@@ -72,7 +72,8 @@ const MESSAGES = {
     defaultsRestored: 'Default options restored.',
     missingFrameUrl: 'ChatKit frame URL is required.',
     missingApiUrl: 'Xpert API URL is required.',
-    missingClientSecret: 'Client Secret / API Key is required.',
+    missingClientSecret:
+      'Client Secret / API Key is required for each assistant.',
   },
   'zh-Hans': {
     appTitle: 'Xpert ChatKit',
@@ -100,7 +101,8 @@ const MESSAGES = {
     frameUrl: 'ChatKit frame URL',
     apiUrl: 'Xpert API URL',
     assistants: '助手',
-    assistantsHelp: '配置一个或多个已发布的 Assistant / Xpert ID，并选择当前助手。',
+    assistantsHelp:
+      '配置一个或多个已发布的 Assistant / Xpert ID，并为每个助手填写自己的 Client Secret / API Key，然后选择当前助手。',
     assistantName: '显示名称',
     assistantNamePlaceholder: '可选名称',
     assistantId: 'Assistant ID / Xpert ID',
@@ -139,7 +141,7 @@ const MESSAGES = {
     defaultsRestored: '默认设置已恢复。',
     missingFrameUrl: '请填写 ChatKit frame URL。',
     missingApiUrl: '请填写 Xpert API URL。',
-    missingClientSecret: '请填写 Client Secret / API Key。',
+    missingClientSecret: '请为每个助手填写自己的 Client Secret / API Key。',
   },
 } as const;
 

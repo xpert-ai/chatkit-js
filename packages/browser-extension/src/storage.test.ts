@@ -36,12 +36,13 @@ describe('extension storage', () => {
         [STORAGE_KEY]: {
           frameUrl: ' https://chat.example/frame ',
           apiUrl: 'https://api.example/api/ai',
+          xpertId: ' assistant-1 ',
           clientSecret: ' secret ',
         },
       }),
     ).toMatchObject({
       frameUrl: 'https://chat.example/frame',
-      clientSecret: 'secret',
+      assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
     });
   });
 
@@ -50,7 +51,7 @@ describe('extension storage', () => {
     const config = normalizeConfig({
       frameUrl: 'https://chat.example/frame',
       apiUrl: 'https://api.example/api/ai',
-      clientSecret: 'secret',
+      assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
     });
 
     await writeConfig(storage, config);
@@ -64,7 +65,7 @@ describe('extension storage', () => {
           newValue: {
             frameUrl: 'https://chat.example/frame',
             apiUrl: 'https://api.example/api/ai',
-            clientSecret: 'secret',
+            assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
           },
         },
       }),
