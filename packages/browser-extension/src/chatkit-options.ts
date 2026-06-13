@@ -27,7 +27,7 @@ export function createChatKitOptions(
   const api: ChatKitOptions['api'] = {
     apiUrl: config.apiUrl,
     getClientSecret: async () => ({
-      secret: config.clientSecret,
+      secret: activeAssistant?.clientSecret ?? '',
     }),
   };
 

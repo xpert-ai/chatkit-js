@@ -10,11 +10,10 @@ describe('mountChatKitHost assistant switcher', () => {
     const config = normalizeConfig({
       frameUrl: 'https://chat.example/frame',
       apiUrl: 'https://api.example/api/ai',
-      clientSecret: 'secret',
       displayMode: 'chat',
       assistants: [
-        { id: 'assistant-1', name: 'Researcher' },
-        { id: 'assistant-2', name: 'Writer' },
+        { id: 'assistant-1', name: 'Researcher', clientSecret: 'secret-1' },
+        { id: 'assistant-2', name: 'Writer', clientSecret: 'secret-2' },
       ],
       activeAssistantId: 'assistant-1',
     });
@@ -51,9 +50,11 @@ describe('mountChatKitHost assistant switcher', () => {
     const config = normalizeConfig({
       frameUrl: 'https://chat.example/frame',
       apiUrl: 'https://api.example/api/ai',
-      clientSecret: 'secret',
       displayMode: 'pet',
-      assistants: [{ id: 'assistant-1' }, { id: 'assistant-2' }],
+      assistants: [
+        { id: 'assistant-1', clientSecret: 'secret-1' },
+        { id: 'assistant-2', clientSecret: 'secret-2' },
+      ],
       activeAssistantId: 'assistant-1',
     });
 

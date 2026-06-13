@@ -27,7 +27,6 @@ let assistantRowId = 0;
 type FormFields = {
   frameUrl: HTMLInputElement;
   apiUrl: HTMLInputElement;
-  clientSecret: HTMLInputElement;
   locale: HTMLSelectElement;
   displayMode: HTMLSelectElement;
   colorScheme: HTMLSelectElement;
@@ -114,6 +113,10 @@ function createAssistantRowHtml(
         <label for="assistantId-${rowId}">${i18n.t('assistantId')}</label>
         <input id="assistantId-${rowId}" name="assistantId" type="text" value="${escapeAttribute(assistant.id ?? '')}" placeholder="your-xpert-id" />
       </div>
+      <div class="ck-field">
+        <label for="assistantClientSecret-${rowId}">${i18n.t('clientSecret')}</label>
+        <input id="assistantClientSecret-${rowId}" name="assistantClientSecret" type="password" value="${escapeAttribute(assistant.clientSecret ?? '')}" autocomplete="off" />
+      </div>
       <button class="ck-button ck-button-danger" type="button" data-role="remove-assistant">${i18n.t('removeAssistant')}</button>
     </div>
   `;
@@ -140,7 +143,6 @@ function collectFields(form: HTMLFormElement): FormFields {
   return {
     frameUrl: getField<HTMLInputElement>(form, 'frameUrl'),
     apiUrl: getField<HTMLInputElement>(form, 'apiUrl'),
-    clientSecret: getField<HTMLInputElement>(form, 'clientSecret'),
     locale: getField<HTMLSelectElement>(form, 'locale'),
     displayMode: getField<HTMLSelectElement>(form, 'displayMode'),
     colorScheme: getField<HTMLSelectElement>(form, 'colorScheme'),
@@ -171,6 +173,9 @@ function readAssistantRows(form: HTMLFormElement): {
     id:
       row.querySelector<HTMLInputElement>('input[name="assistantId"]')?.value ??
       '',
+    clientSecret:
+      row.querySelector<HTMLInputElement>('input[name="assistantClientSecret"]')
+        ?.value ?? '',
   }));
   const activeAssistantId = activeRow?.querySelector<HTMLInputElement>(
     'input[name="assistantId"]',
@@ -190,7 +195,6 @@ function readForm(
     apiUrl: fields.apiUrl.value,
     assistants: assistantConfig.assistants,
     activeAssistantId: assistantConfig.activeAssistantId,
-    clientSecret: fields.clientSecret.value,
     locale: fields.locale.value,
     displayMode: fields.displayMode.value,
     theme: {
@@ -275,16 +279,6 @@ function renderOptions(config: ChatKitExtensionConfig) {
         </div>
         <div class="ck-button-row">
           <button class="ck-button" type="button" data-role="add-assistant">${i18n.t('addAssistant')}</button>
-        </div>
-      </section>
-      <section class="ck-section">
-        <h2 class="ck-section-title">${i18n.t('credentials')}</h2>
-        <div class="ck-field-grid">
-          <div class="ck-field">
-            <label for="clientSecret">${i18n.t('clientSecret')}</label>
-            <input id="clientSecret" name="clientSecret" type="password" value="${escapeAttribute(config.clientSecret)}" autocomplete="off" />
-            <p class="ck-field-help">${i18n.t('clientSecretHelp')}</p>
-          </div>
         </div>
       </section>
       <section class="ck-section">

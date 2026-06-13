@@ -46,9 +46,9 @@ Open the extension options page and set:
 
 - `frameUrl`
 - `apiUrl`
-- assistants: one or more published Assistant ID / Xpert ID entries, with an
-  optional display name and one active assistant
-- `Client Secret / API Key`
+- assistants: one or more published Assistant ID / Xpert ID entries, each with
+  an optional display name and its own `Client Secret / API Key`, plus one
+  active assistant
 - launch mode (`Pet launcher` by default, or `Chat panel`)
 - locale (`en` and `zh-Hans` are supported by the extension UI) and theme
 - enabled surfaces
@@ -60,13 +60,16 @@ Host page automation uses the Chrome `debugger` permission when available so it
 can collect CDP snapshots and dispatch browser-level mouse/keyboard input. If
 CDP is unavailable, the extension falls back to the content-script DOM executor.
 
-The first version uses manual credentials. The extension does not call Xpert
-APIs directly and does not use native `fetch` to reach the platform. Instead,
-the ChatKit options passed to the web component include `api.getClientSecret`,
-which returns the stored `Client Secret / API Key`.
+The extension uses manual per-assistant credentials. It does not call Xpert APIs
+directly and does not use native `fetch` to reach the platform. Instead, the
+ChatKit options passed to the web component include `api.getClientSecret`, which
+returns the stored `Client Secret / API Key` for the active assistant.
 
-Existing extension configs that contain a legacy single `xpertId` are normalized
-into a one-item assistants list the next time the config is read and saved.
+Existing extension configs that contain a legacy single `xpertId` and global
+`clientSecret` are normalized into a one-item assistants list with that
+credential the next time the config is read and saved. Existing multi-assistant
+configs with a global `clientSecret` copy it into any assistant that does not yet
+have its own credential.
 
 ## Local Frame Testing
 

@@ -26,11 +26,13 @@ describe('extension i18n', () => {
           },
           {
             field: 'clientSecret',
-            message: 'Client Secret / API Key is required.',
+            message: 'Client Secret / API Key is required for each assistant.',
           },
         ],
         i18n,
       ),
-    ).toBe('请填写 ChatKit frame URL。 请填写 Client Secret / API Key。');
+    ).toBe(
+      '请填写 ChatKit frame URL。 请为每个助手填写自己的 Client Secret / API Key。',
+    );
   });
 });

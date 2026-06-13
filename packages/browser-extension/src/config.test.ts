@@ -33,9 +33,8 @@ describe('extension config', () => {
     ).toMatchObject({
       frameUrl: 'https://chat.example/frame',
       apiUrl: 'https://api.example/api/ai',
-      assistants: [{ id: 'assistant-1' }],
+      assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
       activeAssistantId: 'assistant-1',
-      clientSecret: 'secret',
       locale: 'zh-Hans',
       displayMode: 'chat',
       theme: { colorScheme: 'dark' },
@@ -54,8 +53,12 @@ describe('extension config', () => {
     expect(
       normalizeConfig({
         assistants: [
-          { id: ' assistant-1 ', name: ' Researcher ' },
-          { id: 'assistant-2', name: ' ' },
+          {
+            id: ' assistant-1 ',
+            name: ' Researcher ',
+            clientSecret: ' secret-1 ',
+          },
+          { id: 'assistant-2', name: ' ', clientSecret: ' secret-2 ' },
           { id: 'assistant-1', name: 'Duplicate' },
           { id: ' ' },
           null,
@@ -64,14 +67,40 @@ describe('extension config', () => {
       }),
     ).toMatchObject({
       assistants: [
-        { id: 'assistant-1', name: 'Researcher' },
-        { id: 'assistant-2' },
+        {
+          id: 'assistant-1',
+          name: 'Researcher',
+          clientSecret: 'secret-1',
+        },
+        { id: 'assistant-2', clientSecret: 'secret-2' },
       ],
       activeAssistantId: 'assistant-1',
     });
   });
 
-  it('keeps an empty assistant list valid', () => {
+  it('migrates a legacy global client secret into assistant credentials', () => {
+    expect(
+      normalizeConfig({
+        assistants: [
+          { id: 'assistant-1', name: 'Researcher' },
+          { id: 'assistant-2', clientSecret: ' secret-2 ' },
+        ],
+        clientSecret: ' legacy-secret ',
+      }),
+    ).toMatchObject({
+      assistants: [
+        {
+          id: 'assistant-1',
+          name: 'Researcher',
+          clientSecret: 'legacy-secret',
+        },
+        { id: 'assistant-2', clientSecret: 'secret-2' },
+      ],
+      activeAssistantId: 'assistant-1',
+    });
+  });
+
+  it('normalizes an empty assistant list', () => {
     expect(
       normalizeConfig({
         assistants: [],
@@ -107,7 +136,7 @@ describe('extension config', () => {
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        clientSecret: 'secret',
+        assistants: [{ id: 'assistant-1', clientSecret: 'secret' }],
       }),
     );
 

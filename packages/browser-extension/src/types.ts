@@ -16,6 +16,7 @@ export type ChatKitPetConfig = {
 export type ChatKitAssistantConfig = {
   id: string;
   name?: string;
+  clientSecret: string;
 };
 
 export type ChatKitExtensionConfig = {
@@ -23,7 +24,6 @@ export type ChatKitExtensionConfig = {
   apiUrl: string;
   assistants: ChatKitAssistantConfig[];
   activeAssistantId?: string;
-  clientSecret: string;
   locale?: SupportedLocale;
   displayMode: ChatKitDisplayMode;
   theme?: { colorScheme?: 'light' | 'dark' };
@@ -44,10 +44,7 @@ export type ChatKitExtensionConfig = {
 };
 
 export type ConfigValidationIssue = {
-  field: keyof Pick<
-    ChatKitExtensionConfig,
-    'frameUrl' | 'apiUrl' | 'clientSecret'
-  >;
+  field: 'frameUrl' | 'apiUrl' | 'clientSecret';
   message: string;
 };
 

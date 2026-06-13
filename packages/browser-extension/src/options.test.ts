@@ -72,6 +72,10 @@ describe('extension options page', () => {
       'input[name="assistantId"]',
     );
     expect(firstAssistantId?.value).toBe('legacy-assistant');
+    const firstAssistantSecret = document.querySelector<HTMLInputElement>(
+      'input[name="assistantClientSecret"]',
+    );
+    expect(firstAssistantSecret?.value).toBe('secret');
 
     document
       .querySelector<HTMLButtonElement>('[data-role="add-assistant"]')
@@ -88,6 +92,9 @@ describe('extension options page', () => {
     secondRow!.querySelector<HTMLInputElement>(
       'input[name="assistantId"]',
     )!.value = 'assistant-2';
+    secondRow!.querySelector<HTMLInputElement>(
+      'input[name="assistantClientSecret"]',
+    )!.value = 'secret-2';
     secondRow!
       .querySelector<HTMLInputElement>('input[name="activeAssistantRow"]')!
       .click();
@@ -101,10 +108,11 @@ describe('extension options page', () => {
     const saved = storage.set.mock.calls.at(-1)?.[0]?.[STORAGE_KEY];
     expect(saved).toMatchObject({
       assistants: [
-        { id: 'legacy-assistant' },
-        { id: 'assistant-2', name: 'Writer' },
+        { id: 'legacy-assistant', clientSecret: 'secret' },
+        { id: 'assistant-2', name: 'Writer', clientSecret: 'secret-2' },
       ],
       activeAssistantId: 'assistant-2',
     });
+    expect(saved).not.toHaveProperty('clientSecret');
   });
 });
