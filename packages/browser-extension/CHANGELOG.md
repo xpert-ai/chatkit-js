@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-browser-extension
 
+## 0.4.0
+
+### Minor Changes
+
+- 137c6b8: multiple assistants
+
 ## 0.3.6
 
 ### Patch Changes
