@@ -11,7 +11,7 @@ import type {
   ChatKitOptions,
   ClientToolMessageInput,
 } from '@xpert-ai/chatkit-types';
-import { readConfig, readConfigChange } from './storage';
+import { readConfig, readConfigChange, writeConfig } from './storage';
 import type { ChatKitDisplayMode, ChatKitExtensionConfig } from './types';
 import { mountChatKitHost } from './host';
 import { createChromeExtensionPlatform } from './platform/chrome/api';
@@ -235,6 +235,7 @@ async function main() {
 
   const host = mountChatKitHost(appRoot, config, 'pageOverlay', {
     openOptionsPage: platform.openOptionsPage,
+    writeConfig: (nextConfig) => writeConfig(platform.storage, nextConfig),
     onClientTool: createOverlayHostAutomationHandler(),
   });
   observeChatkitMinimizeState();

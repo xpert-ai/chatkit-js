@@ -1,5 +1,6 @@
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
+import { getActiveAssistant } from './config';
 import type { ChatKitExtensionConfig } from './types';
 import type { ChatKitDisplayMode } from './types';
 
@@ -13,6 +14,7 @@ export function createChatKitOptions(
   options: ChatKitOptionsBuildOptions = {},
 ): ChatKitOptions {
   const displayMode = options.displayMode ?? config.displayMode;
+  const activeAssistant = getActiveAssistant(config);
   const pet: ChatKitOptions['pet'] =
     displayMode === 'pet'
       ? {
@@ -29,8 +31,8 @@ export function createChatKitOptions(
     }),
   };
 
-  if (config.xpertId) {
-    api.xpertId = config.xpertId;
+  if (activeAssistant) {
+    api.xpertId = activeAssistant.id;
   }
 
   return {

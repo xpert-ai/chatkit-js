@@ -7,7 +7,11 @@ import {
 } from './config';
 import { createI18n, type I18n } from './i18n';
 import { readConfig, writeConfig } from './storage';
-import type { ChatKitExtensionConfig, OverlayPosition } from './types';
+import type {
+  ChatKitAssistantConfig,
+  ChatKitExtensionConfig,
+  OverlayPosition,
+} from './types';
 import { createChromeExtensionPlatform } from './platform/chrome/api';
 
 const root = document.getElementById('app');
@@ -18,11 +22,11 @@ if (!root) {
 
 const appRoot = root;
 const platform = createChromeExtensionPlatform();
+let assistantRowId = 0;
 
 type FormFields = {
   frameUrl: HTMLInputElement;
   apiUrl: HTMLInputElement;
-  xpertId: HTMLInputElement;
   clientSecret: HTMLInputElement;
   locale: HTMLSelectElement;
   displayMode: HTMLSelectElement;
@@ -88,11 +92,54 @@ function createPositionOptions(current: OverlayPosition, i18n: I18n) {
     .join('');
 }
 
+function createAssistantRowHtml(
+  assistant: Partial<ChatKitAssistantConfig>,
+  checked: boolean,
+  i18n: I18n,
+) {
+  assistantRowId += 1;
+  const rowId = assistantRowId;
+
+  return `
+    <div class="ck-assistant-row" data-role="assistant-row">
+      <label class="ck-assistant-active">
+        <input name="activeAssistantRow" type="radio"${checked ? ' checked' : ''} />
+        <span>${i18n.t('activeAssistantShort')}</span>
+      </label>
+      <div class="ck-field">
+        <label for="assistantName-${rowId}">${i18n.t('assistantName')}</label>
+        <input id="assistantName-${rowId}" name="assistantName" type="text" value="${escapeAttribute(assistant.name ?? '')}" placeholder="${escapeAttribute(i18n.t('assistantNamePlaceholder'))}" />
+      </div>
+      <div class="ck-field">
+        <label for="assistantId-${rowId}">${i18n.t('assistantId')}</label>
+        <input id="assistantId-${rowId}" name="assistantId" type="text" value="${escapeAttribute(assistant.id ?? '')}" placeholder="your-xpert-id" />
+      </div>
+      <button class="ck-button ck-button-danger" type="button" data-role="remove-assistant">${i18n.t('removeAssistant')}</button>
+    </div>
+  `;
+}
+
+function createAssistantRowsHtml(config: ChatKitExtensionConfig, i18n: I18n) {
+  const assistants =
+    config.assistants.length > 0 ? config.assistants : [{ id: '' }];
+
+  return assistants
+    .map((assistant, index) =>
+      createAssistantRowHtml(
+        assistant,
+        assistant.id
+          ? assistant.id === config.activeAssistantId
+          : config.assistants.length === 0 && index === 0,
+        i18n,
+      ),
+    )
+    .join('');
+}
+
 function collectFields(form: HTMLFormElement): FormFields {
   return {
     frameUrl: getField<HTMLInputElement>(form, 'frameUrl'),
     apiUrl: getField<HTMLInputElement>(form, 'apiUrl'),
-    xpertId: getField<HTMLInputElement>(form, 'xpertId'),
     clientSecret: getField<HTMLInputElement>(form, 'clientSecret'),
     locale: getField<HTMLSelectElement>(form, 'locale'),
     displayMode: getField<HTMLSelectElement>(form, 'displayMode'),
@@ -107,11 +154,42 @@ function collectFields(form: HTMLFormElement): FormFields {
   };
 }
 
-function readForm(fields: FormFields): ChatKitExtensionConfig {
+function readAssistantRows(form: HTMLFormElement): {
+  assistants: ChatKitAssistantConfig[];
+  activeAssistantId?: string;
+} {
+  const rows = Array.from(
+    form.querySelectorAll<HTMLElement>('[data-role="assistant-row"]'),
+  );
+  const activeRow = form
+    .querySelector<HTMLInputElement>('input[name="activeAssistantRow"]:checked')
+    ?.closest<HTMLElement>('[data-role="assistant-row"]');
+  const assistants = rows.map((row) => ({
+    name:
+      row.querySelector<HTMLInputElement>('input[name="assistantName"]')
+        ?.value ?? '',
+    id:
+      row.querySelector<HTMLInputElement>('input[name="assistantId"]')?.value ??
+      '',
+  }));
+  const activeAssistantId = activeRow?.querySelector<HTMLInputElement>(
+    'input[name="assistantId"]',
+  )?.value;
+
+  return { assistants, activeAssistantId };
+}
+
+function readForm(
+  fields: FormFields,
+  form: HTMLFormElement,
+): ChatKitExtensionConfig {
+  const assistantConfig = readAssistantRows(form);
+
   return normalizeConfig({
     frameUrl: fields.frameUrl.value,
     apiUrl: fields.apiUrl.value,
-    xpertId: fields.xpertId.value,
+    assistants: assistantConfig.assistants,
+    activeAssistantId: assistantConfig.activeAssistantId,
     clientSecret: fields.clientSecret.value,
     locale: fields.locale.value,
     displayMode: fields.displayMode.value,
@@ -132,6 +210,19 @@ function readForm(fields: FormFields): ChatKitExtensionConfig {
       enabled: fields.hostAutomation.checked,
     },
   });
+}
+
+function ensureActiveAssistantSelected(container: HTMLElement) {
+  if (container.querySelector('input[name="activeAssistantRow"]:checked')) {
+    return;
+  }
+
+  const firstRadio = container.querySelector<HTMLInputElement>(
+    'input[name="activeAssistantRow"]',
+  );
+  if (firstRadio) {
+    firstRadio.checked = true;
+  }
 }
 
 function setStatus(message: string, kind: 'info' | 'success' | 'error') {
@@ -174,10 +265,16 @@ function renderOptions(config: ChatKitExtensionConfig) {
             <label for="apiUrl">${i18n.t('apiUrl')}</label>
             <input id="apiUrl" name="apiUrl" type="url" value="${escapeAttribute(config.apiUrl)}" placeholder="https://api.example.com/api/ai" />
           </div>
-          <div class="ck-field">
-            <label for="xpertId">${i18n.t('xpertId')}</label>
-            <input id="xpertId" name="xpertId" type="text" value="${escapeAttribute(config.xpertId ?? '')}" placeholder="your-xpert-id" />
-          </div>
+        </div>
+      </section>
+      <section class="ck-section">
+        <h2 class="ck-section-title">${i18n.t('assistants')}</h2>
+        <p class="ck-field-help">${i18n.t('assistantsHelp')}</p>
+        <div class="ck-assistant-list" data-role="assistant-list">
+          ${createAssistantRowsHtml(config, i18n)}
+        </div>
+        <div class="ck-button-row">
+          <button class="ck-button" type="button" data-role="add-assistant">${i18n.t('addAssistant')}</button>
         </div>
       </section>
       <section class="ck-section">
@@ -272,9 +369,48 @@ function renderOptions(config: ChatKitExtensionConfig) {
   }
 
   const fields = collectFields(form);
+  const assistantList = shell.querySelector<HTMLElement>(
+    '[data-role="assistant-list"]',
+  );
+  if (!assistantList) {
+    throw new Error('Missing assistant list.');
+  }
+
+  assistantList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>(
+      '[data-role="remove-assistant"]',
+    );
+    if (!button) {
+      return;
+    }
+
+    button.closest('[data-role="assistant-row"]')?.remove();
+    if (!assistantList.querySelector('[data-role="assistant-row"]')) {
+      assistantList.insertAdjacentHTML(
+        'beforeend',
+        createAssistantRowHtml({ id: '' }, true, i18n),
+      );
+    }
+    ensureActiveAssistantSelected(assistantList);
+  });
+
+  shell
+    .querySelector<HTMLButtonElement>('[data-role="add-assistant"]')
+    ?.addEventListener('click', () => {
+      assistantList.insertAdjacentHTML(
+        'beforeend',
+        createAssistantRowHtml({ id: '' }, false, i18n),
+      );
+    });
+
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    const nextConfig = readForm(fields);
+    const nextConfig = readForm(fields, form);
     const validation = validateConfig(nextConfig);
     void writeConfig(platform.storage, nextConfig).then(() => {
       renderOptions(nextConfig);

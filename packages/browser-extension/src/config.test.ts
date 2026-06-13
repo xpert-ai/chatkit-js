@@ -33,7 +33,8 @@ describe('extension config', () => {
     ).toMatchObject({
       frameUrl: 'https://chat.example/frame',
       apiUrl: 'https://api.example/api/ai',
-      xpertId: 'assistant-1',
+      assistants: [{ id: 'assistant-1' }],
+      activeAssistantId: 'assistant-1',
       clientSecret: 'secret',
       locale: 'zh-Hans',
       displayMode: 'chat',
@@ -46,6 +47,39 @@ describe('extension config', () => {
       overlay: { width: 900, height: 360, position: 'top-left' },
       pet: { scale: 1.8, boundsPadding: 140 },
       hostAutomation: { enabled: false },
+    });
+  });
+
+  it('normalizes assistants and falls back to the first valid assistant', () => {
+    expect(
+      normalizeConfig({
+        assistants: [
+          { id: ' assistant-1 ', name: ' Researcher ' },
+          { id: 'assistant-2', name: ' ' },
+          { id: 'assistant-1', name: 'Duplicate' },
+          { id: ' ' },
+          null,
+        ],
+        activeAssistantId: 'missing',
+      }),
+    ).toMatchObject({
+      assistants: [
+        { id: 'assistant-1', name: 'Researcher' },
+        { id: 'assistant-2' },
+      ],
+      activeAssistantId: 'assistant-1',
+    });
+  });
+
+  it('keeps an empty assistant list valid', () => {
+    expect(
+      normalizeConfig({
+        assistants: [],
+        activeAssistantId: 'assistant-1',
+      }),
+    ).toMatchObject({
+      assistants: [],
+      activeAssistantId: undefined,
     });
   });
 

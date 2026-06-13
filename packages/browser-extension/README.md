@@ -46,7 +46,8 @@ Open the extension options page and set:
 
 - `frameUrl`
 - `apiUrl`
-- `xpertId`
+- assistants: one or more published Assistant ID / Xpert ID entries, with an
+  optional display name and one active assistant
 - `Client Secret / API Key`
 - launch mode (`Pet launcher` by default, or `Chat panel`)
 - locale (`en` and `zh-Hans` are supported by the extension UI) and theme
@@ -63,6 +64,9 @@ The first version uses manual credentials. The extension does not call Xpert
 APIs directly and does not use native `fetch` to reach the platform. Instead,
 the ChatKit options passed to the web component include `api.getClientSecret`,
 which returns the stored `Client Secret / API Key`.
+
+Existing extension configs that contain a legacy single `xpertId` are normalized
+into a one-item assistants list the next time the config is read and saved.
 
 ## Local Frame Testing
 
