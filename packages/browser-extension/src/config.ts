@@ -1,6 +1,7 @@
 import type { SupportedLocale } from '@xpert-ai/chatkit-types';
 
 import type {
+  ChatKitAssistantConfig,
   ChatKitDisplayMode,
   ChatKitExtensionConfig,
   ConfigValidationIssue,
@@ -33,10 +34,17 @@ type HostAutomationInput = {
   enabled?: unknown;
 };
 
+type AssistantInput = {
+  id?: unknown;
+  name?: unknown;
+};
+
 type ConfigInput = {
   frameUrl?: unknown;
   apiUrl?: unknown;
   xpertId?: unknown;
+  assistants?: unknown;
+  activeAssistantId?: unknown;
   clientSecret?: unknown;
   locale?: unknown;
   displayMode?: unknown;
@@ -52,7 +60,8 @@ export const STORAGE_KEY = 'chatkitExtensionConfig';
 export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
   frameUrl: 'https://app.xpertai.cn/chatkit',
   apiUrl: 'https://api.xpertai.cn/api/ai',
-  xpertId: undefined,
+  assistants: [],
+  activeAssistantId: undefined,
   clientSecret: '',
   locale: undefined,
   displayMode: 'pet',
@@ -112,6 +121,10 @@ function isPetInput(value: unknown): value is PetInput {
 }
 
 function isHostAutomationInput(value: unknown): value is HostAutomationInput {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isAssistantInput(value: unknown): value is AssistantInput {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -214,6 +227,54 @@ function normalizePetBoundsPadding(value: unknown): number {
   );
 }
 
+function normalizeAssistants(
+  value: unknown,
+  legacyXpertId?: string,
+): ChatKitAssistantConfig[] {
+  const sourceAssistants = Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+  const assistants: ChatKitAssistantConfig[] = [];
+
+  for (const entry of sourceAssistants) {
+    if (!isAssistantInput(entry)) {
+      continue;
+    }
+
+    const id = normalizeString(entry.id);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+
+    seen.add(id);
+    const name = optionalString(entry.name);
+    assistants.push({
+      id,
+      ...(name ? { name } : {}),
+    });
+  }
+
+  if (assistants.length || !legacyXpertId) {
+    return assistants;
+  }
+
+  return [{ id: legacyXpertId }];
+}
+
+function normalizeActiveAssistantId(
+  value: unknown,
+  assistants: ChatKitAssistantConfig[],
+): string | undefined {
+  const activeAssistantId = optionalString(value);
+  if (
+    activeAssistantId &&
+    assistants.some((assistant) => assistant.id === activeAssistantId)
+  ) {
+    return activeAssistantId;
+  }
+
+  return assistants[0]?.id;
+}
+
 export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
   const source = isConfigInput(value) ? value : {};
   const sourceTheme = isThemeInput(source.theme) ? source.theme : {};
@@ -226,6 +287,12 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
     ? source.hostAutomation
     : {};
   const colorScheme = normalizeColorScheme(sourceTheme.colorScheme);
+  const legacyXpertId = optionalString(source.xpertId);
+  const assistants = normalizeAssistants(source.assistants, legacyXpertId);
+  const activeAssistantId = normalizeActiveAssistantId(
+    source.activeAssistantId ?? legacyXpertId,
+    assistants,
+  );
 
   return {
     frameUrl: normalizeStringWithDefault(
@@ -236,7 +303,8 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
       source.apiUrl,
       DEFAULT_EXTENSION_CONFIG.apiUrl,
     ),
-    xpertId: optionalString(source.xpertId),
+    assistants,
+    activeAssistantId,
     clientSecret: normalizeString(source.clientSecret),
     locale: normalizeLocale(source.locale),
     displayMode: normalizeDisplayMode(source.displayMode),
@@ -284,6 +352,14 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
       ),
     },
   };
+}
+
+export function getActiveAssistant(
+  config: ChatKitExtensionConfig,
+): ChatKitAssistantConfig | undefined {
+  return config.assistants.find(
+    (assistant) => assistant.id === config.activeAssistantId,
+  );
 }
 
 export function validateConfig(

@@ -9,7 +9,11 @@ describe('createChatKitOptions', () => {
       normalizeConfig({
         frameUrl: 'https://chat.example/frame',
         apiUrl: 'https://api.example/api/ai',
-        xpertId: 'assistant-1',
+        assistants: [
+          { id: 'assistant-1', name: 'Researcher' },
+          { id: 'assistant-2', name: 'Writer' },
+        ],
+        activeAssistantId: 'assistant-2',
         clientSecret: 'secret',
         locale: 'zh-Hans',
         displayMode: 'chat',
@@ -24,7 +28,7 @@ describe('createChatKitOptions', () => {
     expect(options.theme).toEqual({ colorScheme: 'dark' });
     expect(options.api).toMatchObject({
       apiUrl: 'https://api.example/api/ai',
-      xpertId: 'assistant-1',
+      xpertId: 'assistant-2',
     });
 
     if (!('getClientSecret' in options.api)) {
@@ -54,6 +58,30 @@ describe('createChatKitOptions', () => {
         boundsPadding: 50,
       },
     });
+  });
+
+  it('updates xpertId when the active assistant changes', () => {
+    const firstOptions = createChatKitOptions(
+      normalizeConfig({
+        frameUrl: 'https://chat.example/frame',
+        apiUrl: 'https://api.example/api/ai',
+        assistants: [{ id: 'assistant-1' }, { id: 'assistant-2' }],
+        activeAssistantId: 'assistant-1',
+        clientSecret: 'secret',
+      }),
+    );
+    const secondOptions = createChatKitOptions(
+      normalizeConfig({
+        frameUrl: 'https://chat.example/frame',
+        apiUrl: 'https://api.example/api/ai',
+        assistants: [{ id: 'assistant-1' }, { id: 'assistant-2' }],
+        activeAssistantId: 'assistant-2',
+        clientSecret: 'secret',
+      }),
+    );
+
+    expect(firstOptions.api).toMatchObject({ xpertId: 'assistant-1' });
+    expect(secondOptions.api).toMatchObject({ xpertId: 'assistant-2' });
   });
 
   it('can override display mode for a specific extension surface', () => {

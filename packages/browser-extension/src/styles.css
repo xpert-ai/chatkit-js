@@ -147,6 +147,16 @@ select {
   background: #1b55cf;
 }
 
+.ck-button-danger {
+  border-color: #d8b8b8;
+  color: #8a2525;
+}
+
+.ck-button-danger:hover:not(:disabled) {
+  border-color: #c58d8d;
+  background: #fff7f7;
+}
+
 .ck-button-row {
   display: flex;
   flex-wrap: wrap;
@@ -207,6 +217,34 @@ select {
   margin: 0;
 }
 
+.ck-assistant-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ck-assistant-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.ck-assistant-active {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  color: #253044;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ck-assistant-active input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .ck-alert {
   border: 1px solid #f0c36a;
   border-radius: 7px;
@@ -253,8 +291,63 @@ select {
   height: 100%;
 }
 
+.ck-host-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.ck-host-header {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: flex-end;
+  border-bottom: 1px solid #dde3ea;
+  background: #fff;
+  padding: 6px 10px;
+}
+
+.ck-host-assistant-switcher {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #253044;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.ck-host-assistant-switcher select {
+  max-width: min(260px, 58vw);
+  min-height: 32px;
+  border: 1px solid #c6d0dc;
+  border-radius: 7px;
+  background: #fff;
+  color: #172033;
+  padding: 5px 8px;
+}
+
+.ck-host-shell .ck-chatkit {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
 @media (max-width: 640px) {
   .ck-field-grid-two {
     grid-template-columns: 1fr;
+  }
+
+  .ck-assistant-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .ck-assistant-active {
+    min-height: 24px;
   }
 }

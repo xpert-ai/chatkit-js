@@ -13,10 +13,16 @@ export type ChatKitPetConfig = {
   boundsPadding: number;
 };
 
+export type ChatKitAssistantConfig = {
+  id: string;
+  name?: string;
+};
+
 export type ChatKitExtensionConfig = {
   frameUrl: string;
   apiUrl: string;
-  xpertId?: string;
+  assistants: ChatKitAssistantConfig[];
+  activeAssistantId?: string;
   clientSecret: string;
   locale?: SupportedLocale;
   displayMode: ChatKitDisplayMode;

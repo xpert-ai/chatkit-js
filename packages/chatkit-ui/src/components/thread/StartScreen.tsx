@@ -19,6 +19,9 @@ type StartScreenOption = NonNullable<ChatKitOptions['startScreen']>;
 export type StartScreenProps = {
   startScreen?: StartScreenOption;
   onPromptClick?: (prompt: string) => void;
+  onPromptEdit?: (prompt: string) => void;
+  promptSendDisabled?: boolean;
+  promptEditDisabled?: boolean;
   className?: string;
 };
 
@@ -39,16 +42,31 @@ function getIconComponent(icon?: IconName): React.ReactNode {
   return icon ? iconMap[icon] || iconMap['sparkle'] : iconMap['sparkle'];
 }
 
-export function StartScreen({ startScreen, onPromptClick, className }: StartScreenProps) {
+export function StartScreen({
+  startScreen,
+  onPromptClick,
+  onPromptEdit,
+  promptSendDisabled = false,
+  promptEditDisabled = false,
+  className,
+}: StartScreenProps) {
   const { t } = useChatkitTranslation();
   const greeting = startScreen?.greeting ?? t('startScreen.greeting');
   const prompts = startScreen?.prompts ?? [];
+  const editPromptLabel = t('startScreen.editPrompt');
 
   return (
-    <div className={cn('flex flex-col items-center justify-center py-12 px-4', className)}>
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center py-12 px-4',
+        className,
+      )}
+    >
       {/* Greeting */}
       <div className="mb-8 text-center">
-        <h2 className="text-2xl font-semibold text-foreground mb-2">{greeting}</h2>
+        <h2 className="text-2xl font-semibold text-foreground mb-2">
+          {greeting}
+        </h2>
       </div>
 
       {/* Prompt suggestions */}
@@ -56,21 +74,45 @@ export function StartScreen({ startScreen, onPromptClick, className }: StartScre
         <div className="w-full max-w-2xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {prompts.map((item, index) => (
-              <button
+              <div
                 key={`prompt-${index}`}
-                type="button"
-                onClick={() => onPromptClick?.(item.prompt)}
                 className={cn(
-                  'flex items-center gap-3 rounded-xl border bg-card p-4 text-left',
-                  'hover:bg-muted/50 hover:border-primary/20 transition-colors',
-                  'focus:outline-none focus:ring-2 focus:ring-primary/20'
+                  'flex items-stretch rounded-xl border bg-card text-left',
+                  'transition-colors hover:border-primary/20 hover:bg-muted/50',
+                  'focus-within:ring-2 focus-within:ring-primary/20',
                 )}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  {getIconComponent(item.icon)}
-                </span>
-                <span className="text-sm font-medium text-foreground">{item.label}</span>
-              </button>
+                <button
+                  type="button"
+                  disabled={promptSendDisabled}
+                  onClick={() => onPromptClick?.(item.prompt)}
+                  className={cn(
+                    'flex min-w-0 flex-1 items-center gap-3 p-4 text-left',
+                    'focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    {getIconComponent(item.icon)}
+                  </span>
+                  <span className="text-sm font-medium text-foreground">
+                    {item.label}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={promptEditDisabled}
+                  onClick={() => onPromptEdit?.(item.prompt)}
+                  aria-label={editPromptLabel}
+                  title={editPromptLabel}
+                  className={cn(
+                    'flex w-12 shrink-0 items-center justify-center border-l text-muted-foreground',
+                    'rounded-r-xl transition-colors hover:bg-muted hover:text-foreground',
+                    'focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  <Pencil size={16} />
+                </button>
+              </div>
             ))}
           </div>
         </div>

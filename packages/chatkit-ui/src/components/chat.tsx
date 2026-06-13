@@ -1265,13 +1265,16 @@ export function Chat({
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
   // File parsing can continue after submit; only the transport upload blocks send.
   const hasUploadingFiles = attachmentState.hasUploadingFiles;
-  const isSendDisabled =
-    (!trimmedDraft && !hasReferences) ||
+  const isSubmissionBlocked =
     hasPendingInteractiveRequest ||
     missingConfig ||
     isHistoryLoading ||
     hasUploadingFiles ||
     isUploadingReferenceImages;
+  const isSendDisabled =
+    (!trimmedDraft && !hasReferences) || isSubmissionBlocked;
+  const isPromptEditDisabled =
+    hasPendingInteractiveRequest || missingConfig || isHistoryLoading;
 
   const resizeComposerInput = React.useCallback(() => {
     const input = composerInputRef.current;
@@ -1649,7 +1652,7 @@ export function Chat({
 
   const submitDraft = React.useCallback(
     (submitOptions: SubmitDraftOptions = {}) => {
-      if (isSendDisabled) return;
+      if (isSubmissionBlocked) return;
 
       const contentToSubmit = (submitOptions.inputText ?? trimmedDraft).trim();
       const filesToSend =
@@ -1801,7 +1804,7 @@ export function Chat({
     },
     [
       effectiveSessionRuntimeCapabilities,
-      isSendDisabled,
+      isSubmissionBlocked,
       options?.request,
       persistSessionRuntimeCapabilities,
       references,
@@ -2525,70 +2528,22 @@ export function Chat({
     setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
   };
 
-  const handlePromptClick = (prompt: string) => {
-    if (missingConfig || isHistoryLoading) return;
+  const handlePromptClick = React.useCallback(
+    (prompt: string) => {
+      submitDraft({ inputText: prompt, displayText: prompt });
+    },
+    [submitDraft],
+  );
 
-    const newMessage: Message = {
-      id: createMessageId(),
-      type: 'human',
-      content: prompt,
-    };
-
-    const nextFollowUpMode = stream.isLoading ? 'queue' : undefined;
-    const inputPayload: {
-      input: string;
-      planMode?: boolean;
-      runtimeCapabilities?: RuntimeCapabilitiesSelection;
-    } = {
-      input: prompt,
-      ...(planModeEnabled ? { planMode: true } : {}),
-      ...(effectiveSessionRuntimeCapabilities
-        ? { runtimeCapabilities: effectiveSessionRuntimeCapabilities }
-        : {}),
-    };
-    const requestOptions = buildInjectedRequestOptions({
-      defaults: options?.request,
-      humanInput: inputPayload,
-    });
-    const sessionRuntimeCapabilitiesForPersistence =
-      effectiveSessionRuntimeCapabilities;
-    const shouldPersistSessionRuntimeCapabilities =
-      !!sessionRuntimeCapabilitiesForPersistence &&
-      !stream.threadId &&
-      !nextFollowUpMode;
-
-    stream.submit(
-      {
-        input: inputPayload,
-        ...(requestOptions.state ? { state: requestOptions.state } : {}),
-      },
-      {
-        ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
-        ...(requestOptions.context ? { context: requestOptions.context } : {}),
-        ...(requestOptions.config ? { config: requestOptions.config } : {}),
-        ...(shouldPersistSessionRuntimeCapabilities
-          ? {
-              onThreadResolved: (threadId) =>
-                persistSessionRuntimeCapabilities(
-                  threadId,
-                  sessionRuntimeCapabilitiesForPersistence,
-                ),
-            }
-          : {}),
-        ...(!nextFollowUpMode
-          ? {
-              optimisticValues: (prev) => {
-                const prevMessages = prev?.messages ?? [];
-                return { ...prev, messages: [...prevMessages, newMessage] };
-              },
-            }
-          : {}),
-      },
-    );
-
-    // Scroll to bottom to show the new message
-    scrollToBottom(true, true);
-  };
+  const handlePromptEdit = React.useCallback(
+    (prompt: string) => {
+      if (isPromptEditDisabled) return;
+      setComposerText(prompt, prompt.length);
+      setRuntimeCapabilityPalette(null);
+      focusComposerAt(prompt.length);
+    },
+    [focusComposerAt, isPromptEditDisabled, setComposerText],
+  );
 
   const loadConversationMessages = React.useCallback(
     async (recordId: string) => {
@@ -2958,6 +2913,9 @@ export function Chat({
           <StartScreen
             startScreen={startScreen}
             onPromptClick={handlePromptClick}
+            onPromptEdit={handlePromptEdit}
+            promptSendDisabled={isSubmissionBlocked}
+            promptEditDisabled={isPromptEditDisabled}
           />
         ) : (
           <div className="space-y-4">

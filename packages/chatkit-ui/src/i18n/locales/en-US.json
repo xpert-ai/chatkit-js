@@ -98,7 +98,8 @@
     "regenerate": "Regenerate response"
   },
   "startScreen": {
-    "greeting": "What can I help with today?"
+    "greeting": "What can I help with today?",
+    "editPrompt": "Edit prompt"
   },
   "composer": {
     "openMenu": "Open menu",

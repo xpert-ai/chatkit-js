@@ -3,7 +3,7 @@ import '@xpert-ai/chatkit-web-component';
 import type { ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
 
 import { createChatKitOptions } from './chatkit-options';
-import { validateConfig } from './config';
+import { getActiveAssistant, validateConfig } from './config';
 import { createI18n, formatConfigIssues, type I18n } from './i18n';
 import type { ChatKitDisplayMode, ChatKitExtensionConfig } from './types';
 
@@ -11,6 +11,7 @@ type HostSurface = 'sidePanel' | 'pageOverlay';
 
 type HostActions = {
   openOptionsPage: () => Promise<void> | void;
+  writeConfig?: (config: ChatKitExtensionConfig) => Promise<void> | void;
   onClientTool?: ChatKitOptions['onClientTool'];
 };
 
@@ -70,6 +71,65 @@ function resolveSurfaceDisplayMode(
   return surface === 'sidePanel' ? 'chat' : config.displayMode;
 }
 
+function getAssistantLabel(assistant: { id: string; name?: string }): string {
+  return assistant.name ?? assistant.id;
+}
+
+function shouldShowAssistantSwitcher(
+  surface: HostSurface,
+  config: ChatKitExtensionConfig,
+): boolean {
+  return (
+    config.assistants.length > 1 &&
+    resolveSurfaceDisplayMode(surface, config) === 'chat'
+  );
+}
+
+function createAssistantSwitcher(
+  config: ChatKitExtensionConfig,
+  i18n: I18n,
+  actions: HostActions,
+): HTMLElement {
+  const header = document.createElement('header');
+  header.className = 'ck-host-header';
+
+  const field = document.createElement('label');
+  field.className = 'ck-host-assistant-switcher';
+
+  const label = document.createElement('span');
+  label.textContent = i18n.t('activeAssistant');
+
+  const select = document.createElement('select');
+  select.name = 'activeAssistantId';
+  select.setAttribute('aria-label', i18n.t('activeAssistant'));
+
+  const activeAssistant = getActiveAssistant(config);
+  for (const assistant of config.assistants) {
+    const option = document.createElement('option');
+    option.value = assistant.id;
+    option.textContent = getAssistantLabel(assistant);
+    option.selected = assistant.id === activeAssistant?.id;
+    select.append(option);
+  }
+
+  select.addEventListener('change', () => {
+    const nextConfig = {
+      ...config,
+      activeAssistantId: select.value,
+    };
+    void Promise.resolve(actions.writeConfig?.(nextConfig)).catch((error) => {
+      console.warn(
+        '[chatkit-browser-extension] Failed to switch assistant:',
+        error,
+      );
+    });
+  });
+
+  field.append(label, select);
+  header.append(field);
+  return header;
+}
+
 export function mountChatKitHost(
   root: HTMLElement,
   initialConfig: ChatKitExtensionConfig,
@@ -110,7 +170,16 @@ export function mountChatKitHost(
 
     const element = document.createElement('xpertai-chatkit') as XpertAIChatKit;
     element.className = 'ck-chatkit';
-    root.replaceChildren(element);
+    const displayMode = resolveSurfaceDisplayMode(surface, config);
+
+    if (shouldShowAssistantSwitcher(surface, config)) {
+      const shell = document.createElement('section');
+      shell.className = 'ck-host-shell';
+      shell.append(createAssistantSwitcher(config, i18n, actions), element);
+      root.replaceChildren(shell);
+    } else {
+      root.replaceChildren(element);
+    }
 
     let current = true;
     applyOptionsCleanup = () => {
@@ -124,7 +193,7 @@ export function mountChatKitHost(
 
       element.setOptions(
         createChatKitOptions(config, {
-          displayMode: resolveSurfaceDisplayMode(surface, config),
+          displayMode,
           onClientTool: actions.onClientTool,
         }),
       );

@@ -1,6 +1,6 @@
 import './styles.css';
 
-import { readConfig, readConfigChange } from './storage';
+import { readConfig, readConfigChange, writeConfig } from './storage';
 import { mountChatKitHost } from './host';
 import { createChromeExtensionPlatform } from './platform/chrome/api';
 
@@ -17,6 +17,7 @@ async function main() {
   const config = await readConfig(platform.storage);
   const host = mountChatKitHost(appRoot, config, 'sidePanel', {
     openOptionsPage: platform.openOptionsPage,
+    writeConfig: (nextConfig) => writeConfig(platform.storage, nextConfig),
     onClientTool: platform.runHostAutomationForActiveTab,
   });
 
