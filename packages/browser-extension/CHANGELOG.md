@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-browser-extension
 
+## 0.4.1
+
+### Patch Changes
+
+- 9a80b65: split api key
+
 ## 0.4.0
 
 ### Minor Changes
