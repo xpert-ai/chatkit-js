@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.3.21
+
+### Patch Changes
+
+- 10a5127: edit prompts suggestions
+
 ## 0.3.20
 
 ### Patch Changes
