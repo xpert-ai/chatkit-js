@@ -67,9 +67,15 @@ export function ContextUsageIndicator({
 }: ContextUsageIndicatorProps) {
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
-  const [maxContextSize, setMaxContextSize] = React.useState<number | null>(null);
-  const [usedContextSize, setUsedContextSize] = React.useState<number | null>(null);
-  const [assistantAgentKey, setAssistantAgentKey] = React.useState<string | null>(null);
+  const [maxContextSize, setMaxContextSize] = React.useState<number | null>(
+    null,
+  );
+  const [usedContextSize, setUsedContextSize] = React.useState<number | null>(
+    null,
+  );
+  const [assistantAgentKey, setAssistantAgentKey] = React.useState<
+    string | null
+  >(null);
   const latestRealtimeUsageRef = React.useRef<{
     threadId: string | null;
     agentKey: string | null;
@@ -81,13 +87,18 @@ export function ContextUsageIndicator({
   });
 
   const realtimeUsage = React.useMemo(
-    () => getThreadContextUsage(stream.contextUsageByAgentKey, assistantAgentKey),
+    () =>
+      getThreadContextUsage(stream.contextUsageByAgentKey, assistantAgentKey),
     [assistantAgentKey, stream.contextUsageByAgentKey],
   );
-  const realtimeUsedContextSize = getThreadContextUsageTotalTokens(realtimeUsage);
+  const realtimeUsedContextSize =
+    getThreadContextUsageTotalTokens(realtimeUsage);
+  const hasApiConfiguration = Boolean(
+    stream.apiUrl?.trim() && stream.apiKey?.trim(),
+  );
 
   React.useEffect(() => {
-    if (!stream.client || !stream.assistantId) {
+    if (!hasApiConfiguration || !stream.client || !stream.assistantId) {
       setMaxContextSize(null);
       setAssistantAgentKey(null);
       return;
@@ -110,7 +121,7 @@ export function ContextUsageIndicator({
     return () => {
       cancelled = true;
     };
-  }, [stream.client, stream.assistantId]);
+  }, [hasApiConfiguration, stream.client, stream.assistantId]);
 
   React.useEffect(() => {
     latestRealtimeUsageRef.current = {
@@ -126,7 +137,7 @@ export function ContextUsageIndicator({
   }, [realtimeUsedContextSize]);
 
   React.useEffect(() => {
-    if (!stream.client) {
+    if (!hasApiConfiguration || !stream.client) {
       setUsedContextSize(null);
       return;
     }
@@ -140,11 +151,14 @@ export function ContextUsageIndicator({
     let cancelled = false;
     const requestThreadId = stream.threadId;
     const requestAgentKey = assistantAgentKey;
-    stream.client.threads.getContextUsage(
-            requestThreadId,
-            requestAgentKey ? { agentKey: requestAgentKey } : undefined,
-          )
-      .then((result) => normalizeContextUsageNumber(result?.usage?.context_tokens))
+    stream.client.threads
+      .getContextUsage(
+        requestThreadId,
+        requestAgentKey ? { agentKey: requestAgentKey } : undefined,
+      )
+      .then((result) =>
+        normalizeContextUsageNumber(result?.usage?.context_tokens),
+      )
       .then((result) => {
         if (cancelled) return;
         const latestRealtimeUsage = latestRealtimeUsageRef.current;
@@ -171,9 +185,8 @@ export function ContextUsageIndicator({
     };
   }, [
     assistantAgentKey,
+    hasApiConfiguration,
     realtimeUsedContextSize,
-    stream.apiKey,
-    stream.apiUrl,
     stream.client,
     stream.threadId,
     stream.isLoading,
@@ -203,9 +216,15 @@ export function ContextUsageIndicator({
     used: formattedUsed,
     max: formattedMax,
   });
-  const usageLabelWithSuffix = usageLabel.endsWith(':') ? usageLabel : `${usageLabel}:`;
+  const usageLabelWithSuffix = usageLabel.endsWith(':')
+    ? usageLabel
+    : `${usageLabel}:`;
   const progressClassName =
-    percent >= 90 ? 'text-destructive' : percent >= 75 ? 'text-amber-500' : 'text-primary dark:text-zinc-300';
+    percent >= 90
+      ? 'text-destructive'
+      : percent >= 75
+        ? 'text-amber-500'
+        : 'text-primary dark:text-zinc-300';
 
   return (
     <Tooltip>
@@ -218,12 +237,21 @@ export function ContextUsageIndicator({
           )}
           aria-label={`${usageLabelWithSuffix} ${usageFullLabel}. ${usageTokensLabel}`}
         >
-          <ProgressCircle value={percent} className={cn('size-3.5', progressClassName)} />
+          <ProgressCircle
+            value={percent}
+            className={cn('size-3.5', progressClassName)}
+          />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top" sideOffset={6} className="space-y-0.5 px-3 py-2 text-center">
+      <TooltipContent
+        side="top"
+        sideOffset={6}
+        className="space-y-0.5 px-3 py-2 text-center"
+      >
         <div className="text-primary-foreground/70">{usageLabelWithSuffix}</div>
-        <div className="font-medium text-primary-foreground/80">{usageFullLabel}</div>
+        <div className="font-medium text-primary-foreground/80">
+          {usageFullLabel}
+        </div>
         <div className="text-sm font-semibold">{usageTokensLabel}</div>
       </TooltipContent>
     </Tooltip>
