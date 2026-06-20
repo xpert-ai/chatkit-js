@@ -228,6 +228,7 @@ export function retainResumeStreamOptions(
 
 export type StreamContextType = {
   client: Client<StateType>;
+  authenticatedFetch: typeof fetch;
   apiUrl: string;
   assistantId: string;
   apiKey: string;
@@ -3419,6 +3420,7 @@ const StreamSession = ({
 
   const value: StreamContextType = {
     client,
+    authenticatedFetch: fetchWithClientSecretRefresh,
     apiUrl,
     assistantId,
     apiKey: runtimeClientSecret,

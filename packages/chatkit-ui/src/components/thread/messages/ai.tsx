@@ -5,6 +5,7 @@ import type {
   MessageContentImageUrl,
   TMessageContentComplex,
   TMessageContentComponent,
+  TMessageComponentMcpAppData,
   TMessageComponentWidgetData,
   TMessageContentMemory,
   TMessageContentReasoning,
@@ -52,6 +53,7 @@ import {
   RequestUserInputResultCard,
 } from './request-user-input-result-card';
 import { WidgetMessage } from './widget';
+import { isMcpAppComponentData, McpAppMessage } from './mcp-app';
 
 export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
@@ -96,6 +98,12 @@ function isWidgetComponent(
 ): content is TMessageContentComponent<TMessageComponentWidgetData> {
   const data = content.data as Record<string, unknown> | undefined;
   return data?.type === 'Widget' && Array.isArray(data.widgets);
+}
+
+function isMcpAppComponent(
+  content: TMessageContentComponent,
+): content is TMessageContentComponent<TMessageComponentMcpAppData> {
+  return isMcpAppComponentData(content.data);
 }
 
 function isMemoryContent(
@@ -487,6 +495,14 @@ function renderContentItem(
       );
     }
 
+    if (isMcpAppComponent(content)) {
+      return (
+        <div key={content.id ?? `mcp-app-${index}`}>
+          <McpAppMessage data={content.data} />
+        </div>
+      );
+    }
+
     if (
       getComponentMessagePresentation(content, getToolStepData(content)) ===
       'grouped-step'
@@ -586,7 +602,8 @@ function renderEntryBatch(
     entries.map((entry) => entry.item),
     {
       shouldGroupComponent: (item) =>
-        getRequestUserInputResultCardData(item, lookupMessages) === null,
+        getRequestUserInputResultCardData(item, lookupMessages) === null &&
+        !isMcpAppComponent(item),
     },
   );
 
@@ -698,7 +715,8 @@ function renderContent(
 
   const renderUnits = buildToolComponentRenderUnits(content, {
     shouldGroupComponent: (item) =>
-      getRequestUserInputResultCardData(item, lookupMessages) === null,
+      getRequestUserInputResultCardData(item, lookupMessages) === null &&
+      !isMcpAppComponent(item),
   });
 
   return (
