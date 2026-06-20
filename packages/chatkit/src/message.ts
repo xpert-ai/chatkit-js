@@ -2,6 +2,7 @@ import type { ToolCall } from '@langchain/core/messages/tool';
 import type { Types } from '@a2ui/lit/0.8';
 import type { FollowUpBehavior } from './options';
 import type { ChatKitCommandSource } from './commands';
+import type { LocalizedText } from './localized-text';
 import {
   CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
@@ -92,6 +93,114 @@ export type TMessageComponentWidget =
 
 export type TMessageContentWidget =
   TMessageContentComponent<TMessageComponentWidgetData>;
+
+/**
+ * Declares who may use an MCP tool. `model` exposes the tool to the LLM;
+ * `app` allows the rendered MCP App iframe to call it through the host bridge.
+ */
+export type TMcpAppVisibility = 'model' | 'app';
+
+/**
+ * CSP domains declared by an MCP App resource. The backend validates and
+ * normalizes these values before ChatKit applies them to the iframe response.
+ */
+export type TMcpAppCsp = {
+  connectDomains?: string[];
+  resourceDomains?: string[];
+  frameDomains?: string[];
+  baseUriDomains?: string[];
+};
+
+/**
+ * Permission grant value for browser features requested by an MCP App resource.
+ * A boolean is enough for simple allow/deny cases; object values preserve
+ * future protocol details without forcing ChatKit message migrations.
+ */
+export type TMcpAppPermissionGrant = boolean | Record<string, unknown>;
+
+/**
+ * Browser feature permissions requested by an MCP App resource. ChatKit should
+ * keep deny-by-default behavior and only translate supported grants to iframe
+ * `allow` attributes.
+ */
+export type TMcpAppPermissions = {
+  camera?: TMcpAppPermissionGrant;
+  microphone?: TMcpAppPermissionGrant;
+  geolocation?: TMcpAppPermissionGrant;
+  clipboardWrite?: TMcpAppPermissionGrant;
+};
+
+export type IconType = 'image' | 'svg' | 'font' | 'emoji' | 'lottie';
+
+export type IconDefinition = {
+  type: IconType;
+  value: string;
+  color?: string;
+  size?: number;
+  alt?: string;
+  style?: Record<string, string>;
+};
+
+/**
+ * Safe metadata needed to render an MCP App message. Chat history stores this
+ * descriptor only; the app HTML is fetched from the short-lived backend app
+ * instance using `appInstanceId`.
+ */
+export type TMessageComponentMcpAppData = {
+  /** Component discriminator used by ChatKit renderers. */
+  type: 'McpApp';
+  /** Short-lived host-side instance that scopes resource and bridge access. */
+  appInstanceId: string;
+  /** Signed host token used to revive and authorize this app instance. */
+  appInstanceToken?: string;
+  /** MCP resource URI, normally `ui://...`, used to load the app HTML. */
+  resourceUri: string;
+  /** Tool that produced this app surface. */
+  toolName: string;
+  /** Provider/model tool-call id associated with the triggering call. */
+  toolCallId?: string;
+  /** Xpert toolset id used for authorization and MCP client lookup. */
+  toolsetId?: string;
+  /** MCP server name within a multi-server toolset. */
+  serverName?: string;
+  /** Xpert execution id that produced this message component. */
+  executionId?: string;
+  /** Display title shown by the ChatKit shell around the app. */
+  title?: LocalizedText;
+  /** Optional display description shown by the ChatKit shell around the app. */
+  description?: LocalizedText;
+  /** Optional display icon shown by the ChatKit shell around the app. */
+  icon?: IconDefinition;
+  /** Resource-level content security policy metadata. */
+  csp?: TMcpAppCsp;
+  /** Resource-level browser permission metadata. */
+  permissions?: TMcpAppPermissions;
+  /** Optional dedicated origin requested by the resource; may be ignored by v1 hosts. */
+  domain?: string;
+  /** Resource hint for whether the host should render a visible border. */
+  prefersBorder?: boolean;
+  /** Original tool input sent to the MCP App via `ui/notifications/tool-input`. */
+  toolInput?: Record<string, unknown>;
+  /** Visibility declared by the originating MCP tool. */
+  visibility?: TMcpAppVisibility[];
+  /** Current lifecycle status of the tool/app message. */
+  status?: 'running' | 'success' | 'fail';
+  /** Human-readable error captured while creating or rendering the app. */
+  error?: string;
+};
+
+/**
+ * MCP App data embedded as a ChatKit component message.
+ */
+export type TMessageComponentMcpApp =
+  TMessageComponent<TMessageComponentMcpAppData>;
+
+/**
+ * MCP App component item in a LangChain-compatible complex message content
+ * array.
+ */
+export type TMessageContentMcpApp =
+  TMessageContentComponent<TMessageComponentMcpAppData>;
 
 export type TMessageContentText = {
   id?: string;
