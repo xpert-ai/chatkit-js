@@ -19,11 +19,50 @@ type JsonRpcRequest = {
   params?: unknown;
 };
 
-type McpAppResourceResponse = {
+type JsonObject = Record<string, unknown>;
+
+type McpJsonSchemaObject = JsonObject & {
+  type: 'object';
+  properties?: JsonObject;
+  required?: string[];
+};
+
+type McpContentBlock = JsonObject & {
+  type: string;
+};
+
+type McpCallToolResult = {
+  content: McpContentBlock[];
+  structuredContent?: JsonObject;
+  isError?: boolean;
+  _meta?: JsonObject;
+};
+
+type McpAppToolDefinition = JsonObject & {
+  name: string;
+  title?: TMessageComponentMcpAppData['title'];
+  description?: TMessageComponentMcpAppData['description'];
+  icon?: TMessageComponentMcpAppData['icon'];
+  inputSchema: McpJsonSchemaObject;
+};
+
+type McpAppToolInfo = JsonObject & {
+  id?: string;
+  name?: string;
+  originalName?: string;
+  title?: TMessageComponentMcpAppData['title'];
+  description?: TMessageComponentMcpAppData['description'];
+  icon?: TMessageComponentMcpAppData['icon'];
+  serverName?: string;
+  toolCallId?: string;
+  toolsetId?: string;
+  tool: McpAppToolDefinition;
+};
+
+type NormalizedMcpAppResource = {
   uri?: string;
   mimeType?: string;
-  text?: string;
-  blob?: string;
+  html: string;
   resourceUri?: string;
   title?: TMessageComponentMcpAppData['title'];
   description?: TMessageComponentMcpAppData['description'];
@@ -32,13 +71,60 @@ type McpAppResourceResponse = {
   permissions?: TMessageComponentMcpAppData['permissions'];
   domain?: string;
   prefersBorder?: boolean;
-  toolInfo?: Record<string, unknown>;
-  toolInput?: Record<string, unknown>;
-  toolResult?: unknown;
+  toolInfo: McpAppToolInfo;
+  toolInput: JsonObject;
+  hasToolResult: boolean;
+  toolResult: McpCallToolResult;
+  rawToolResult: unknown;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+const EMPTY_INPUT_SCHEMA: McpJsonSchemaObject = {
+  type: 'object',
+  properties: {},
+};
+
+function isRecord(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function readRecord(value: unknown): JsonObject | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function readNonEmptyRecord(value: unknown): JsonObject | undefined {
+  const record = readRecord(value);
+  return record && Object.keys(record).length ? record : undefined;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readLocalizedText(
+  value: unknown,
+): TMessageComponentMcpAppData['title'] | undefined {
+  if (typeof value === 'string') return value;
+  if (isRecord(value)) return value as TMessageComponentMcpAppData['title'];
+  return undefined;
+}
+
+function readIconDefinition(
+  value: unknown,
+): TMessageComponentMcpAppData['icon'] | undefined {
+  if (!isRecord(value)) return undefined;
+  return typeof value.type === 'string' && typeof value.value === 'string'
+    ? (value as TMessageComponentMcpAppData['icon'])
+    : undefined;
+}
+
+function readStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => typeof item === 'string');
+  return strings.length ? strings : undefined;
 }
 
 function buildXpertApiUrl(apiUrl: string, path: string) {
@@ -136,7 +222,7 @@ function injectCsp(html: string, csp?: TMessageComponentMcpAppData['csp']) {
   return injectHeadContent(html, meta);
 }
 
-function decodeResourceHtml(resource: McpAppResourceResponse) {
+function decodeResourceHtml(resource: JsonObject) {
   if (typeof resource.text === 'string') {
     return resource.text;
   }
@@ -158,6 +244,50 @@ function decodeResourceHtml(resource: McpAppResourceResponse) {
       return null;
     }
   }
+}
+
+function normalizeCspMetadata(
+  value: unknown,
+): TMessageComponentMcpAppData['csp'] | undefined {
+  const raw = readRecord(value);
+  if (!raw) return undefined;
+
+  const csp: TMessageComponentMcpAppData['csp'] = {};
+  const connectDomains = readStringList(raw.connectDomains);
+  const resourceDomains = readStringList(raw.resourceDomains);
+  const frameDomains = readStringList(raw.frameDomains);
+  const baseUriDomains = readStringList(raw.baseUriDomains);
+
+  if (connectDomains) csp.connectDomains = connectDomains;
+  if (resourceDomains) csp.resourceDomains = resourceDomains;
+  if (frameDomains) csp.frameDomains = frameDomains;
+  if (baseUriDomains) csp.baseUriDomains = baseUriDomains;
+
+  return Object.keys(csp).length ? csp : undefined;
+}
+
+function normalizePermissionGrant(value: unknown) {
+  return value === true || isRecord(value) ? value : undefined;
+}
+
+function normalizePermissionsMetadata(
+  value: unknown,
+): TMessageComponentMcpAppData['permissions'] | undefined {
+  const raw = readRecord(value);
+  if (!raw) return undefined;
+
+  const permissions: TMessageComponentMcpAppData['permissions'] = {};
+  const camera = normalizePermissionGrant(raw.camera);
+  const microphone = normalizePermissionGrant(raw.microphone);
+  const geolocation = normalizePermissionGrant(raw.geolocation);
+  const clipboardWrite = normalizePermissionGrant(raw.clipboardWrite);
+
+  if (camera !== undefined) permissions.camera = camera;
+  if (microphone !== undefined) permissions.microphone = microphone;
+  if (geolocation !== undefined) permissions.geolocation = geolocation;
+  if (clipboardWrite !== undefined) permissions.clipboardWrite = clipboardWrite;
+
+  return Object.keys(permissions).length ? permissions : undefined;
 }
 
 function normalizeJsonRpcMessage(value: unknown): JsonRpcRequest | null {
@@ -407,37 +537,78 @@ function injectMcpAppTheme(html: string, theme: McpAppTheme) {
   return injectHeadContent(html, style);
 }
 
-function buildStandardToolInfo(
+function normalizeInputSchema(value: unknown): McpJsonSchemaObject {
+  const raw = readRecord(value);
+  if (!raw || (raw.type !== undefined && raw.type !== 'object')) {
+    return EMPTY_INPUT_SCHEMA;
+  }
+
+  return {
+    ...raw,
+    type: 'object',
+    properties: readRecord(raw.properties) ?? {},
+    ...(Array.isArray(raw.required) &&
+    raw.required.every((item) => typeof item === 'string')
+      ? { required: raw.required }
+      : {}),
+  };
+}
+
+function normalizeMcpAppToolInfo(
+  value: unknown,
   data: TMessageComponentMcpAppData,
-  resource?: McpAppResourceResponse | null,
-) {
-  const raw = resource?.toolInfo ?? {};
-  const rawTitle =
-    isRecord(raw) && (raw.title !== undefined || raw.name !== undefined)
-      ? (raw.title ?? raw.name)
-      : undefined;
-  const rawDescription =
-    isRecord(raw) && raw.description !== undefined
-      ? raw.description
-      : undefined;
-  const rawIcon =
-    isRecord(raw) && raw.icon !== undefined ? raw.icon : undefined;
+  resource: Pick<
+    NormalizedMcpAppResource,
+    'title' | 'description' | 'icon'
+  > = {},
+): McpAppToolInfo {
+  const raw = readRecord(value) ?? {};
+  const rawTool = readRecord(raw.tool) ?? {};
+  const rawName = readString(raw.name);
   const originalName =
-    isRecord(raw) && typeof raw.originalName === 'string'
-      ? raw.originalName
-      : data.toolName;
-  const title = rawTitle ?? resource?.title ?? data.title ?? data.toolName;
-  const description = rawDescription ?? resource?.description ?? data.description;
-  const icon = rawIcon ?? resource?.icon ?? data.icon;
+    readString(rawTool.name) ?? readString(raw.originalName) ?? data.toolName;
+  const title =
+    readLocalizedText(rawTool.title) ??
+    readLocalizedText(raw.title) ??
+    resource.title ??
+    data.title ??
+    data.toolName;
+  const description =
+    readLocalizedText(rawTool.description) ??
+    readLocalizedText(raw.description) ??
+    resource.description ??
+    data.description;
+  const icon =
+    readIconDefinition(rawTool.icon) ??
+    readIconDefinition(raw.icon) ??
+    resource.icon ??
+    data.icon;
 
   return {
     ...raw,
     id: data.toolCallId,
+    name: rawName ?? data.toolName,
+    originalName,
+    title,
+    ...(description ? { description } : {}),
+    ...(icon ? { icon } : {}),
+    serverName: readString(raw.serverName) ?? data.serverName,
+    toolCallId: readString(raw.toolCallId) ?? data.toolCallId,
+    toolsetId: readString(raw.toolsetId) ?? data.toolsetId,
     tool: {
+      ...rawTool,
       name: originalName,
-      title,
-      ...(description ? { description } : {}),
-      ...(icon ? { icon } : {}),
+      title: readLocalizedText(rawTool.title) ?? title,
+      inputSchema: normalizeInputSchema(
+        rawTool.inputSchema ?? raw.inputSchema,
+      ),
+      ...(description
+        ? {
+            description:
+              readLocalizedText(rawTool.description) ?? description,
+          }
+        : {}),
+      ...(icon ? { icon: readIconDefinition(rawTool.icon) ?? icon } : {}),
     },
   };
 }
@@ -483,53 +654,151 @@ function stringifyToolResult(value: unknown) {
   }
 }
 
-function normalizeCallToolResult(value: unknown) {
-  if (isRecord(value) && Array.isArray(value.content)) {
-    return value;
+function createTextContentBlock(text: string): McpContentBlock {
+  return {
+    type: 'text',
+    text,
+  };
+}
+
+function normalizeContentBlocks(value: unknown): McpContentBlock[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter(
+    (item): item is McpContentBlock =>
+      isRecord(item) && typeof item.type === 'string',
+  );
+}
+
+function extractLegacyArtifactMeta(value: JsonObject): JsonObject | undefined {
+  const meta = readRecord(value._meta);
+  if (meta) return meta;
+
+  const entries = Object.entries(value).filter(
+    ([key]) => key !== 'structuredContent' && key !== 'isError',
+  );
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function normalizeToolArtifact(value: unknown): Partial<McpCallToolResult> {
+  if (isRecord(value)) {
+    return {
+      ...(readRecord(value.structuredContent)
+        ? { structuredContent: readRecord(value.structuredContent) }
+        : {}),
+      ...(readBoolean(value.isError) !== undefined
+        ? { isError: readBoolean(value.isError) }
+        : {}),
+      ...(extractLegacyArtifactMeta(value)
+        ? { _meta: extractLegacyArtifactMeta(value) }
+        : {}),
+    };
+  }
+
+  if (!Array.isArray(value)) return {};
+
+  return value.reduce<Partial<McpCallToolResult>>((result, item) => {
+    const normalized = normalizeToolArtifact(item);
+    return {
+      ...result,
+      ...normalized,
+      _meta: result._meta ?? normalized._meta,
+      structuredContent:
+        result.structuredContent ?? normalized.structuredContent,
+      isError: result.isError ?? normalized.isError,
+    };
+  }, {});
+}
+
+export function normalizeCallToolResult(value: unknown): McpCallToolResult {
+  if (value === undefined) {
+    return {
+      content: [],
+    };
+  }
+
+  if (isRecord(value)) {
+    if (value.toolResult !== undefined && !Array.isArray(value.content)) {
+      return normalizeCallToolResult(value.toolResult);
+    }
+
+    const content = normalizeContentBlocks(value.content);
+    const result: McpCallToolResult = {
+      content: content.length ? content : [],
+    };
+    const structuredContent = readRecord(value.structuredContent);
+    const isError = readBoolean(value.isError);
+    const meta = readRecord(value._meta);
+
+    if (structuredContent) result.structuredContent = structuredContent;
+    if (isError !== undefined) result.isError = isError;
+    if (meta) result._meta = meta;
+
+    return result;
   }
 
   if (Array.isArray(value) && value.length >= 2) {
     const [content, artifact] = value;
-    const text =
-      typeof content === 'string' ? content : stringifyToolResult(content);
-    const normalized: Record<string, unknown> = {
+    const artifactFields = normalizeToolArtifact(artifact);
+
+    return {
       content: [
-        {
-          type: 'text',
-          text,
-        },
+        createTextContentBlock(
+          typeof content === 'string' ? content : stringifyToolResult(content),
+        ),
       ],
+      ...artifactFields,
     };
-
-    if (isRecord(artifact)) {
-      normalized._meta = artifact;
-      if (isRecord(artifact.structuredContent)) {
-        normalized.structuredContent = artifact.structuredContent;
-      }
-    } else if (Array.isArray(artifact)) {
-      const structured = artifact.find(
-        (item): item is Record<string, unknown> =>
-          isRecord(item) && isRecord(item.structuredContent),
-      );
-      const meta = artifact.find(isRecord);
-      if (structured?.structuredContent) {
-        normalized.structuredContent = structured.structuredContent;
-      }
-      if (meta) {
-        normalized._meta = meta;
-      }
-    }
-
-    return normalized;
   }
 
   return {
-    content: [
-      {
-        type: 'text',
-        text: stringifyToolResult(value),
-      },
-    ],
+    content: [createTextContentBlock(stringifyToolResult(value))],
+  };
+}
+
+export function normalizeMcpAppResourceResponse(
+  value: unknown,
+  data: TMessageComponentMcpAppData,
+): NormalizedMcpAppResource {
+  const raw = readRecord(value);
+  if (!raw) {
+    throw new Error('MCP App resource response must be an object');
+  }
+
+  const html = decodeResourceHtml(raw);
+  if (!html) {
+    throw new Error('MCP App resource did not include HTML content');
+  }
+
+  const resourceInfo = {
+    title: readLocalizedText(raw.title),
+    description: readLocalizedText(raw.description),
+    icon: readIconDefinition(raw.icon),
+  };
+  const toolInput =
+    readNonEmptyRecord(raw.toolInput) ??
+    data.toolInput ??
+    readRecord(raw.toolInput) ??
+    {};
+  const rawToolResult = raw.toolResult ?? data.toolResult;
+
+  return {
+    uri: readString(raw.uri),
+    mimeType: readString(raw.mimeType),
+    html,
+    resourceUri: readString(raw.resourceUri),
+    title: resourceInfo.title,
+    description: resourceInfo.description,
+    icon: resourceInfo.icon,
+    csp: normalizeCspMetadata(raw.csp),
+    permissions: normalizePermissionsMetadata(raw.permissions),
+    domain: readString(raw.domain),
+    prefersBorder: readBoolean(raw.prefersBorder),
+    toolInfo: normalizeMcpAppToolInfo(raw.toolInfo, data, resourceInfo),
+    toolInput,
+    hasToolResult: rawToolResult !== undefined,
+    toolResult: normalizeCallToolResult(rawToolResult),
+    rawToolResult,
   };
 }
 
@@ -595,9 +864,8 @@ export function McpAppMessage({
   const initializedRef = React.useRef(false);
   const sentInitialResultRef = React.useRef(false);
   const modelContextRef = React.useRef<unknown>(null);
-  const [resource, setResource] = React.useState<McpAppResourceResponse | null>(
-    null,
-  );
+  const [resource, setResource] =
+    React.useState<NormalizedMcpAppResource | null>(null);
   const [srcDoc, setSrcDoc] = React.useState<string | null>(null);
   const [height, setHeight] = React.useState(420);
   const [error, setError] = React.useState<string | null>(null);
@@ -659,21 +927,24 @@ export function McpAppMessage({
       jsonrpc: '2.0',
       method: 'ui/notifications/tool-input',
       params: {
-        arguments: resource.toolInput ?? data.toolInput ?? {},
+        arguments: resource.toolInput,
       },
     });
+    if (!resource.hasToolResult) {
+      return;
+    }
     postToApp({
       jsonrpc: '2.0',
       method: 'ui/notifications/tool-result',
       params: {
-        ...normalizeCallToolResult(resource.toolResult),
+        ...resource.toolResult,
         toolCallId: data.toolCallId,
         toolName: data.toolName,
         // Legacy compatibility for apps written before the 2026-01-26 notification shape.
-        result: resource.toolResult,
+        result: resource.rawToolResult,
       },
     });
-  }, [data.toolCallId, data.toolInput, data.toolName, postToApp, resource]);
+  }, [data.toolCallId, data.toolName, postToApp, resource]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -693,19 +964,19 @@ export function McpAppMessage({
           throw new Error(`MCP App resource failed with ${response.status}`);
         }
 
-        const payload = (await response.json()) as McpAppResourceResponse;
-        const html = decodeResourceHtml(payload);
-        if (!html) {
-          throw new Error('MCP App resource did not include HTML content');
-        }
+        const payload = await response.json();
+        const normalizedResource = normalizeMcpAppResourceResponse(
+          payload,
+          data,
+        );
 
-        setResource(payload);
+        setResource(normalizedResource);
         const hostLocale = normalizeHostLocale(i18n.language);
         setSrcDoc(
           injectMcpAppTheme(
             injectCsp(
-              injectMcpAppLocale(html, hostLocale),
-              payload.csp ?? data.csp,
+              injectMcpAppLocale(normalizedResource.html, hostLocale),
+              normalizedResource.csp ?? data.csp,
             ),
             buildMcpAppTheme(containerRef.current),
           ),
@@ -726,6 +997,7 @@ export function McpAppMessage({
     };
   }, [
     authenticatedFetch,
+    data,
     data.appInstanceId,
     data.csp,
     i18n.language,
@@ -768,7 +1040,8 @@ export function McpAppMessage({
         initializedRef.current = true;
         const permissions = resource?.permissions ?? data.permissions;
         const csp = resource?.csp ?? data.csp;
-        const toolInfo = buildStandardToolInfo(data, resource);
+        const toolInfo =
+          resource?.toolInfo ?? normalizeMcpAppToolInfo(undefined, data);
         const theme = buildMcpAppTheme(containerRef.current);
         const hostLocale = normalizeHostLocale(i18n.language);
         const hostLanguage = getLocaleLanguage(hostLocale);
@@ -824,10 +1097,7 @@ export function McpAppMessage({
               openLinks: true,
             },
             context: {
-              toolInfo: resource?.toolInfo ?? {
-                name: data.toolName,
-                toolCallId: data.toolCallId,
-              },
+              toolInfo,
               theme: theme.mode,
               themeCssVariables: theme.cssVariables,
               locale: hostLocale,
@@ -1009,7 +1279,7 @@ export function McpAppMessage({
       {isLoading ? (
         <div className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading MCP App</span>
+          <span>{i18n.t('message.mcpApp.loading')}</span>
         </div>
       ) : error ? (
         <div className="flex h-40 items-center justify-center gap-2 px-4 text-sm text-destructive">

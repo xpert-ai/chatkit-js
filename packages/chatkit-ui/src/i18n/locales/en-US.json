@@ -263,6 +263,9 @@
     "loading": "Loading",
     "thinking": "Thinking",
     "answering": "Answering",
+    "mcpApp": {
+      "loading": "Loading MCP App"
+    },
     "contextCompression": {
       "running": "Automatically compressing context",
       "success": "Context automatically compressed",
