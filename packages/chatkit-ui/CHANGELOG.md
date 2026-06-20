@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.1
+
+### Patch Changes
+
+- 9fe05aa: support mcp tool result
+- Updated dependencies [9fe05aa]
+  - @xpert-ai/chatkit-types@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes
