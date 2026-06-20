@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.1
+
+### Patch Changes
+
+- 9fe05aa: support mcp tool result
+
 ## 0.4.0
 
 ### Minor Changes
