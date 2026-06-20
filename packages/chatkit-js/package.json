@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-js",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Framework-agnostic bindings for Xpert Chatkit",
   "type": "module",
   "sideEffects": false,

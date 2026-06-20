@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.0
+
+### Minor Changes
+
+- 2c299ff: mcp apps
+
 ## 0.3.13
 
 ### Patch Changes

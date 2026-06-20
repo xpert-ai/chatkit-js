@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-react
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [2c299ff]
+  - @xpert-ai/chatkit-types@0.4.0
+  - @xpert-ai/chatkit-web-component@0.3.6
+
 ## 0.3.1
 
 ### Patch Changes
