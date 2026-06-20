@@ -2,6 +2,7 @@ import type { ToolCall } from '@langchain/core/messages/tool';
 import type { Types } from '@a2ui/lit/0.8';
 import type { FollowUpBehavior } from './options';
 import type { ChatKitCommandSource } from './commands';
+import type { LocalizedText } from './localized-text';
 import {
   CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
@@ -129,6 +130,17 @@ export type TMcpAppPermissions = {
   clipboardWrite?: TMcpAppPermissionGrant;
 };
 
+export type IconType = 'image' | 'svg' | 'font' | 'emoji' | 'lottie';
+
+export type IconDefinition = {
+  type: IconType;
+  value: string;
+  color?: string;
+  size?: number;
+  alt?: string;
+  style?: Record<string, string>;
+};
+
 /**
  * Safe metadata needed to render an MCP App message. Chat history stores this
  * descriptor only; the app HTML is fetched from the short-lived backend app
@@ -139,6 +151,8 @@ export type TMessageComponentMcpAppData = {
   type: 'McpApp';
   /** Short-lived host-side instance that scopes resource and bridge access. */
   appInstanceId: string;
+  /** Signed host token used to revive and authorize this app instance. */
+  appInstanceToken?: string;
   /** MCP resource URI, normally `ui://...`, used to load the app HTML. */
   resourceUri: string;
   /** Tool that produced this app surface. */
@@ -152,7 +166,11 @@ export type TMessageComponentMcpAppData = {
   /** Xpert execution id that produced this message component. */
   executionId?: string;
   /** Display title shown by the ChatKit shell around the app. */
-  title?: string;
+  title?: LocalizedText;
+  /** Optional display description shown by the ChatKit shell around the app. */
+  description?: LocalizedText;
+  /** Optional display icon shown by the ChatKit shell around the app. */
+  icon?: IconDefinition;
   /** Resource-level content security policy metadata. */
   csp?: TMcpAppCsp;
   /** Resource-level browser permission metadata. */

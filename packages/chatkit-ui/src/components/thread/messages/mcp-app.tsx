@@ -1,12 +1,16 @@
 import * as React from 'react';
 
-import type { TMessageComponentMcpAppData } from '@xpert-ai/chatkit-types';
+import {
+  resolveLocalizedText,
+  type TMessageComponentMcpAppData,
+} from '@xpert-ai/chatkit-types';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 import { useStreamContext } from '../../../providers/Stream';
 import { Badge } from '../../ui/badge';
+import { IconDefinitionRenderer } from '../../ui/icon-definition';
 
 type JsonRpcRequest = {
   jsonrpc?: '2.0';
@@ -21,6 +25,9 @@ type McpAppResourceResponse = {
   text?: string;
   blob?: string;
   resourceUri?: string;
+  title?: TMessageComponentMcpAppData['title'];
+  description?: TMessageComponentMcpAppData['description'];
+  icon?: TMessageComponentMcpAppData['icon'];
   csp?: TMessageComponentMcpAppData['csp'];
   permissions?: TMessageComponentMcpAppData['permissions'];
   domain?: string;
@@ -64,7 +71,8 @@ function buildMcpAppReviveParams(data: TMessageComponentMcpAppData) {
   add('toolName', data.toolName);
   add('toolCallId', data.toolCallId);
   add('resourceUri', data.resourceUri);
-  add('title', data.title);
+  add('title', typeof data.title === 'string' ? data.title : undefined);
+  add('token', data.appInstanceToken);
 
   return params;
 }
@@ -112,16 +120,20 @@ function buildCsp(csp?: TMessageComponentMcpAppData['csp']) {
   ].join('; ');
 }
 
+function injectHeadContent(html: string, content: string) {
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head([^>]*)>/i, `<head$1>${content}`);
+  }
+
+  return `<!doctype html><html><head>${content}</head><body>${html}</body></html>`;
+}
+
 function injectCsp(html: string, csp?: TMessageComponentMcpAppData['csp']) {
   const meta = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(
     buildCsp(csp),
   )}">`;
 
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head([^>]*)>/i, `<head$1>${meta}`);
-  }
-
-  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
+  return injectHeadContent(html, meta);
 }
 
 function decodeResourceHtml(resource: McpAppResourceResponse) {
@@ -199,19 +211,224 @@ function getContainerDimensions(element: HTMLElement | null) {
   };
 }
 
+function normalizeHostLocale(locale?: string) {
+  return locale?.trim() || navigator.language || 'en-US';
+}
+
+function getLocaleLanguage(locale: string) {
+  return locale.split(/[-_]/)[0]?.toLowerCase() || locale.toLowerCase();
+}
+
+function getLocaleDirection(locale: string) {
+  const language = getLocaleLanguage(locale);
+  return ['ar', 'fa', 'he', 'ur'].includes(language) ? 'rtl' : 'ltr';
+}
+
+function setHtmlAttribute(attrs: string, name: string, value: string) {
+  const escaped = escapeHtmlAttribute(value);
+  const pattern = new RegExp(`\\s${name}=("[^"]*"|'[^']*'|[^\\s>]*)`, 'i');
+  if (pattern.test(attrs)) {
+    return attrs.replace(pattern, ` ${name}="${escaped}"`);
+  }
+  return `${attrs} ${name}="${escaped}"`;
+}
+
+function injectMcpAppLocale(html: string, locale: string) {
+  const normalizedLocale = normalizeHostLocale(locale);
+  const direction = getLocaleDirection(normalizedLocale);
+
+  if (/<html[\s>]/i.test(html)) {
+    return html.replace(/<html([^>]*)>/i, (_match, attrs: string) => {
+      const withLang = setHtmlAttribute(attrs, 'lang', normalizedLocale);
+      const withDirection = setHtmlAttribute(withLang, 'dir', direction);
+      return `<html${withDirection}>`;
+    });
+  }
+
+  return `<!doctype html><html lang="${escapeHtmlAttribute(
+    normalizedLocale,
+  )}" dir="${direction}"><head></head><body>${html}</body></html>`;
+}
+
+type McpAppThemeMode = 'light' | 'dark';
+
+type McpAppTheme = {
+  mode: McpAppThemeMode;
+  cssVariables: Record<string, string>;
+};
+
+const MCP_APP_THEME_COLOR_TOKENS = [
+  ['--background', '--mcp-app-color-background', 'oklch(1 0 0)'],
+  ['--foreground', '--mcp-app-color-foreground', 'oklch(0.145 0 0)'],
+  ['--card', '--mcp-app-color-card', 'oklch(1 0 0)'],
+  [
+    '--card-foreground',
+    '--mcp-app-color-card-foreground',
+    'oklch(0.145 0 0)',
+  ],
+  ['--popover', '--mcp-app-color-popover', 'oklch(1 0 0)'],
+  [
+    '--popover-foreground',
+    '--mcp-app-color-popover-foreground',
+    'oklch(0.145 0 0)',
+  ],
+  ['--primary', '--mcp-app-color-primary', 'oklch(0.205 0 0)'],
+  [
+    '--primary-foreground',
+    '--mcp-app-color-primary-foreground',
+    'oklch(0.985 0 0)',
+  ],
+  ['--secondary', '--mcp-app-color-secondary', 'oklch(0.97 0 0)'],
+  [
+    '--secondary-foreground',
+    '--mcp-app-color-secondary-foreground',
+    'oklch(0.205 0 0)',
+  ],
+  ['--muted', '--mcp-app-color-muted', 'oklch(0.97 0 0)'],
+  [
+    '--muted-foreground',
+    '--mcp-app-color-muted-foreground',
+    'oklch(0.556 0 0)',
+  ],
+  ['--accent', '--mcp-app-color-accent', 'oklch(0.97 0 0)'],
+  [
+    '--accent-foreground',
+    '--mcp-app-color-accent-foreground',
+    'oklch(0.205 0 0)',
+  ],
+  [
+    '--destructive',
+    '--mcp-app-color-destructive',
+    'oklch(0.577 0.245 27.325)',
+  ],
+  [
+    '--destructive-foreground',
+    '--mcp-app-color-destructive-foreground',
+    'oklch(0.985 0 0)',
+  ],
+  ['--border', '--mcp-app-color-border', 'oklch(0.922 0 0)'],
+  ['--input', '--mcp-app-color-input', 'oklch(0.922 0 0)'],
+  ['--ring', '--mcp-app-color-ring', 'oklch(0.708 0 0)'],
+  ['--chart-1', '--mcp-app-color-chart-1', 'oklch(0.87 0 0)'],
+  ['--chart-2', '--mcp-app-color-chart-2', 'oklch(0.556 0 0)'],
+  ['--chart-3', '--mcp-app-color-chart-3', 'oklch(0.439 0 0)'],
+  ['--chart-4', '--mcp-app-color-chart-4', 'oklch(0.371 0 0)'],
+  ['--chart-5', '--mcp-app-color-chart-5', 'oklch(0.269 0 0)'],
+] as const;
+
+function sanitizeCssValue(value: string) {
+  return value.replace(/[;{}<>]/g, '').trim();
+}
+
+function normalizeColorCssValue(value: string) {
+  const trimmed = sanitizeCssValue(value);
+  if (!trimmed) return '';
+
+  if (
+    /^(#|rgb\(|rgba\(|hsl\(|hsla\(|oklch\(|oklab\(|color\(|var\()/i.test(
+      trimmed,
+    )
+  ) {
+    return trimmed;
+  }
+
+  if (/^-?\d/.test(trimmed) && /\s/.test(trimmed)) {
+    return `hsl(${trimmed})`;
+  }
+
+  return trimmed;
+}
+
+function getHostThemeMode(): McpAppThemeMode {
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+}
+
+function readHostCssVariable(
+  element: HTMLElement | null,
+  variableName: string,
+) {
+  const candidates = [
+    element,
+    element === document.documentElement ? null : document.documentElement,
+  ].filter(Boolean) as HTMLElement[];
+
+  for (const candidate of candidates) {
+    const value = window
+      .getComputedStyle(candidate)
+      .getPropertyValue(variableName)
+      .trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+function buildMcpAppTheme(element: HTMLElement | null): McpAppTheme {
+  const source = element ?? document.documentElement;
+  const sourceStyles = window.getComputedStyle(source);
+  const cssVariables: Record<string, string> = {
+    '--mcp-app-color-scheme': getHostThemeMode(),
+    '--mcp-app-font-sans': sanitizeCssValue(
+      sourceStyles.fontFamily || 'ui-sans-serif, system-ui, sans-serif',
+    ),
+    '--mcp-app-font-mono': sanitizeCssValue(
+      readHostCssVariable(source, '--font-mono') ||
+        'ui-monospace, SFMono-Regular, Menlo, monospace',
+    ),
+    '--mcp-app-radius': sanitizeCssValue(
+      readHostCssVariable(source, '--radius') || '0.5rem',
+    ),
+  };
+
+  for (const [
+    hostVariable,
+    appVariable,
+    fallback,
+  ] of MCP_APP_THEME_COLOR_TOKENS) {
+    cssVariables[appVariable] =
+      normalizeColorCssValue(readHostCssVariable(source, hostVariable)) ||
+      fallback;
+  }
+
+  return {
+    mode: getHostThemeMode(),
+    cssVariables,
+  };
+}
+
+function injectMcpAppTheme(html: string, theme: McpAppTheme) {
+  const declarations = Object.entries(theme.cssVariables)
+    .map(([name, value]) => `${name}: ${sanitizeCssValue(value)};`)
+    .join('');
+  const style = `<style id="mcp-app-host-theme">:root{color-scheme:${theme.mode};${declarations}}</style>`;
+
+  return injectHeadContent(html, style);
+}
+
 function buildStandardToolInfo(
   data: TMessageComponentMcpAppData,
   resource?: McpAppResourceResponse | null,
 ) {
   const raw = resource?.toolInfo ?? {};
+  const rawTitle =
+    isRecord(raw) && (raw.title !== undefined || raw.name !== undefined)
+      ? (raw.title ?? raw.name)
+      : undefined;
+  const rawDescription =
+    isRecord(raw) && raw.description !== undefined
+      ? raw.description
+      : undefined;
+  const rawIcon =
+    isRecord(raw) && raw.icon !== undefined ? raw.icon : undefined;
   const originalName =
     isRecord(raw) && typeof raw.originalName === 'string'
       ? raw.originalName
       : data.toolName;
-  const title =
-    isRecord(raw) && typeof raw.name === 'string'
-      ? raw.name
-      : data.title ?? data.toolName;
+  const title = rawTitle ?? resource?.title ?? data.title ?? data.toolName;
+  const description = rawDescription ?? resource?.description ?? data.description;
+  const icon = rawIcon ?? resource?.icon ?? data.icon;
 
   return {
     ...raw,
@@ -219,6 +436,8 @@ function buildStandardToolInfo(
     tool: {
       name: originalName,
       title,
+      ...(description ? { description } : {}),
+      ...(icon ? { icon } : {}),
     },
   };
 }
@@ -481,7 +700,16 @@ export function McpAppMessage({
         }
 
         setResource(payload);
-        setSrcDoc(injectCsp(html, payload.csp ?? data.csp));
+        const hostLocale = normalizeHostLocale(i18n.language);
+        setSrcDoc(
+          injectMcpAppTheme(
+            injectCsp(
+              injectMcpAppLocale(html, hostLocale),
+              payload.csp ?? data.csp,
+            ),
+            buildMcpAppTheme(containerRef.current),
+          ),
+        );
       } catch (loadError) {
         if (!controller.signal.aborted) {
           setError(getErrorMessage(loadError));
@@ -496,7 +724,13 @@ export function McpAppMessage({
     return () => {
       controller.abort();
     };
-  }, [authenticatedFetch, data.appInstanceId, data.csp, resourceUrl]);
+  }, [
+    authenticatedFetch,
+    data.appInstanceId,
+    data.csp,
+    i18n.language,
+    resourceUrl,
+  ]);
 
   React.useEffect(() => {
     sendInitialToolNotifications();
@@ -535,6 +769,10 @@ export function McpAppMessage({
         const permissions = resource?.permissions ?? data.permissions;
         const csp = resource?.csp ?? data.csp;
         const toolInfo = buildStandardToolInfo(data, resource);
+        const theme = buildMcpAppTheme(containerRef.current);
+        const hostLocale = normalizeHostLocale(i18n.language);
+        const hostLanguage = getLocaleLanguage(hostLocale);
+        const hostDirection = getLocaleDirection(hostLocale);
         postToApp(
           jsonRpcResult(request.id, {
             protocolVersion: '2026-01-26',
@@ -562,10 +800,11 @@ export function McpAppMessage({
             },
             hostContext: {
               toolInfo,
-              theme: document.documentElement.classList.contains('dark')
-                ? 'dark'
-                : 'light',
-              locale: i18n.language,
+              theme: theme.mode,
+              themeCssVariables: theme.cssVariables,
+              locale: hostLocale,
+              language: hostLanguage,
+              direction: hostDirection,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               displayMode: 'inline',
               availableDisplayModes: ['inline'],
@@ -589,10 +828,11 @@ export function McpAppMessage({
                 name: data.toolName,
                 toolCallId: data.toolCallId,
               },
-              theme: document.documentElement.classList.contains('dark')
-                ? 'dark'
-                : 'light',
-              locale: i18n.language,
+              theme: theme.mode,
+              themeCssVariables: theme.cssVariables,
+              locale: hostLocale,
+              language: hostLanguage,
+              direction: hostDirection,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               displayMode: 'inline',
               availableDisplayModes: ['inline'],
@@ -726,6 +966,14 @@ export function McpAppMessage({
   const sandbox = React.useMemo(() => buildSandboxAttribute(), []);
   const prefersBorder =
     resource?.prefersBorder ?? data.prefersBorder ?? true;
+  const displayTitle =
+    resolveLocalizedText(resource?.title ?? data.title, i18n.language) ??
+    data.toolName;
+  const displayDescription = resolveLocalizedText(
+    resource?.description ?? data.description,
+    i18n.language,
+  );
+  const displayIcon = resource?.icon ?? data.icon;
 
   return (
     <div
@@ -737,12 +985,20 @@ export function McpAppMessage({
       )}
     >
       <div className="flex min-h-10 items-center justify-between gap-3 border-b px-3 py-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {data.title ?? data.toolName}
-          </div>
-          <div className="truncate text-[11px] text-muted-foreground">
-            {data.resourceUri}
+        <div className="flex min-w-0 items-center gap-2">
+          {displayIcon ? (
+            <IconDefinitionRenderer
+              icon={displayIcon}
+              size={18}
+              className="shrink-0"
+              decorative
+            />
+          ) : null}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">{displayTitle}</div>
+            <div className="truncate text-[11px] text-muted-foreground">
+              {displayDescription ?? data.resourceUri}
+            </div>
           </div>
         </div>
         <Badge variant="secondary" className="shrink-0 rounded-md">
@@ -763,7 +1019,7 @@ export function McpAppMessage({
       ) : srcDoc ? (
         <iframe
           ref={iframeRef}
-          title={data.title ?? data.toolName}
+          title={displayTitle}
           srcDoc={srcDoc}
           className="block w-full bg-background"
           style={{ height }}
