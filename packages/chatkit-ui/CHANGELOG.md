@@ -1,5 +1,32 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.0
+
+### Minor Changes
+
+- 2c299ff: mcp apps
+
+### Patch Changes
+
+- e27c2a6: Defer context usage loading until the ChatKit client secret is available.
+- Updated dependencies [2c299ff]
+  - @xpert-ai/chatkit-types@0.4.0
+  - @xpert-ai/chatkit-web-shared@0.3.4
+
+## 0.3.21
+
+### Patch Changes
+
+- 10a5127: edit prompts suggestions
+
+## 0.3.20
+
+### Patch Changes
+
+- ac09330: Preserve thread goal specs in parsed goal payloads.
+- Updated dependencies [ac09330]
+  - @xpert-ai/chatkit-types@0.3.13
+
 ## 0.3.19
 
 ### Patch Changes

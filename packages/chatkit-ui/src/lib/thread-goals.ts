@@ -1,6 +1,7 @@
 import type {
   ChatKitGoalAdapter,
   ThreadGoal,
+  ThreadGoalSpec,
   ThreadGoalStatus,
   TThreadGoalClearedEvent,
   TThreadGoalUpdatedEvent,
@@ -178,6 +179,48 @@ function normalizeNumber(value: unknown): number {
   return 0;
 }
 
+function parseStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    return null;
+  }
+  return value;
+}
+
+function parseThreadGoalSpec(value: unknown): ThreadGoalSpec | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const raw = value as Partial<ThreadGoalSpec>;
+  const successCriteria = parseStringArray(raw.successCriteria);
+  const constraints = parseStringArray(raw.constraints);
+  const verificationChecklist = parseStringArray(raw.verificationChecklist);
+
+  if (
+    typeof raw.originalObjective !== 'string' ||
+    typeof raw.executableGoal !== 'string' ||
+    !successCriteria ||
+    !constraints ||
+    !verificationChecklist ||
+    typeof raw.recommendedStrategy !== 'string' ||
+    (raw.source !== 'system' && raw.source !== 'llm') ||
+    typeof raw.generatedAt !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    originalObjective: raw.originalObjective,
+    executableGoal: raw.executableGoal,
+    successCriteria,
+    constraints,
+    verificationChecklist,
+    recommendedStrategy: raw.recommendedStrategy,
+    source: raw.source,
+    generatedAt: raw.generatedAt,
+  };
+}
+
 export function parseThreadGoal(value: unknown): ThreadGoal | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -199,6 +242,12 @@ export function parseThreadGoal(value: unknown): ThreadGoal | null {
     threadId: raw.threadId,
     objective: raw.objective,
     status: raw.status,
+    ...(raw.goalSpec === null
+      ? { goalSpec: null }
+      : (() => {
+          const goalSpec = parseThreadGoalSpec(raw.goalSpec);
+          return goalSpec ? { goalSpec } : {};
+        })()),
     tokensUsed: normalizeNumber(raw.tokensUsed),
     elapsedSeconds: normalizeNumber(raw.elapsedSeconds),
     continuationCount: normalizeNumber(raw.continuationCount),
@@ -263,6 +312,12 @@ export function parseThreadGoalUpdatedPatchEvent(
     ...(typeof goal.objective === 'string'
       ? { objective: goal.objective }
       : {}),
+    ...(goal.goalSpec === null
+      ? { goalSpec: null }
+      : (() => {
+          const goalSpec = parseThreadGoalSpec(goal.goalSpec);
+          return goalSpec ? { goalSpec } : {};
+        })()),
     ...(typeof goal.tokensUsed === 'number'
       ? { tokensUsed: normalizeNumber(goal.tokensUsed) }
       : {}),

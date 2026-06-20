@@ -513,12 +513,24 @@ export type ThreadGoalStatus =
   | 'budget_limited'
   | 'complete';
 
+export type ThreadGoalSpec = {
+  originalObjective: string;
+  executableGoal: string;
+  successCriteria: string[];
+  constraints: string[];
+  verificationChecklist: string[];
+  recommendedStrategy: string;
+  source: 'system' | 'llm';
+  generatedAt: string;
+};
+
 export type ThreadGoal = {
   id?: string;
   conversationId?: string;
   threadId: string;
   objective: string;
   status: ThreadGoalStatus;
+  goalSpec?: ThreadGoalSpec | null;
   tokensUsed: number;
   elapsedSeconds: number;
   continuationCount: number;
