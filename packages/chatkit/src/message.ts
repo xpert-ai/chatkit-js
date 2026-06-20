@@ -141,10 +141,21 @@ export type IconDefinition = {
   style?: Record<string, string>;
 };
 
+export type TMcpAppToolResultContentBlock = Record<string, unknown> & {
+  type: string;
+};
+
+export type TMcpAppToolResult = {
+  content: TMcpAppToolResultContentBlock[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+  _meta?: Record<string, unknown>;
+};
+
 /**
  * Safe metadata needed to render an MCP App message. Chat history stores this
- * descriptor only; the app HTML is fetched from the short-lived backend app
- * instance using `appInstanceId`.
+ * descriptor and the initial tool input/result only; the app HTML is fetched
+ * from the backend app instance using `appInstanceId`.
  */
 export type TMessageComponentMcpAppData = {
   /** Component discriminator used by ChatKit renderers. */
@@ -181,6 +192,15 @@ export type TMessageComponentMcpAppData = {
   prefersBorder?: boolean;
   /** Original tool input sent to the MCP App via `ui/notifications/tool-input`. */
   toolInput?: Record<string, unknown>;
+  /**
+   * Standardized initial CallToolResult used to replay MCP App history without
+   * re-running the originating tool. Raw app HTML is never persisted here.
+   */
+  toolResult?: TMcpAppToolResult;
+  /** Serialized byte size of the initial tool result when known. */
+  toolResultSize?: number;
+  /** True when the initial tool result was too large to inline in chat history. */
+  toolResultTruncated?: boolean;
   /** Visibility declared by the originating MCP tool. */
   visibility?: TMcpAppVisibility[];
   /** Current lifecycle status of the tool/app message. */

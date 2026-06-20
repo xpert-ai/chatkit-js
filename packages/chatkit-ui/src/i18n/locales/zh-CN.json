@@ -263,6 +263,9 @@
     "loading": "正在加载",
     "thinking": "正在思考",
     "answering": "正在生成",
+    "mcpApp": {
+      "loading": "正在加载 MCP App"
+    },
     "contextCompression": {
       "running": "正在自动压缩上下文",
       "success": "上下文已自动压缩",
