@@ -1,5 +1,18 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.0
+
+### Minor Changes
+
+- 2c299ff: mcp apps
+
+### Patch Changes
+
+- e27c2a6: Defer context usage loading until the ChatKit client secret is available.
+- Updated dependencies [2c299ff]
+  - @xpert-ai/chatkit-types@0.4.0
+  - @xpert-ai/chatkit-web-shared@0.3.4
+
 ## 0.3.21
 
 ### Patch Changes
