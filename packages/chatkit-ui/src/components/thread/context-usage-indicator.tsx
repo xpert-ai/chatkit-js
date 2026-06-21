@@ -85,9 +85,10 @@ export function ContextUsageIndicator({
     [assistantAgentKey, stream.contextUsageByAgentKey],
   );
   const realtimeUsedContextSize = getThreadContextUsageTotalTokens(realtimeUsage);
+  const hasApiConfiguration = Boolean(stream.apiUrl?.trim() && stream.apiKey?.trim());
 
   React.useEffect(() => {
-    if (!stream.client || !stream.assistantId) {
+    if (!hasApiConfiguration || !stream.client || !stream.assistantId) {
       setMaxContextSize(null);
       setAssistantAgentKey(null);
       return;
@@ -110,7 +111,7 @@ export function ContextUsageIndicator({
     return () => {
       cancelled = true;
     };
-  }, [stream.client, stream.assistantId]);
+  }, [hasApiConfiguration, stream.client, stream.assistantId]);
 
   React.useEffect(() => {
     latestRealtimeUsageRef.current = {
@@ -126,7 +127,7 @@ export function ContextUsageIndicator({
   }, [realtimeUsedContextSize]);
 
   React.useEffect(() => {
-    if (!stream.client) {
+    if (!hasApiConfiguration || !stream.client) {
       setUsedContextSize(null);
       return;
     }
@@ -171,6 +172,7 @@ export function ContextUsageIndicator({
     };
   }, [
     assistantAgentKey,
+    hasApiConfiguration,
     realtimeUsedContextSize,
     stream.apiKey,
     stream.apiUrl,
