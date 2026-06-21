@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.2
+
+### Patch Changes
+
+- c384e60: mcp app instance token
+
 ## 0.4.1
 
 ### Patch Changes
