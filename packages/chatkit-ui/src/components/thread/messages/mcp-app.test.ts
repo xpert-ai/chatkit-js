@@ -23,6 +23,7 @@ describe('MCP App normalization', () => {
       {
         uri: 'ui://wiki-explorer/mcp-app.html',
         text: '<html></html>',
+        appInstanceToken: 'fresh-runtime-token',
         toolInfo: {
           name: 'wiki-explorer__get-first-degree-links',
           originalName: 'get-first-degree-links',
@@ -54,6 +55,7 @@ describe('MCP App normalization', () => {
     );
 
     expect(normalized.html).toBe('<html></html>');
+    expect(normalized.appInstanceToken).toBe('fresh-runtime-token');
     expect(normalized.toolInfo.tool).toMatchObject({
       name: 'get-first-degree-links',
       title: 'Wiki Explorer',
