@@ -498,7 +498,7 @@ function renderContentItem(
     if (isMcpAppComponent(content)) {
       return (
         <div key={content.id ?? `mcp-app-${index}`}>
-          <McpAppMessage data={content.data} />
+          <McpAppMessage messageId={messageId} data={content.data} />
         </div>
       );
     }

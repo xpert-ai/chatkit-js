@@ -63,6 +63,7 @@ type NormalizedMcpAppResource = {
   uri?: string;
   mimeType?: string;
   html: string;
+  appInstanceToken?: string;
   resourceUri?: string;
   title?: TMessageComponentMcpAppData['title'];
   description?: TMessageComponentMcpAppData['description'];
@@ -144,7 +145,13 @@ function appendQuery(path: string, params: URLSearchParams) {
   return query ? `${path}?${query}` : path;
 }
 
-function buildMcpAppReviveParams(data: TMessageComponentMcpAppData) {
+function buildMcpAppReviveParams(
+  data: TMessageComponentMcpAppData,
+  options?: {
+    appInstanceToken?: string;
+    messageId?: string;
+  },
+) {
   const params = new URLSearchParams();
   const add = (key: string, value?: string) => {
     if (value) {
@@ -158,7 +165,8 @@ function buildMcpAppReviveParams(data: TMessageComponentMcpAppData) {
   add('toolCallId', data.toolCallId);
   add('resourceUri', data.resourceUri);
   add('title', typeof data.title === 'string' ? data.title : undefined);
-  add('token', data.appInstanceToken);
+  add('messageId', options?.messageId);
+  add('token', options?.appInstanceToken ?? data.appInstanceToken);
 
   return params;
 }
@@ -166,12 +174,16 @@ function buildMcpAppReviveParams(data: TMessageComponentMcpAppData) {
 function buildMcpAppEndpointPath(
   data: TMessageComponentMcpAppData,
   endpoint: 'resource' | 'rpc',
+  options?: {
+    appInstanceToken?: string;
+    messageId?: string;
+  },
 ) {
   return appendQuery(
     `/api/xpert-toolset/mcp-apps/${encodeURIComponent(
       data.appInstanceId,
     )}/${endpoint}`,
-    buildMcpAppReviveParams(data),
+    buildMcpAppReviveParams(data, options),
   );
 }
 
@@ -786,6 +798,7 @@ export function normalizeMcpAppResourceResponse(
     uri: readString(raw.uri),
     mimeType: readString(raw.mimeType),
     html,
+    appInstanceToken: readString(raw.appInstanceToken),
     resourceUri: readString(raw.resourceUri),
     title: resourceInfo.title,
     description: resourceInfo.description,
@@ -847,9 +860,11 @@ export function isMcpAppComponentData(
 
 export function McpAppMessage({
   data,
+  messageId,
   className,
 }: {
   data: TMessageComponentMcpAppData;
+  messageId?: string;
   className?: string;
 }) {
   const { i18n } = useChatkitTranslation();
@@ -866,6 +881,8 @@ export function McpAppMessage({
   const modelContextRef = React.useRef<unknown>(null);
   const [resource, setResource] =
     React.useState<NormalizedMcpAppResource | null>(null);
+  const [runtimeAppInstanceToken, setRuntimeAppInstanceToken] =
+    React.useState<string | undefined>(data.appInstanceToken);
   const [srcDoc, setSrcDoc] = React.useState<string | null>(null);
   const [height, setHeight] = React.useState(420);
   const [error, setError] = React.useState<string | null>(null);
@@ -875,18 +892,23 @@ export function McpAppMessage({
     () =>
       buildXpertApiUrl(
         apiUrl,
-        buildMcpAppEndpointPath(data, 'resource'),
+        buildMcpAppEndpointPath(data, 'resource', {
+          messageId,
+        }),
       ),
-    [apiUrl, data],
+    [apiUrl, data, messageId],
   );
 
   const rpcUrl = React.useMemo(
     () =>
       buildXpertApiUrl(
         apiUrl,
-        buildMcpAppEndpointPath(data, 'rpc'),
+        buildMcpAppEndpointPath(data, 'rpc', {
+          appInstanceToken: runtimeAppInstanceToken,
+          messageId,
+        }),
       ),
-    [apiUrl, data],
+    [apiUrl, data, messageId, runtimeAppInstanceToken],
   );
 
   const postToApp = React.useCallback((message: unknown) => {
@@ -950,6 +972,7 @@ export function McpAppMessage({
     const controller = new AbortController();
     initializedRef.current = false;
     sentInitialResultRef.current = false;
+    setRuntimeAppInstanceToken(data.appInstanceToken);
     setIsLoading(true);
     setError(null);
     setResource(null);
@@ -971,6 +994,9 @@ export function McpAppMessage({
         );
 
         setResource(normalizedResource);
+        setRuntimeAppInstanceToken(
+          normalizedResource.appInstanceToken ?? data.appInstanceToken,
+        );
         const hostLocale = normalizeHostLocale(i18n.language);
         setSrcDoc(
           injectMcpAppTheme(
@@ -999,6 +1025,7 @@ export function McpAppMessage({
     authenticatedFetch,
     data,
     data.appInstanceId,
+    data.appInstanceToken,
     data.csp,
     i18n.language,
     resourceUrl,
