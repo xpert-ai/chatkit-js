@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.2
+
+### Patch Changes
+
+- 8a8b98d: maxWidth of layout
+
 ## 0.4.1
 
 ### Patch Changes

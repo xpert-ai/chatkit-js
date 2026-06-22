@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.3
+
+### Patch Changes
+
+- 8a8b98d: maxWidth of layout
+- Updated dependencies [8a8b98d]
+  - @xpert-ai/chatkit-types@0.4.2
+
 ## 0.4.2
 
 ### Patch Changes
