@@ -239,8 +239,8 @@ const baseOptions: ChatKitOptions = {
   },
 };
 
-function renderChat() {
-  return render(<Chat clientSecret="secret" options={baseOptions} />);
+function renderChat(options: ChatKitOptions = baseOptions) {
+  return render(<Chat clientSecret="secret" options={options} />);
 }
 
 function pasteLongReference(textbox: HTMLElement, text: string) {
@@ -291,6 +291,32 @@ describe('Chat start screen prompts', () => {
     mocks.stream.pendingHITLRequest = null;
     mocks.stream.isLoading = false;
     mocks.stream.submit.mockClear();
+  });
+
+  it('limits the chat column width when layout maxWidth is configured', async () => {
+    const { container } = renderChat({
+      ...baseOptions,
+      layout: {
+        maxWidth: '960px',
+      },
+    });
+
+    const columnSlots = [
+      'chatkit-chat-header',
+      'chatkit-chat-content',
+      'chatkit-chat-composer',
+    ];
+
+    await waitFor(() => {
+      for (const slot of columnSlots) {
+        const element = container.querySelector<HTMLElement>(
+          `[data-slot="${slot}"]`,
+        );
+        expect(element).toBeInTheDocument();
+        expect(element).toHaveStyle({ maxWidth: '960px' });
+        expect(element).toHaveClass('mx-auto', 'w-full');
+      }
+    });
   });
 
   it('submits a start-screen prompt with existing attachments and references', async () => {

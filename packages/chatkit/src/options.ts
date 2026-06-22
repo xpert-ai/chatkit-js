@@ -322,6 +322,19 @@ export type ChatKitTheme = {
   };
 };
 
+export type ChatKitLayoutOptions = {
+  /**
+   * Maximum width of the internal chat column on wide screens. The ChatKit root
+   * still fills its host container; message content and composer remain centered
+   * within this width.
+   *
+   * Accepts any CSS max-width value, or a number interpreted by React as pixels.
+   *
+   * @example "960px"
+   */
+  maxWidth?: number | string;
+};
+
 type CustomApiConfig = {
   /**
    * The URL (relative or absolute) of the ChatKit API. The configured endpoint
@@ -501,6 +514,11 @@ export type ChatKitOptions = {
    * * @default "light"
    */
   theme?: ColorScheme | ChatKitTheme;
+
+  /**
+   * Layout configuration for the ChatKit UI.
+   */
+  layout?: ChatKitLayoutOptions;
 
   /**
    * Optional animated pet companion rendered by the ChatKit web component over
