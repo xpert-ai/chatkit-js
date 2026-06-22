@@ -2765,6 +2765,18 @@ export function Chat({
   });
 
   const assistantTitle = assistantName || resolvedTitle;
+  const layoutMaxWidth = options?.layout?.maxWidth;
+  const chatColumnStyle = React.useMemo<React.CSSProperties | undefined>(() => {
+    if (
+      layoutMaxWidth === undefined ||
+      layoutMaxWidth === null ||
+      layoutMaxWidth === ''
+    ) {
+      return undefined;
+    }
+
+    return { maxWidth: layoutMaxWidth };
+  }, [layoutMaxWidth]);
 
   return (
     <UploadDroppedFiles
@@ -2780,7 +2792,11 @@ export function Chat({
         className,
       )}
     >
-      <div className="flex items-center justify-between border-b p-2 sticky top-0 z-10 bg-background">
+      <div
+        data-slot="chatkit-chat-header"
+        className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
+        style={chatColumnStyle}
+      >
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="relative shrink-0">
             <ChatkitAvatar
@@ -2888,7 +2904,11 @@ export function Chat({
         </div>
       </div>
 
-      <div className="flex-1 p-4">
+      <div
+        data-slot="chatkit-chat-content"
+        className="mx-auto w-full flex-1 p-4"
+        style={chatColumnStyle}
+      >
         {errorMessage && (
           <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {errorMessage}
@@ -3230,7 +3250,11 @@ export function Chat({
         </div>
       )}
 
-      <div className="p-2 sticky bottom-0 z-10 bg-background">
+      <div
+        data-slot="chatkit-chat-composer"
+        className="mx-auto w-full p-2 sticky bottom-0 z-10 bg-background"
+        style={chatColumnStyle}
+      >
         {threadErrorMessage && (
           <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
             {threadErrorMessage}
