@@ -19,6 +19,7 @@ vi.mock('mermaid', () => ({
 }));
 
 import { setLanguage } from '../../i18n';
+import { ParentMessengerContext } from '../../providers/ParentMessenger';
 import { ThemeProvider } from '../../providers/Theme';
 import { MarkdownText } from './markdown-text';
 
@@ -63,6 +64,28 @@ function renderMarkdown(
   );
 }
 
+function renderMarkdownWithMessenger(markdown: string, sendEvent: ReturnType<typeof vi.fn>) {
+  return render(
+    <ThemeProvider theme={{ colorScheme: 'light' }}>
+      <ParentMessengerContext.Provider
+        value={
+          {
+            isParentAvailable: true,
+            sendCommand: vi.fn(),
+            sendEvent,
+            registerOnSetOptions: vi.fn(() => vi.fn()),
+            registerOnSetPetEnabled: vi.fn(() => vi.fn()),
+            registerOnSetComposerValue: vi.fn(() => vi.fn()),
+            registerOnFocusComposer: vi.fn(() => vi.fn()),
+          } as any
+        }
+      >
+        <MarkdownText>{markdown}</MarkdownText>
+      </ParentMessengerContext.Provider>
+    </ThemeProvider>,
+  );
+}
+
 describe('MarkdownText', () => {
   beforeEach(() => {
     setLanguage('en-US');
@@ -100,6 +123,34 @@ describe('MarkdownText', () => {
     expect(container).toHaveTextContent('const answer = 42;');
     expect(screen.queryByText('Mermaid')).not.toBeInTheDocument();
     expect(mermaidMock.render).not.toHaveBeenCalled();
+  });
+
+  it('emits a ChatKit effect when a knowledgebase citation link is clicked', () => {
+    const sendEvent = vi.fn();
+    const href =
+      'xpert://knowledgebase/chunk?knowledgebaseId=kb-1&documentId=doc-1&chunkId=chunk-1';
+    renderMarkdownWithMessenger(`Answer [Source 1](${href})`, sendEvent);
+
+    const link = screen.getByRole('link', { name: 'Source 1' });
+    fireEvent.click(link);
+
+    expect(link).toHaveAttribute('data-knowledgebase-citation', 'true');
+    expect(link).toHaveClass('text-[0.85em]');
+    expect(link).toHaveClass('decoration-dotted');
+    expect(link).toHaveClass('hover:text-primary');
+    expect(link).not.toHaveAttribute('target');
+    expect(sendEvent).toHaveBeenCalledWith('public_event', [
+      'effect',
+      {
+        name: 'knowledgebase.open_citation',
+        data: {
+          knowledgebaseId: 'kb-1',
+          documentId: 'doc-1',
+          chunkId: 'chunk-1',
+          citationUrl: href,
+        },
+      },
+    ]);
   });
 
   it('renders proposed_plan tags as a markdown plan card', () => {

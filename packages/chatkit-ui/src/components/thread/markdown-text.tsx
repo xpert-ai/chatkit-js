@@ -2,7 +2,7 @@
 
 import './markdown-styles.css';
 
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import remarkMath from 'remark-math';
@@ -13,6 +13,7 @@ import {
   type ComponentPropsWithoutRef,
   type FC,
   type ReactNode,
+  useContext,
   useId,
   useState,
 } from 'react';
@@ -23,6 +24,7 @@ import { MermaidBlock } from './mermaid-block';
 import { TooltipIconButton } from './tooltip-icon-button';
 import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { ParentMessengerContext } from '../../providers/ParentMessenger';
 
 import 'katex/dist/katex.min.css';
 
@@ -63,6 +65,7 @@ const proposedPlanClosePattern = /^\s*<\/proposed_plan>\s*$/;
 const markdownFencePattern = /^ {0,3}(`{3,}|~{3,})/;
 const planMarkdownFencePattern =
   /^\s*(`{3,}|~{3,})[ \t]*(?:markdown|md)[^\n]*\r?\n([\s\S]*?)\r?\n\1[ \t]*\s*$/i;
+const knowledgebaseCitationEffectName = 'knowledgebase.open_citation';
 
 type MarkdownElementProps<T extends keyof JSX.IntrinsicElements> =
   ComponentPropsWithoutRef<T> & {
@@ -77,6 +80,97 @@ const stripMarkdownNode = <T extends { node?: unknown }>(
 
   return elementProps;
 };
+
+type KnowledgebaseCitationTarget = {
+  knowledgebaseId?: string;
+  documentId: string;
+  chunkId?: string;
+  documentName?: string;
+  citationUrl: string;
+};
+
+const parseKnowledgebaseCitationHref = (
+  href: unknown,
+): KnowledgebaseCitationTarget | null => {
+  if (typeof href !== 'string' || !href.trim()) {
+    return null;
+  }
+
+  try {
+    const url = new URL(href);
+    if (
+      url.protocol !== 'xpert:' ||
+      url.hostname !== 'knowledgebase' ||
+      url.pathname !== '/chunk'
+    ) {
+      return null;
+    }
+
+    const documentId = url.searchParams.get('documentId')?.trim();
+    if (!documentId) {
+      return null;
+    }
+
+    const knowledgebaseId = url.searchParams.get('knowledgebaseId')?.trim();
+    const chunkId = url.searchParams.get('chunkId')?.trim();
+    const documentName = url.searchParams.get('documentName')?.trim();
+
+    return {
+      documentId,
+      citationUrl: href,
+      ...(knowledgebaseId ? { knowledgebaseId } : {}),
+      ...(chunkId ? { chunkId } : {}),
+      ...(documentName ? { documentName } : {}),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const markdownUrlTransform = (value: string) =>
+  parseKnowledgebaseCitationHref(value) ? value : defaultUrlTransform(value);
+
+function MarkdownAnchor({
+  className,
+  href,
+  onClick,
+  ...props
+}: MarkdownElementProps<'a'>) {
+  const parentMessenger = useContext(ParentMessengerContext);
+  const citationTarget = parseKnowledgebaseCitationHref(href);
+  const anchorProps = stripMarkdownNode(props);
+
+  return (
+    <a
+      className={cn(
+        citationTarget
+          ? 'text-muted-foreground text-[0.85em] underline decoration-dotted underline-offset-4 transition-colors hover:text-primary'
+          : 'text-primary font-medium underline underline-offset-4',
+        className,
+      )}
+      href={href}
+      target={citationTarget ? undefined : '_blank'}
+      rel={citationTarget ? undefined : 'noopener noreferrer'}
+      data-knowledgebase-citation={citationTarget ? 'true' : undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!citationTarget || event.defaultPrevented) {
+          return;
+        }
+
+        event.preventDefault();
+        parentMessenger?.sendEvent('public_event', [
+          'effect',
+          {
+            name: knowledgebaseCitationEffectName,
+            data: citationTarget,
+          },
+        ]);
+      }}
+      {...anchorProps}
+    />
+  );
+}
 
 const getTextContent = (children: ReactNode) =>
   Children.toArray(children)
@@ -203,6 +297,7 @@ function MarkdownContent({ children }: { children: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[rehypeKatex]}
+      urlTransform={markdownUrlTransform}
       components={defaultComponents}
     >
       {children}
@@ -414,17 +509,7 @@ const defaultComponents: any = {
       {...stripMarkdownNode(props)}
     />
   ),
-  a: ({ className, ...props }: MarkdownElementProps<'a'>) => (
-    <a
-      className={cn(
-        'text-primary font-medium underline underline-offset-4',
-        className,
-      )}
-      target="_blank"
-      rel="noopener noreferrer"
-      {...stripMarkdownNode(props)}
-    />
-  ),
+  a: MarkdownAnchor,
   blockquote: ({ className, ...props }: MarkdownElementProps<'blockquote'>) => (
     <blockquote
       className={cn(
