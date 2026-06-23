@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.4
+
+### Patch Changes
+
+- 79dcf6b: knowledge citation
+
 ## 0.4.3
 
 ### Patch Changes
