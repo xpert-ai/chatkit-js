@@ -390,6 +390,123 @@ export type RuntimeCapabilitiesSelection = RuntimeCapabilitiesSelectionSet & {
   recommended?: RuntimeCapabilitiesSelectionSet;
 };
 
+export type ChatRequestFileAssetStatus =
+  | 'uploaded'
+  | 'scanning'
+  | 'parsing'
+  | 'ready'
+  | 'partial'
+  | 'failed';
+
+export type ChatRequestFileAssetPurpose =
+  | 'chat_attachment'
+  | 'workspace'
+  | 'knowledge';
+
+export type ChatRequestFileParseMode = 'auto' | 'fast' | 'deep' | 'none';
+
+type ChatRequestFileBase = Partial<File> & {
+  id?: string;
+  name?: string;
+  originalName?: string;
+  fileName?: string;
+  mimeType?: string;
+  mimetype?: string;
+  type?: string;
+  size?: number;
+  extension?: string;
+  fileKey?: string;
+};
+
+export type ChatRequestFileAssetMetadata = {
+  objectKey?: string;
+  url?: string;
+  fileUrl?: string;
+  thumbUrl?: string;
+  status?: ChatRequestFileAssetStatus;
+  parseStatus?: ChatRequestFileAssetStatus;
+  purpose?: ChatRequestFileAssetPurpose;
+  parseMode?: ChatRequestFileParseMode;
+  capabilities?: string[];
+  summary?: string;
+  workspacePath?: string;
+};
+
+/**
+ * Preferred chat file shape. This is the AgentFile/FileAsset handle returned by
+ * the file upload endpoint; new callers should submit this shape.
+ */
+export type ChatRequestFileAssetHandle = ChatRequestFileBase &
+  ChatRequestFileAssetMetadata &
+  (
+    | {
+        fileAssetId: string;
+        fileId?: string;
+        storageFileId?: string;
+      }
+    | {
+        id: string;
+        fileId: string;
+        storageFileId: string;
+        fileAssetId?: string;
+      }
+  );
+
+/**
+ * @deprecated Compatibility bridge for clients that still submit storage-layer
+ * handles. New callers should upload first and submit ChatRequestFileAssetHandle.
+ */
+export type ChatRequestStorageFileHandle = ChatRequestFileBase & {
+  storageFileId: string;
+  file?: string;
+  url?: string;
+  fileUrl?: string;
+  thumb?: string;
+  thumbUrl?: string;
+  storageProvider?: string;
+};
+
+/**
+ * Integration fallback for platforms such as webhooks that receive bytes but
+ * cannot call the upload endpoint first. Only data URLs are expected here;
+ * arbitrary remote URLs should not be submitted as chat files.
+ */
+export type ChatRequestInlineDataUrlFile = ChatRequestFileBase &
+  (
+    | {
+        fileUrl: `data:${string}`;
+        url?: string;
+      }
+    | {
+        url: `data:${string}`;
+        fileUrl?: string;
+      }
+  );
+
+/**
+ * @deprecated Old ChatKit/browser attachment placeholder. It may be accepted by
+ * legacy backends but is not a FileAsset handle.
+ */
+export type ChatRequestLegacyFileHandle = ChatRequestFileBase & {
+  id: string;
+  fileId?: string;
+  fileAssetId?: never;
+  storageFileId?: never;
+};
+
+/**
+ * @deprecated Raw browser File shape used before upload completion. External
+ * chat API callers should upload first and submit ChatRequestFileAssetHandle.
+ */
+export type ChatRequestBrowserFile = Partial<File>;
+
+export type ChatRequestFile =
+  | ChatRequestFileAssetHandle
+  | ChatRequestStorageFileHandle
+  | ChatRequestInlineDataUrlFile
+  | ChatRequestLegacyFileHandle
+  | ChatRequestBrowserFile;
+
 /**
  * Human input message, including uploaded file handles and references.
  */
@@ -400,7 +517,7 @@ export type TChatRequestHuman = {
    * AgentFile/FileAsset-shaped objects here; raw browser File objects should be
    * uploaded before submission.
    */
-  files?: Partial<File>[];
+  files?: ChatRequestFile[];
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
   planMode?: boolean;
