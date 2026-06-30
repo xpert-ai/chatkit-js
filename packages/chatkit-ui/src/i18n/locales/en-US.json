@@ -263,6 +263,21 @@
     "loading": "Loading",
     "thinking": "Thinking",
     "answering": "Answering",
+    "navigation": {
+      "label": "Message navigation",
+      "system": "System",
+      "tool": "Tool",
+      "event": "Event",
+      "message": "Message",
+      "image": "Image",
+      "memory": "Memory",
+      "widget": "Widget",
+      "mcpApp": "MCP App",
+      "attachment": "Attachment",
+      "reference": "Reference",
+      "capability": "Capability",
+      "moreTags": "+{{count}}"
+    },
     "mcpApp": {
       "loading": "Loading MCP App"
     },

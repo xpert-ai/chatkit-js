@@ -335,6 +335,15 @@ export type ChatKitLayoutOptions = {
   maxWidth?: number | string;
 };
 
+export type ChatKitMessageNavigationOptions = {
+  /**
+   * Whether to show the message quick navigation rail.
+   *
+   * @default true
+   */
+  enabled?: boolean;
+};
+
 type CustomApiConfig = {
   /**
    * The URL (relative or absolute) of the ChatKit API. The configured endpoint
@@ -519,6 +528,11 @@ export type ChatKitOptions = {
    * Layout configuration for the ChatKit UI.
    */
   layout?: ChatKitLayoutOptions;
+
+  /**
+   * Message list quick navigation controls.
+   */
+  messageNavigation?: ChatKitMessageNavigationOptions;
 
   /**
    * Optional animated pet companion rendered by the ChatKit web component over

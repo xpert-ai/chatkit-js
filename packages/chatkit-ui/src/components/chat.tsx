@@ -67,6 +67,7 @@ import {
   AssistantMessage,
   AssistantStreamingIndicator,
 } from './thread/messages/ai';
+import { MessageNavigator } from './thread/MessageNavigator';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
 import {
@@ -93,9 +94,7 @@ import {
   type ComposerValuePayload,
 } from '../lib/references';
 import { getMissingApiConfigurationKind } from '../lib/api-config';
-import {
-  sortVisiblePendingFollowUps,
-} from '../lib/follow-ups';
+import { sortVisiblePendingFollowUps } from '../lib/follow-ups';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { PetBridge } from './pet/PetBridge';
@@ -163,6 +162,14 @@ import {
   type RuntimeCapabilitiesWithCommands,
   type RuntimeCapabilityPaletteState,
 } from '../lib/slash-commands';
+import {
+  buildMessageNavigationItems,
+  getMessageNavigationItemId,
+  MESSAGE_NAVIGATION_MIN_ITEMS,
+  type MessageNavigationItem,
+  type MessageNavigationLabels,
+  type MessageNavigationSourceMessage,
+} from '../lib/message-navigation';
 
 export type ChatProps = {
   className?: string;
@@ -489,12 +496,14 @@ export function Chat({
   clientSecret = '',
   isClientSecretInitializing = false,
 }: ChatProps) {
-  const { t } = useChatkitTranslation();
+  const { t, i18n } = useChatkitTranslation();
   const composer = options?.composer;
   const startScreen = options?.startScreen;
   const history = options?.history;
   const disclaimer = options?.disclaimer;
   const apiUrl = options?.api?.apiUrl || defaultApiUrl;
+  const messageNavigationEnabled =
+    options?.messageNavigation?.enabled !== false;
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
   const { theme } = useTheme();
@@ -643,6 +652,9 @@ export function Chat({
     isLoading: isThreadsLoading,
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
+  const messageNavigationAnchorsRef = React.useRef(
+    new Map<string, HTMLDivElement>(),
+  );
   const attachmentsRef = React.useRef<ChatAttachmentsHandle>(null);
   const composerInputRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteRef = React.useRef<HTMLDivElement>(null);
@@ -663,6 +675,7 @@ export function Chat({
 
   const resolvedTitle = title ?? t('chat.title');
   const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
+  const assistantTitle = assistantName || resolvedTitle;
   const petRequired = options?.displayMode === 'pet';
   const basePetSettings = React.useMemo(
     () => derivePetLocalSettings(options?.pet),
@@ -727,6 +740,47 @@ export function Chat({
     () => stream.messages ?? [],
     [stream.messages],
   );
+  const messageNavigationLabels = React.useMemo<MessageNavigationLabels>(
+    () => ({
+      user: t('chat.youLabel'),
+      assistant: assistantTitle,
+      system: t('message.navigation.system'),
+      tool: t('message.navigation.tool'),
+      event: t('message.navigation.event'),
+      message: t('message.navigation.message'),
+      image: t('message.navigation.image'),
+      memory: t('message.navigation.memory'),
+      widget: t('message.navigation.widget'),
+      mcpApp: t('message.navigation.mcpApp'),
+      attachment: t('message.navigation.attachment'),
+      reference: t('message.navigation.reference'),
+      capability: t('message.navigation.capability'),
+      reasoning: t('message.reasoning'),
+    }),
+    [assistantTitle, t],
+  );
+  const messageNavigationItems = React.useMemo(
+    () =>
+      messageNavigationEnabled
+        ? buildMessageNavigationItems(
+            messages as MessageNavigationSourceMessage[],
+            {
+              labels: messageNavigationLabels,
+              language: i18n.language,
+              assistantTitle,
+            },
+          )
+        : [],
+    [
+      assistantTitle,
+      i18n.language,
+      messageNavigationEnabled,
+      messageNavigationLabels,
+      messages,
+    ],
+  );
+  const showMessageNavigation =
+    messageNavigationItems.length >= MESSAGE_NAVIGATION_MIN_ITEMS;
   const historyMessagePagination = stream.historyMessagePagination;
   const isLoadingMoreMessages = Boolean(
     historyMessagePagination?.isLoadingMore,
@@ -761,17 +815,14 @@ export function Chat({
     () => getRuntimeCapabilityOptions(runtimeCapabilities),
     [runtimeCapabilities],
   );
-  const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(
-    () => {
-      if (isGoalAdapter(options?.goal)) {
-        return options.goal;
-      }
-      return supportsXpertThreadGoalAdapter(stream.client)
-        ? createXpertThreadGoalAdapter(stream.client)
-        : null;
-    },
-    [options?.goal, stream.client],
-  );
+  const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(() => {
+    if (isGoalAdapter(options?.goal)) {
+      return options.goal;
+    }
+    return supportsXpertThreadGoalAdapter(stream.client)
+      ? createXpertThreadGoalAdapter(stream.client)
+      : null;
+  }, [options?.goal, stream.client]);
   const displayedGoalElapsedSeconds = threadGoal
     ? (threadGoal.elapsedSeconds ?? 0) +
       (goalElapsedStartedAt
@@ -1099,6 +1150,28 @@ export function Chat({
     },
     [cancelPendingAutoScroll, enableAutoFollow],
   );
+
+  const setMessageNavigationAnchor = React.useCallback(
+    (id: string, node: HTMLDivElement | null) => {
+      if (node) {
+        messageNavigationAnchorsRef.current.set(id, node);
+        return;
+      }
+      messageNavigationAnchorsRef.current.delete(id);
+    },
+    [],
+  );
+
+  const getMessageNavigationAnchor = React.useCallback(
+    (item: MessageNavigationItem) =>
+      messageNavigationAnchorsRef.current.get(item.id) ?? null,
+    [],
+  );
+
+  const handleMessageNavigationNavigate = React.useCallback(() => {
+    disableAutoFollow();
+    clearQuoteSelection();
+  }, [clearQuoteSelection, disableAutoFollow]);
 
   React.useEffect(() => {
     const viewport = viewportRef.current;
@@ -1973,12 +2046,9 @@ export function Chat({
     ],
   );
 
-  const handleGoalPanelOpenChange = React.useCallback(
-    (open: boolean) => {
-      setIsGoalPanelOpen(open);
-    },
-    [],
-  );
+  const handleGoalPanelOpenChange = React.useCallback((open: boolean) => {
+    setIsGoalPanelOpen(open);
+  }, []);
 
   const addRunRuntimeCapabilities = React.useCallback(
     (selection: RuntimeCapabilitiesSelection) => {
@@ -2588,7 +2658,9 @@ export function Chat({
         const nextViewport = viewportRef.current;
         if (nextViewport) {
           const nextScrollTop =
-            nextViewport.scrollHeight - previousScrollHeight + previousScrollTop;
+            nextViewport.scrollHeight -
+            previousScrollHeight +
+            previousScrollTop;
           nextViewport.scrollTop = Math.max(0, nextScrollTop);
           previousScrollTopRef.current = nextViewport.scrollTop;
         }
@@ -2764,7 +2836,6 @@ export function Chat({
     fallbackTitle: t('history.threadFallback'),
   });
 
-  const assistantTitle = assistantName || resolvedTitle;
   const layoutMaxWidth = options?.layout?.maxWidth;
   const chatColumnStyle = React.useMemo<React.CSSProperties | undefined>(() => {
     if (
@@ -2904,6 +2975,19 @@ export function Chat({
         </div>
       </div>
 
+      {showMessageNavigation && (
+        <MessageNavigator
+          items={messageNavigationItems}
+          viewportRef={viewportRef}
+          getAnchor={getMessageNavigationAnchor}
+          onNavigate={handleMessageNavigationNavigate}
+          label={t('message.navigation.label')}
+          tagsOverflowLabel={(count) =>
+            t('message.navigation.moreTags', { count })
+          }
+        />
+      )}
+
       <div
         data-slot="chatkit-chat-content"
         className="mx-auto w-full flex-1 p-4"
@@ -3014,6 +3098,10 @@ export function Chat({
                 message.type === 'human' || isAssistantMessage;
               const quoteSource =
                 message.type === 'human' ? t('chat.youLabel') : assistantTitle;
+              const messageNavigationId = getMessageNavigationItemId(
+                message as MessageNavigationSourceMessage,
+                index,
+              );
 
               if (
                 !isAssistantMessage &&
@@ -3028,6 +3116,10 @@ export function Chat({
               return (
                 <div
                   key={message.id ?? `${message.type}-${index}`}
+                  ref={(node) =>
+                    setMessageNavigationAnchor(messageNavigationId, node)
+                  }
+                  data-message-navigation-id={messageNavigationId}
                   className={cn(
                     'group flex gap-3',
                     message.type === 'human'
@@ -3392,7 +3484,8 @@ export function Chat({
                       disabled={isGoalLoading}
                       onClick={() =>
                         void handleGoalCommand({
-                          args: threadGoal.status === 'paused' ? 'resume' : 'pause',
+                          args:
+                            threadGoal.status === 'paused' ? 'resume' : 'pause',
                           commandSource: {
                             type: 'slash_command',
                             name: 'goal',
