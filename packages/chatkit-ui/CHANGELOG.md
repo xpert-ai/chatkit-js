@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.5
+
+### Patch Changes
+
+- 3830e6f: message navigation
+- Updated dependencies [3830e6f]
+  - @xpert-ai/chatkit-types@0.4.4
+
 ## 0.4.4
 
 ### Patch Changes

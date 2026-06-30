@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.4
+
+### Patch Changes
+
+- 3830e6f: message navigation
+
 ## 0.4.3
 
 ### Patch Changes
