@@ -263,6 +263,21 @@
     "loading": "正在加载",
     "thinking": "正在思考",
     "answering": "正在生成",
+    "navigation": {
+      "label": "消息导航",
+      "system": "系统",
+      "tool": "工具",
+      "event": "事件",
+      "message": "消息",
+      "image": "图片",
+      "memory": "记忆",
+      "widget": "组件",
+      "mcpApp": "MCP App",
+      "attachment": "附件",
+      "reference": "引用",
+      "capability": "能力",
+      "moreTags": "+{{count}}"
+    },
     "mcpApp": {
       "loading": "正在加载 MCP App"
     },

@@ -67,7 +67,7 @@ describe('ContextUsageIndicator', () => {
   it('does not load assistant context size before the client secret is ready', () => {
     const stream = createStream({ apiKey: '' });
     mockUseStreamContext.mockReturnValue(
-      stream as ReturnType<typeof useStreamContext>,
+      stream as unknown as ReturnType<typeof useStreamContext>,
     );
 
     render(<ContextUsageIndicator />);
@@ -79,7 +79,7 @@ describe('ContextUsageIndicator', () => {
   it('loads assistant context size once API configuration is available', async () => {
     const stream = createStream();
     mockUseStreamContext.mockReturnValue(
-      stream as ReturnType<typeof useStreamContext>,
+      stream as unknown as ReturnType<typeof useStreamContext>,
     );
 
     render(<ContextUsageIndicator />);
