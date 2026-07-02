@@ -123,7 +123,14 @@ export interface XpertAIChatKit extends HTMLElement {
     appendReferences?: boolean;
     selectedToolId?: string | null;
     selectedModelId?: string | null;
+    runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+    insertRuntimeCapabilities?: boolean;
   }): Promise<void>;
+
+  /** Sets the selected runtime capabilities for the next user message without sending it. */
+  setRuntimeCapabilities(
+    selection: RuntimeCapabilitiesSelection | null,
+  ): Promise<void>;
 
   /**
    * Manually fetches updates from the server.

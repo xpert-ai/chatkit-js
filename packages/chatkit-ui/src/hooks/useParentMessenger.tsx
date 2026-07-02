@@ -5,6 +5,7 @@ import {
   type ParentMessenger,
 } from '../providers/ParentMessenger';
 import type { ComposerValuePayload } from '../lib/references';
+import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 
 export type { ParentMessenger } from '../providers/ParentMessenger';
 
@@ -12,6 +13,9 @@ export type ParentMessengerOptions = {
   onSetOptions?: (options: ChatKitOptions | null) => void;
   onSetPetEnabled?: (enabled: boolean) => void;
   onSetComposerValue?: (payload: ComposerValuePayload | null) => void;
+  onSetRuntimeCapabilities?: (
+    selection: RuntimeCapabilitiesSelection | null,
+  ) => void;
   onFocusComposer?: () => void;
 };
 
@@ -19,6 +23,7 @@ export function useParentMessenger({
   onSetOptions,
   onSetPetEnabled,
   onSetComposerValue,
+  onSetRuntimeCapabilities,
   onFocusComposer,
 }: ParentMessengerOptions = {}): ParentMessenger {
   const context = useContext(ParentMessengerContext);
@@ -32,12 +37,14 @@ export function useParentMessenger({
     registerOnSetOptions,
     registerOnSetPetEnabled,
     registerOnSetComposerValue,
+    registerOnSetRuntimeCapabilities,
     registerOnFocusComposer,
     ...messenger
   } = context;
   const onSetOptionsRef = useRef(onSetOptions);
   const onSetPetEnabledRef = useRef(onSetPetEnabled);
   const onSetComposerValueRef = useRef(onSetComposerValue);
+  const onSetRuntimeCapabilitiesRef = useRef(onSetRuntimeCapabilities);
   const onFocusComposerRef = useRef(onFocusComposer);
   useEffect(() => {
     onSetOptionsRef.current = onSetOptions;
@@ -49,12 +56,16 @@ export function useParentMessenger({
     onSetComposerValueRef.current = onSetComposerValue;
   }, [onSetComposerValue]);
   useEffect(() => {
+    onSetRuntimeCapabilitiesRef.current = onSetRuntimeCapabilities;
+  }, [onSetRuntimeCapabilities]);
+  useEffect(() => {
     onFocusComposerRef.current = onFocusComposer;
   }, [onFocusComposer]);
 
   const hasOnSetOptions = Boolean(onSetOptions);
   const hasOnSetPetEnabled = Boolean(onSetPetEnabled);
   const hasOnSetComposerValue = Boolean(onSetComposerValue);
+  const hasOnSetRuntimeCapabilities = Boolean(onSetRuntimeCapabilities);
   const hasOnFocusComposer = Boolean(onFocusComposer);
   useEffect(() => {
     if (!hasOnSetOptions) return;
@@ -79,6 +90,14 @@ export function useParentMessenger({
     };
     return registerOnSetComposerValue(handler);
   }, [hasOnSetComposerValue, registerOnSetComposerValue]);
+
+  useEffect(() => {
+    if (!hasOnSetRuntimeCapabilities) return;
+    const handler = (selection: RuntimeCapabilitiesSelection | null) => {
+      onSetRuntimeCapabilitiesRef.current?.(selection);
+    };
+    return registerOnSetRuntimeCapabilities(handler);
+  }, [hasOnSetRuntimeCapabilities, registerOnSetRuntimeCapabilities]);
 
   useEffect(() => {
     if (!hasOnFocusComposer) return;

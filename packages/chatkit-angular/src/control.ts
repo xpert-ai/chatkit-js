@@ -9,6 +9,7 @@ const CHATKIT_METHOD_NAMES = Object.freeze([
   'setThreadId',
   'sendUserMessage',
   'setComposerValue',
+  'setRuntimeCapabilities',
   'fetchUpdates',
   'sendCustomAction',
 ] as const);
@@ -138,6 +139,12 @@ class ChatKitController {
 
   setComposerValue(...args: Parameters<XpertAIChatKit['setComposerValue']>) {
     return this.callMethod('setComposerValue', ...args);
+  }
+
+  setRuntimeCapabilities(
+    ...args: Parameters<XpertAIChatKit['setRuntimeCapabilities']>
+  ) {
+    return this.callMethod('setRuntimeCapabilities', ...args);
   }
 
   fetchUpdates(...args: Parameters<XpertAIChatKit['fetchUpdates']>) {

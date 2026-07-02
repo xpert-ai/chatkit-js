@@ -34,6 +34,7 @@ const CHATKIT_METHOD_NAMES = Object.freeze([
   'setThreadId',
   'sendUserMessage',
   'setComposerValue',
+  'setRuntimeCapabilities',
   'fetchUpdates',
   'sendCustomAction',
 ] as const);
@@ -284,6 +285,9 @@ export const ChatKit = ControlBase.extend('xpertai.chatkit.ui5.ChatKit', {
   },
   setComposerValue(this: ChatKitInstance, ...args: ChatKitMethodParams<'setComposerValue'>) {
     return this._callMethod('setComposerValue', ...args);
+  },
+  setRuntimeCapabilities(this: ChatKitInstance, ...args: ChatKitMethodParams<'setRuntimeCapabilities'>) {
+    return this._callMethod('setRuntimeCapabilities', ...args);
   },
   fetchUpdates(this: ChatKitInstance, ...args: ChatKitMethodParams<'fetchUpdates'>) {
     return this._callMethod('fetchUpdates', ...args);

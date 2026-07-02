@@ -29,6 +29,24 @@ function PetEnabledProbe({
   return null;
 }
 
+function RuntimeCapabilitiesProbe({
+  onSetRuntimeCapabilities,
+}: {
+  onSetRuntimeCapabilities?: (selection: unknown) => void;
+}) {
+  useParentMessenger({ onSetRuntimeCapabilities });
+  return null;
+}
+
+function ComposerValueProbe({
+  onSetComposerValue,
+}: {
+  onSetComposerValue: (payload: unknown) => void;
+}) {
+  useParentMessenger({ onSetComposerValue });
+  return null;
+}
+
 function ChatMinimizeEventProbe() {
   const parentMessenger = useParentMessenger();
 
@@ -227,6 +245,108 @@ describe('ParentMessengerProvider', () => {
         __xpaiChatKit: true,
         type: 'response',
         nonce: 'pet-enabled-test',
+        response: { ok: true },
+      }),
+      '*',
+    );
+  });
+
+  it('dispatches setRuntimeCapabilities commands to registered handlers', async () => {
+    const onSetRuntimeCapabilities = vi.fn();
+    const runtimeCapabilities = {
+      mode: 'allowlist' as const,
+      skills: { workspaceId: 'workspace-1', ids: ['skill-1'] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+    };
+
+    render(
+      <ParentMessengerProvider>
+        <RuntimeCapabilitiesProbe
+          onSetRuntimeCapabilities={onSetRuntimeCapabilities}
+        />
+      </ParentMessengerProvider>,
+    );
+
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onSetRuntimeCapabilities',
+        nonce: 'runtime-capabilities-command-test',
+        data: runtimeCapabilities,
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: parentWindow,
+    });
+
+    window.dispatchEvent(event);
+
+    await waitFor(() =>
+      expect(onSetRuntimeCapabilities).toHaveBeenCalledWith(
+        runtimeCapabilities,
+      ),
+    );
+    expect(parentWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __xpaiChatKit: true,
+        type: 'response',
+        nonce: 'runtime-capabilities-command-test',
+        response: { ok: true },
+      }),
+      '*',
+    );
+  });
+
+  it('dispatches setComposerValue runtime capability insert payloads to registered handlers', async () => {
+    const onSetComposerValue = vi.fn();
+    const runtimeCapabilities = {
+      mode: 'allowlist' as const,
+      skills: { workspaceId: 'workspace-1', ids: ['skill-1'] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+    };
+
+    render(
+      <ParentMessengerProvider>
+        <ComposerValueProbe onSetComposerValue={onSetComposerValue} />
+      </ParentMessengerProvider>,
+    );
+
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onSetComposerValue',
+        nonce: 'runtime-capabilities-insert-command-test',
+        data: {
+          runtimeCapabilities,
+          insertRuntimeCapabilities: true,
+        },
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: parentWindow,
+    });
+
+    window.dispatchEvent(event);
+
+    await waitFor(() =>
+      expect(onSetComposerValue).toHaveBeenCalledWith({
+        runtimeCapabilities,
+        insertRuntimeCapabilities: true,
+      }),
+    );
+    expect(parentWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __xpaiChatKit: true,
+        type: 'response',
+        nonce: 'runtime-capabilities-insert-command-test',
         response: { ok: true },
       }),
       '*',

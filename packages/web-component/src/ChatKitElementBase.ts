@@ -11,6 +11,7 @@ import type {
 } from '@xpert-ai/chatkit-types';
 import { normalizePetOptions } from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
+import type { RuntimeCapabilitiesSelection } from '@xpert-ai/chatkit-types';
 import type { SendUserMessageParams } from '@xpert-ai/chatkit-types';
 import { removeMethods } from './helpers';
 
@@ -875,9 +876,17 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     files?: File[];
     selectedToolId?: string | null;
     selectedModelId?: string | null;
+    runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+    insertRuntimeCapabilities?: boolean;
   }) {
     await this.#loaded;
     await this.#messenger?.commands.setComposerValue(params);
+  }
+
+  @requireCommandCapability
+  async setRuntimeCapabilities(selection: RuntimeCapabilitiesSelection | null) {
+    await this.#loaded;
+    await this.#messenger?.commands.setRuntimeCapabilities(selection);
   }
 
   @requireCommandCapability
