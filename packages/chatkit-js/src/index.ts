@@ -31,6 +31,7 @@ const CHATKIT_METHOD_NAMES = Object.freeze([
   'setThreadId',
   'sendUserMessage',
   'setComposerValue',
+  'setRuntimeCapabilities',
   'fetchUpdates',
   'sendCustomAction',
 ] as const);
@@ -141,7 +142,9 @@ export type ChatKitInstance = ChatKitMethods & {
   destroy: () => void;
 };
 
-export function createChatKit(config: CreateChatKitOptions = {}): ChatKitInstance {
+export function createChatKit(
+  config: CreateChatKitOptions = {} as CreateChatKitOptions,
+): ChatKitInstance {
   const element = resolveElement(config.element ?? null);
   const { options, handlers } = splitOptions(config);
 
@@ -163,7 +166,7 @@ export function createChatKit(config: CreateChatKitOptions = {}): ChatKitInstanc
     );
   }
 
-  const methods = {} as ChatKitMethods;
+  const methods = {} as Record<ChatKitMethod, (...args: any[]) => unknown>;
   for (const key of CHATKIT_METHOD_NAMES) {
     methods[key] = (...args: any[]) => {
       const method = element[key];
@@ -189,6 +192,6 @@ export function createChatKit(config: CreateChatKitOptions = {}): ChatKitInstanc
   return {
     element,
     destroy,
-    ...methods,
+    ...(methods as ChatKitMethods),
   };
 }

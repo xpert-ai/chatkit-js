@@ -101,6 +101,8 @@ export type SetComposerValueCommandPayload = {
     files?: File[]
     selectedToolId?: string | null
     selectedModelId?: string | null
+    runtimeCapabilities?: RuntimeCapabilitiesSelection | null
+    insertRuntimeCapabilities?: boolean
 }
 
 export type CustomActionCommandPayload = {
@@ -127,6 +129,7 @@ export type OuterCommands = {
     sendUserMessage: (params: SendUserMessageCommandPayload) => void
     setPetEnabled: (params: { enabled: boolean }) => void
     setComposerValue: (params: SetComposerValueCommandPayload) => void
+    setRuntimeCapabilities: (selection: RuntimeCapabilitiesSelection | null) => void
     setThreadId: (params: { threadId: string | null }) => void
     focusComposer: () => void
     fetchUpdates: () => void
@@ -205,6 +208,7 @@ export const BASE_CAPABILITY_ALLOWLIST = [
   "command.setOptions",
   "command.sendUserMessage",
   "command.setComposerValue",
+  "command.setRuntimeCapabilities",
   "command.setThreadId",
   "command.focusComposer",
   "command.fetchUpdates",

@@ -11,6 +11,7 @@ const CHATKIT_METHOD_NAMES = Object.freeze([
   'setThreadId',
   'sendUserMessage',
   'setComposerValue',
+  'setRuntimeCapabilities',
   'fetchUpdates',
   'sendCustomAction',
 ] as const);

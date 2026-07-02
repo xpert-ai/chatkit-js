@@ -6,6 +6,7 @@ import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
 } from '@xpert-ai/chatkit-types';
+import type { RuntimeCapabilitiesSelection } from './runtime-capabilities';
 
 export type ComposerValuePayload = {
   text?: string;
@@ -15,6 +16,8 @@ export type ComposerValuePayload = {
   appendReferences?: boolean;
   selectedToolId?: string | null;
   selectedModelId?: string | null;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+  insertRuntimeCapabilities?: boolean;
 };
 
 type ReferenceCandidate = {

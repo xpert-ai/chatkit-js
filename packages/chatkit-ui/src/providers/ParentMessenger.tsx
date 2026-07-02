@@ -30,6 +30,7 @@ import { createMessageId } from '../lib/utils';
 type CommandMessageMap = {
   onSendUserMessage: SendUserMessageParams;
   onSetComposerValue: ComposerValuePayload | null;
+  onSetRuntimeCapabilities: RuntimeCapabilitiesSelection | null;
   onSetOptions: ChatKitOptions | null;
   onSetPetEnabled: { enabled: boolean };
   onFocusComposer: null;
@@ -123,6 +124,9 @@ type OnSetPetEnabledHandler = (enabled: boolean) => void;
 type OnSetComposerValueHandler = (
   payload: ComposerValuePayload | null,
 ) => void | Promise<void>;
+type OnSetRuntimeCapabilitiesHandler = (
+  selection: RuntimeCapabilitiesSelection | null,
+) => void | Promise<void>;
 type OnFocusComposerHandler = () => void | Promise<void>;
 
 type ParentMessengerContextValue = ParentMessenger & {
@@ -130,6 +134,9 @@ type ParentMessengerContextValue = ParentMessenger & {
   registerOnSetPetEnabled: (handler: OnSetPetEnabledHandler) => () => void;
   registerOnSetComposerValue: (
     handler: OnSetComposerValueHandler,
+  ) => () => void;
+  registerOnSetRuntimeCapabilities: (
+    handler: OnSetRuntimeCapabilitiesHandler,
   ) => () => void;
   registerOnFocusComposer: (handler: OnFocusComposerHandler) => () => void;
 };
@@ -156,6 +163,9 @@ export function ParentMessengerProvider({
   const onSetPetEnabledHandlersRef = useRef(new Set<OnSetPetEnabledHandler>());
   const onSetComposerValueHandlersRef = useRef(
     new Set<OnSetComposerValueHandler>(),
+  );
+  const onSetRuntimeCapabilitiesHandlersRef = useRef(
+    new Set<OnSetRuntimeCapabilitiesHandler>(),
   );
   const onFocusComposerHandlersRef = useRef(new Set<OnFocusComposerHandler>());
   const latestOptionsRef = useRef<ChatKitOptions | null>(null);
@@ -190,6 +200,16 @@ export function ParentMessengerProvider({
       onSetComposerValueHandlersRef.current.add(handler);
       return () => {
         onSetComposerValueHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
+  const registerOnSetRuntimeCapabilities = useCallback(
+    (handler: OnSetRuntimeCapabilitiesHandler) => {
+      onSetRuntimeCapabilitiesHandlersRef.current.add(handler);
+      return () => {
+        onSetRuntimeCapabilitiesHandlersRef.current.delete(handler);
       };
     },
     [],
@@ -388,6 +408,31 @@ export function ParentMessengerProvider({
         return;
       }
 
+      if (
+        payload.type === 'command' &&
+        payload.command === 'onSetRuntimeCapabilities'
+      ) {
+        const selection = isRuntimeCapabilitiesSelection(payload.data)
+          ? (payload.data as RuntimeCapabilitiesSelection)
+          : null;
+        void Promise.all(
+          [...onSetRuntimeCapabilitiesHandlersRef.current].map((handler) =>
+            Promise.resolve(handler(selection)),
+          ),
+        )
+          .then(() => {
+            if (payload.nonce) {
+              sendResponse(payload.nonce, { ok: true });
+            }
+          })
+          .catch((error) => {
+            if (payload.nonce) {
+              sendResponse(payload.nonce, undefined, error);
+            }
+          });
+        return;
+      }
+
       if (payload.type === 'command' && payload.command === 'onSetOptions') {
         latestOptionsRef.current =
           (payload.data as ChatKitOptions | null) ?? null;
@@ -534,6 +579,7 @@ export function ParentMessengerProvider({
       registerOnSetOptions,
       registerOnSetPetEnabled,
       registerOnSetComposerValue,
+      registerOnSetRuntimeCapabilities,
       registerOnFocusComposer,
     }),
     [
@@ -543,6 +589,7 @@ export function ParentMessengerProvider({
       registerOnSetOptions,
       registerOnSetPetEnabled,
       registerOnSetComposerValue,
+      registerOnSetRuntimeCapabilities,
       registerOnFocusComposer,
     ],
   );

@@ -75,7 +75,6 @@ import {
   type ChatkitAvatarData,
   extractAssistantAvatar,
 } from './ui/chatkit-avatar';
-import { RuntimeCapabilityIcon } from './runtime-capability-icon';
 import { useStreamManager } from '../hooks/useStream';
 import { useThreads } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
@@ -109,23 +108,10 @@ import {
   type PetLocalSettings,
 } from './pet/pet-local-settings';
 import {
-  createEmptyRuntimeCapabilitiesSelection,
-  createDefaultRuntimeCapabilitiesSelection,
-  createRuntimeCapabilitiesForSubmit,
   getRecommendedRuntimeCapabilitiesSelection,
-  getRuntimeCapabilityOptions,
-  isRuntimeCapabilitySelected,
-  mergeRuntimeCapabilitiesSelections,
-  toggleRuntimeCapabilitySelection,
   type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../lib/runtime-capabilities';
-import {
-  hasMissingRuntimeCapabilityReferences,
-  loadConversationRuntimeCapabilities,
-  persistConversationRuntimeCapabilities as persistRuntimeCapabilitiesToConversation,
-  type MissingRuntimeCapabilityReferences,
-} from '../lib/conversation-runtime-capabilities';
 import {
   executeThreadGoalCommand,
   loadThreadGoal,
@@ -136,32 +122,31 @@ import {
   supportsXpertThreadGoalAdapter,
 } from '../lib/xpert-thread-goal-adapter';
 import {
-  createComposerCapabilityPart,
   createComposerTextParts,
   findAdjacentComposerCapability,
-  getComposerCapabilityKeys,
   getComposerCapabilityPartMap,
-  getComposerCapabilitySelectionKeys,
   getComposerEditingLength,
-  getComposerEditingText,
   getComposerPlainText,
   getComposerSelectionOffset,
   getComposerSelectionOffsets,
-  getRuntimeCapabilityOptionKey,
   normalizeComposerParts,
   readComposerPartsFromElement,
-  removeComposerCapabilityTokens,
   replaceComposerRange,
   setComposerSelectionOffset,
-  type ComposerCapabilityPart,
   type ComposerPart,
 } from '../lib/composer-parts';
+import { hasSelectedRuntimeSlashCommand } from '../lib/slash-commands';
 import {
-  hasSelectedRuntimeSlashCommand,
-  resolveRuntimeCapabilityPalette,
-  type RuntimeCapabilitiesWithCommands,
-  type RuntimeCapabilityPaletteState,
-} from '../lib/slash-commands';
+  ComposerCapabilityToken,
+  DetachedRunRuntimeCapabilities,
+  HumanRuntimeCapabilityChips,
+  getRemovedComposerCapabilityParts,
+  getRuntimeCapabilityOptionsForSelection,
+  getRuntimeCapabilityPaletteEmptyLabelKey,
+  removeComposerCapabilityPartsFromSelection,
+  useRuntimeCapabilitiesState,
+  useRuntimeCapabilityComposerActions,
+} from './chat/runtime-capabilities';
 import {
   buildMessageNavigationItems,
   getMessageNavigationItemId,
@@ -219,37 +204,6 @@ type HumanMessageWithMeta = Message & {
   runtimeCapabilityOptions?: RuntimeCapabilityOption[];
 };
 
-function getSlashPaletteEmptyLabelKey(
-  palette: RuntimeCapabilityPaletteState,
-  runtimeCapabilitiesReady: boolean,
-): string {
-  if (!palette.capabilityTypes || palette.capabilityTypes.length !== 1) {
-    return 'composer.capabilities.emptySearch';
-  }
-
-  if (!runtimeCapabilitiesReady) {
-    return 'composer.slashCommands.empty.loadingCapabilities';
-  }
-
-  const hasQuery = palette.query.trim().length > 0;
-  const capabilityType = palette.capabilityTypes[0];
-  if (capabilityType === 'skill') {
-    return hasQuery
-      ? 'composer.slashCommands.empty.matchingSkills'
-      : 'composer.slashCommands.empty.skills';
-  }
-
-  if (capabilityType === 'plugin') {
-    return hasQuery
-      ? 'composer.slashCommands.empty.matchingPlugins'
-      : 'composer.slashCommands.empty.plugins';
-  }
-
-  return hasQuery
-    ? 'composer.slashCommands.empty.matchingSubAgents'
-    : 'composer.slashCommands.empty.subAgents';
-}
-
 type QuoteSelectionState = {
   reference: ChatKitReference;
   top: number;
@@ -263,42 +217,6 @@ type SubmitDraftOptions = {
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   planMode?: boolean;
 };
-
-function getHttpStatus(error: unknown): number | null {
-  if (!error || typeof error !== 'object' || !('status' in error)) {
-    return null;
-  }
-
-  const status = (error as { status?: unknown }).status;
-  return typeof status === 'number' ? status : null;
-}
-
-function warnMissingRuntimeCapabilityReferences(
-  action: string,
-  missing: MissingRuntimeCapabilityReferences,
-) {
-  if (!hasMissingRuntimeCapabilityReferences(missing)) {
-    return;
-  }
-
-  console.warn(
-    `[Chat] Runtime capabilities ${action} include unavailable references:`,
-    missing,
-  );
-}
-
-function getSelectedRuntimeCapabilityOptions(
-  selection: RuntimeCapabilitiesSelection | null | undefined,
-  options: RuntimeCapabilityOption[],
-): RuntimeCapabilityOption[] {
-  if (!selection) {
-    return [];
-  }
-
-  return options.filter((option) =>
-    isRuntimeCapabilitySelected(selection, option.type, option.id),
-  );
-}
 
 async function readImageDimensions(file: File): Promise<{
   width?: number;
@@ -507,6 +425,38 @@ export function Chat({
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
   const { theme } = useTheme();
+  const effectiveClientSecret = stream.apiKey?.trim()
+    ? stream.apiKey
+    : clientSecret;
+  const missingConfigKind = getMissingApiConfigurationKind({
+    apiUrl,
+    clientSecret: effectiveClientSecret,
+  });
+  const missingConfig = Boolean(missingConfigKind);
+  const missingConfigShortMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlShort');
+      case 'clientSecret':
+        return t('chat.missingClientSecretShort');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretShort');
+      default:
+        return t('chat.missingConfigShort');
+    }
+  }, [missingConfigKind, t]);
+  const missingConfigDetailMessage = React.useMemo(() => {
+    switch (missingConfigKind) {
+      case 'apiUrl':
+        return t('chat.missingApiUrlDetail');
+      case 'clientSecret':
+        return t('chat.missingClientSecretDetail');
+      case 'apiUrlAndClientSecret':
+        return t('chat.missingApiUrlAndClientSecretDetail');
+      default:
+        return t('chat.missingConfigDetail');
+    }
+  }, [missingConfigKind, t]);
 
   const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
   const [historyError, setHistoryError] = React.useState<string | null>(null);
@@ -618,20 +568,6 @@ export function Chat({
   const [petSettingsOpen, setPetSettingsOpen] = React.useState(false);
   const [petLocalSettings, setPetLocalSettings] =
     React.useState<PetLocalSettings | null>(() => readPetLocalSettings());
-  const [runtimeCapabilities, setRuntimeCapabilities] =
-    React.useState<RuntimeCapabilitiesWithCommands | null>(null);
-  const [runtimeCapabilitiesReady, setRuntimeCapabilitiesReady] =
-    React.useState(false);
-  const [sessionRuntimeCapabilities, setSessionRuntimeCapabilities] =
-    React.useState<RuntimeCapabilitiesSelection>(() =>
-      createEmptyRuntimeCapabilitiesSelection(),
-    );
-  const [runRuntimeCapabilities, setRunRuntimeCapabilities] =
-    React.useState<RuntimeCapabilitiesSelection>(() =>
-      createEmptyRuntimeCapabilitiesSelection(),
-    );
-  const [runtimeCapabilityPalette, setRuntimeCapabilityPalette] =
-    React.useState<RuntimeCapabilityPaletteState | null>(null);
   const [attachmentState, setAttachmentState] =
     React.useState<ChatAttachmentsState>({
       uploadedFiles: [],
@@ -671,7 +607,30 @@ export function Chat({
   const autoScrollFrameRef = React.useRef<number | null>(null);
   const isPointerDownRef = React.useRef(false);
   const lastTouchYRef = React.useRef<number | null>(null);
-  const runtimeCapabilityPreferenceLoadRef = React.useRef(0);
+  const {
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    runtimeCapabilityOptions,
+    effectiveSessionRuntimeCapabilities,
+    runRuntimeCapabilities,
+    detachedRunRuntimeCapabilityOptions,
+    runtimeCapabilityPalette,
+    setRunRuntimeCapabilities,
+    setRuntimeCapabilityPalette,
+    applyExternalRuntimeCapabilities,
+    handleSessionRuntimeCapabilityToggle,
+    addRunRuntimeCapabilities,
+    resetRunRuntimeCapabilities,
+    getRuntimeCapabilitiesForSubmit,
+    getRuntimeCapabilitiesForCommand,
+    persistSessionRuntimeCapabilities,
+  } = useRuntimeCapabilitiesState({
+    client: stream.client,
+    assistantId: stream.assistantId,
+    threadId: stream.threadId,
+    disabled: missingConfig || !stream.client || !stream.assistantId,
+    composerParts,
+  });
 
   const resolvedTitle = title ?? t('chat.title');
   const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
@@ -811,10 +770,6 @@ export function Chat({
   const hasPendingInteractiveRequest =
     hasPendingRequestUserInput || hasPendingHITLRequest;
   const hasPendingTodos = Boolean(stream.todos?.items.length);
-  const runtimeCapabilityOptions = React.useMemo(
-    () => getRuntimeCapabilityOptions(runtimeCapabilities),
-    [runtimeCapabilities],
-  );
   const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(() => {
     if (isGoalAdapter(options?.goal)) {
       return options.goal;
@@ -829,16 +784,6 @@ export function Chat({
         ? Math.max(0, Math.floor((streamingNow - goalElapsedStartedAt) / 1000))
         : 0)
     : 0;
-  const effectiveSessionRuntimeCapabilities = React.useMemo(
-    () =>
-      runtimeCapabilitiesReady && runtimeCapabilities
-        ? mergeRuntimeCapabilitiesSelections(
-            runtimeCapabilities,
-            sessionRuntimeCapabilities,
-          )
-        : null,
-    [runtimeCapabilities, runtimeCapabilitiesReady, sessionRuntimeCapabilities],
-  );
   const goalCommandAvailable = hasSelectedRuntimeSlashCommand(
     runtimeCapabilities,
     effectiveSessionRuntimeCapabilities,
@@ -849,61 +794,6 @@ export function Chat({
     !hasCompletedGoal &&
     (Boolean(goalError) ||
       (threadGoal?.status === 'active' && stream.isLoading));
-  const runRuntimeCapabilityOptions = React.useMemo(
-    () =>
-      runtimeCapabilityOptions.filter((option) =>
-        isRuntimeCapabilitySelected(
-          runRuntimeCapabilities,
-          option.type,
-          option.id,
-        ),
-      ),
-    [runRuntimeCapabilities, runtimeCapabilityOptions],
-  );
-  const composerRuntimeCapabilitySelectionKeys = React.useMemo(
-    () => getComposerCapabilitySelectionKeys(composerParts),
-    [composerParts],
-  );
-  const detachedRunRuntimeCapabilityOptions = React.useMemo(
-    () =>
-      runRuntimeCapabilityOptions.filter(
-        (option) =>
-          !composerRuntimeCapabilitySelectionKeys.has(
-            getRuntimeCapabilityOptionKey(option),
-          ),
-      ),
-    [composerRuntimeCapabilitySelectionKeys, runRuntimeCapabilityOptions],
-  );
-
-  const persistSessionRuntimeCapabilities = React.useCallback(
-    async (
-      threadId: string,
-      selection: RuntimeCapabilitiesSelection | null | undefined,
-    ) => {
-      if (!runtimeCapabilities || !selection) {
-        return;
-      }
-
-      try {
-        const result = await persistRuntimeCapabilitiesToConversation({
-          client: stream.client,
-          threadId,
-          capabilities: runtimeCapabilities,
-          selection,
-        });
-        warnMissingRuntimeCapabilityReferences(
-          'persisted selection',
-          result.missing,
-        );
-      } catch (error) {
-        console.warn(
-          '[Chat] Failed to persist runtime capabilities selection:',
-          error,
-        );
-      }
-    },
-    [runtimeCapabilities, stream.client],
-  );
 
   const clearQuoteSelection = React.useCallback(() => {
     setQuoteSelection(null);
@@ -927,25 +817,18 @@ export function Chat({
       }
 
       if (options?.syncRemovedCapabilityTokens ?? true) {
-        const nextKeys = getComposerCapabilityKeys(normalized);
-        const removedCapabilities = previous.filter(
-          (part): part is ComposerCapabilityPart =>
-            part.type === 'capability' && !nextKeys.has(part.key),
+        const removedCapabilities = getRemovedComposerCapabilityParts(
+          previous,
+          normalized,
         );
 
         if (removedCapabilities.length > 0) {
-          setRunRuntimeCapabilities((selection) => {
-            let nextSelection = selection;
-            for (const part of removedCapabilities) {
-              nextSelection = toggleRuntimeCapabilitySelection(
-                nextSelection,
-                part.capability.type,
-                part.capability.id,
-                false,
-              );
-            }
-            return nextSelection;
-          });
+          setRunRuntimeCapabilities((selection) =>
+            removeComposerCapabilityPartsFromSelection(
+              selection,
+              removedCapabilities,
+            ),
+          );
         }
       }
 
@@ -955,7 +838,7 @@ export function Chat({
         setComposerDomVersion((version) => version + 1);
       }
     },
-    [],
+    [setRunRuntimeCapabilities],
   );
 
   const setComposerText = React.useCallback(
@@ -981,6 +864,24 @@ export function Chat({
       setComposerSelectionOffset(input, nextPosition);
     });
   }, []);
+
+  const {
+    applyComposerValueRuntimeCapabilities,
+    updateRuntimeCapabilityPalette,
+    removeRunRuntimeCapability,
+    insertComposerCapabilityToken,
+  } = useRuntimeCapabilityComposerActions({
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    runtimeCapabilityOptions,
+    setRunRuntimeCapabilities,
+    setRuntimeCapabilityPalette,
+    applyExternalRuntimeCapabilities,
+    composerInputRef,
+    composerPartsRef,
+    commitComposerParts,
+    focusComposerAt,
+  });
 
   const parentMessenger = useParentMessenger({
     onSetComposerValue: React.useCallback(
@@ -1011,8 +912,20 @@ export function Chat({
                 ) ?? null);
           setSelectedTool(nextTool);
         }
+
+        applyComposerValueRuntimeCapabilities(payload);
       },
-      [composer?.tools, setComposerText],
+      [
+        applyComposerValueRuntimeCapabilities,
+        composer?.tools,
+        setComposerText,
+      ],
+    ),
+    onSetRuntimeCapabilities: React.useCallback(
+      (selection: RuntimeCapabilitiesSelection | null) => {
+        applyExternalRuntimeCapabilities(selection);
+      },
+      [applyExternalRuntimeCapabilities],
     ),
     onFocusComposer: React.useCallback(() => {
       composerInputRef.current?.focus();
@@ -1303,38 +1216,6 @@ export function Chat({
     }
   }, [stream.isLoading, messages, scrollToBottom]);
 
-  const effectiveClientSecret = stream.apiKey?.trim()
-    ? stream.apiKey
-    : clientSecret;
-  const missingConfigKind = getMissingApiConfigurationKind({
-    apiUrl,
-    clientSecret: effectiveClientSecret,
-  });
-  const missingConfig = Boolean(missingConfigKind);
-  const missingConfigShortMessage = React.useMemo(() => {
-    switch (missingConfigKind) {
-      case 'apiUrl':
-        return t('chat.missingApiUrlShort');
-      case 'clientSecret':
-        return t('chat.missingClientSecretShort');
-      case 'apiUrlAndClientSecret':
-        return t('chat.missingApiUrlAndClientSecretShort');
-      default:
-        return t('chat.missingConfigShort');
-    }
-  }, [missingConfigKind, t]);
-  const missingConfigDetailMessage = React.useMemo(() => {
-    switch (missingConfigKind) {
-      case 'apiUrl':
-        return t('chat.missingApiUrlDetail');
-      case 'clientSecret':
-        return t('chat.missingClientSecretDetail');
-      case 'apiUrlAndClientSecret':
-        return t('chat.missingApiUrlAndClientSecretDetail');
-      default:
-        return t('chat.missingConfigDetail');
-    }
-  }, [missingConfigKind, t]);
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
   // File parsing can continue after submit; only the transport upload blocks send.
   const hasUploadingFiles = attachmentState.hasUploadingFiles;
@@ -1446,126 +1327,6 @@ export function Chat({
   }, [missingConfig, stream.client, stream.assistantId]);
 
   React.useEffect(() => {
-    if (missingConfig || !stream.client || !stream.assistantId) {
-      setRuntimeCapabilities(null);
-      setRuntimeCapabilitiesReady(false);
-      setSessionRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
-      setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
-      setRuntimeCapabilityPalette(null);
-      return;
-    }
-
-    const controller = new AbortController();
-
-    setRuntimeCapabilitiesReady(false);
-    setRuntimeCapabilities(null);
-    setRuntimeCapabilityPalette(null);
-
-    void stream.client.assistants
-      .getRuntimeCapabilities(stream.assistantId, {
-        signal: controller.signal,
-      })
-      .then((payload) => {
-        setRuntimeCapabilities(payload);
-        setRuntimeCapabilitiesReady(true);
-        setSessionRuntimeCapabilities(
-          createDefaultRuntimeCapabilitiesSelection(payload),
-        );
-        setRunRuntimeCapabilities(
-          createEmptyRuntimeCapabilitiesSelection(payload),
-        );
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-        if (getHttpStatus(error) === 404) {
-          setRuntimeCapabilities(null);
-          setRuntimeCapabilitiesReady(false);
-          setSessionRuntimeCapabilities(
-            createEmptyRuntimeCapabilitiesSelection(),
-          );
-          setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
-          return;
-        }
-        console.warn('[Chat] Failed to load runtime capabilities:', error);
-        setRuntimeCapabilities(null);
-        setRuntimeCapabilitiesReady(false);
-        setSessionRuntimeCapabilities(
-          createEmptyRuntimeCapabilitiesSelection(),
-        );
-        setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
-      });
-
-    return () => controller.abort();
-  }, [missingConfig, stream.client, stream.assistantId]);
-
-  React.useEffect(() => {
-    setRunRuntimeCapabilities(
-      createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
-    );
-
-    if (!runtimeCapabilitiesReady || !runtimeCapabilities) {
-      setSessionRuntimeCapabilities(
-        createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
-      );
-      return;
-    }
-
-    const defaultSelection =
-      createDefaultRuntimeCapabilitiesSelection(runtimeCapabilities);
-    const threadId = stream.threadId?.trim();
-    if (!threadId) {
-      setSessionRuntimeCapabilities(defaultSelection);
-      return;
-    }
-
-    let cancelled = false;
-    const requestId = runtimeCapabilityPreferenceLoadRef.current + 1;
-    runtimeCapabilityPreferenceLoadRef.current = requestId;
-    setSessionRuntimeCapabilities(defaultSelection);
-
-    void loadConversationRuntimeCapabilities({
-      client: stream.client,
-      threadId,
-      capabilities: runtimeCapabilities,
-    })
-      .then(({ selection, missing }) => {
-        if (
-          cancelled ||
-          runtimeCapabilityPreferenceLoadRef.current !== requestId
-        ) {
-          return;
-        }
-
-        warnMissingRuntimeCapabilityReferences('loaded selection', missing);
-        setSessionRuntimeCapabilities(selection ?? defaultSelection);
-      })
-      .catch((error: unknown) => {
-        if (
-          cancelled ||
-          runtimeCapabilityPreferenceLoadRef.current !== requestId
-        ) {
-          return;
-        }
-        console.warn(
-          '[Chat] Failed to load persisted runtime capabilities selection:',
-          error,
-        );
-        setSessionRuntimeCapabilities(defaultSelection);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    runtimeCapabilities,
-    runtimeCapabilitiesReady,
-    stream.client,
-    stream.threadId,
-  ]);
-
-  React.useEffect(() => {
     setThreadGoal(stream.threadGoal);
   }, [stream.threadGoal]);
 
@@ -1620,44 +1381,6 @@ export function Chat({
   // are fetched later by built-in file-understanding tools.
   const uploadedFiles = attachmentState.uploadedFiles;
 
-  const handleSessionRuntimeCapabilityToggle = React.useCallback(
-    (type: RuntimeCapabilityOption['type'], id: string, selected: boolean) => {
-      setSessionRuntimeCapabilities((previous) => {
-        const nextSelection = toggleRuntimeCapabilitySelection(
-          previous,
-          type,
-          id,
-          selected,
-        );
-
-        const threadId = stream.threadId?.trim();
-        if (threadId) {
-          void persistSessionRuntimeCapabilities(threadId, nextSelection);
-        }
-
-        return nextSelection;
-      });
-    },
-    [persistSessionRuntimeCapabilities, stream.threadId],
-  );
-
-  const updateRuntimeCapabilityPalette = React.useCallback(
-    (parts: ComposerPart[], selectionStart?: number | null) => {
-      const input = composerInputRef.current;
-      const editingText = getComposerEditingText(parts);
-      const nextPalette = resolveRuntimeCapabilityPalette(
-        editingText,
-        typeof selectionStart === 'number'
-          ? selectionStart
-          : input
-            ? getComposerSelectionOffset(input)
-            : getComposerEditingLength(parts),
-      );
-      setRuntimeCapabilityPalette(nextPalette);
-    },
-    [],
-  );
-
   const syncComposerInputFromElement = React.useCallback(
     (input: HTMLDivElement) => {
       const previousCapabilities = getComposerCapabilityPartMap(
@@ -1702,27 +1425,6 @@ export function Chat({
     );
   }, [updateRuntimeCapabilityPalette]);
 
-  const removeRunRuntimeCapability = React.useCallback(
-    (option: RuntimeCapabilityOption) => {
-      setRunRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(
-          previous,
-          option.type,
-          option.id,
-          false,
-        ),
-      );
-      commitComposerParts(
-        removeComposerCapabilityTokens(composerPartsRef.current, option),
-        {
-          resetDom: true,
-          syncRemovedCapabilityTokens: false,
-        },
-      );
-    },
-    [commitComposerParts],
-  );
-
   const submitDraft = React.useCallback(
     (submitOptions: SubmitDraftOptions = {}) => {
       if (isSubmissionBlocked) return;
@@ -1743,31 +1445,10 @@ export function Chat({
         return;
       }
 
-      const recommendedRuntimeCapabilitiesForSubmit =
-        submitOptions.runtimeCapabilities &&
-        runtimeCapabilities &&
-        runtimeCapabilitiesReady
-          ? mergeRuntimeCapabilitiesSelections(
-              runtimeCapabilities,
-              runRuntimeCapabilities,
-              submitOptions.runtimeCapabilities,
-            )
-          : runRuntimeCapabilities;
-      const runtimeCapabilitiesForSubmit =
-        runtimeCapabilities && runtimeCapabilitiesReady
-          ? createRuntimeCapabilitiesForSubmit({
-              capabilities: runtimeCapabilities,
-              available: effectiveSessionRuntimeCapabilities,
-              recommended: recommendedRuntimeCapabilitiesForSubmit,
-            })
-          : null;
-      const runtimeCapabilityOptionsForMessage =
-        getSelectedRuntimeCapabilityOptions(
-          getRecommendedRuntimeCapabilitiesSelection(
-            runtimeCapabilitiesForSubmit,
-          ),
-          runtimeCapabilityOptions,
-        );
+      const {
+        runtimeCapabilitiesForSubmit,
+        runtimeCapabilityOptionsForMessage,
+      } = getRuntimeCapabilitiesForSubmit(submitOptions.runtimeCapabilities);
 
       const displayContent =
         submitOptions.displayText ||
@@ -1870,21 +1551,16 @@ export function Chat({
       }
       attachmentsRef.current?.clear();
       setReferences([]);
-      setRunRuntimeCapabilities(
-        createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
-      );
-      setRuntimeCapabilityPalette(null);
+      resetRunRuntimeCapabilities();
     },
     [
       effectiveSessionRuntimeCapabilities,
+      getRuntimeCapabilitiesForSubmit,
       isSubmissionBlocked,
       options?.request,
       persistSessionRuntimeCapabilities,
       references,
-      runtimeCapabilities,
-      runtimeCapabilitiesReady,
-      runtimeCapabilityOptions,
-      runRuntimeCapabilities,
+      resetRunRuntimeCapabilities,
       scrollToBottom,
       selectedTool,
       commitComposerParts,
@@ -1954,13 +1630,7 @@ export function Chat({
         if (startsGoalRun) {
           const goalRunThreadId = result.threadId ?? threadId;
           const runtimeCapabilitiesForGoalRun =
-            runtimeCapabilities && runtimeCapabilitiesReady
-              ? createRuntimeCapabilitiesForSubmit({
-                  capabilities: runtimeCapabilities,
-                  available: effectiveSessionRuntimeCapabilities,
-                  recommended: commandRuntimeCapabilities,
-                })
-              : (commandRuntimeCapabilities ?? null);
+            getRuntimeCapabilitiesForCommand(commandRuntimeCapabilities);
           const inputPayload: {
             input: string;
             runtimeCapabilities?: RuntimeCapabilitiesSelection;
@@ -2035,12 +1705,10 @@ export function Chat({
       }
     },
     [
-      effectiveSessionRuntimeCapabilities,
+      getRuntimeCapabilitiesForCommand,
       goalAdapter,
       options?.request,
       refreshThreads,
-      runtimeCapabilities,
-      runtimeCapabilitiesReady,
       stream,
       t,
     ],
@@ -2049,57 +1717,6 @@ export function Chat({
   const handleGoalPanelOpenChange = React.useCallback((open: boolean) => {
     setIsGoalPanelOpen(open);
   }, []);
-
-  const addRunRuntimeCapabilities = React.useCallback(
-    (selection: RuntimeCapabilitiesSelection) => {
-      setRunRuntimeCapabilities((previous) =>
-        runtimeCapabilities
-          ? mergeRuntimeCapabilitiesSelections(
-              runtimeCapabilities,
-              previous,
-              selection,
-            )
-          : previous,
-      );
-    },
-    [runtimeCapabilities],
-  );
-
-  const insertComposerCapabilityToken = React.useCallback(
-    (
-      capability: RuntimeCapabilityOption,
-      range?: { start: number; end: number },
-    ) => {
-      const token = createComposerCapabilityPart(capability, createMessageId());
-      const currentParts = composerPartsRef.current;
-      const replaceRange = range ?? {
-        start: getComposerEditingLength(currentParts),
-        end: getComposerEditingLength(currentParts),
-      };
-      const nextParts = replaceComposerRange(
-        currentParts,
-        replaceRange.start,
-        replaceRange.end,
-        [token],
-      );
-      commitComposerParts(nextParts, {
-        caretOffset: replaceRange.start + 1,
-        resetDom: true,
-        syncRemovedCapabilityTokens: true,
-      });
-      setRunRuntimeCapabilities((previous) =>
-        toggleRuntimeCapabilitySelection(
-          previous,
-          capability.type,
-          capability.id,
-          true,
-        ),
-      );
-      setRuntimeCapabilityPalette(null);
-      focusComposerAt(replaceRange.start + 1);
-    },
-    [commitComposerParts, focusComposerAt],
-  );
 
   const {
     slashPaletteOptions,
@@ -2130,7 +1747,7 @@ export function Chat({
   });
   const slashPaletteEmptyLabel = runtimeCapabilityPalette
     ? t(
-        getSlashPaletteEmptyLabelKey(
+        getRuntimeCapabilityPaletteEmptyLabelKey(
           runtimeCapabilityPalette,
           runtimeCapabilitiesReady,
         ),
@@ -3085,7 +2702,7 @@ export function Chat({
               const humanRuntimeCapabilityOptions =
                 message.type === 'human'
                   ? (humanMessage.runtimeCapabilityOptions ??
-                    getSelectedRuntimeCapabilityOptions(
+                    getRuntimeCapabilityOptionsForSelection(
                       getRecommendedRuntimeCapabilitiesSelection(
                         humanMessage.runtimeCapabilities,
                       ),
@@ -3175,22 +2792,9 @@ export function Chat({
                         <>
                           {message.type === 'human' &&
                             humanRuntimeCapabilityOptions.length > 0 && (
-                              <div className="mb-2 flex flex-wrap gap-1.5">
-                                {humanRuntimeCapabilityOptions.map((option) => (
-                                  <span
-                                    key={`${option.type}:${option.id}`}
-                                    className="inline-flex max-w-full items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs font-medium text-primary-foreground"
-                                  >
-                                    <RuntimeCapabilityIcon
-                                      option={option}
-                                      variant="chip"
-                                    />
-                                    <span className="max-w-[9rem] truncate">
-                                      {option.label}
-                                    </span>
-                                  </span>
-                                ))}
-                              </div>
+                              <HumanRuntimeCapabilityChips
+                                options={humanRuntimeCapabilityOptions}
+                              />
                             )}
                           {message.type === 'human' &&
                             humanReferences.length > 0 && (
@@ -3385,31 +2989,12 @@ export function Chat({
           </div>
         )}
 
-        {detachedRunRuntimeCapabilityOptions.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {t('composer.capabilities.runOnly')}
-            </span>
-            {detachedRunRuntimeCapabilityOptions.map((option) => (
-              <span
-                key={`${option.type}:${option.id}`}
-                className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-              >
-                <RuntimeCapabilityIcon option={option} variant="chip" />
-                <span className="max-w-40 truncate">{option.label}</span>
-                <button
-                  type="button"
-                  onClick={() => removeRunRuntimeCapability(option)}
-                  className="rounded-full p-0.5 hover:bg-primary/15"
-                  title={t('composer.capabilities.removeRunCapability')}
-                  aria-label={t('composer.capabilities.removeRunCapability')}
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        <DetachedRunRuntimeCapabilities
+          options={detachedRunRuntimeCapabilityOptions}
+          runOnlyLabel={t('composer.capabilities.runOnly')}
+          removeLabel={t('composer.capabilities.removeRunCapability')}
+          onRemove={removeRunRuntimeCapability}
+        />
 
         {showGoalStatus && (
           <div
@@ -3680,20 +3265,7 @@ export function Chat({
                     {part.text}
                   </React.Fragment>
                 ) : (
-                  <span
-                    key={part.key}
-                    data-composer-capability-key={part.key}
-                    data-capability-type={part.capability.type}
-                    data-capability-id={part.capability.id}
-                    contentEditable={false}
-                    className="mx-0.5 inline-flex max-w-[14rem] select-none items-center gap-1 text-sm font-semibold text-primary align-baseline"
-                  >
-                    <RuntimeCapabilityIcon
-                      option={part.capability}
-                      variant="chip"
-                    />
-                    <span className="truncate">{part.capability.label}</span>
-                  </span>
+                  <ComposerCapabilityToken key={part.key} part={part} />
                 ),
               )}
             </div>

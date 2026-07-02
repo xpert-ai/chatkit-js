@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -77,6 +78,9 @@ const mocks = vi.hoisted(() => {
       stopRuntimeActivityItem: vi.fn(),
       setThreadId: vi.fn(),
     },
+    parentMessengerOptions: null as null | {
+      onSetComposerValue?: (payload: unknown) => void;
+    },
   };
 });
 
@@ -133,7 +137,14 @@ vi.mock('../providers/Theme', () => ({
 }));
 
 vi.mock('../hooks/useParentMessenger', () => ({
-  useParentMessenger: () => undefined,
+  useParentMessenger: (options?: {
+    onSetComposerValue?: (payload: unknown) => void;
+  }) => {
+    if (options?.onSetComposerValue) {
+      mocks.parentMessengerOptions = options;
+    }
+    return undefined;
+  },
 }));
 
 vi.mock('./composer/ComposerMenu', () => ({
@@ -488,6 +499,7 @@ describe('Chat plan mode payload', () => {
     mocks.stream.error = null;
     mocks.stream.submit.mockResolvedValue(undefined);
     (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal = null;
+    mocks.parentMessengerOptions = null;
   });
 
   afterEach(() => {
@@ -2087,6 +2099,77 @@ describe('Chat plan mode payload', () => {
       skills: { ids: [] },
       plugins: { nodeKeys: [] },
       subAgents: { nodeKeys: [] },
+    });
+  });
+
+  it('inserts parent-requested runtime capabilities as atomic composer tokens', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-docs',
+            workspaceId: 'workspace-1',
+            label: 'documents',
+            repositoryName: 'Documents',
+          },
+        ],
+        plugins: [],
+        subAgents: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    expect(mocks.parentMessengerOptions?.onSetComposerValue).toEqual(
+      expect.any(Function),
+    );
+    await act(async () => {
+      mocks.parentMessengerOptions?.onSetComposerValue?.({
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: ['skill-docs'] },
+          plugins: { nodeKeys: [] },
+          subAgents: { nodeKeys: [] },
+        },
+        insertRuntimeCapabilities: true,
+      });
+    });
+
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('textbox')).getByText('documents'),
+      ).toBeInTheDocument(),
+    );
+
+    let textbox = screen.getByRole('textbox');
+    expect(
+      textbox.querySelector('[data-composer-capability-key]'),
+    ).toHaveAttribute('data-capability-id', 'skill-docs');
+
+    textbox = insertComposerText(textbox, ' create a doc');
+    const send = screen.getByRole('button', { name: 'send' });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.stream.submit.mock.calls[0][0].input.runtimeCapabilities,
+    ).toEqual({
+      mode: 'allowlist',
+      skills: { workspaceId: 'workspace-1', ids: ['skill-docs'] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+      recommended: {
+        skills: { workspaceId: 'workspace-1', ids: ['skill-docs'] },
+        plugins: { nodeKeys: [] },
+        subAgents: { nodeKeys: [] },
+      },
     });
   });
 
