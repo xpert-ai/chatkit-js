@@ -16,6 +16,7 @@ import type {
   SlashPaletteOption,
 } from '../../lib/slash-commands';
 import type { RuntimeCapabilityOption } from '../../lib/runtime-capabilities';
+import { getRuntimeCapabilityColor } from '../../lib/runtime-capabilities';
 import { RuntimeCapabilityIcon } from '../runtime-capability-icon';
 import { IconDefinitionRenderer } from '../ui/icon-definition';
 
@@ -83,92 +84,111 @@ export function SlashPalette({
       )}
     >
       {options.length > 0 ? (
-        options.map((option, index) => (
-          <React.Fragment key={option.id}>
-            <button
-              ref={(element) => {
-                optionRefs.current[index] = element;
-              }}
-              data-slot="slash-palette-option"
-              data-kind={option.kind}
-              data-depth={option.kind === 'capability' ? option.depth : 0}
-              type="button"
-              aria-expanded={
-                option.kind === 'command' && option.capabilityType
-                  ? option.expanded === true
-                  : undefined
-              }
-              onMouseDown={(event) => {
-                event.preventDefault();
-                onSelect(option);
-              }}
-              className={cn(
-                'flex h-8 w-full items-center gap-1 rounded-md px-2 text-left text-sm hover:bg-muted',
-                itemRoundedClass,
-                option.kind === 'capability' && option.depth === 1 && 'pl-9',
-                index === palette.activeIndex && 'bg-muted',
-              )}
-            >
-              <span
+        options.map((option, index) => {
+          const capabilityColor =
+            option.kind === 'capability' && option.capability.type !== 'skill'
+              ? getRuntimeCapabilityColor(option.capability)
+              : undefined;
+          return (
+            <React.Fragment key={option.id}>
+              <button
+                ref={(element) => {
+                  optionRefs.current[index] = element;
+                }}
+                data-slot="slash-palette-option"
+                data-kind={option.kind}
+                data-depth={option.kind === 'capability' ? option.depth : 0}
+                type="button"
+                aria-expanded={
+                  option.kind === 'command' && option.capabilityType
+                    ? option.expanded === true
+                    : undefined
+                }
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onSelect(option);
+                }}
                 className={cn(
-                  'flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground',
+                  'flex h-8 w-full items-center gap-1 rounded-md px-2 text-left text-sm hover:bg-muted',
+                  itemRoundedClass,
                   option.kind === 'capability' &&
                     option.depth === 1 &&
-                    'h-5 w-5',
+                    'pl-9',
+                  index === palette.activeIndex && 'bg-muted',
                 )}
               >
-                {option.kind === 'command' ? (
-                  <SlashCommandIcon command={option.command} />
-                ) : (
-                  <RuntimeCapabilityIcon
-                    option={option.capability}
-                    variant="list"
-                  />
-                )}
-              </span>
-              <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
-                  <span className="truncate font-medium">{option.label}</span>
-                  {option.kind === 'command' &&
-                  option.capabilityType &&
-                  typeof option.childCount === 'number' ? (
-                    <span
-                      data-slot="slash-palette-child-count"
-                      className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium leading-none text-muted-foreground"
-                    >
-                      {option.childCount}
-                    </span>
-                  ) : null}
-                </span>
-                {option.description && (
-                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                    {option.description}
-                  </span>
-                )}
-              </span>
-              {option.kind === 'command' && option.capabilityType ? (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
-                  {option.expanded ? (
-                    <ChevronDown size={14} />
+                <span
+                  className={cn(
+                    'flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground',
+                    option.kind === 'capability' &&
+                      option.depth === 1 &&
+                      'h-5 w-5',
+                  )}
+                  style={
+                    capabilityColor ? { color: capabilityColor } : undefined
+                  }
+                >
+                  {option.kind === 'command' ? (
+                    <SlashCommandIcon command={option.command} />
                   ) : (
-                    <ChevronRight size={14} />
+                    <RuntimeCapabilityIcon
+                      option={option.capability}
+                      variant="list"
+                    />
                   )}
                 </span>
+                <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                  <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
+                    <span
+                      className="truncate font-medium"
+                      style={
+                        capabilityColor ? { color: capabilityColor } : undefined
+                      }
+                    >
+                      {option.label}
+                    </span>
+                    {option.kind === 'command' &&
+                    option.capabilityType &&
+                    typeof option.childCount === 'number' ? (
+                      <span
+                        data-slot="slash-palette-child-count"
+                        className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium leading-none text-muted-foreground"
+                      >
+                        {option.childCount}
+                      </span>
+                    ) : null}
+                  </span>
+                  {option.description && (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {option.description}
+                    </span>
+                  )}
+                </span>
+                {option.kind === 'command' && option.capabilityType ? (
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
+                    {option.expanded ? (
+                      <ChevronDown size={14} />
+                    ) : (
+                      <ChevronRight size={14} />
+                    )}
+                  </span>
+                ) : null}
+              </button>
+              {option.kind === 'command' &&
+              option.capabilityType &&
+              option.expanded &&
+              option.childCount === 0 ? (
+                <div
+                  data-slot="slash-palette-group-empty"
+                  className="px-3 py-1.5 pl-12 text-xs text-muted-foreground"
+                >
+                  {capabilityEmptyLabels?.[option.capabilityType] ??
+                    emptyLabel}
+                </div>
               ) : null}
-            </button>
-            {option.kind === 'command' &&
-            option.capabilityType &&
-            option.expanded &&
-            option.childCount === 0 ? (
-              <div
-                data-slot="slash-palette-group-empty"
-                className="px-3 py-1.5 pl-12 text-xs text-muted-foreground"
-              >
-                {capabilityEmptyLabels?.[option.capabilityType] ?? emptyLabel}
-              </div>
-            ) : null}
-          </React.Fragment>
-        ))
+            </React.Fragment>
+          );
+        })
       ) : (
         <div className="px-3 py-2 text-sm text-muted-foreground">
           {emptyLabel}

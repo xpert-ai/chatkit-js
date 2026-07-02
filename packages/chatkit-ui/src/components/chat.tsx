@@ -890,6 +890,10 @@ export function Chat({
           return;
         }
 
+        const shouldInsertRuntimeCapabilitiesBeforeText =
+          typeof payload.text === 'string' &&
+          payload.insertRuntimeCapabilities === true;
+
         if (typeof payload.text === 'string') {
           setComposerText(payload.text);
         }
@@ -913,13 +917,14 @@ export function Chat({
           setSelectedTool(nextTool);
         }
 
-        applyComposerValueRuntimeCapabilities(payload);
+        applyComposerValueRuntimeCapabilities(
+          payload,
+          shouldInsertRuntimeCapabilitiesBeforeText
+            ? { insertAt: 0 }
+            : undefined,
+        );
       },
-      [
-        applyComposerValueRuntimeCapabilities,
-        composer?.tools,
-        setComposerText,
-      ],
+      [applyComposerValueRuntimeCapabilities, composer?.tools, setComposerText],
     ),
     onSetRuntimeCapabilities: React.useCallback(
       (selection: RuntimeCapabilitiesSelection | null) => {

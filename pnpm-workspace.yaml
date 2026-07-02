@@ -2,5 +2,9 @@ packages:
   - 'packages/*'
   - 'examples/*'
   - 'examples/*/*'
+allowBuilds:
+  '@parcel/watcher': set this to true or false
+  esbuild: set this to true or false
+  msw: set this to true or false
 gitChecks: false
 publishBranch: main

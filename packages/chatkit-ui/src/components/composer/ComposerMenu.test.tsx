@@ -250,6 +250,7 @@ describe('ComposerMenu', () => {
               label: 'Research Skill',
               description: 'Search and summarize',
               meta: {
+                color: '#2563EB',
                 icon: {
                   type: 'svg',
                   value:
@@ -265,6 +266,7 @@ describe('ComposerMenu', () => {
               label: 'Sandbox Plugin',
               description: 'Run commands',
               meta: {
+                color: '#F97316',
                 icon: {
                   type: 'svg',
                   value:
@@ -322,6 +324,9 @@ describe('ComposerMenu', () => {
     expect(
       skillItem.querySelector('[data-slot="runtime-capability-meta-icon"] svg'),
     ).toBeInTheDocument();
+    expect(within(skillItem).getByText('Research Skill')).not.toHaveStyle({
+      color: '#2563EB',
+    });
     fireEvent.click(skillItem);
     expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
       'skill',
@@ -339,6 +344,9 @@ describe('ComposerMenu', () => {
         '[data-slot="runtime-capability-meta-icon"] svg',
       ),
     ).toBeInTheDocument();
+    expect(within(pluginItem).getByText('Sandbox Plugin')).toHaveStyle({
+      color: '#F97316',
+    });
     fireEvent.click(pluginItem);
     expect(onRuntimeCapabilityToggle).toHaveBeenCalledWith(
       'plugin',

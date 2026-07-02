@@ -47,6 +47,7 @@ import {
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { useTheme } from '../../providers/Theme';
 import {
+  getRuntimeCapabilityColor,
   isRuntimeCapabilitySelected,
   type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
@@ -324,6 +325,8 @@ export function ComposerMenu({
     const selected = selectedRuntimeCapabilities
       ? isRuntimeCapabilitySelected(selectedRuntimeCapabilities, type, item.id)
       : false;
+    const capabilityColor =
+      type === 'skill' ? undefined : getRuntimeCapabilityColor(item.capability);
     const icon = (
       <RuntimeCapabilityIcon option={item.capability} variant="list" />
     );
@@ -342,11 +345,19 @@ export function ComposerMenu({
           selected && 'bg-muted',
         )}
       >
-        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground">
+        <span
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground"
+          style={capabilityColor ? { color: capabilityColor } : undefined}
+        >
           {icon}
         </span>
         <span className="min-w-0 flex-1 text-left">
-          <span className="block truncate">{item.label}</span>
+          <span
+            className="block truncate"
+            style={capabilityColor ? { color: capabilityColor } : undefined}
+          >
+            {item.label}
+          </span>
           {(item.description || item.fallbackDescription) && (
             <span className="block truncate text-xs text-muted-foreground">
               {item.description ?? item.fallbackDescription}

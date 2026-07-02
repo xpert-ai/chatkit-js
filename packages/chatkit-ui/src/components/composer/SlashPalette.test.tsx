@@ -98,4 +98,42 @@ describe('SlashPalette', () => {
 
     expect(badge).toHaveAttribute('data-slot', 'slash-palette-child-count');
   });
+
+  it('does not tint skill capability rows with the skill color', () => {
+    render(
+      <SlashPalette
+        palette={palette}
+        options={[
+          {
+            kind: 'capability',
+            id: 'capability:skill:documents',
+            label: 'documents',
+            capability: {
+              type: 'skill',
+              id: 'skill-docs',
+              label: 'documents',
+              capability: {
+                id: 'skill-docs',
+                workspaceId: 'workspace-1',
+                label: 'documents',
+                meta: {
+                  color: '#2563EB',
+                },
+              },
+            },
+            depth: 1,
+          },
+        ]}
+        paletteRef={{ current: null }}
+        optionRefs={{ current: [] }}
+        emptyLabel="No commands"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    const option = screen.getByRole('button', { name: /documents/ });
+    expect(within(option).getByText('documents')).not.toHaveStyle({
+      color: '#2563EB',
+    });
+  });
 });
