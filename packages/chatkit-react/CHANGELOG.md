@@ -1,5 +1,17 @@
 # @xpert-ai/chatkit-react
 
+## 0.4.0
+
+### Minor Changes
+
+- d6b2e09: feat: set runtime capabilities
+
+### Patch Changes
+
+- Updated dependencies [d6b2e09]
+  - @xpert-ai/chatkit-web-component@0.4.0
+  - @xpert-ai/chatkit-types@0.4.5
+
 ## 0.3.2
 
 ### Patch Changes
