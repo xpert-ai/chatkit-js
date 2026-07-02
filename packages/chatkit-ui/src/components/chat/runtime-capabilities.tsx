@@ -8,6 +8,7 @@ import {
   createDefaultRuntimeCapabilitiesSelection,
   createRuntimeCapabilitiesForSubmit,
   getRecommendedRuntimeCapabilitiesSelection,
+  getRuntimeCapabilityColor,
   getRuntimeCapabilityOptions,
   isRuntimeCapabilitySelected,
   mergeRuntimeCapabilitiesSelections,
@@ -23,6 +24,7 @@ import {
 } from '../../lib/conversation-runtime-capabilities';
 import {
   createComposerCapabilityPart,
+  createComposerTextParts,
   getComposerCapabilityKeys,
   getComposerCapabilitySelectionKeys,
   getComposerEditingLength,
@@ -81,6 +83,15 @@ type RuntimeCapabilitiesComposerActionsParams = {
   commitComposerParts: CommitComposerParts;
   focusComposerAt: (position?: number) => void;
 };
+
+function createComposerCapabilityInsertionParts(
+  options: RuntimeCapabilityOption[],
+): ComposerPart[] {
+  return options.flatMap((option) => [
+    createComposerCapabilityPart(option, createMessageId()),
+    ...(option.type === 'skill' ? createComposerTextParts(' ') : []),
+  ]);
+}
 
 function getHttpStatus(error: unknown): number | null {
   if (!error || typeof error !== 'object' || !('status' in error)) {
@@ -571,11 +582,16 @@ export function useRuntimeCapabilityComposerActions({
   commitComposerParts,
   focusComposerAt,
 }: RuntimeCapabilitiesComposerActionsParams) {
-  const pendingExternalRuntimeCapabilityInsertRef =
-    React.useRef<RuntimeCapabilitiesSelection | null>(null);
+  const pendingExternalRuntimeCapabilityInsertRef = React.useRef<{
+    selection: RuntimeCapabilitiesSelection;
+    insertAt?: number | null;
+  } | null>(null);
 
   const insertExternalRuntimeCapabilities = React.useCallback(
-    (selection: RuntimeCapabilitiesSelection | null) => {
+    (
+      selection: RuntimeCapabilitiesSelection | null,
+      options?: { insertAt?: number | null },
+    ) => {
       applyExternalRuntimeCapabilities(selection);
       if (!selection) {
         pendingExternalRuntimeCapabilityInsertRef.current = null;
@@ -583,7 +599,10 @@ export function useRuntimeCapabilityComposerActions({
       }
 
       if (!runtimeCapabilitiesReady || !runtimeCapabilities) {
-        pendingExternalRuntimeCapabilityInsertRef.current = selection;
+        pendingExternalRuntimeCapabilityInsertRef.current = {
+          selection,
+          insertAt: options?.insertAt ?? null,
+        };
         return;
       }
 
@@ -603,16 +622,21 @@ export function useRuntimeCapabilityComposerActions({
       }
 
       const currentParts = composerPartsRef.current;
-      const insertAt = getComposerEditingLength(currentParts);
+      const editingLength = getComposerEditingLength(currentParts);
+      const insertAt =
+        typeof options?.insertAt === 'number'
+          ? Math.max(0, Math.min(options.insertAt, editingLength))
+          : editingLength;
+      const replacementParts =
+        createComposerCapabilityInsertionParts(selectedOptions);
       const nextParts = replaceComposerRange(
         currentParts,
         insertAt,
         insertAt,
-        selectedOptions.map((option) =>
-          createComposerCapabilityPart(option, createMessageId()),
-        ),
+        replacementParts,
       );
-      const nextCaretOffset = insertAt + selectedOptions.length;
+      const nextCaretOffset =
+        insertAt + getComposerEditingLength(replacementParts);
       commitComposerParts(nextParts, {
         caretOffset: nextCaretOffset,
         resetDom: true,
@@ -634,22 +658,26 @@ export function useRuntimeCapabilityComposerActions({
   );
 
   const applyComposerValueRuntimeCapabilities = React.useCallback(
-    (payload: {
-      runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
-      insertRuntimeCapabilities?: boolean;
-    }) => {
-      const runtimeCapabilitiesPayload =
-        isRuntimeCapabilitiesSelection(payload.runtimeCapabilities)
-          ? payload.runtimeCapabilities
-          : payload.runtimeCapabilities === null
-            ? null
-            : undefined;
+    (
+      payload: {
+        runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+        insertRuntimeCapabilities?: boolean;
+      },
+      options?: { insertAt?: number | null },
+    ) => {
+      const runtimeCapabilitiesPayload = isRuntimeCapabilitiesSelection(
+        payload.runtimeCapabilities,
+      )
+        ? payload.runtimeCapabilities
+        : payload.runtimeCapabilities === null
+          ? null
+          : undefined;
       if (runtimeCapabilitiesPayload === undefined) {
         return;
       }
 
       if (payload.insertRuntimeCapabilities === true) {
-        insertExternalRuntimeCapabilities(runtimeCapabilitiesPayload);
+        insertExternalRuntimeCapabilities(runtimeCapabilitiesPayload, options);
       } else {
         applyExternalRuntimeCapabilities(runtimeCapabilitiesPayload);
       }
@@ -700,7 +728,9 @@ export function useRuntimeCapabilityComposerActions({
       capability: RuntimeCapabilityOption,
       range?: { start: number; end: number },
     ) => {
-      const token = createComposerCapabilityPart(capability, createMessageId());
+      const replacementParts = createComposerCapabilityInsertionParts([
+        capability,
+      ]);
       const currentParts = composerPartsRef.current;
       const replaceRange = range ?? {
         start: getComposerEditingLength(currentParts),
@@ -710,10 +740,12 @@ export function useRuntimeCapabilityComposerActions({
         currentParts,
         replaceRange.start,
         replaceRange.end,
-        [token],
+        replacementParts,
       );
+      const nextCaretOffset =
+        replaceRange.start + getComposerEditingLength(replacementParts);
       commitComposerParts(nextParts, {
-        caretOffset: replaceRange.start + 1,
+        caretOffset: nextCaretOffset,
         resetDom: true,
         syncRemovedCapabilityTokens: true,
       });
@@ -726,7 +758,7 @@ export function useRuntimeCapabilityComposerActions({
         ),
       );
       setRuntimeCapabilityPalette(null);
-      focusComposerAt(replaceRange.start + 1);
+      focusComposerAt(nextCaretOffset);
     },
     [
       commitComposerParts,
@@ -747,7 +779,9 @@ export function useRuntimeCapabilityComposerActions({
       return;
     }
 
-    insertExternalRuntimeCapabilities(pendingSelection);
+    insertExternalRuntimeCapabilities(pendingSelection.selection, {
+      insertAt: pendingSelection.insertAt,
+    });
   }, [
     insertExternalRuntimeCapabilities,
     runtimeCapabilities,
@@ -774,15 +808,22 @@ export function HumanRuntimeCapabilityChips({
 
   return (
     <div className="mb-2 flex flex-wrap gap-1.5">
-      {options.map((option) => (
-        <span
-          key={`${option.type}:${option.id}`}
-          className="inline-flex max-w-full items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs font-medium text-primary-foreground"
-        >
-          <RuntimeCapabilityIcon option={option} variant="chip" />
-          <span className="max-w-[9rem] truncate">{option.label}</span>
-        </span>
-      ))}
+      {options.map((option) => {
+        const color =
+          option.type === 'skill'
+            ? undefined
+            : getRuntimeCapabilityColor(option);
+        return (
+          <span
+            key={`${option.type}:${option.id}`}
+            className="inline-flex max-w-full items-center gap-1 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs font-medium text-primary-foreground"
+            style={color ? { color } : undefined}
+          >
+            <RuntimeCapabilityIcon option={option} variant="chip" />
+            <span className="max-w-[9rem] truncate">{option.label}</span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -805,24 +846,28 @@ export function DetachedRunRuntimeCapabilities({
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">{runOnlyLabel}</span>
-      {options.map((option) => (
-        <span
-          key={`${option.type}:${option.id}`}
-          className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-        >
-          <RuntimeCapabilityIcon option={option} variant="chip" />
-          <span className="max-w-40 truncate">{option.label}</span>
-          <button
-            type="button"
-            onClick={() => onRemove(option)}
-            className="rounded-full p-0.5 hover:bg-primary/15"
-            title={removeLabel}
-            aria-label={removeLabel}
+      {options.map((option) => {
+        const color = getRuntimeCapabilityColor(option);
+        return (
+          <span
+            key={`${option.type}:${option.id}`}
+            className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+            style={color ? { color } : undefined}
           >
-            <X size={11} />
-          </button>
-        </span>
-      ))}
+            <RuntimeCapabilityIcon option={option} variant="chip" />
+            <span className="max-w-40 truncate">{option.label}</span>
+            <button
+              type="button"
+              onClick={() => onRemove(option)}
+              className="rounded-full p-0.5 hover:bg-primary/15"
+              title={removeLabel}
+              aria-label={removeLabel}
+            >
+              <X size={11} />
+            </button>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -832,6 +877,7 @@ export function ComposerCapabilityToken({
 }: {
   part: ComposerCapabilityPart;
 }) {
+  const color = getRuntimeCapabilityColor(part.capability);
   return (
     <span
       key={part.key}
@@ -840,6 +886,7 @@ export function ComposerCapabilityToken({
       data-capability-id={part.capability.id}
       contentEditable={false}
       className="mx-0.5 inline-flex max-w-[14rem] select-none items-center gap-1 text-sm font-semibold text-primary align-baseline"
+      style={color ? { color } : undefined}
     >
       <RuntimeCapabilityIcon option={part.capability} variant="chip" />
       <span className="truncate">{part.capability.label}</span>

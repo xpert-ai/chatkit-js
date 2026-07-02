@@ -2111,6 +2111,9 @@ describe('Chat plan mode payload', () => {
             workspaceId: 'workspace-1',
             label: 'documents',
             repositoryName: 'Documents',
+            meta: {
+              color: '#2563EB',
+            },
           },
         ],
         plugins: [],
@@ -2148,11 +2151,14 @@ describe('Chat plan mode payload', () => {
     );
 
     let textbox = screen.getByRole('textbox');
-    expect(
-      textbox.querySelector('[data-composer-capability-key]'),
-    ).toHaveAttribute('data-capability-id', 'skill-docs');
+    const capabilityToken = textbox.querySelector(
+      '[data-composer-capability-key]',
+    );
+    expect(capabilityToken).toHaveAttribute('data-capability-id', 'skill-docs');
+    expect(capabilityToken).toHaveStyle({ color: '#2563EB' });
+    expect(textbox.textContent).toContain('documents ');
 
-    textbox = insertComposerText(textbox, ' create a doc');
+    textbox = insertComposerText(textbox, 'create a doc');
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);
@@ -2171,6 +2177,58 @@ describe('Chat plan mode payload', () => {
         subAgents: { nodeKeys: [] },
       },
     });
+  });
+
+  it('places parent-requested runtime capability tokens before prompt text', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
+      {
+        skills: [
+          {
+            id: 'skill-docs',
+            workspaceId: 'workspace-1',
+            label: 'documents',
+            repositoryName: 'Documents',
+          },
+        ],
+        plugins: [],
+        subAgents: [],
+      },
+    );
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    const prompt = 'Draft a project memo as a document';
+    await act(async () => {
+      mocks.parentMessengerOptions?.onSetComposerValue?.({
+        text: prompt,
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: { workspaceId: 'workspace-1', ids: ['skill-docs'] },
+          plugins: { nodeKeys: [] },
+          subAgents: { nodeKeys: [] },
+        },
+        insertRuntimeCapabilities: true,
+      });
+    });
+
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('textbox')).getByText('documents'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('textbox')).toHaveTextContent(prompt);
+
+    const textContent = screen.getByRole('textbox').textContent ?? '';
+    expect(textContent).toContain(`documents ${prompt}`);
+    expect(textContent.indexOf('documents')).toBeLessThan(
+      textContent.indexOf(prompt),
+    );
   });
 
   it('keeps the contenteditable node stable during IME composition', async () => {

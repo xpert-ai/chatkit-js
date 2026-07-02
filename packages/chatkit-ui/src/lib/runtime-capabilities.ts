@@ -29,6 +29,7 @@ export type RuntimeCapabilityOption =
       id: string;
       label: string;
       description?: string;
+      color?: string;
       capability: RuntimeCapabilitySkill;
     }
   | {
@@ -36,6 +37,7 @@ export type RuntimeCapabilityOption =
       id: string;
       label: string;
       description?: string;
+      color?: string;
       capability: RuntimeCapabilityPlugin;
     }
   | {
@@ -43,6 +45,7 @@ export type RuntimeCapabilityOption =
       id: string;
       label: string;
       description?: string;
+      color?: string;
       capability: RuntimeCapabilitySubAgent;
     };
 
@@ -269,6 +272,7 @@ export function getRuntimeCapabilityOptions(
       id: capability.id,
       label: capability.label,
       description: capability.description ?? capability.repositoryName,
+      color: readRuntimeCapabilityColor(capability),
       capability,
     })),
     ...capabilities.plugins.map((capability) => ({
@@ -276,6 +280,7 @@ export function getRuntimeCapabilityOptions(
       id: capability.nodeKey,
       label: capability.label,
       description: capability.description ?? capability.provider,
+      color: readRuntimeCapabilityColor(capability),
       capability,
     })),
     ...(capabilities.subAgents ?? []).map((capability) => ({
@@ -283,9 +288,35 @@ export function getRuntimeCapabilityOptions(
       id: capability.nodeKey,
       label: capability.label,
       description: capability.description ?? capability.name,
+      color: readRuntimeCapabilityColor(capability),
       capability,
     })),
   ];
+}
+
+export function getRuntimeCapabilityColor(
+  option?: RuntimeCapabilityOption | null,
+): string | undefined {
+  return option?.color ?? readRuntimeCapabilityColor(option?.capability);
+}
+
+function readRuntimeCapabilityColor(capability: unknown): string | undefined {
+  const meta = readObjectValue(capability)?.meta;
+  const color = readNonEmptyString(readObjectValue(meta)?.color);
+  if (color) {
+    return color;
+  }
+  return readNonEmptyString(readObjectValue(meta)?.brandColor);
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function readObjectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 export function hasRuntimeCapabilitySelection(
