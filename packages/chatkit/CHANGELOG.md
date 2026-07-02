@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.5
+
+### Patch Changes
+
+- d6b2e09: feat: set runtime capabilities
+
 ## 0.4.4
 
 ### Patch Changes

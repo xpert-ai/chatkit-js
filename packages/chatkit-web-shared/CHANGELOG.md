@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.4.0
+
+### Minor Changes
+
+- d6b2e09: feat: set runtime capabilities
+
+### Patch Changes
+
+- Updated dependencies [d6b2e09]
+  - @xpert-ai/chatkit-types@0.4.5
+
 ## 0.3.4
 
 ### Patch Changes
