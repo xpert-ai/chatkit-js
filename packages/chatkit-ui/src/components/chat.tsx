@@ -2799,6 +2799,7 @@ export function Chat({
                           isThreadRunning={currentThreadIsRunning}
                           organizationId={stream.organizationId}
                           apiUrl={stream.apiUrl}
+                          pet={effectivePet}
                         />
                       ) : (
                         <>

@@ -1,6 +1,8 @@
 import * as React from 'react';
 
 import type {
+  ChatKitOptions,
+  ChatKitPetAnimationName,
   ChatkitMessage,
   MessageContentImageUrl,
   TMessageContentComplex,
@@ -33,6 +35,7 @@ import { cn } from '../../../lib/utils';
 import { Badge } from '../../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { InlinePetStatus } from '../../pet/InlinePetStatus';
 import { MarkdownText } from '../markdown-text';
 import { AgentEventRow, AgentRunGroup } from './agent-run-group';
 import {
@@ -64,6 +67,7 @@ export type AssistantMessageProps = {
   isThreadRunning?: boolean;
   organizationId?: string;
   apiUrl?: string;
+  pet?: ChatKitOptions['pet'] | null;
 };
 
 const assistantMessageStackClassName =
@@ -122,6 +126,12 @@ function safeJson(value: unknown) {
 
 function formatDisplayValue(value: unknown) {
   return typeof value === 'string' ? value : safeJson(value);
+}
+
+function getInlinePetState(
+  status: AssistantStreamingStatus,
+): ChatKitPetAnimationName {
+  return status === 'loading' ? 'running' : 'review';
 }
 
 function ReasoningBlock({
@@ -784,6 +794,7 @@ export function AssistantMessage({
   isThreadRunning,
   organizationId,
   apiUrl,
+  pet,
 }: AssistantMessageProps) {
   const { t } = useChatkitTranslation();
   const renderTree = buildAssistantRenderTree(
@@ -798,6 +809,12 @@ export function AssistantMessage({
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
   const lookupMessages = messages?.length ? messages : [message];
+  const inlinePetState = resolvedStreamingStatus
+    ? getInlinePetState(resolvedStreamingStatus)
+    : null;
+  const inlinePet = inlinePetState ? (
+    <InlinePetStatus pet={pet} state={inlinePetState} />
+  ) : null;
 
   const answerNode = renderContent(message, lookupMessages, {
     isThreadRunning,
@@ -816,7 +833,10 @@ export function AssistantMessage({
   if (!hasContent && !hasReasoning && resolvedStreamingStatus) {
     return (
       <div className={cn('space-y-3', streamingClass, className)}>
-        <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+        <div className="flex items-center gap-2">
+          {inlinePet}
+          <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+        </div>
       </div>
     );
   }
@@ -828,12 +848,15 @@ export function AssistantMessage({
           defaultValue={message.status === 'reasoning' ? 'reasoning' : 'answer'}
           className="w-full"
         >
-          <TabsList className="">
-            <TabsTrigger value="answer">{t('message.answer')}</TabsTrigger>
-            <TabsTrigger value="reasoning">
-              {t('message.reasoning')}
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-2">
+            {inlinePet}
+            <TabsList className="">
+              <TabsTrigger value="answer">{t('message.answer')}</TabsTrigger>
+              <TabsTrigger value="reasoning">
+                {t('message.reasoning')}
+              </TabsTrigger>
+            </TabsList>
+          </div>
           <TabsContent value="answer" className="space-y-3">
             {answerNode}
           </TabsContent>
@@ -852,7 +875,10 @@ export function AssistantMessage({
     <div className={cn('space-y-3', streamingClass, className)}>
       {hasReasoning ? reasoningNode : answerNode}
       {resolvedStreamingStatus ? (
-        <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+        <div className="flex items-center gap-2">
+          {inlinePet}
+          <AssistantStreamingIndicator status={resolvedStreamingStatus} />
+        </div>
       ) : null}
     </div>
   );
