@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.7
+
+### Patch Changes
+
+- 5bbdf4a: Place inserted runtime capability composer chips before prompt text when both are provided by setComposerValue.
+- 21972b6: title of thread
+- f20c001: pet avatar
+- 5bbdf4a: Render runtime capability chips and selectors with capability metadata colors.
+
 ## 0.4.6
 
 ### Patch Changes
