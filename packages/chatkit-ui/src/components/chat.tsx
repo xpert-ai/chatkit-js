@@ -2420,6 +2420,10 @@ export function Chat({
     () => threads.find((item) => item.id === stream.threadId),
     [threads, stream.threadId],
   );
+  const assistantStatusText = React.useMemo(() => {
+    if (!stream.threadId) return t('chat.statusOnline');
+    return currentThread?.title?.trim() || t('chat.statusOnline');
+  }, [currentThread?.title, stream.threadId, t]);
 
   const streamErrorMessage =
     stream.error instanceof Error ? stream.error.message : undefined;
@@ -2490,7 +2494,7 @@ export function Chat({
         className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
         style={chatColumnStyle}
       >
-        <div className="flex items-center gap-3 overflow-hidden">
+        <div className="flex min-w-0 items-center gap-3 overflow-hidden">
           <div className="relative shrink-0">
             <ChatkitAvatar
               avatar={assistantAvatar}
@@ -2499,15 +2503,18 @@ export function Chat({
             />
             <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
           </div>
-          <div className="truncate">
+          <div className="min-w-0">
             <h2
               className="text-lg font-semibold truncate"
               title={assistantTitle}
             >
               {assistantTitle}
             </h2>
-            <p className="text-xs text-muted-foreground">
-              {t('chat.statusOnline')}
+            <p
+              className="truncate text-xs text-muted-foreground"
+              title={assistantStatusText}
+            >
+              {assistantStatusText}
             </p>
           </div>
         </div>
