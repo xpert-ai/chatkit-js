@@ -6,6 +6,12 @@ import type { MessageNavigationItem } from '../lib/message-navigation';
 
 const mocks = vi.hoisted(() => ({
   refreshThreads: vi.fn().mockResolvedValue(undefined),
+  threads: [] as Array<{
+    id: string;
+    recordId: string;
+    title: string;
+    status: string;
+  }>,
   stream: {
     client: {
       contexts: {
@@ -97,7 +103,7 @@ vi.mock('../hooks/useStream', () => ({
 
 vi.mock('../hooks/useThreads', () => ({
   useThreads: () => ({
-    threads: [],
+    threads: mocks.threads,
     deleteThread: vi.fn(),
     refreshThreads: mocks.refreshThreads,
     isLoading: false,
@@ -246,6 +252,8 @@ function setMessages(count = 3) {
 describe('Chat message navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.threads.splice(0);
+    mocks.stream.threadId = 'thread-1';
     setMessages(3);
   });
 
@@ -291,5 +299,19 @@ describe('Chat message navigation', () => {
       'data-count',
       '4',
     );
+  });
+
+  it('shows the current thread title in the header status row', () => {
+    mocks.threads.push({
+      id: 'thread-1',
+      recordId: 'conversation-1',
+      title: 'Fix onboarding copy',
+      status: 'idle',
+    });
+
+    render(<Chat options={baseOptions} />);
+
+    expect(screen.getByText('Fix onboarding copy')).toBeInTheDocument();
+    expect(screen.queryByText('Online')).not.toBeInTheDocument();
   });
 });

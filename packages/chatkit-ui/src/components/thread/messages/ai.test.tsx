@@ -202,7 +202,7 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
   }),
 }));
 
-import { AssistantMessage } from './ai';
+import { AssistantMessage, type AssistantMessageProps } from './ai';
 
 type AssistantChatkitMessage = ChatkitMessage & { type: 'assistant' };
 
@@ -262,6 +262,7 @@ function renderAssistant(
     executionId?: string;
     agentRuns?: AgentRunInfo[];
   } = {},
+  props: Omit<Partial<AssistantMessageProps>, 'message'> = {},
 ) {
   return render(
     <AssistantMessage
@@ -273,6 +274,7 @@ function renderAssistant(
           content,
         } as ChatkitMessage & { type: 'assistant' }
       }
+      {...props}
     />,
   );
 }
@@ -330,6 +332,77 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('Automatically compressing context')).toHaveClass(
       'ck-tool-call-running-text',
     );
+  });
+
+  it('shows an inline pet next to assistant state controls only while streaming', () => {
+    const content: ChatkitMessage['content'] = [
+      { id: 'answer', type: 'text', text: 'Drafting the page.' },
+    ];
+    const reasoning = [
+      {
+        id: 'reasoning',
+        type: 'reasoning' as const,
+        text: 'Need layout first.',
+      },
+    ];
+
+    const { rerender } = renderAssistant(
+      content,
+      { reasoning, status: 'answering' },
+      { isStreaming: true, streamingStatus: 'answering', pet: true },
+    );
+
+    expect(screen.getByTestId('chatkit-inline-pet-status')).toHaveAttribute(
+      'data-pet-state',
+      'review',
+    );
+
+    rerender(
+      <AssistantMessage
+        message={
+          {
+            id: 'assistant-1',
+            type: 'assistant',
+            content,
+            reasoning,
+          } as ChatkitMessage & { type: 'assistant' }
+        }
+        isStreaming={false}
+        pet
+      />,
+    );
+
+    expect(screen.queryByTestId('chatkit-inline-pet-status')).toBeNull();
+  });
+
+  it('uses the running inline pet state before the assistant starts answering', () => {
+    renderAssistant(
+      '',
+      {},
+      {
+        isStreaming: true,
+        streamingStatus: 'loading',
+        pet: true,
+      },
+    );
+
+    expect(screen.getByTestId('chatkit-inline-pet-status')).toHaveAttribute(
+      'data-pet-state',
+      'running',
+    );
+  });
+
+  it('does not show an inline pet while streaming when pet is disabled', () => {
+    renderAssistant(
+      '',
+      {},
+      {
+        isStreaming: true,
+        streamingStatus: 'loading',
+      },
+    );
+
+    expect(screen.queryByTestId('chatkit-inline-pet-status')).toBeNull();
   });
 
   it('expands the latest completed tool group by default', () => {
@@ -1928,7 +2001,9 @@ describe('AssistantMessage tool components', () => {
     expect(workerToggle).not.toHaveAccessibleName(/tool/);
     expect(workerToggle).not.toHaveAccessibleName(/event/);
     expect(screen.getByText('Visible worker output.')).toBeInTheDocument();
-    expect(screen.queryByText(THREAD_CONTEXT_USAGE_EVENT_TYPE)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(THREAD_CONTEXT_USAGE_EVENT_TYPE),
+    ).not.toBeInTheDocument();
   });
 
   it('expands running sub-agent groups while keeping older completed groups collapsed', () => {

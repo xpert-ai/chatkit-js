@@ -154,6 +154,16 @@
     }
 }
 
+@keyframes chatkit-inline-pet-sprite-x {
+    from {
+        background-position-x: 0;
+    }
+
+    to {
+        background-position-x: var(--chatkit-inline-pet-x-end);
+    }
+}
+
 .ck-tool-call-running-text {
     color: transparent;
     background-image: linear-gradient(
@@ -180,6 +190,12 @@
     animation: chatkit-tool-call-row-enter 220ms ease-out both;
 }
 
+.chatkit-inline-pet-status__sprite {
+    animation: chatkit-inline-pet-sprite-x
+        var(--chatkit-inline-pet-duration)
+        steps(var(--chatkit-inline-pet-frames)) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .ck-tool-call-row-enter {
         animation: none;
@@ -188,6 +204,10 @@
     .ck-tool-call-running-text {
         color: var(--muted-foreground);
         background: none;
+        animation: none;
+    }
+
+    .chatkit-inline-pet-status__sprite {
         animation: none;
     }
 }
