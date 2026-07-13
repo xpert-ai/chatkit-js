@@ -511,6 +511,14 @@ export type ChatKitOptions = {
   goal?: ChatKitGoalAdapter;
 
   /**
+   * Optional compact thread summary surface. Disabled by default so existing
+   * integrations keep their current layout until they opt in.
+   */
+  taskSummary?: {
+    enabled?: boolean;
+  };
+
+  /**
    * Locale override for ChatKit UI. If not provided, the browser's locale
    * will be used. If the locale is not supported, will fall back to English.
    *

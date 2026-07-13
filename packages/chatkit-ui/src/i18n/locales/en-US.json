@@ -252,6 +252,39 @@
       "failed": "Failed to render diagram"
     }
   },
+  "taskSummary": {
+    "title": "Task summary",
+    "description": "Current task, outputs, sources, running services, agent activity, and pending requests.",
+    "open": "Open task summary",
+    "empty": "Task activity will appear here.",
+    "historyError": "Some historical summary data failed to load. Live activity is still available.",
+    "retry": "Retry",
+    "viewAll": "View all",
+    "loadMore": "Load more",
+    "collapse": "Show less",
+    "createOutput": "Create files or sites",
+    "addOutput": "Create output",
+    "addSource": "Add source",
+    "sections": {
+      "task": "Task",
+      "outputs": "Outputs",
+      "sources": "Sources",
+      "running": "Running",
+      "agents": "Agent activity",
+      "pending": "Pending"
+    },
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "completed": "Completed"
+    },
+    "pending": {
+      "approval": "Approval required",
+      "userInput": "Input required",
+      "followUp": "Pending follow-up message",
+      "steer": "Pending steering message"
+    }
+  },
   "thread": {
     "errorToast": "An error occurred. Please try again.",
     "errorLabel": "Error:",

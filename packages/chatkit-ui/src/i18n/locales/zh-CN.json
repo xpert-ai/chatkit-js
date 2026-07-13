@@ -252,6 +252,39 @@
       "failed": "图表渲染失败"
     }
   },
+  "taskSummary": {
+    "title": "任务摘要",
+    "description": "当前任务、产出、来源、运行中服务、Agent 活动和待处理请求。",
+    "open": "打开任务摘要",
+    "empty": "任务活动会显示在这里。",
+    "historyError": "部分历史摘要加载失败，实时活动仍可使用。",
+    "retry": "重试",
+    "viewAll": "查看全部",
+    "loadMore": "加载更多",
+    "collapse": "收起",
+    "createOutput": "创建文件或站点",
+    "addOutput": "创建产出",
+    "addSource": "添加来源",
+    "sections": {
+      "task": "任务",
+      "outputs": "产出",
+      "sources": "来源",
+      "running": "运行中",
+      "agents": "Agent 活动",
+      "pending": "待处理"
+    },
+    "status": {
+      "pending": "待处理",
+      "in_progress": "进行中",
+      "completed": "已完成"
+    },
+    "pending": {
+      "approval": "需要审批",
+      "userInput": "需要输入",
+      "followUp": "等待发送的跟进消息",
+      "steer": "等待发送的引导消息"
+    }
+  },
   "thread": {
     "errorToast": "发生错误，请重试。",
     "errorLabel": "错误：",

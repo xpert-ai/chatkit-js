@@ -27,7 +27,10 @@ import type {
   ToolOption,
   ThreadGoal,
   ChatKitGoalAdapter,
+  ChatTaskSummaryOpenResourceEffect,
+  ChatTaskSummaryResourceReference,
 } from '@xpert-ai/chatkit-types';
+import { CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT } from '@xpert-ai/chatkit-types';
 
 import {
   cn,
@@ -155,6 +158,18 @@ import {
   type MessageNavigationLabels,
   type MessageNavigationSourceMessage,
 } from '../lib/message-navigation';
+import {
+  collectLiveTaskSummary,
+  type TaskSummaryMessage,
+  type TaskSummaryPending,
+  type TaskSummaryRuntimeItem,
+} from '../lib/task-summary';
+import { useTaskSummary } from '../hooks/useTaskSummary';
+import {
+  TaskSummaryPanel,
+  TaskSummaryTrigger,
+  type TaskSummaryProps,
+} from './task-summary/TaskSummary';
 
 export type ChatProps = {
   className?: string;
@@ -171,6 +186,9 @@ const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 const GOAL_RUN_INPUT = 'Continue working toward the active goal.';
+const TASK_SUMMARY_PANEL_WIDTH_REM = 20;
+const TASK_SUMMARY_PANEL_EDGE_INSET_REM = 1.25;
+const TASK_SUMMARY_PANEL_SAFE_GAP_REM = 0.75;
 
 function isGoalAdapter(value: unknown): value is ChatKitGoalAdapter {
   return (
@@ -588,6 +606,7 @@ export function Chat({
     isLoading: isThreadsLoading,
   } = useThreads();
   const viewportRef = React.useRef<HTMLDivElement>(null);
+  const chatColumnRef = React.useRef<HTMLDivElement>(null);
   const messageNavigationAnchorsRef = React.useRef(
     new Map<string, HTMLDivElement>(),
   );
@@ -1090,6 +1109,184 @@ export function Chat({
     disableAutoFollow();
     clearQuoteSelection();
   }, [clearQuoteSelection, disableAutoFollow]);
+
+  const taskSummaryEnabled = options?.taskSummary?.enabled === true;
+  const taskSummaryConversationId = stream.conversationId ?? null;
+  const [taskSummaryDocked, setTaskSummaryDocked] = React.useState(false);
+  const [taskSummaryOpen, setTaskSummaryOpen] = React.useState(false);
+  const manuallyClosedTaskSummaryConversationIdsRef = React.useRef(
+    new Set<string>(),
+  );
+  const liveTaskSummaryPending = React.useMemo<TaskSummaryPending[]>(() => {
+    const followUps = pendingFollowUps.map((item) => ({
+      id: `follow-up:${item.id}`,
+      kind: 'follow_up' as const,
+      title:
+        item.mode === 'steer'
+          ? t('taskSummary.pending.steer')
+          : t('taskSummary.pending.followUp'),
+      messageId: item.clientMessageId,
+      createdAt: new Date(item.createdAt).toISOString(),
+    }));
+    const userInput = stream.pendingRequestUserInput
+      ? [
+          {
+            id: `user-input:${stream.pendingRequestUserInput.id}`,
+            kind: 'user_input' as const,
+            title:
+              stream.pendingRequestUserInput.params.questions[0]?.header ||
+              t('taskSummary.pending.userInput'),
+            createdAt: new Date(
+              stream.pendingRequestUserInput.createdAt,
+            ).toISOString(),
+          },
+        ]
+      : [];
+    const approvals = stream.pendingHITLRequest
+      ? [
+          {
+            id: `approval:${stream.pendingHITLRequest.id}`,
+            kind: 'approval' as const,
+            title: t('taskSummary.pending.approval'),
+            createdAt: new Date(
+              stream.pendingHITLRequest.createdAt,
+            ).toISOString(),
+          },
+        ]
+      : [];
+    return [...approvals, ...userInput, ...followUps];
+  }, [
+    pendingFollowUps,
+    stream.pendingHITLRequest,
+    stream.pendingRequestUserInput,
+    t,
+  ]);
+  const liveTaskSummaryRunning = React.useMemo<TaskSummaryRuntimeItem[]>(
+    () =>
+      stream.runtimeActivities.sandboxServices.services
+        .filter(
+          (service) =>
+            service.status === 'starting' ||
+            service.status === 'running' ||
+            service.status === 'stopping',
+        )
+        .map((service) => ({
+          id:
+            service.id ??
+            `${service.provider}:${service.name}:${service.actualPort ?? service.requestedPort ?? ''}`,
+          title: service.name,
+          status: service.status,
+          description:
+            service.actualPort || service.requestedPort
+              ? `:${service.actualPort ?? service.requestedPort}`
+              : undefined,
+          resource: {
+            type: 'browser' as const,
+            serviceId: service.id,
+            url: service.previewUrl ?? undefined,
+          },
+          updatedAt: service.startedAt ?? undefined,
+        })),
+    [stream.runtimeActivities.sandboxServices.services],
+  );
+  const taskSummaryAgentNames = React.useMemo(() => {
+    const names = new Map<string, string>();
+    runtimeCapabilityOptions.forEach((option) => {
+      if (option.type !== 'subAgent') return;
+      const name = option.capability.name?.trim();
+      if (!name) return;
+      names.set(option.id, name);
+      const agentKey = option.capability.agentKey?.trim();
+      if (agentKey) names.set(agentKey, name);
+    });
+    return names;
+  }, [runtimeCapabilityOptions]);
+  const liveTaskSummary = React.useMemo(
+    () =>
+      collectLiveTaskSummary({
+        messages: messages.map(
+          (message): TaskSummaryMessage => ({
+            id: message.id,
+            content: message.content,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+            taskSummary: message.taskSummary,
+            references: message.references,
+            attachments: message.attachments,
+            fileAssets: message.fileAssets,
+            agentRuns: message.agentRuns,
+            runtimeCapabilities: message.runtimeCapabilities,
+          }),
+        ),
+        goal: threadGoal,
+        todos: stream.todos,
+        pending: liveTaskSummaryPending,
+        running: liveTaskSummaryRunning,
+        agentNames: taskSummaryAgentNames,
+      }),
+    [
+      liveTaskSummaryPending,
+      liveTaskSummaryRunning,
+      messages,
+      stream.todos,
+      taskSummaryAgentNames,
+      threadGoal,
+    ],
+  );
+  const taskSummary = useTaskSummary({
+    enabled: taskSummaryEnabled,
+    conversationId: taskSummaryConversationId,
+    client: stream.client,
+    live: liveTaskSummary,
+  });
+
+  const navigateToTaskSummaryMessage = React.useCallback(
+    async (messageId: string) => {
+      try {
+        let anchor = messageNavigationAnchorsRef.current.get(messageId);
+        let pageCount = 0;
+        while (!anchor && pageCount < 100) {
+          const loaded = await stream.loadMoreConversationMessages();
+          if (!loaded.length) break;
+          pageCount += 1;
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
+          anchor = messageNavigationAnchorsRef.current.get(messageId);
+        }
+        if (!anchor) return;
+        disableAutoFollow();
+        clearQuoteSelection();
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (error) {
+        console.warn('Failed to locate task summary message', error);
+      }
+    },
+    [clearQuoteSelection, disableAutoFollow, stream],
+  );
+
+  const openTaskSummaryResource = React.useCallback(
+    (
+      resource: ChatTaskSummaryResourceReference,
+      messageId?: string,
+      resourceTitle?: string,
+    ) => {
+      const data: ChatTaskSummaryOpenResourceEffect = {
+        resource,
+        conversationId: taskSummaryConversationId ?? undefined,
+        messageId,
+        title: resourceTitle,
+      };
+      parentMessenger.sendEvent('public_event', [
+        'effect',
+        {
+          name: CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT,
+          data,
+        },
+      ]);
+    },
+    [parentMessenger, taskSummaryConversationId],
+  );
 
   React.useEffect(() => {
     const viewport = viewportRef.current;
@@ -2474,8 +2671,106 @@ export function Chat({
 
     return { maxWidth: layoutMaxWidth };
   }, [layoutMaxWidth]);
+  React.useLayoutEffect(() => {
+    if (!taskSummaryEnabled) {
+      setTaskSummaryDocked(false);
+      return;
+    }
+
+    const viewport = viewportRef.current;
+    const chatColumn = chatColumnRef.current;
+    if (!viewport || !chatColumn) {
+      setTaskSummaryDocked(false);
+      return;
+    }
+
+    const updateDockedState = () => {
+      const viewportRect = viewport.getBoundingClientRect();
+      const chatColumnRect = chatColumn.getBoundingClientRect();
+      const rootFontSize = Number.parseFloat(
+        window.getComputedStyle(document.documentElement).fontSize,
+      );
+      const remInPixels = Number.isFinite(rootFontSize) ? rootFontSize : 16;
+      const requiredSideSpace =
+        (TASK_SUMMARY_PANEL_WIDTH_REM +
+          TASK_SUMMARY_PANEL_EDGE_INSET_REM +
+          TASK_SUMMARY_PANEL_SAFE_GAP_REM) *
+        remInPixels;
+      const availableSideSpace = viewportRect.right - chatColumnRect.right;
+      setTaskSummaryDocked(availableSideSpace >= requiredSideSpace);
+    };
+
+    updateDockedState();
+    window.addEventListener('resize', updateDockedState);
+    const resizeObserver =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(updateDockedState)
+        : null;
+    resizeObserver?.observe(viewport);
+    resizeObserver?.observe(chatColumn);
+
+    return () => {
+      window.removeEventListener('resize', updateDockedState);
+      resizeObserver?.disconnect();
+    };
+  }, [layoutMaxWidth, taskSummaryEnabled]);
+  const taskSummaryAvailable = Boolean(
+    taskSummaryEnabled && stream.threadId && taskSummaryConversationId,
+  );
+  const handleTaskSummaryOpenChange = React.useCallback(
+    (open: boolean) => {
+      setTaskSummaryOpen(open);
+      if (!taskSummaryConversationId) return;
+      if (open) {
+        manuallyClosedTaskSummaryConversationIdsRef.current.delete(
+          taskSummaryConversationId,
+        );
+        return;
+      }
+      manuallyClosedTaskSummaryConversationIdsRef.current.add(
+        taskSummaryConversationId,
+      );
+    },
+    [taskSummaryConversationId],
+  );
+  React.useEffect(() => {
+    if (!taskSummaryDocked) {
+      setTaskSummaryOpen(false);
+    }
+  }, [taskSummaryDocked]);
+  React.useEffect(() => {
+    if (
+      !taskSummaryDocked ||
+      !taskSummaryAvailable ||
+      !taskSummaryConversationId ||
+      manuallyClosedTaskSummaryConversationIdsRef.current.has(
+        taskSummaryConversationId,
+      )
+    ) {
+      return;
+    }
+
+    setTaskSummaryOpen(true);
+  }, [taskSummaryAvailable, taskSummaryConversationId, taskSummaryDocked]);
+  const taskSummaryProps: TaskSummaryProps = {
+    summary: taskSummary.summary,
+    historyError: taskSummary.historyError,
+    loadingSections: taskSummary.loadingSections,
+    loadedSectionCounts: taskSummary.loadedSectionCounts,
+    onRetryHistory: taskSummary.retryHistory,
+    onLoadSection: taskSummary.loadSection,
+    onNavigateMessage: (messageId) => {
+      void navigateToTaskSummaryMessage(messageId);
+    },
+    onFocusComposer: () => focusComposerAt(),
+    onOpenResource: openTaskSummaryResource,
+  };
 
   return (
+    <div
+      className="relative flex h-full w-full min-w-0 bg-background"
+      data-task-summary-layout={taskSummaryDocked ? 'docked' : 'popover'}
+    >
     <UploadDroppedFiles
       ref={viewportRef}
       data-chatkit-root=""
@@ -2485,11 +2780,12 @@ export function Chat({
       activeClassName="ring-2 ring-primary/40 ring-inset"
       onFiles={handleDroppedFiles}
       className={cn(
-        'relative flex h-full w-full flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
+        'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
         className,
       )}
     >
       <div
+        ref={chatColumnRef}
         data-slot="chatkit-chat-header"
         className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
         style={chatColumnStyle}
@@ -2519,6 +2815,14 @@ export function Chat({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {taskSummaryAvailable && (
+            <TaskSummaryTrigger
+              {...taskSummaryProps}
+              displayMode={taskSummaryDocked ? 'docked' : 'popover'}
+              open={taskSummaryOpen}
+              onOpenChange={handleTaskSummaryOpenChange}
+            />
+          )}
           {canMinimizeToPet && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -3387,5 +3691,14 @@ export function Chat({
       />
       <PetBridge pet={effectivePet} state={petAutoState} />
     </UploadDroppedFiles>
+    {taskSummaryAvailable && taskSummaryDocked && taskSummaryOpen && (
+      <div className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80">
+        <TaskSummaryPanel
+          {...taskSummaryProps}
+          className="pointer-events-auto max-h-full"
+        />
+      </div>
+    )}
+    </div>
   );
 }

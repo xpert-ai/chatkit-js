@@ -80,6 +80,68 @@ describe('normalizeReferences', () => {
       },
     ]);
   });
+
+  it('normalizes browser element references without dropping Xpert metadata', () => {
+    expect(
+      normalizeReferences([
+        {
+          type: 'element',
+          id: 'element-1',
+          text: 'Submit',
+          attributes: [{ name: 'type', value: 'submit' }],
+          outerHtml: '<button type="submit">Submit</button>',
+          pageTitle: 'Checkout',
+          pageUrl: 'https://example.com/checkout',
+          selector: '#submit',
+          serviceId: 'service-1',
+          tagName: 'button',
+        },
+      ]),
+    ).toEqual([
+      {
+        type: 'element',
+        id: 'element-1',
+        text: 'Submit',
+        attributes: [{ name: 'type', value: 'submit' }],
+        outerHtml: '<button type="submit">Submit</button>',
+        pageTitle: 'Checkout',
+        pageUrl: 'https://example.com/checkout',
+        selector: '#submit',
+        serviceId: 'service-1',
+        tagName: 'button',
+      },
+    ]);
+  });
+
+  it('normalizes file element references with source locations', () => {
+    const reference = normalizeReferences([
+      {
+        type: 'file_element',
+        id: 'file-element-1',
+        text: 'Revenue',
+        attributes: [],
+        documentTitle: 'Report',
+        domPath: 'table[0]/row[2]',
+        filePath: '/workspace/report.xlsx',
+        outerHtml: '<tr><td>Revenue</td></tr>',
+        selector: 'tr:nth-child(3)',
+        sourceStartLine: 3,
+        sourceEndLine: 5,
+        tagName: 'tr',
+      },
+    ])[0];
+
+    expect(reference).toMatchObject({
+      type: 'file_element',
+      sourceStartLine: 3,
+      sourceEndLine: 5,
+    });
+    expect(reference && getReferenceKey(reference)).toBe('file-element-1');
+    expect(reference && getReferenceLabel(reference)).toBe('Report');
+    expect(reference && getReferenceMetaLine(reference)).toBe(
+      '/workspace/report.xlsx:3-5',
+    );
+  });
 });
 
 describe('buildHumanMessageInputPayload', () => {

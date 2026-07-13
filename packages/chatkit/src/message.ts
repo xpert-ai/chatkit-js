@@ -3,6 +3,7 @@ import type { Types } from '@a2ui/lit/0.8';
 import type { FollowUpBehavior } from './options';
 import type { ChatKitCommandSource } from './commands';
 import type { LocalizedText } from './localized-text';
+import type { TChatTaskSummaryContribution } from './task-summary';
 import {
   CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
@@ -304,6 +305,7 @@ export type TMessageComponentStep<T = unknown> = {
   input?: any;
   output?: unknown;
   artifact?: any;
+  taskSummary?: TChatTaskSummaryContribution;
 };
 
 /**
@@ -365,10 +367,43 @@ export type ChatKitImageReference = ChatKitReferenceBase & {
   height?: number;
 };
 
+export type ChatKitElementAttribute = {
+  name: string;
+  value: string;
+};
+
+export type ChatKitElementReference = ChatKitReferenceBase & {
+  type: 'element';
+  attributes: ChatKitElementAttribute[];
+  outerHtml: string;
+  pageTitle?: string;
+  pageUrl: string;
+  role?: string;
+  selector: string;
+  serviceId: string;
+  tagName: string;
+};
+
+export type ChatKitFileElementReference = ChatKitReferenceBase & {
+  type: 'file_element';
+  attributes: ChatKitElementAttribute[];
+  documentTitle?: string;
+  domPath: string;
+  filePath: string;
+  outerHtml: string;
+  role?: string;
+  selector: string;
+  sourceEndLine?: number;
+  sourceStartLine?: number;
+  tagName: string;
+};
+
 export type ChatKitReference =
   | ChatKitCodeReference
   | ChatKitQuoteReference
-  | ChatKitImageReference;
+  | ChatKitImageReference
+  | ChatKitElementReference
+  | ChatKitFileElementReference;
 
 export type ChatKitReferenceCompositionMode = 'compose' | 'preserve';
 
