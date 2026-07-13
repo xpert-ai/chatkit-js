@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.6
+
+### Patch Changes
+
+- 8d8b8b4: Add the opt-in task summary contribution protocol, resource effects, history aggregation, and responsive six-section task summary interface.
+
 ## 0.4.5
 
 ### Patch Changes
