@@ -1,4 +1,20 @@
-import type { RuntimeCapabilitiesSelection as ChatKitRuntimeCapabilitiesSelection } from "@xpert-ai/chatkit-types"
+import type {
+    ChatKitReference,
+    ChatKitReferenceCompositionMode,
+    RuntimeCapabilitiesSelection as ChatKitRuntimeCapabilitiesSelection,
+} from "@xpert-ai/chatkit-types"
+
+export type {
+    ChatKitCodeReference,
+    ChatKitElementAttribute,
+    ChatKitElementReference,
+    ChatKitFileElementReference,
+    ChatKitImageReference,
+    ChatKitQuoteReference,
+    ChatKitReference,
+    ChatKitReferenceBase,
+    ChatKitReferenceCompositionMode,
+} from "@xpert-ai/chatkit-types"
 
 export type ChatKitReq = any
 
@@ -7,45 +23,6 @@ type JsonRecord = Record<string, unknown>
 export type SerializedChatKitOptions = JsonRecord
 export type ChatKitCommandUserMessageContent = unknown
 export type ChatKitCommandToolChoice = unknown
-
-export type ChatKitReferenceBase = {
-    id?: string
-    label?: string
-    text: string
-}
-
-export type ChatKitCodeReference = ChatKitReferenceBase & {
-    type: "code"
-    path: string
-    startLine: number
-    endLine: number
-    language?: string
-    taskId?: string
-}
-
-export type ChatKitQuoteReference = ChatKitReferenceBase & {
-    type: "quote"
-    messageId?: string
-    source?: string
-}
-
-export type ChatKitImageReference = ChatKitReferenceBase & {
-    type: "image"
-    fileId?: string
-    url?: string
-    mimeType?: string
-    name?: string
-    size?: number
-    width?: number
-    height?: number
-}
-
-export type ChatKitReference =
-    | ChatKitCodeReference
-    | ChatKitQuoteReference
-    | ChatKitImageReference
-
-export type ChatKitReferenceCompositionMode = "compose" | "preserve"
 
 export type RuntimeCapabilitiesSelectionSet = Omit<
     ChatKitRuntimeCapabilitiesSelection,

@@ -1,6 +1,9 @@
 import type {
   Attachment,
   ChatKitCodeReference,
+  ChatKitElementAttribute,
+  ChatKitElementReference,
+  ChatKitFileElementReference,
   ChatKitImageReference,
   ChatKitQuoteReference,
   ChatKitReference,
@@ -39,6 +42,19 @@ type ReferenceCandidate = {
   size?: unknown;
   width?: unknown;
   height?: unknown;
+  attributes?: unknown;
+  outerHtml?: unknown;
+  pageTitle?: unknown;
+  pageUrl?: unknown;
+  role?: unknown;
+  selector?: unknown;
+  serviceId?: unknown;
+  tagName?: unknown;
+  documentTitle?: unknown;
+  domPath?: unknown;
+  filePath?: unknown;
+  sourceStartLine?: unknown;
+  sourceEndLine?: unknown;
 };
 
 type CodeReferenceCandidate = ReferenceCandidate & {
@@ -75,6 +91,38 @@ type ImageReferenceCandidate = ReferenceCandidate & {
   height?: number;
 };
 
+type ElementReferenceCandidate = ReferenceCandidate & {
+  type: 'element';
+  attributes: ChatKitElementAttribute[];
+  outerHtml: string;
+  pageUrl: string;
+  selector: string;
+  serviceId: string;
+  tagName: string;
+  text: string;
+  id?: string;
+  label?: string;
+  pageTitle?: string;
+  role?: string;
+};
+
+type FileElementReferenceCandidate = ReferenceCandidate & {
+  type: 'file_element';
+  attributes: ChatKitElementAttribute[];
+  domPath: string;
+  filePath: string;
+  outerHtml: string;
+  selector: string;
+  tagName: string;
+  text: string;
+  sourceStartLine?: number;
+  sourceEndLine?: number;
+  id?: string;
+  label?: string;
+  documentTitle?: string;
+  role?: string;
+};
+
 type LegacyCodeReferenceCandidate = Omit<ChatKitCodeReference, 'type'> & {
   type?: unknown;
 };
@@ -108,6 +156,25 @@ function toLineNumber(value: unknown): number | null {
 
 function isOptionalNumber(value: unknown): value is number | undefined {
   return value === undefined || Number.isFinite(value);
+}
+
+function isElementAttribute(value: unknown): value is ChatKitElementAttribute {
+  if (!isObjectLike(value)) {
+    return false;
+  }
+
+  return (
+    'name' in value &&
+    'value' in value &&
+    typeof value.name === 'string' &&
+    typeof value.value === 'string'
+  );
+}
+
+function isElementAttributes(
+  value: unknown,
+): value is ChatKitElementAttribute[] {
+  return Array.isArray(value) && value.every(isElementAttribute);
 }
 
 function toOptionalNumber(
@@ -199,6 +266,56 @@ function isImageReferenceCandidate(
   );
 }
 
+function isElementReferenceCandidate(
+  value: unknown,
+): value is ElementReferenceCandidate {
+  if (!isObjectLike(value)) {
+    return false;
+  }
+
+  const candidate = value as ReferenceCandidate;
+  return (
+    candidate.type === 'element' &&
+    isElementAttributes(candidate.attributes) &&
+    isNonEmptyString(candidate.outerHtml) &&
+    isNonEmptyString(candidate.pageUrl) &&
+    isNonEmptyString(candidate.selector) &&
+    isNonEmptyString(candidate.serviceId) &&
+    isNonEmptyString(candidate.tagName) &&
+    toReferenceText(candidate.text) !== null &&
+    isOptionalString(candidate.id) &&
+    isOptionalString(candidate.label) &&
+    isOptionalString(candidate.pageTitle) &&
+    isOptionalString(candidate.role)
+  );
+}
+
+function isFileElementReferenceCandidate(
+  value: unknown,
+): value is FileElementReferenceCandidate {
+  if (!isObjectLike(value)) {
+    return false;
+  }
+
+  const candidate = value as ReferenceCandidate;
+  return (
+    candidate.type === 'file_element' &&
+    isElementAttributes(candidate.attributes) &&
+    isNonEmptyString(candidate.domPath) &&
+    isNonEmptyString(candidate.filePath) &&
+    isNonEmptyString(candidate.outerHtml) &&
+    isNonEmptyString(candidate.selector) &&
+    isNonEmptyString(candidate.tagName) &&
+    toReferenceText(candidate.text) !== null &&
+    isOptionalString(candidate.id) &&
+    isOptionalString(candidate.label) &&
+    isOptionalString(candidate.documentTitle) &&
+    isOptionalString(candidate.role) &&
+    isOptionalNumber(candidate.sourceStartLine) &&
+    isOptionalNumber(candidate.sourceEndLine)
+  );
+}
+
 function toCodeReference(
   candidate: CodeReferenceCandidate,
 ): ChatKitCodeReference {
@@ -279,6 +396,58 @@ function toImageReference(
   };
 }
 
+function toElementReference(
+  candidate: ElementReferenceCandidate,
+): ChatKitElementReference {
+  const id = toOptionalString(candidate.id);
+  const label = toOptionalString(candidate.label);
+  const pageTitle = toOptionalString(candidate.pageTitle);
+  const role = toOptionalString(candidate.role);
+  return {
+    type: 'element',
+    ...(id ? { id } : {}),
+    ...(label ? { label } : {}),
+    attributes: candidate.attributes,
+    outerHtml: candidate.outerHtml,
+    ...(pageTitle ? { pageTitle } : {}),
+    pageUrl: candidate.pageUrl.trim(),
+    ...(role ? { role } : {}),
+    selector: candidate.selector,
+    serviceId: candidate.serviceId,
+    tagName: candidate.tagName,
+    text: candidate.text,
+  };
+}
+
+function toFileElementReference(
+  candidate: FileElementReferenceCandidate,
+): ChatKitFileElementReference {
+  const id = toOptionalString(candidate.id);
+  const label = toOptionalString(candidate.label);
+  const documentTitle = toOptionalString(candidate.documentTitle);
+  const role = toOptionalString(candidate.role);
+  return {
+    type: 'file_element',
+    ...(id ? { id } : {}),
+    ...(label ? { label } : {}),
+    attributes: candidate.attributes,
+    ...(documentTitle ? { documentTitle } : {}),
+    domPath: candidate.domPath,
+    filePath: candidate.filePath,
+    outerHtml: candidate.outerHtml,
+    ...(role ? { role } : {}),
+    selector: candidate.selector,
+    ...(toOptionalNumber(candidate.sourceStartLine) !== undefined
+      ? { sourceStartLine: candidate.sourceStartLine }
+      : {}),
+    ...(toOptionalNumber(candidate.sourceEndLine) !== undefined
+      ? { sourceEndLine: candidate.sourceEndLine }
+      : {}),
+    tagName: candidate.tagName,
+    text: candidate.text,
+  };
+}
+
 function isLegacyCodeReference(
   candidate: ReferenceCandidate,
 ): candidate is LegacyCodeReferenceCandidate {
@@ -309,6 +478,14 @@ export function normalizeReference(value: unknown): ChatKitReference | null {
 
   if (isImageReferenceCandidate(candidate)) {
     return toImageReference(candidate);
+  }
+
+  if (isElementReferenceCandidate(candidate)) {
+    return toElementReference(candidate);
+  }
+
+  if (isFileElementReferenceCandidate(candidate)) {
+    return toFileElementReference(candidate);
   }
 
   if (type === undefined && isLegacyCodeReference(candidate)) {
@@ -412,6 +589,24 @@ export function getReferenceKey(reference: ChatKitReference): string {
     ].join(':');
   }
 
+  if (reference.type === 'element') {
+    return [
+      reference.type,
+      reference.serviceId,
+      reference.pageUrl,
+      reference.selector,
+    ].join(':');
+  }
+
+  if (reference.type === 'file_element') {
+    return [
+      reference.type,
+      reference.filePath,
+      reference.domPath,
+      reference.selector,
+    ].join(':');
+  }
+
   return [
     reference.type,
     reference.messageId ?? '',
@@ -454,7 +649,15 @@ export function getReferenceLabel(reference: ChatKitReference): string {
     return reference.name?.trim() || 'Pasted image';
   }
 
-  if (reference.source && reference.source.trim()) {
+  if (reference.type === 'element') {
+    return reference.pageTitle?.trim() || reference.tagName;
+  }
+
+  if (reference.type === 'file_element') {
+    return reference.documentTitle?.trim() || reference.filePath;
+  }
+
+  if (reference.type === 'quote' && reference.source?.trim()) {
     return reference.source.trim();
   }
 
@@ -473,11 +676,23 @@ export function getReferenceMetaLine(
     return parts.length ? parts.join(' • ') : null;
   }
 
-  if (reference.source && reference.source.trim()) {
+  if (reference.type === 'element') {
+    return reference.pageUrl;
+  }
+
+  if (reference.type === 'file_element') {
+    const start = reference.sourceStartLine;
+    const end = reference.sourceEndLine ?? start;
+    return start
+      ? `${reference.filePath}:${start}${end === start ? '' : `-${end}`}`
+      : reference.filePath;
+  }
+
+  if (reference.type === 'quote' && reference.source?.trim()) {
     return getQuoteExcerpt(reference);
   }
 
-  if (reference.messageId && reference.messageId.trim()) {
+  if (reference.type === 'quote' && reference.messageId?.trim()) {
     return `Message ${reference.messageId.trim()}`;
   }
 
@@ -511,6 +726,14 @@ export function getReferenceTitle(reference: ChatKitReference): string {
     }
 
     return titleLines.join('\n');
+  }
+
+  if (reference.type === 'element') {
+    return `${getReferenceLabel(reference)}\n${reference.pageUrl}\n\n${reference.text}`;
+  }
+
+  if (reference.type === 'file_element') {
+    return `${getReferenceMetaLine(reference) ?? reference.filePath}\n\n${reference.text}`;
   }
 
   const header =
