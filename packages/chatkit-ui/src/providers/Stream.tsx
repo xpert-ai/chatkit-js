@@ -61,7 +61,10 @@ import {
   normalizeAgentRunInfo,
   type AgentRunInfo,
 } from '../lib/agent-runs';
-import { upsertAgentRunOnLatestMessage } from '../lib/stream-agent-runs';
+import {
+  interruptActiveAgentRunOnMessages,
+  upsertAgentRunOnLatestMessage,
+} from '../lib/stream-agent-runs';
 import {
   normalizeClientSecretResult,
   type ResolvedClientSecret,
@@ -2249,7 +2252,9 @@ const StreamSession = ({
   const stop = useCallback(() => {
     const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
     const activeRunId = lastExecutionIdRef.current;
-    abortRef.current?.abort();
+    const activeAbortController = abortRef.current;
+    const hasActiveRun = activeAbortController !== null;
+    activeAbortController?.abort();
     abortRef.current = null;
     clearPendingRequestUserInput(
       createAbortError('The user input request was cancelled.'),
@@ -2257,6 +2262,20 @@ const StreamSession = ({
     clearPendingHITLRequest(
       createAbortError('The HITL request was cancelled.'),
     );
+    if (hasActiveRun) {
+      const interruptedAt = Date.now();
+      setValues((prev) => {
+        const messages = prev.messages ?? [];
+        const nextMessages = interruptActiveAgentRunOnMessages(messages, {
+          activeRunId,
+          hasActiveRun,
+          interruptedAt,
+        });
+        return nextMessages === messages
+          ? prev
+          : { ...prev, messages: nextMessages };
+      });
+    }
     setIsLoading(false);
     if (activeThreadId && activeRunId) {
       client.runs
