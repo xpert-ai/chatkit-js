@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.9
+
+### Patch Changes
+
+- 242cac0: Hide primary agent executions from agent activity.
+- 7af926c: Remove inactive output and source action buttons from the task summary.
+- 865ec8d: Stop running sub-agent indicators when a chat run is interrupted.
+- 47b49d0: Deduplicate human message attachments already displayed as image references.
+
 ## 0.4.8
 
 ### Patch Changes
