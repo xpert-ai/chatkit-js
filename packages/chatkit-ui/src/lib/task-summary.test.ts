@@ -118,7 +118,7 @@ describe('task summary aggregation', () => {
     ]);
   });
 
-  it('shows invoked agents by configured name without treating available agents as sources', () => {
+  it('shows only invoked sub-agents by configured name without treating available agents as sources', () => {
     const live = collectLiveTaskSummary({
       messages: [
         {
@@ -141,7 +141,15 @@ describe('task summary aggregation', () => {
           },
           agentRuns: [
             {
+              id: 'root-execution',
+              agentKey: 'Agent_primary',
+              title: 'Primary Agent',
+              status: 'running',
+              updatedAt: '2026-07-13T03:00:00.000Z',
+            },
+            {
               id: 'execution-1',
+              parentId: 'root-execution',
               agentKey: 'Agent_wzkLtrU4Ai',
               title: 'Diagnosis Runner',
               status: 'error',
@@ -149,6 +157,7 @@ describe('task summary aggregation', () => {
             },
             {
               id: 'execution-2',
+              parentId: 'root-execution',
               agentKey: 'Agent_wzkLtrU4Ai',
               title: 'Diagnosis Runner',
               status: 'running',
@@ -203,6 +212,38 @@ describe('task summary aggregation', () => {
 
     expect(merged.agents).toEqual([
       expect.objectContaining({ id: 'execution-2', status: 'running' }),
+    ]);
+    expect(merged.totals.agents).toBe(1);
+  });
+
+  it('excludes primary agent executions from historical summaries', () => {
+    const history = snapshot({
+      agents: {
+        total: 2,
+        items: [
+          {
+            id: 'root-execution',
+            level: 0,
+            agentKey: 'Agent_primary',
+            title: 'Primary Agent',
+            status: 'success',
+          },
+          {
+            id: 'child-execution',
+            parentId: 'root-execution',
+            level: 1,
+            agentKey: 'Agent_researcher',
+            title: 'Researcher',
+            status: 'success',
+          },
+        ],
+      },
+    });
+
+    const merged = mergeTaskSummary(history, emptyLive({}));
+
+    expect(merged.agents).toEqual([
+      expect.objectContaining({ id: 'child-execution' }),
     ]);
     expect(merged.totals.agents).toBe(1);
   });
