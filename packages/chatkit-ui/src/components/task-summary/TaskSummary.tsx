@@ -9,7 +9,6 @@ import {
   ListChecks,
   Loader2,
   PlayCircle,
-  Plus,
   RotateCcw,
   Target,
 } from 'lucide-react';
@@ -20,7 +19,6 @@ import type {
 } from '../../lib/task-summary';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn } from '../../lib/utils';
-import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
@@ -221,8 +219,6 @@ function TaskSummaryContent({
 
       <SummarySection
         title={t('taskSummary.sections.outputs')}
-        actionLabel={t('taskSummary.addOutput')}
-        onAction={onFocusComposer}
       >
         {summary.outputs.length === 0 ? (
           <SummaryPrompt onClick={onFocusComposer}>
@@ -251,8 +247,6 @@ function TaskSummaryContent({
 
       <SummarySection
         title={t('taskSummary.sections.sources')}
-        actionLabel={t('taskSummary.addSource')}
-        onAction={onFocusComposer}
       >
         {sectionItems('sources', summary.sources).map((item) => (
           <SummaryButton
@@ -384,31 +378,15 @@ function TaskSummaryContent({
 
 function SummarySection({
   title,
-  actionLabel,
-  onAction,
   children,
 }: {
   title: string;
-  actionLabel?: string;
-  onAction?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <section aria-label={title} className="px-4 py-3">
       <div className="flex min-h-7 items-center justify-between gap-3">
         <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
-        {onAction && actionLabel && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="size-7 rounded-lg bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label={actionLabel}
-            onClick={onAction}
-          >
-            <Plus className="size-4" />
-          </Button>
-        )}
       </div>
       <div className="mt-1 space-y-0.5">{children}</div>
     </section>
