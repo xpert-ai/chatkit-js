@@ -64,6 +64,7 @@ import {
   type ChatAttachmentsState,
 } from './chat/attachments';
 import { UploadDroppedFiles } from './chat/upload-dropped-files';
+import { getVisibleHumanAttachments } from './chat/message-files';
 import { usePetAutoState } from './chat/usePetAutoState';
 import { useSlashCommands } from './chat/useSlashCommands';
 import {
@@ -3011,10 +3012,13 @@ export function Chat({
                 messageContent.trim().length > 0;
               const humanMessage = message as HumanMessageWithMeta;
               const humanReferences = humanMessage.references ?? [];
-              const humanAttachments = [
-                ...(humanMessage.fileAssets ?? []),
-                ...(humanMessage.attachments ?? []),
-              ];
+              const humanAttachments = getVisibleHumanAttachments(
+                [
+                  ...(humanMessage.fileAssets ?? []),
+                  ...(humanMessage.attachments ?? []),
+                ],
+                humanReferences,
+              );
               const humanRuntimeCapabilityOptions =
                 message.type === 'human'
                   ? (humanMessage.runtimeCapabilityOptions ??

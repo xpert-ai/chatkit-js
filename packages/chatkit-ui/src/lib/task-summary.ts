@@ -645,24 +645,26 @@ export function collectLiveTaskSummary({
     (message) => extractPlan(message) ?? [],
   );
   const agentRuns = messages.flatMap((message) =>
-    (message.agentRuns ?? []).map((run) => ({
-      id: run.id,
-      parentId: run.parentId,
-      level: agentRunLevel(run, messages),
-      agentKey: run.agentKey,
-      title:
-        (run.agentKey ? agentNames?.get(run.agentKey) : undefined) ??
-        run.title ??
-        run.xpertName ??
-        run.agentKey ??
-        'Agent',
-      status: taskSummaryAgentStatus(run.status),
-      elapsedTime: run.elapsedTime,
-      error: typeof run.error === 'string' ? run.error : undefined,
-      messageId: message.id,
-      updatedAt:
-        run.updatedAt ?? run.endedAt ?? run.startedAt ?? message.updatedAt,
-    })),
+    (message.agentRuns ?? [])
+      .filter((run) => Boolean(run.parentId))
+      .map((run) => ({
+        id: run.id,
+        parentId: run.parentId,
+        level: agentRunLevel(run, messages),
+        agentKey: run.agentKey,
+        title:
+          (run.agentKey ? agentNames?.get(run.agentKey) : undefined) ??
+          run.title ??
+          run.xpertName ??
+          run.agentKey ??
+          'Agent',
+        status: taskSummaryAgentStatus(run.status),
+        elapsedTime: run.elapsedTime,
+        error: typeof run.error === 'string' ? run.error : undefined,
+        messageId: message.id,
+        updatedAt:
+          run.updatedAt ?? run.endedAt ?? run.startedAt ?? message.updatedAt,
+      })),
   );
   return {
     goal,
@@ -724,7 +726,9 @@ export function mergeTaskSummary(
     ...live.sources,
   ]);
   const agents = mergeAgents([
-    ...(historySections?.agents ?? history?.agents.items ?? []),
+    ...(historySections?.agents ?? history?.agents.items ?? []).filter((agent) =>
+      Boolean(agent.parentId),
+    ),
     ...live.agents,
   ]);
   const pending = mergePending([

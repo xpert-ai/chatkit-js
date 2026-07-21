@@ -101,7 +101,7 @@ describe('TaskSummaryTrigger', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('keeps Codex-style output and source actions visible when empty', () => {
+  it('keeps the empty output prompt without inactive section actions', () => {
     const onFocusComposer = vi.fn();
     const value = summary();
     value.outputs = [];
@@ -121,9 +121,14 @@ describe('TaskSummaryTrigger', () => {
     );
 
     expect(screen.getByText('Create files or sites')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Create output' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add source' }));
-    expect(onFocusComposer).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole('button', { name: 'Create output' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Add source' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Create files or sites'));
+    expect(onFocusComposer).toHaveBeenCalledOnce();
   });
 });
 
