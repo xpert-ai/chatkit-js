@@ -86,6 +86,9 @@
   "history": {
     "threadHistory": "线程历史",
     "title": "线程",
+    "refresh": "刷新线程",
+    "updatedAt": "更新于 {{time}}",
+    "deleteThread": "删除 {{title}}",
     "newThread": "新线程",
     "empty": "暂无线程",
     "newThreadTitle": "新线程",

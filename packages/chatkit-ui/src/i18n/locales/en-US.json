@@ -86,6 +86,9 @@
   "history": {
     "threadHistory": "Thread history",
     "title": "Threads",
+    "refresh": "Refresh threads",
+    "updatedAt": "Updated {{time}}",
+    "deleteThread": "Delete {{title}}",
     "newThread": "New Thread",
     "empty": "No threads yet",
     "newThreadTitle": "New thread",

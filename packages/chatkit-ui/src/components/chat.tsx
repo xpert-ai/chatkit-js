@@ -2899,8 +2899,10 @@ export function Chat({
                 threads={threads}
                 currentThreadId={stream.threadId ?? undefined}
                 onNewThread={handleNewThread}
+                onRefresh={refreshThreads}
                 onSelectThread={handleSelectThread}
                 onDeleteThread={handleDeleteThread}
+                isRefreshing={isThreadsLoading}
                 showDelete={history?.showDelete !== false}
                 disabled={missingConfig || isThreadsLoading || isHistoryLoading}
               />
