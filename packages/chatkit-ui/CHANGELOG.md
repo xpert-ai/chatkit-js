@@ -1,5 +1,15 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.11
+
+### Patch Changes
+
+- 4610ece: Add an opt-in Remote Views workbench with responsive split and drawer layouts,
+  an isolated iframe protocol bridge, chat context and client-command integration,
+  and the public `workbench` options.
+- Updated dependencies [4610ece]
+  - @xpert-ai/chatkit-types@0.4.7
+
 ## 0.4.10
 
 ### Patch Changes
