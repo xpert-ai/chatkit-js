@@ -1,4 +1,30 @@
 {
+  "workbench": {
+    "title": "Views",
+    "description": "Remote workbench views",
+    "views": "Available views",
+    "open": "Open views",
+    "close": "Close views",
+    "expandPanel": "Expand panel",
+    "restorePanel": "Restore panel",
+    "toggleSidebar": "Show or hide sidebar",
+    "resize": "Resize views panel",
+    "loading": "Loading views...",
+    "loadingView": "Loading view...",
+    "empty": "No compatible views are available.",
+    "loadFailed": "Views could not be loaded.",
+    "entryUnavailable": "Remote view content is unavailable.",
+    "missingAssistant": "An assistant is required to load views.",
+    "retry": "Retry",
+    "errors": {
+      "contextKeyRequired": "Context key is required.",
+      "messageRequired": "Message text is required.",
+      "sendFailed": "The message could not be sent.",
+      "requestFailed": "The remote view request failed.",
+      "requestTimeout": "The remote view request timed out.",
+      "clientCommandUnavailable": "No handler is configured for client command {{commandKey}}."
+    }
+  },
   "chat": {
     "title": "Chat",
     "placeholder": "Type a message...",

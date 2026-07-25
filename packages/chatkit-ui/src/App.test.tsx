@@ -29,6 +29,12 @@ vi.mock('./providers/Theme', () => ({
   ),
 }));
 
+vi.mock('./workbench/WorkbenchShell', () => ({
+  WorkbenchShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="workbench-shell">{children}</div>
+  ),
+}));
+
 vi.mock('./hooks/useParentMessenger', () => ({
   useParentMessenger: () => ({
     isParentAvailable: false,
@@ -57,6 +63,7 @@ describe('App', () => {
 
     expect(screen.getByTestId('stream-provider')).toBeInTheDocument();
     expect(screen.getByTestId('chat')).toBeInTheDocument();
+    expect(screen.queryByTestId('workbench-shell')).not.toBeInTheDocument();
     expect(StreamProvider).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: undefined,
@@ -95,5 +102,20 @@ describe('App', () => {
       }),
       undefined,
     );
+  });
+
+  it('mounts the workbench shell only when explicitly enabled', () => {
+    render(
+      <App
+        clientSecret="secret"
+        options={{
+          ...options,
+          workbench: { enabled: true },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('workbench-shell')).toBeInTheDocument();
+    expect(screen.getByTestId('chat')).toBeInTheDocument();
   });
 });

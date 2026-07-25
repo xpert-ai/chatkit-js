@@ -343,7 +343,22 @@ export const mapLangGraphEventToChatKit = ({
     case ChatMessageEventTypeEnum.ON_TOOL_START:
     case ChatMessageEventTypeEnum.ON_TOOL_END: {
       const toolName = extractToolName(record);
+      const toolCallId = pickString(record, [
+        'tool_call_id',
+        'toolCallId',
+        'id',
+        'call_id',
+      ]);
       const argsPreview = summarizeValue(extractToolArgs(record));
+      const outputSummary =
+        eventType === ChatMessageEventTypeEnum.ON_TOOL_END
+          ? summarizeValue(
+              record?.output ??
+                record?.outputs ??
+                record?.result ??
+                record?.data,
+            )
+          : undefined;
       const toolKey = extractToolKey(runKey, record, toolName);
       if (eventType === ChatMessageEventTypeEnum.ON_TOOL_START) {
         state.toolStartTimes.set(toolKey, Date.now());
@@ -364,7 +379,9 @@ export const mapLangGraphEventToChatKit = ({
         {
           ...buildBaseLogData(runId, threadId),
           ...(toolName ? { toolName } : {}),
+          ...(toolCallId ? { toolCallId } : {}),
           ...(argsPreview ? { argsPreview } : {}),
+          ...(outputSummary ? { outputSummary } : {}),
           ...(durationMs != null ? { durationMs } : {}),
         },
       );

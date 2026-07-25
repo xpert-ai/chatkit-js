@@ -6,6 +6,7 @@ import { StreamProvider } from "./providers/Stream";
 import { ThemeProvider } from "./providers/Theme";
 import { getLanguage, setLanguage } from "./i18n";
 import { useParentMessenger } from './hooks/useParentMessenger';
+import { WorkbenchShell } from './workbench/WorkbenchShell';
 
 export type AppProps = {
   options?: ChatKitOptions | null;
@@ -31,11 +32,30 @@ export function App({
   const theme = options?.theme;
   const locale = options?.locale;
   const requestLocale = locale ?? getLanguage();
+  const workbenchEnabled = options?.workbench?.enabled === true;
+  const [workbenchRequestContext, setWorkbenchRequestContext] = React.useState<
+    Record<string, unknown>
+  >({});
+  const handleWorkbenchRequestContextChange = React.useCallback(
+    (context: Record<string, unknown>) => {
+      setWorkbenchRequestContext(context);
+    },
+    [],
+  );
 
   React.useEffect(() => {
     if (!locale) return;
     setLanguage(locale);
   }, [locale]);
+
+  const chat = (
+    <Chat
+      className="flex-1"
+      clientSecret={apiKey}
+      options={options}
+      isClientSecretInitializing={isClientSecretInitializing}
+    />
+  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -50,13 +70,21 @@ export function App({
             xpertId={options?.api.xpertId || resolvedXpertId || xpertId}
             initialThread={options?.initialThread ?? null}
             locale={requestLocale}
+            additionalContext={
+              workbenchEnabled ? workbenchRequestContext : undefined
+            }
           >
-            <Chat
-              className="flex-1"
-              clientSecret={apiKey}
-              options={options}
-              isClientSecretInitializing={isClientSecretInitializing}
-            />
+            {workbenchEnabled ? (
+              <WorkbenchShell
+                options={options}
+                locale={requestLocale}
+                onRequestContextChange={handleWorkbenchRequestContextChange}
+              >
+                {chat}
+              </WorkbenchShell>
+            ) : (
+              chat
+            )}
           </StreamProvider>
         </A2UIProvider>
       </div>

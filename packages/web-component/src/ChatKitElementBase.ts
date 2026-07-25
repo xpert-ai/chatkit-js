@@ -163,6 +163,35 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
         }
         return onClientTool({ name, params, id, tool_call_id });
       },
+      onWorkbenchClientCommand: async ({
+        commandKey,
+        payload,
+        hostType,
+        hostId,
+        viewKey,
+      }: {
+        commandKey: string;
+        payload?: unknown;
+        hostType: 'agent';
+        hostId: string;
+        viewKey: string;
+      }) => {
+        const onClientCommand = this.#opts?.workbench?.onClientCommand;
+        if (!onClientCommand) {
+          this.#emitAndThrow(
+            new IntegrationError(
+              `No handler for workbench client command "${commandKey}". Add workbench.onClientCommand to your ChatKit options.`,
+            ),
+          );
+        }
+        return onClientCommand({
+          commandKey,
+          payload,
+          hostType,
+          hostId,
+          viewKey,
+        });
+      },
       onWidgetAction: async ({
         action,
         widgetItem,

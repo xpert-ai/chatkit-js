@@ -36,6 +36,13 @@ type CommandMessageMap = {
   onFocusComposer: null;
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
+  onWorkbenchClientCommand: {
+    commandKey: string;
+    payload?: unknown;
+    hostType: 'agent';
+    hostId: string;
+    viewKey: string;
+  };
   onGetClientSecret: string | null;
   onWidgetAction: {
     action:
@@ -72,6 +79,14 @@ type ParentEventPayloadMap = {
 };
 
 type ParentEventName = keyof ParentEventPayloadMap;
+
+export const CHATKIT_INTERNAL_PARENT_EVENT =
+  'chatkit:internal-parent-event' as const;
+
+export type ChatKitInternalParentEventDetail = {
+  event: ParentEventName;
+  data: ParentEventPayloadMap[ParentEventName];
+};
 
 type ParentEventMessage<K extends ParentEventName = ParentEventName> = {
   type: 'event';
@@ -559,6 +574,16 @@ export function ParentMessengerProvider({
       data: ParentEventPayloadMap[E],
       transfer?: Transferable[],
     ) => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent<ChatKitInternalParentEventDetail>(
+            CHATKIT_INTERNAL_PARENT_EVENT,
+            {
+              detail: { event, data },
+            },
+          ),
+        );
+      }
       if (!isParentAvailable) return;
       const message: ParentEnvelope = {
         __xpaiChatKit: true,

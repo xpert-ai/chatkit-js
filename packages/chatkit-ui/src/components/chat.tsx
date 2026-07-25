@@ -140,6 +140,7 @@ import {
   type ComposerPart,
 } from '../lib/composer-parts';
 import { hasSelectedRuntimeSlashCommand } from '../lib/slash-commands';
+import { WorkbenchToggleButton } from '../workbench/WorkbenchShell';
 import {
   ComposerCapabilityToken,
   DetachedRunRuntimeCapabilities,
@@ -2824,6 +2825,8 @@ export function Chat({
               onOpenChange={handleTaskSummaryOpenChange}
             />
           )}
+          <WorkbenchToggleButton />
+
           {canMinimizeToPet && (
             <Tooltip>
               <TooltipTrigger asChild>
