@@ -48,6 +48,7 @@ import {
   type TMessageContentComponent,
   type TThreadContextUsageEvent,
   type ThreadGoal,
+  type TChatTaskSummaryContribution,
   normalizeRequestLanguage,
 } from '@xpert-ai/chatkit-types';
 import {
@@ -60,7 +61,10 @@ import {
   normalizeAgentRunInfo,
   type AgentRunInfo,
 } from '../lib/agent-runs';
-import { upsertAgentRunOnLatestMessage } from '../lib/stream-agent-runs';
+import {
+  interruptActiveAgentRunOnMessages,
+  upsertAgentRunOnLatestMessage,
+} from '../lib/stream-agent-runs';
 import {
   normalizeClientSecretResult,
   type ResolvedClientSecret,
@@ -137,6 +141,7 @@ import {
   type PendingHITLRequest,
 } from '../lib/hitl';
 import { logRuntimeActivity, useRuntimeActivities } from './runtime-activities';
+import { normalizeTaskSummaryContribution } from '../lib/task-summary';
 
 export {
   getAutoDrainQueuedFollowUpIds,
@@ -166,6 +171,7 @@ type ChatKitAIMessage = Message & {
   visibleAt?: string | null;
   clientToolCalls?: ToolCall[];
   agentRuns?: AgentRunInfo[];
+  taskSummary?: TChatTaskSummaryContribution;
 };
 
 type ChatKitMessageContentPart = NonNullable<
@@ -255,6 +261,7 @@ export type StreamContextType = {
   apiKey: string;
   organizationId?: string;
   threadId: string | null;
+  conversationId: string | null;
   threadGoal: ThreadGoal | null;
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
   values: StateType;
@@ -564,6 +571,7 @@ type PersistedChatMessage = ChatMessage &
     targetExecutionId?: string | null;
     visibleAt?: string | null;
     thirdPartyMessage?: unknown;
+    taskSummary?: unknown;
   };
 
 function normalizeThreadIdentifier(threadId?: string | null): string | null {
@@ -646,6 +654,7 @@ function mapChatMessageToUiMessage(
   const runtimeCapabilities = extractRuntimeCapabilities(message);
   const attachments = normalizeMessageFiles(message.attachments);
   const fileAssets = normalizeMessageFiles(message.fileAssets);
+  const taskSummary = normalizeTaskSummaryContribution(message.taskSummary);
 
   return {
     id: message.id ?? createMessageId(),
@@ -662,6 +671,7 @@ function mapChatMessageToUiMessage(
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
+    ...(taskSummary ? { taskSummary } : {}),
     ...(message.followUpMode ? { followUpMode: message.followUpMode } : {}),
     ...(message.followUpStatus
       ? { followUpStatus: message.followUpStatus }
@@ -1047,6 +1057,9 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
         .map((item) => normalizeAgentRunInfo(item))
         .filter((item): item is AgentRunInfo => Boolean(item))
     : [];
+  const taskSummary = normalizeTaskSummaryContribution(
+    (raw as { taskSummary?: unknown }).taskSummary,
+  );
 
   return {
     id,
@@ -1063,6 +1076,7 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
     ...(agentRuns.length > 0 ? { agentRuns } : {}),
+    ...(taskSummary ? { taskSummary } : {}),
   };
 }
 
@@ -1443,6 +1457,7 @@ export function applyStreamEvent(
   onThreadGoalCleared?: (threadId: string) => void,
   onThreadGoalPatched?: (event: ThreadGoalUpdatedPatchEvent) => void,
   preservedMessages?: ChatKitAIMessage[],
+  onConversationStart?: (conversationId: string) => void,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
@@ -1555,6 +1570,17 @@ export function applyStreamEvent(
     );
     if (eventErrorMessage) {
       setError(new Error(eventErrorMessage));
+    }
+
+    if (
+      eventType === ChatMessageEventTypeEnum.ON_CONVERSATION_START &&
+      eventData &&
+      typeof eventData.id === 'string'
+    ) {
+      const conversationId = eventData.id.trim();
+      if (conversationId) {
+        onConversationStart?.(conversationId);
+      }
     }
 
     switch (eventType) {
@@ -1807,6 +1833,7 @@ const StreamSession = ({
   additionalContext?: Record<string, unknown>;
 }) => {
   const [threadId, setThreadId] = useQueryState('threadId');
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
   const [historyMessagePagination, setHistoryMessagePagination] =
@@ -1884,6 +1911,13 @@ const StreamSession = ({
   useEffect(() => {
     activeThreadIdRef.current = threadId ?? null;
   }, [threadId]);
+  const updateConversationId = useCallback(
+    (nextConversationId: string | null) => {
+      conversationIdRef.current = nextConversationId;
+      setConversationId(nextConversationId);
+    },
+    [],
+  );
   const updateHistoryMessagePagination = useCallback(
     (
       next:
@@ -1991,7 +2025,7 @@ const StreamSession = ({
             limit: 1,
           });
           conversationId = conversationResult.items?.[0]?.id?.trim() ?? null;
-          conversationIdRef.current = conversationId;
+          updateConversationId(conversationId);
         }
       }
       if (!conversationId) {
@@ -2017,7 +2051,7 @@ const StreamSession = ({
         Promise.resolve()
       );
     },
-    [],
+    [updateConversationId],
   );
   const rememberHITLExecutionId = useCallback((executionId: string) => {
     lastExecutionIdRef.current = executionId;
@@ -2241,7 +2275,9 @@ const StreamSession = ({
   const stop = useCallback(() => {
     const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
     const activeRunId = lastExecutionIdRef.current;
-    abortRef.current?.abort();
+    const activeAbortController = abortRef.current;
+    const hasActiveRun = activeAbortController !== null;
+    activeAbortController?.abort();
     abortRef.current = null;
     clearPendingRequestUserInput(
       createAbortError('The user input request was cancelled.'),
@@ -2249,6 +2285,20 @@ const StreamSession = ({
     clearPendingHITLRequest(
       createAbortError('The HITL request was cancelled.'),
     );
+    if (hasActiveRun) {
+      const interruptedAt = Date.now();
+      setValues((prev) => {
+        const messages = prev.messages ?? [];
+        const nextMessages = interruptActiveAgentRunOnMessages(messages, {
+          activeRunId,
+          hasActiveRun,
+          interruptedAt,
+        });
+        return nextMessages === messages
+          ? prev
+          : { ...prev, messages: nextMessages };
+      });
+    }
     setIsLoading(false);
     if (activeThreadId && activeRunId) {
       client.runs
@@ -2422,7 +2472,7 @@ const StreamSession = ({
       updateTodos(null);
       activeThreadIdRef.current = null;
       clearRuntimeActivities();
-      conversationIdRef.current = recordId;
+      updateConversationId(recordId);
       updateHistoryMessagePagination({
         ...createEmptyHistoryMessagePagination(),
         conversationId: recordId,
@@ -2482,6 +2532,7 @@ const StreamSession = ({
       runtimeClientSecret,
       setThreadId,
       stop,
+      updateConversationId,
       updateHistoryMessagePagination,
       updateTodos,
     ],
@@ -2604,7 +2655,7 @@ const StreamSession = ({
       setThreadGoal(null);
       setValues({ messages: initialMessages ?? [] });
       updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
-      conversationIdRef.current = null;
+      updateConversationId(null);
       activeThreadIdRef.current = newThreadId ?? null;
       shouldStartFreshAssistantMessageAfterSteerRef.current = false;
       lastExecutionIdRef.current = null;
@@ -2622,6 +2673,7 @@ const StreamSession = ({
       clearRuntimeActivities,
       setThreadId,
       threadId,
+      updateConversationId,
       updateHistoryMessagePagination,
       updateTodos,
     ],
@@ -2702,10 +2754,10 @@ const StreamSession = ({
         limit: 1,
       });
       const conversationId = conversationResult.items?.[0]?.id?.trim() ?? null;
-      conversationIdRef.current = conversationId;
+      updateConversationId(conversationId);
       return conversationId;
     },
-    [client],
+    [client, updateConversationId],
   );
 
   const sendSteerFollowUp = useCallback(
@@ -3034,6 +3086,7 @@ const StreamSession = ({
               });
             },
             preservedMessages,
+            updateConversationId,
           );
         }
 
@@ -3080,6 +3133,7 @@ const StreamSession = ({
       removePendingFollowUps,
       updateTodos,
       handleRuntimeActivityTrigger,
+      updateConversationId,
     ],
   );
 
@@ -3120,7 +3174,7 @@ const StreamSession = ({
 
       const conversation = conversationResult.items?.[0];
       if (!conversation?.id) {
-        conversationIdRef.current = null;
+        updateConversationId(null);
         setPendingFollowUps([]);
         updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
         setValues({ messages: [] });
@@ -3142,7 +3196,7 @@ const StreamSession = ({
         }
       }
 
-      conversationIdRef.current = conversation.id;
+      updateConversationId(conversation.id);
       const loadedMessages = await loadConversationMessages(conversation.id);
       await refreshSandboxServices({
         targetThreadId: threadId,
@@ -3191,6 +3245,7 @@ const StreamSession = ({
       clearRuntimeActivities,
       refreshSandboxServices,
       setThreadId,
+      updateConversationId,
       updateHistoryMessagePagination,
       updateTodos,
     ],
@@ -3325,6 +3380,7 @@ const StreamSession = ({
         setContextUsageByAgentKey({});
         updateTodos(null);
         clearRuntimeActivities();
+        updateConversationId(null);
         updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
         lastExecutionIdRef.current = null;
         lastEventIdRef.current = null;
@@ -3374,7 +3430,7 @@ const StreamSession = ({
         }
 
         nextThreadId = resumeThreadId;
-        conversationIdRef.current = input.conversationId;
+        updateConversationId(input.conversationId);
         activeThreadIdRef.current = resumeThreadId;
         setThreadId(resumeThreadId);
       }
@@ -3433,6 +3489,7 @@ const StreamSession = ({
       sendSteerFollowUp,
       setThreadId,
       threadId,
+      updateConversationId,
       updateHistoryMessagePagination,
       updateTodos,
     ],
@@ -3453,6 +3510,7 @@ const StreamSession = ({
     apiKey: runtimeClientSecret,
     organizationId: runtimeOrganizationId,
     threadId: threadId ?? null,
+    conversationId,
     threadGoal,
     contextUsageByAgentKey,
     values,

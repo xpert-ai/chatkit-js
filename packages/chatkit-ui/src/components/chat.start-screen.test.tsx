@@ -40,6 +40,10 @@ const mocks = vi.hoisted(() => {
         conversations: {
           search: vi.fn().mockResolvedValue({ items: [] }),
           update: vi.fn(),
+          getTaskSummary: vi.fn((conversationId: string) =>
+            Promise.resolve(emptyTaskSummary(conversationId)),
+          ),
+          listTaskSummaryItems: vi.fn(),
         },
       },
       apiUrl: 'https://api.example.com',
@@ -47,6 +51,7 @@ const mocks = vi.hoisted(() => {
       apiKey: 'secret',
       organizationId: undefined,
       threadId: null as string | null,
+      conversationId: null as string | null,
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [] as Array<{
@@ -128,6 +133,8 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
         'composer.removeReference': 'Remove reference',
         'startScreen.editPrompt': 'Edit prompt',
         'startScreen.greeting': 'What can I help with today?',
+        'taskSummary.open': 'Open task summary',
+        'taskSummary.title': 'Task summary',
       };
       return labels[key] ?? options?.defaultValue ?? key;
     },
@@ -239,6 +246,25 @@ const baseOptions: ChatKitOptions = {
   },
 };
 
+const taskSummaryGeometry = {
+  viewportRight: 0,
+  chatColumnRight: 0,
+};
+
+const defaultGetBoundingClientRect =
+  HTMLElement.prototype.getBoundingClientRect;
+vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+  function (this: HTMLElement) {
+    if (this.hasAttribute('data-chatkit-root')) {
+      return domRect(taskSummaryGeometry.viewportRight);
+    }
+    if (this.dataset.slot === 'chatkit-chat-header') {
+      return domRect(taskSummaryGeometry.chatColumnRight);
+    }
+    return defaultGetBoundingClientRect.call(this);
+  },
+);
+
 function renderChat(options: ChatKitOptions = baseOptions) {
   return render(<Chat clientSecret="secret" options={options} />);
 }
@@ -286,11 +312,14 @@ describe('Chat start screen prompts', () => {
     mocks.refreshThreads.mockClear();
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
+    mocks.stream.conversationId = null;
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.pendingHITLRequest = null;
     mocks.stream.isLoading = false;
     mocks.stream.submit.mockClear();
+    taskSummaryGeometry.viewportRight = 0;
+    taskSummaryGeometry.chatColumnRight = 0;
   });
 
   it('limits the chat column width when layout maxWidth is configured', async () => {
@@ -317,6 +346,127 @@ describe('Chat start screen prompts', () => {
         expect(element).toHaveClass('mx-auto', 'w-full');
       }
     });
+  });
+
+  it('opens the docked task summary once per conversation when the right gutter fits it', async () => {
+    taskSummaryGeometry.viewportRight = 1600;
+    taskSummaryGeometry.chatColumnRight = 1200;
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.conversationId = 'conversation-1';
+    const options: ChatKitOptions = {
+      ...baseOptions,
+      taskSummary: { enabled: true },
+    };
+    const view = renderChat(options);
+
+    const panel = await waitFor(() => {
+      const value = view.container.querySelector(
+        '[data-slot="task-summary-panel"]',
+      );
+      expect(value).toBeInTheDocument();
+      return value;
+    });
+    expect(panel?.parentElement).toHaveClass(
+      'absolute',
+      'right-5',
+      'top-3',
+      'w-80',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open task summary' }));
+    expect(
+      view.container.querySelector('[data-slot="task-summary-panel"]'),
+    ).not.toBeInTheDocument();
+
+    view.rerender(<Chat clientSecret="secret" options={options} />);
+    expect(
+      view.container.querySelector('[data-slot="task-summary-panel"]'),
+    ).not.toBeInTheDocument();
+
+    taskSummaryGeometry.viewportRight = 1500;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-task-summary-layout="popover"]'),
+      ).toBeInTheDocument(),
+    );
+    taskSummaryGeometry.viewportRight = 1600;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-task-summary-layout="docked"]'),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      view.container.querySelector('[data-slot="task-summary-panel"]'),
+    ).not.toBeInTheDocument();
+
+    mocks.stream.threadId = 'thread-2';
+    mocks.stream.conversationId = 'conversation-2';
+    view.rerender(<Chat clientSecret="secret" options={options} />);
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-slot="task-summary-panel"]'),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('uses the popover when the right gutter cannot fit the task summary', async () => {
+    taskSummaryGeometry.viewportRight = 1500;
+    taskSummaryGeometry.chatColumnRight = 1200;
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.conversationId = 'conversation-1';
+    const view = renderChat({
+      ...baseOptions,
+      layout: { maxWidth: '960px' },
+      taskSummary: { enabled: true },
+    });
+
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-task-summary-layout="popover"]'),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      view.container.querySelector('[data-slot="task-summary-panel"]'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open task summary' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('restores an automatically hidden summary when the right gutter grows again', async () => {
+    taskSummaryGeometry.viewportRight = 1600;
+    taskSummaryGeometry.chatColumnRight = 1200;
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.conversationId = 'conversation-1';
+    const view = renderChat({
+      ...baseOptions,
+      layout: { maxWidth: '960px' },
+      taskSummary: { enabled: true },
+    });
+
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-slot="task-summary-panel"]'),
+      ).toBeInTheDocument(),
+    );
+
+    taskSummaryGeometry.viewportRight = 1500;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-slot="task-summary-panel"]'),
+      ).not.toBeInTheDocument(),
+    );
+
+    taskSummaryGeometry.viewportRight = 1600;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() =>
+      expect(
+        view.container.querySelector('[data-slot="task-summary-panel"]'),
+      ).toBeInTheDocument(),
+    );
   });
 
   it('submits a start-screen prompt with existing attachments and references', async () => {
@@ -416,3 +566,31 @@ describe('Chat start screen prompts', () => {
     expect(screen.getByText('Pasted text')).toBeInTheDocument();
   });
 });
+
+function emptyTaskSummary(conversationId: string) {
+  return {
+    version: 1 as const,
+    conversationId,
+    threadId: `thread-${conversationId}`,
+    task: {},
+    outputs: { items: [], total: 0 },
+    sources: { items: [], total: 0 },
+    agents: { items: [], total: 0 },
+    pending: { items: [], total: 0 },
+    updatedAt: '2026-07-13T00:00:00.000Z',
+  };
+}
+
+function domRect(right: number): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    width: right,
+    height: 0,
+    top: 0,
+    right,
+    bottom: 0,
+    left: 0,
+    toJSON: () => ({}),
+  };
+}

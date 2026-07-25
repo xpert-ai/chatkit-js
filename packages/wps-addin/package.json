@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-wps-addin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "WPS Writer task pane add-in that embeds Xpert ChatKit and exposes WPS client tools.",
   "sideEffects": false,
   "type": "module",

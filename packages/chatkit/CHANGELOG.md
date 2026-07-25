@@ -1,5 +1,41 @@
 # @xpert-ai/chatkit-types
 
+## 0.4.6
+
+### Patch Changes
+
+- 8d8b8b4: Add the opt-in task summary contribution protocol, resource effects, history aggregation, and responsive six-section task summary interface.
+
+## 0.4.5
+
+### Patch Changes
+
+- d6b2e09: feat: set runtime capabilities
+
+## 0.4.4
+
+### Patch Changes
+
+- 3830e6f: message navigation
+
+## 0.4.3
+
+### Patch Changes
+
+- eb343de: add file types
+
+## 0.4.2
+
+### Patch Changes
+
+- 8a8b98d: maxWidth of layout
+
+## 0.4.1
+
+### Patch Changes
+
+- 9fe05aa: support mcp tool result
+
 ## 0.4.0
 
 ### Minor Changes

@@ -149,6 +149,43 @@ describe('conversation message history pagination', () => {
   });
 });
 
+describe('conversation lifecycle stream events', () => {
+  it('resolves the current conversation id when a new conversation starts', () => {
+    const onConversationStart = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_CONVERSATION_START,
+          data: { id: 'conversation-new', status: 'busy' },
+        }),
+      },
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+      { threadId: 'thread-new' },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onConversationStart,
+    );
+
+    expect(onConversationStart).toHaveBeenCalledWith('conversation-new');
+  });
+});
+
 describe('request language headers', () => {
   it('normalizes ChatKit locales to Xpert language headers', () => {
     expect(normalizeRequestLanguage('zh-CN')).toBe('zh-Hans');

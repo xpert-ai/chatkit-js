@@ -1,5 +1,83 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.10
+
+### Patch Changes
+
+- 505b4fb: ui
+
+## 0.4.9
+
+### Patch Changes
+
+- 242cac0: Hide primary agent executions from agent activity.
+- 7af926c: Remove inactive output and source action buttons from the task summary.
+- 865ec8d: Stop running sub-agent indicators when a chat run is interrupted.
+- 47b49d0: Deduplicate human message attachments already displayed as image references.
+
+## 0.4.8
+
+### Patch Changes
+
+- 8d8b8b4: Add the opt-in task summary contribution protocol, resource effects, history aggregation, and responsive six-section task summary interface.
+- Updated dependencies [8d8b8b4]
+  - @xpert-ai/chatkit-types@0.4.6
+  - @xpert-ai/chatkit-web-shared@0.4.1
+
+## 0.4.7
+
+### Patch Changes
+
+- 5bbdf4a: Place inserted runtime capability composer chips before prompt text when both are provided by setComposerValue.
+- 21972b6: title of thread
+- f20c001: pet avatar
+- 5bbdf4a: Render runtime capability chips and selectors with capability metadata colors.
+
+## 0.4.6
+
+### Patch Changes
+
+- d6b2e09: feat: set runtime capabilities
+- Updated dependencies [d6b2e09]
+  - @xpert-ai/chatkit-web-shared@0.4.0
+  - @xpert-ai/chatkit-types@0.4.5
+
+## 0.4.5
+
+### Patch Changes
+
+- 3830e6f: message navigation
+- Updated dependencies [3830e6f]
+  - @xpert-ai/chatkit-types@0.4.4
+
+## 0.4.4
+
+### Patch Changes
+
+- 79dcf6b: knowledge citation
+
+## 0.4.3
+
+### Patch Changes
+
+- 8a8b98d: maxWidth of layout
+- Updated dependencies [8a8b98d]
+  - @xpert-ai/chatkit-types@0.4.2
+
+## 0.4.2
+
+### Patch Changes
+
+- c384e60: mcp app instance token
+
+## 0.4.1
+
+### Patch Changes
+
+- 9fe05aa: support mcp tool result
+- Updated dependencies [9fe05aa]
+  - @xpert-ai/chatkit-types@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes
