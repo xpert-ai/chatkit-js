@@ -226,6 +226,27 @@ export function retainResumeStreamOptions(
   };
 }
 
+export function mergeStreamRequestContext(
+  base: Record<string, unknown> | undefined,
+  additional: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!additional || Object.keys(additional).length === 0) return base;
+  const baseEnv = readStringFields(base?.env);
+  const additionalEnv = readStringFields(additional.env);
+  const merged = { ...(base ?? {}), ...additional };
+  const env = { ...baseEnv, ...additionalEnv };
+  return Object.keys(env).length > 0 ? { ...merged, env } : merged;
+}
+
+function readStringFields(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, field] of Object.entries(value)) {
+    if (typeof field === 'string') result[key] = field;
+  }
+  return result;
+}
+
 export type StreamContextType = {
   client: Client<StateType>;
   authenticatedFetch: typeof fetch;
@@ -1774,6 +1795,7 @@ const StreamSession = ({
   assistantId,
   initialThread,
   locale,
+  additionalContext,
 }: {
   children: ReactNode;
   apiKey: string;
@@ -1782,6 +1804,7 @@ const StreamSession = ({
   assistantId: string;
   initialThread?: string | null;
   locale?: string | null;
+  additionalContext?: Record<string, unknown>;
 }) => {
   const [threadId, setThreadId] = useQueryState('threadId');
   const [values, setValues] = useState<StateType>({ messages: [] });
@@ -2692,7 +2715,7 @@ const StreamSession = ({
       options?: StreamSubmitOptions,
     ) => {
       const normalizedRequest = normalizeRequestContextAndConfig({
-        context: options?.context,
+        context: mergeStreamRequestContext(options?.context, additionalContext),
         config: options?.config,
       });
       const conversationId = await resolveConversationId(nextThreadId);
@@ -2715,7 +2738,7 @@ const StreamSession = ({
         config: normalizedRequest.config as Config | undefined,
       });
     },
-    [assistantId, client, resolveConversationId],
+    [additionalContext, assistantId, client, resolveConversationId],
   );
 
   const promotePendingFollowUpToSteer = useCallback(
@@ -2906,7 +2929,10 @@ const StreamSession = ({
       setIsLoading(true);
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
-          context: options?.context,
+          context: mergeStreamRequestContext(
+            options?.context,
+            additionalContext,
+          ),
           config: options?.config,
         });
         const stream =
@@ -3045,6 +3071,7 @@ const StreamSession = ({
     },
     [
       assistantId,
+      additionalContext,
       client,
       sendEvent,
       handleInterrupt,
@@ -3469,6 +3496,7 @@ export const StreamProvider: React.FC<{
   xpertId?: string;
   initialThread?: string | null;
   locale?: string | null;
+  additionalContext?: Record<string, unknown>;
 }> = ({
   children,
   apiKey,
@@ -3477,6 +3505,7 @@ export const StreamProvider: React.FC<{
   xpertId,
   initialThread,
   locale,
+  additionalContext,
 }) => {
   return (
     <StreamSession
@@ -3486,6 +3515,7 @@ export const StreamProvider: React.FC<{
       assistantId={xpertId ?? 'your-xpert-id'}
       initialThread={initialThread}
       locale={locale}
+      additionalContext={additionalContext}
     >
       {children}
     </StreamSession>

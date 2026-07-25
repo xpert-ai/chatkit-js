@@ -480,6 +480,31 @@ export type ChatKitGoalAdapter = {
   }) => Promise<ThreadGoal | null>;
 };
 
+export type ChatKitWorkbenchClientCommandRequest = {
+  commandKey: string;
+  payload?: unknown;
+  hostType: 'agent';
+  hostId: string;
+  viewKey: string;
+};
+
+export type ChatKitWorkbenchOptions = {
+  /**
+   * Enables the right-side Xpert Remote Views workbench.
+   *
+   * @default false
+   */
+  enabled?: boolean;
+
+  /**
+   * Handles manifest-declared client commands that are not implemented by
+   * ChatKit itself.
+   */
+  onClientCommand?: (
+    request: ChatKitWorkbenchClientCommandRequest,
+  ) => unknown | Promise<unknown>;
+};
+
 export type ChatKitOptions = {
   /**
    * ChatKit iframe URL for web component integrations.
@@ -533,6 +558,13 @@ export type ChatKitOptions = {
    * Message list quick navigation controls.
    */
   messageNavigation?: ChatKitMessageNavigationOptions;
+
+  /**
+   * Optional Xpert Remote Views workbench.
+   *
+   * @default disabled
+   */
+  workbench?: ChatKitWorkbenchOptions;
 
   /**
    * Optional animated pet companion rendered by the ChatKit web component over

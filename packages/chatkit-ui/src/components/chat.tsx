@@ -136,6 +136,7 @@ import {
   type ComposerPart,
 } from '../lib/composer-parts';
 import { hasSelectedRuntimeSlashCommand } from '../lib/slash-commands';
+import { WorkbenchToggleButton } from '../workbench/WorkbenchShell';
 import {
   ComposerCapabilityToken,
   DetachedRunRuntimeCapabilities,
@@ -2519,6 +2520,8 @@ export function Chat({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <WorkbenchToggleButton />
+
           {canMinimizeToPet && (
             <Tooltip>
               <TooltipTrigger asChild>

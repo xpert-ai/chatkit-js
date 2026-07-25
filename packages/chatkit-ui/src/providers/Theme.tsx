@@ -18,6 +18,15 @@ interface ThemeContextValue {
    */
   theme: ChatKitTheme;
   isDarkMode: boolean;
+  /**
+   * Element that owns ChatKit's resolved CSS variables. This lets sandbox
+   * bridges read the same computed values that ChatKit renders with.
+   */
+  themeRootRef: React.RefObject<HTMLDivElement | null>;
+  /**
+   * Increments after the current theme has been applied to themeRootRef.
+   */
+  themeRevision: number;
 }
 
 const ThemeContext = React.createContext<ThemeContextValue | undefined>(undefined);
@@ -243,6 +252,7 @@ function generateGrayscaleColors(
  */
 export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps) {
   const themeRef = React.useRef<HTMLDivElement>(null);
+  const [themeRevision, setThemeRevision] = React.useState(0);
 
   // Normalize theme to ChatKitTheme object
   const theme = React.useMemo<ChatKitTheme>(() => {
@@ -261,8 +271,13 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
   }, [theme]);
 
   const contextValue = React.useMemo<ThemeContextValue>(
-    () => ({ theme, isDarkMode }),
-    [theme, isDarkMode]
+    () => ({
+      theme,
+      isDarkMode,
+      themeRootRef: themeRef,
+      themeRevision,
+    }),
+    [theme, isDarkMode, themeRevision]
   );
 
   React.useEffect(() => {
@@ -400,6 +415,10 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
         }
       }
     }
+
+    // Notify external theme bridges after all classes and variables for this
+    // theme can be read from getComputedStyle(themeRef.current).
+    setThemeRevision((current) => current + 1);
 
     // Cleanup function
     return () => {

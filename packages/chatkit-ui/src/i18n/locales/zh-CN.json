@@ -1,4 +1,30 @@
 {
+  "workbench": {
+    "title": "视图",
+    "description": "远程工作台视图",
+    "views": "可用视图",
+    "open": "打开视图",
+    "close": "关闭视图",
+    "expandPanel": "展开面板",
+    "restorePanel": "还原面板",
+    "toggleSidebar": "显示/隐藏侧边栏",
+    "resize": "调整视图面板宽度",
+    "loading": "正在加载视图...",
+    "loadingView": "正在加载视图...",
+    "empty": "暂无兼容的视图。",
+    "loadFailed": "视图加载失败。",
+    "entryUnavailable": "远程视图内容不可用。",
+    "missingAssistant": "需要 Assistant 才能加载视图。",
+    "retry": "重试",
+    "errors": {
+      "contextKeyRequired": "必须提供上下文键。",
+      "messageRequired": "必须提供消息内容。",
+      "sendFailed": "消息发送失败。",
+      "requestFailed": "远程视图请求失败。",
+      "requestTimeout": "远程视图请求超时。",
+      "clientCommandUnavailable": "未配置客户端命令 {{commandKey}} 的处理器。"
+    }
+  },
   "chat": {
     "title": "聊天",
     "placeholder": "输入消息...",
