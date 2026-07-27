@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.4.12
+
+### Patch Changes
+
+- 1137249: Bind new ChatKit threads to the active assistant before the first run.
+
 ## 0.4.11
 
 ### Patch Changes
