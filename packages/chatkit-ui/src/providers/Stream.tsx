@@ -340,6 +340,16 @@ export function createLanguageHeaders(
     : undefined;
 }
 
+export function createAssistantThreadPayload(
+  assistantId: string,
+  threadId?: string,
+) {
+  return {
+    assistantId,
+    ...(threadId ? { threadId, ifExists: 'raise' as const } : {}),
+  };
+}
+
 function createAbortError(message: string): Error | DOMException {
   if (typeof DOMException !== 'undefined') {
     return new DOMException(message, 'AbortError');
@@ -3440,15 +3450,16 @@ const StreamSession = ({
         setThreadId(desiredThreadId);
       }
       if (!nextThreadId && desiredThreadId) {
-        const created = await client.threads.create({
-          threadId: desiredThreadId,
-          ifExists: 'raise',
-        });
+        const created = await client.threads.create(
+          createAssistantThreadPayload(assistantId, desiredThreadId),
+        );
         nextThreadId = created.thread_id;
         setThreadId(created.thread_id);
       }
       if (!nextThreadId) {
-        const created = await client.threads.create();
+        const created = await client.threads.create(
+          createAssistantThreadPayload(assistantId),
+        );
         nextThreadId = created.thread_id;
         setThreadId(created.thread_id);
       }
@@ -3480,6 +3491,7 @@ const StreamSession = ({
       );
     },
     [
+      assistantId,
       client,
       addAutoQueuedFollowUpIds,
       addSteerPriorityFollowUpIds,
