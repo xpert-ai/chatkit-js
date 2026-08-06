@@ -61,7 +61,14 @@ export function createChromeManifest(version = '0.3.0'): ChromeManifest {
     side_panel: {
       default_path: 'sidepanel.html',
     },
-    permissions: ['storage', 'sidePanel', 'scripting', 'activeTab', 'debugger'],
+    permissions: [
+      'storage',
+      'sidePanel',
+      'scripting',
+      'activeTab',
+      'debugger',
+      'nativeMessaging',
+    ],
     host_permissions: PAGE_OVERLAY_HOST_PERMISSIONS,
     web_accessible_resources: [
       {

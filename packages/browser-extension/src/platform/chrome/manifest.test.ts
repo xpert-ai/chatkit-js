@@ -14,6 +14,7 @@ describe('chrome manifest', () => {
       'scripting',
       'activeTab',
       'debugger',
+      'nativeMessaging',
     ]);
     expect(manifest.host_permissions).toEqual([
       'http://*/*',

@@ -34,6 +34,7 @@ type FormFields = {
   pageOverlay: HTMLInputElement;
   autoPageOverlay: HTMLInputElement;
   hostAutomation: HTMLInputElement;
+  hostAutomationProvider: HTMLSelectElement;
   overlayWidth: HTMLInputElement;
   overlayHeight: HTMLInputElement;
   overlayPosition: HTMLSelectElement;
@@ -150,6 +151,10 @@ function collectFields(form: HTMLFormElement): FormFields {
     pageOverlay: getField<HTMLInputElement>(form, 'pageOverlay'),
     autoPageOverlay: getField<HTMLInputElement>(form, 'autoPageOverlay'),
     hostAutomation: getField<HTMLInputElement>(form, 'hostAutomation'),
+    hostAutomationProvider: getField<HTMLSelectElement>(
+      form,
+      'hostAutomationProvider',
+    ),
     overlayWidth: getField<HTMLInputElement>(form, 'overlayWidth'),
     overlayHeight: getField<HTMLInputElement>(form, 'overlayHeight'),
     overlayPosition: getField<HTMLSelectElement>(form, 'overlayPosition'),
@@ -212,6 +217,10 @@ function readForm(
     },
     hostAutomation: {
       enabled: fields.hostAutomation.checked,
+      provider:
+        fields.hostAutomationProvider.value === 'isolated_runner'
+          ? 'isolated_runner'
+          : 'current_tab',
     },
   });
 }
@@ -242,6 +251,15 @@ function setStatus(message: string, kind: 'info' | 'success' | 'error') {
       : kind === 'error'
         ? 'ck-alert'
         : 'ck-status';
+}
+
+function setBrowserRunnerStatus(message: string, kind: 'info' | 'error') {
+  const status = appRoot.querySelector<HTMLElement>(
+    '[data-role="browser-runner-status"]',
+  );
+  if (!status) return;
+  status.textContent = message;
+  status.className = kind === 'error' ? 'ck-alert' : 'ck-status';
 }
 
 function renderOptions(config: ChatKitExtensionConfig) {
@@ -346,6 +364,21 @@ function renderOptions(config: ChatKitExtensionConfig) {
             ${i18n.t('enableHostAutomation')}
           </label>
         </div>
+        <div class="ck-field">
+          <label for="hostAutomationProvider">${i18n.t('automationProvider')}</label>
+          <select id="hostAutomationProvider" name="hostAutomationProvider">
+            <option value="current_tab"${config.hostAutomation.provider === 'current_tab' ? ' selected' : ''}>${i18n.t('currentTabProvider')}</option>
+            <option value="isolated_runner"${config.hostAutomation.provider === 'isolated_runner' ? ' selected' : ''}>${i18n.t('isolatedRunnerProvider')}</option>
+          </select>
+        </div>
+      </section>
+      <section class="ck-section">
+        <h2 class="ck-section-title">${i18n.t('isolatedBrowser')}</h2>
+        <p class="ck-field-help">${i18n.t('isolatedBrowserHelp')}</p>
+        <div class="ck-button-row">
+          <button class="ck-button" type="button" data-role="refresh-browser-runner">${i18n.t('refreshRunnerStatus')}</button>
+        </div>
+        <p class="ck-status" data-role="browser-runner-status">${i18n.t('runnerStatusChecking')}</p>
       </section>
       <section class="ck-section">
         <div class="ck-button-row">
@@ -402,6 +435,25 @@ function renderOptions(config: ChatKitExtensionConfig) {
       );
     });
 
+  const refreshBrowserRunnerStatus = async () => {
+    try {
+      const status = await platform.getBrowserRunnerStatus();
+      setBrowserRunnerStatus(
+        `${i18n.t('runnerStatus')}: ${status.state}${status.sessionId ? ` · ${status.sessionId}` : ''}`,
+        'info',
+      );
+    } catch (error) {
+      setBrowserRunnerStatus(
+        `${i18n.t('runnerUnavailable')}: ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      );
+    }
+  };
+
+  shell
+    .querySelector<HTMLButtonElement>('[data-role="refresh-browser-runner"]')
+    ?.addEventListener('click', () => void refreshBrowserRunnerStatus());
+
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     const nextConfig = readForm(fields, form);
@@ -428,6 +480,7 @@ function renderOptions(config: ChatKitExtensionConfig) {
     });
 
   appRoot.replaceChildren(shell);
+  void refreshBrowserRunnerStatus();
 }
 
 async function main() {
