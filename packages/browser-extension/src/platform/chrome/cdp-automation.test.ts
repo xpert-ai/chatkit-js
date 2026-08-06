@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { runCdpHostAutomation, type ChromeDebuggerApi } from './cdp-automation';
+import {
+  clearCdpAutomationStateForTab,
+  resetCdpAutomationStateForTesting,
+  runCdpHostAutomation,
+  type ChromeDebuggerApi,
+} from './cdp-automation';
 
 function createDebuggerApi(
   sendCommand: ChromeDebuggerApi['sendCommand'],
@@ -189,8 +194,1034 @@ function createRuntimeEvalDebuggerApi(): ChromeDebuggerApi {
 
 describe('CDP host automation', () => {
   afterEach(() => {
+    vi.useRealTimers();
     document.body.innerHTML = '';
+    Reflect.deleteProperty(globalThis, '__xpertaiChatKitHostAutomation');
+    resetCdpAutomationStateForTesting();
     vi.restoreAllMocks();
+  });
+
+  it('binds CDP snapshot refs to a cached v2 page state and document scope', async () => {
+    document.body.innerHTML = `
+      <button id="save" data-testid="save">Save</button>
+      <button>Unstable</button>
+    `;
+    mockVisibleTree();
+    document.elementsFromPoint = vi.fn(() => [
+      document.querySelector('#save')!,
+      document.body,
+    ]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+    const sendCommand = vi.mocked(debuggerApi.sendCommand);
+
+    const firstResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 420, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-v2-snapshot-1' },
+    );
+    const first = parseContent(firstResponse).result as Record<string, unknown>;
+    const pageStateId = first.pageStateId as string;
+    const elements = first.elements as Array<Record<string, unknown>>;
+
+    expect(firstResponse.status).toBe('success');
+    expect(pageStateId).toEqual(expect.any(String));
+    expect(first.capabilities).toMatchObject({
+      targetingVersion: 2,
+      strictRefs: true,
+      strictCoordinates: true,
+      freshState: true,
+      postconditions: true,
+      policyGate: true,
+      actionTrace: true,
+    });
+    expect(first.documents).toEqual([
+      expect.objectContaining({ documentRef: 'd1', sameOrigin: true }),
+    ]);
+    expect(elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ref: expect.any(String),
+          documentRef: 'd1',
+          selector: '#save',
+        }),
+        expect.objectContaining({
+          name: 'Unstable',
+          documentRef: 'd1',
+        }),
+      ]),
+    );
+    expect(
+      elements.find((element) => element.name === 'Unstable'),
+    ).not.toHaveProperty('selector');
+    const initialDomSnapshotCalls = sendCommand.mock.calls.filter(
+      ([, method]) => method === 'DOMSnapshot.captureSnapshot',
+    ).length;
+
+    const cachedResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 420, url: 'https://example.com' },
+      {
+        name: 'host_page_snapshot',
+        params: { pageStateId },
+        id: 'call-v2-snapshot-2',
+      },
+    );
+    const cached = parseContent(cachedResponse).result as Record<
+      string,
+      unknown
+    >;
+
+    expect(cached.pageStateId).toBe(pageStateId);
+    expect(cached.elements).toEqual(first.elements);
+    expect(
+      sendCommand.mock.calls.filter(
+        ([, method]) => method === 'DOMSnapshot.captureSnapshot',
+      ),
+    ).toHaveLength(initialDomSnapshotCalls);
+  });
+
+  it('expires cached CDP snapshot state after two minutes', async () => {
+    const now = new Date('2026-08-05T00:00:00.000Z').getTime();
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    document.body.innerHTML = '<button id="save">Save</button>';
+    mockVisibleTree();
+    document.elementsFromPoint = vi.fn(() => [
+      document.querySelector('#save')!,
+      document.body,
+    ]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 430, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-expiry-1' },
+    );
+    expect(snapshotResponse.status).toBe('success');
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+
+    dateNow.mockReturnValue(now + 2 * 60_000 + 1);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 430, url: 'https://example.com' },
+      {
+        name: 'host_page_snapshot',
+        params: { pageStateId: snapshot.pageStateId },
+        id: 'call-expiry-2',
+      },
+    );
+
+    expect(response.status).toBe('error');
+    expect(parseContent(response)).toMatchObject({
+      code: 'stale_page_state',
+      requiresFreshSnapshot: true,
+      invalidatedPageStateId: snapshot.pageStateId,
+    });
+
+    const element = (snapshot.elements as Array<Record<string, unknown>>)[0];
+    const actionResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 430, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: element?.documentRef,
+          ref: element?.ref,
+        },
+        id: 'call-expiry-3',
+      },
+    );
+    expect(actionResponse.status).toBe('error');
+    expect(parseContent(actionResponse)).toMatchObject({
+      code: 'stale_page_state',
+      dispatched: false,
+    });
+    expect(debuggerApi.sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 430 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
+  });
+
+  it('retains at most 32 tab snapshot states', async () => {
+    const debuggerApi = createDebuggerApi(
+      vi.fn(async (target, method) => {
+        if (method === 'Runtime.evaluate') {
+          return {
+            result: {
+              value: {
+                pageStateId: `state-${target.tabId}`,
+                url: `https://example.com/${target.tabId}`,
+                elements: [],
+              },
+            },
+          };
+        }
+        if (method === 'Accessibility.getFullAXTree') return { nodes: [] };
+        if (method === 'DOMSnapshot.captureSnapshot') return { documents: [] };
+        return {};
+      }),
+    );
+
+    for (let tabId = 1; tabId <= 33; tabId += 1) {
+      const response = await runCdpHostAutomation(
+        { debugger: debuggerApi },
+        { id: tabId, url: `https://example.com/${tabId}` },
+        { name: 'host_page_snapshot', params: {}, id: `call-${tabId}` },
+      );
+      expect(response.status).toBe('success');
+    }
+
+    const evicted = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 1, url: 'https://example.com/1' },
+      {
+        name: 'host_page_snapshot',
+        params: { pageStateId: 'state-1' },
+        id: 'call-evicted',
+      },
+    );
+
+    expect(evicted.status).toBe('error');
+    expect(parseContent(evicted)).toMatchObject({
+      code: 'stale_page_state',
+      invalidatedPageStateId: 'state-1',
+    });
+  });
+
+  it('clears cached CDP state when its tab closes', async () => {
+    const debuggerApi = createDebuggerApi(
+      vi.fn(async (_target, method) => {
+        if (method === 'Runtime.evaluate') {
+          return {
+            result: {
+              value: {
+                pageStateId: 'closed-tab-state',
+                url: 'https://example.com',
+                elements: [],
+              },
+            },
+          };
+        }
+        if (method === 'Accessibility.getFullAXTree') return { nodes: [] };
+        if (method === 'DOMSnapshot.captureSnapshot') return { documents: [] };
+        return {};
+      }),
+    );
+
+    await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 431, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-closed-1' },
+    );
+    clearCdpAutomationStateForTab(431);
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 431, url: 'https://example.com' },
+      {
+        name: 'host_page_snapshot',
+        params: { pageStateId: 'closed-tab-state' },
+        id: 'call-closed-2',
+      },
+    );
+
+    expect(response.status).toBe('error');
+    expect(parseContent(response)).toMatchObject({
+      code: 'stale_page_state',
+      invalidatedPageStateId: 'closed-tab-state',
+    });
+  });
+
+  it('rejects ambiguous CDP semantic targets before dispatching input', async () => {
+    document.body.innerHTML = '<button>Save</button><button>Save</button>';
+    mockVisibleTree();
+    document.elementsFromPoint = vi.fn(() => [document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 421, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-ambiguous-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 421, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          role: 'button',
+          name: 'Save',
+        },
+        id: 'call-ambiguous-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('error');
+    expect(content).toMatchObject({
+      ok: false,
+      code: 'ambiguous_target',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+      resolution: {
+        strategy: 'semantic_exact',
+        pageStateId: snapshot.pageStateId,
+        candidates: [
+          expect.objectContaining({ documentRef: 'd1', role: 'button' }),
+          expect.objectContaining({ documentRef: 'd1', role: 'button' }),
+        ],
+      },
+    });
+    expect(debuggerApi.sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 421 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
+  });
+
+  it('rejects a strict CDP target nested inside a disabled actionable ancestor', async () => {
+    document.body.innerHTML = `
+      <button id="save" disabled><span data-testid="save-icon">Save</span></button>
+    `;
+    const button = document.querySelector('button');
+    const icon = document.querySelector('[data-testid="save-icon"]');
+    if (!button || !icon) {
+      throw new Error('disabled target fixture is unavailable.');
+    }
+    mockRect(button, createDomRect(20, 40, 120, 32));
+    mockRect(icon, createDomRect(28, 48, 20, 16));
+    document.elementsFromPoint = vi.fn(() => [icon, button, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 426, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-disabled-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 426, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          testId: 'save-icon',
+        },
+        id: 'call-disabled-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('error');
+    expect(content).toMatchObject({
+      code: 'target_disabled',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+    });
+    expect(debuggerApi.sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 426 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
+  });
+
+  it('requires an exact single-use approval token before CDP password fill', async () => {
+    document.body.innerHTML = `<input id="password" type="password" />`;
+    const field = document.querySelector<HTMLInputElement>('#password');
+    if (!field) {
+      throw new Error('password field fixture is unavailable.');
+    }
+    mockRect(field, createDomRect(20, 40, 180, 32));
+    document.elementsFromPoint = vi.fn(() => [field, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 427, url: 'https://example.com/form' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-password-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.tag === 'input',
+    );
+    const params = {
+      pageStateId: snapshot.pageStateId,
+      documentRef: target?.documentRef,
+      ref: target?.ref,
+      value: 'correct horse battery staple',
+    };
+    const approvalResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 427, url: 'https://example.com/form' },
+      {
+        name: 'host_page_fill',
+        params,
+        id: 'call-password-2',
+      },
+    );
+    const approval = parseContent(approvalResponse);
+
+    expect(approvalResponse.status).toBe('error');
+    expect(approval).toMatchObject({
+      code: 'approval_required',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+      actionToken: expect.any(String),
+      risks: ['password_input'],
+    });
+    expect(field.value).toBe('');
+
+    const mismatchResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 427, url: 'https://example.com/form' },
+      {
+        name: 'host_page_fill',
+        params: {
+          ...params,
+          value: 'changed secret',
+          actionToken: approval.actionToken,
+        },
+        id: 'call-password-3',
+      },
+    );
+    const mismatch = parseContent(mismatchResponse);
+
+    expect(mismatchResponse.status).toBe('error');
+    expect(mismatch).toMatchObject({
+      code: 'approval_required',
+      approvalReason: 'action_mismatch',
+      actionToken: expect.any(String),
+    });
+    expect(field.value).toBe('');
+
+    const approvedResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 427, url: 'https://example.com/form' },
+      {
+        name: 'host_page_fill',
+        params: {
+          ...params,
+          value: 'changed secret',
+          actionToken: mismatch.actionToken,
+        },
+        id: 'call-password-4',
+      },
+    );
+
+    expect(approvedResponse.status).toBe('success');
+    expect(field.value).toBe('changed secret');
+  });
+
+  it('requires approval before CDP form submit input dispatch', async () => {
+    document.body.innerHTML = `
+      <form><button id="submit" type="submit">Submit</button></form>
+    `;
+    const button = document.querySelector('button');
+    if (!button) {
+      throw new Error('submit button fixture is unavailable.');
+    }
+    mockRect(button, createDomRect(20, 40, 120, 32));
+    document.elementsFromPoint = vi.fn(() => [button, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 428, url: 'https://example.com/form' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-submit-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.tag === 'button',
+    );
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 428, url: 'https://example.com/form' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: target?.documentRef,
+          ref: target?.ref,
+        },
+        id: 'call-submit-2',
+      },
+    );
+
+    expect(response.status).toBe('error');
+    expect(parseContent(response)).toMatchObject({
+      code: 'approval_required',
+      dispatched: false,
+      risks: ['form_submit'],
+    });
+    expect(debuggerApi.sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 428 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
+  });
+
+  it('allows a CDP cross-origin link click without approval', async () => {
+    document.body.innerHTML =
+      '<a id="target" href="https://other.example/path">Open</a>';
+    const anchor = document.querySelector('a');
+    if (!anchor) {
+      throw new Error('cross-origin link fixture is unavailable.');
+    }
+    mockRect(anchor, createDomRect(20, 40, 120, 32));
+    document.elementsFromPoint = vi.fn(() => [anchor, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 430, url: 'https://example.com/current' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-link-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.tag === 'a',
+    );
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 430, url: 'https://example.com/current' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: target?.documentRef,
+          ref: target?.ref,
+        },
+        id: 'call-link-2',
+      },
+    );
+
+    expect(response.status).toBe('success');
+    expect(parseContent(response)).toMatchObject({
+      result: { dispatched: true },
+    });
+    expect(debuggerApi.sendCommand).toHaveBeenCalledWith(
+      { tabId: 430 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed' }),
+    );
+  });
+
+  it('allows CDP cross-origin navigation without approval', async () => {
+    document.body.innerHTML = '<main>Current page</main>';
+    mockVisibleTree();
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 429, url: 'https://example.com/current' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-navigate-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 429, url: 'https://example.com/current' },
+      {
+        name: 'host_page_navigate',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          url: 'https://other.example/path',
+        },
+        id: 'call-navigate-2',
+      },
+    );
+
+    expect(response.status).toBe('success');
+    expect(parseContent(response)).toMatchObject({
+      result: {
+        dispatched: true,
+        navigated: 'https://other.example/path',
+      },
+    });
+    expect(debuggerApi.sendCommand).toHaveBeenCalledWith(
+      { tabId: 429 },
+      'Page.navigate',
+      { url: 'https://other.example/path' },
+    );
+  });
+
+  it('returns a v2 action outcome and invalidates the dispatched CDP state', async () => {
+    document.body.innerHTML =
+      '<button id="save" data-testid="save">Save</button>';
+    const button = document.querySelector('button');
+    if (!button) throw new Error('save button fixture is unavailable.');
+    mockRect(button, createDomRect(20, 40, 120, 32));
+    document.elementsFromPoint = vi.fn(() => [button, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 422, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-outcome-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.testId === 'save',
+    );
+    const params = {
+      pageStateId: snapshot.pageStateId,
+      documentRef: target?.documentRef,
+      ref: target?.ref,
+    };
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 422, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params,
+        id: 'call-outcome-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('success');
+    expect(content).toMatchObject({
+      ok: true,
+      result: {
+        dispatched: true,
+        outcome: 'executed_unverified',
+        requiresFreshSnapshot: true,
+        invalidatedPageStateId: snapshot.pageStateId,
+        resolution: {
+          strategy: 'ref',
+          pageStateId: snapshot.pageStateId,
+          resolved: expect.objectContaining({
+            ref: target?.ref,
+            documentRef: 'd1',
+            role: 'button',
+          }),
+        },
+        evidence: {
+          timestamp: expect.any(String),
+          pageStateId: snapshot.pageStateId,
+          url: 'https://example.com/',
+          action: 'host_page_click',
+          outcome: 'executed_unverified',
+          requested: expect.objectContaining({
+            kind: 'ref',
+            ref: target?.ref,
+          }),
+          resolution: expect.objectContaining({
+            strategy: 'ref',
+            pageStateId: snapshot.pageStateId,
+          }),
+        },
+      },
+    });
+
+    const mouseEventsBeforeRetry = (
+      debuggerApi.sendCommand as ReturnType<typeof vi.fn>
+    ).mock.calls.filter(
+      ([, method]) => method === 'Input.dispatchMouseEvent',
+    ).length;
+    const staleResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 422, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params,
+        id: 'call-outcome-3',
+      },
+    );
+    const staleContent = parseContent(staleResponse);
+
+    expect(staleResponse.status).toBe('error');
+    expect(staleContent).toMatchObject({
+      code: 'stale_page_state',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+    });
+    expect(
+      (debuggerApi.sendCommand as ReturnType<typeof vi.fn>).mock.calls.filter(
+        ([, method]) => method === 'Input.dispatchMouseEvent',
+      ),
+    ).toHaveLength(mouseEventsBeforeRetry);
+  });
+
+  it('verifies a fresh CDP postcondition after dispatch', async () => {
+    document.body.innerHTML =
+      '<button id="save">Save</button><div data-testid="notice">Saved</div>';
+    const button = document.querySelector('button');
+    const notice = document.querySelector('[data-testid="notice"]');
+    if (!button || !notice) {
+      throw new Error('postcondition fixture is unavailable.');
+    }
+    mockRect(button, createDomRect(20, 40, 120, 32));
+    mockRect(notice, createDomRect(20, 90, 200, 24));
+    document.elementsFromPoint = vi.fn(() => [button, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 423, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-verify-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.name === 'Save',
+    );
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 423, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          ref: target?.ref,
+          expectation: {
+            type: 'element_visible',
+            target: {
+              documentScope: 'same_document',
+              documentRef: 'd1',
+              kind: 'test_id',
+              testId: 'notice',
+            },
+          },
+        },
+        id: 'call-verify-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('success');
+    expect(content).toMatchObject({
+      ok: true,
+      result: {
+        dispatched: true,
+        outcome: 'verified',
+        verification: {
+          status: 'passed',
+          expectation: { type: 'element_visible' },
+          actual: true,
+        },
+      },
+    });
+  });
+
+  it('returns a failed CDP postcondition without choosing an ambiguous observation target', async () => {
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <input data-testid="status" value="first" />
+      <input data-testid="status" value="second" />
+    `;
+    const button = document.getElementById('save');
+    if (!button) {
+      throw new Error('ambiguous CDP postcondition fixture is unavailable.');
+    }
+    mockRect(button, createDomRect(20, 40, 120, 32));
+    document.elementsFromPoint = vi.fn(() => [button, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 424, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-ambiguous-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.name === 'Save',
+    );
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 424, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          ref: target?.ref,
+          expectation: {
+            type: 'field_contains',
+            target: {
+              documentScope: 'same_document',
+              documentRef: 'd1',
+              kind: 'test_id',
+              testId: 'status',
+            },
+            value: 'first',
+          },
+        },
+        id: 'call-ambiguous-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('error');
+    expect(content).toMatchObject({
+      ok: false,
+      result: {
+        dispatched: true,
+        outcome: 'verification_failed',
+        verification: { status: 'failed', actual: null },
+      },
+    });
+  });
+
+  it('returns the last CDP observation after postcondition timeout', async () => {
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <input data-testid="status" value="pending" />
+    `;
+    const button = document.getElementById('save');
+    if (!button) {
+      throw new Error('timeout CDP postcondition fixture is unavailable.');
+    }
+    mockRect(button, createDomRect(20, 40, 120, 32));
+    document.elementsFromPoint = vi.fn(() => [button, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 425, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-timeout-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const target = (snapshot.elements as Array<Record<string, unknown>>).find(
+      (element) => element.name === 'Save',
+    );
+
+    vi.useFakeTimers();
+    try {
+      const responsePromise = runCdpHostAutomation(
+        { debugger: debuggerApi },
+        { id: 425, url: 'https://example.com' },
+        {
+          name: 'host_page_click',
+          params: {
+            pageStateId: snapshot.pageStateId,
+            documentRef: 'd1',
+            ref: target?.ref,
+            expectation: {
+              type: 'field_contains',
+              target: {
+                documentScope: 'same_document',
+                documentRef: 'd1',
+                kind: 'test_id',
+                testId: 'status',
+              },
+              value: 'saved',
+            },
+          },
+          id: 'call-timeout-2',
+        },
+      );
+      let settled = false;
+      void responsePromise.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      for (let index = 0; index < 250 && !settled; index += 1) {
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      expect(settled).toBe(true);
+      const response = await responsePromise;
+      const content = parseContent(response);
+
+      expect(response.status).toBe('error');
+      expect(content).toMatchObject({
+        ok: false,
+        result: {
+          dispatched: true,
+          outcome: 'verification_failed',
+          verification: { status: 'timed_out', actual: 'pending' },
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects ambiguous strict coordinate identities before CDP dispatch', async () => {
+    document.body.innerHTML = '<button>Open</button><button>Open</button>';
+    const buttons = Array.from(document.querySelectorAll('button'));
+    mockRect(buttons[0]!, createDomRect(20, 40, 120, 32));
+    mockRect(buttons[1]!, createDomRect(20, 90, 120, 32));
+    document.elementsFromPoint = vi.fn(() => [buttons[0]!, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 424, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-coordinate-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 424, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          action: 'click',
+          x: 80,
+          y: 56,
+          coordinateSpace: 'viewport-css-px',
+          targetText: 'Open',
+        },
+        id: 'call-coordinate-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('error');
+    expect(content).toMatchObject({
+      code: 'coordinate_target_ambiguous',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+      resolution: {
+        strategy: 'coordinate',
+        candidates: [
+          expect.objectContaining({ name: 'Open' }),
+          expect.objectContaining({ name: 'Open' }),
+        ],
+      },
+    });
+    expect(debuggerApi.sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 424 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
+  });
+
+  it('rejects a strict accessibility target instead of using its center', async () => {
+    document.body.innerHTML = '<button id="execute">Execute</button>';
+    const button = document.querySelector('button');
+    if (!button) throw new Error('AX button fixture is unavailable.');
+    mockRect(button, createDomRect(40, 60, 140, 36));
+    document.elementsFromPoint = vi.fn(() => [document.body]);
+    const sendCommand = vi.fn(async (_target, method, commandParams) => {
+      if (method === 'Runtime.evaluate') {
+        const expression =
+          commandParams && typeof commandParams.expression === 'string'
+            ? commandParams.expression
+            : '';
+        return { result: { value: await eval(expression) } };
+      }
+      if (method === 'Accessibility.getFullAXTree') {
+        return {
+          nodes: [
+            {
+              nodeId: 'ax-execute',
+              backendDOMNodeId: 17,
+              role: { value: 'button' },
+              name: { value: 'Execute' },
+            },
+          ],
+        };
+      }
+      if (method === 'DOMSnapshot.captureSnapshot') return { documents: [] };
+      if (method === 'DOM.resolveNode') {
+        return { object: { objectId: 'button-object' } };
+      }
+      if (method === 'Runtime.callFunctionOn') {
+        const declaration =
+          commandParams && typeof commandParams.functionDeclaration === 'string'
+            ? commandParams.functionDeclaration
+            : '';
+        const fn = eval(`(${declaration})`) as (
+          this: Element,
+          rawArgs?: unknown,
+        ) => unknown;
+        const args = commandParams?.arguments as
+          | Array<{ value?: unknown }>
+          | undefined;
+        return { result: { value: await fn.call(button, args?.[0]?.value) } };
+      }
+      return {};
+    });
+    const debuggerApi = createDebuggerApi(sendCommand);
+
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 425, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-ax-strict-1' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 425, url: 'https://example.com' },
+      {
+        name: 'host_page_click',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          axRef: 'ax-execute',
+        },
+        id: 'call-ax-strict-2',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('error');
+    expect(content).toMatchObject({
+      code: 'target_occluded',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+      resolution: {
+        strategy: 'ax_ref',
+        pageStateId: snapshot.pageStateId,
+      },
+    });
+    expect(sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 425 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
   });
 
   it('captures rich snapshots through Runtime, Accessibility, and DOMSnapshot', async () => {
@@ -396,8 +1427,10 @@ describe('CDP host automation', () => {
       { name: 'host_page_snapshot', params: {}, id: 'call-1' },
     );
     const snapshotContent = parseContent(snapshotResponse);
-    const readableContent = snapshotContent.result
-      .readableContent as Record<string, unknown>;
+    const readableContent = snapshotContent.result.readableContent as Record<
+      string,
+      unknown
+    >;
     const blocks = readableContent.blocks as Array<Record<string, unknown>>;
     const listBlock = blocks.find((block) => block.type === 'list');
     const listBlockId = listBlock?.blockId;
@@ -518,8 +1551,10 @@ describe('CDP host automation', () => {
       { name: 'host_page_snapshot', params: {}, id: 'call-1' },
     );
     const snapshotContent = parseContent(snapshotResponse);
-    const readableContent = snapshotContent.result
-      .readableContent as Record<string, unknown>;
+    const readableContent = snapshotContent.result.readableContent as Record<
+      string,
+      unknown
+    >;
     const blocks = readableContent.blocks as Array<Record<string, unknown>>;
     const listBlock = blocks.find((block) => block.type === 'list');
 
@@ -1334,6 +2369,64 @@ describe('CDP host automation', () => {
         hitTarget: { tag: 'button', role: 'button', name: '执行' },
       },
     });
+  });
+
+  it('rejects strict coordinate targeting of an inaccessible frame element', async () => {
+    document.body.innerHTML =
+      '<iframe id="payment-frame" role="button" aria-label="Payment"></iframe>';
+    const frame = document.getElementById('payment-frame');
+    if (!(frame instanceof HTMLIFrameElement)) {
+      throw new Error('inaccessible CDP frame fixture is unavailable.');
+    }
+    Object.defineProperty(frame, 'contentDocument', {
+      configurable: true,
+      get: () => null,
+    });
+    mockRect(frame, createDomRect(20, 30, 300, 200));
+    document.elementsFromPoint = vi.fn(() => [frame, document.body]);
+    const debuggerApi = createRuntimeEvalDebuggerApi();
+    const snapshotResponse = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 426, url: 'https://example.com' },
+      { name: 'host_page_snapshot', params: {}, id: 'call-frame-snapshot' },
+    );
+    const snapshot = parseContent(snapshotResponse).result as Record<
+      string,
+      unknown
+    >;
+
+    const response = await runCdpHostAutomation(
+      { debugger: debuggerApi },
+      { id: 426, url: 'https://example.com' },
+      {
+        name: 'host_page_pointer',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: 'd1',
+          action: 'click',
+          x: 100,
+          y: 100,
+          coordinateSpace: 'viewport-css-px',
+          targetText: 'Payment',
+          targetRole: 'button',
+        },
+        id: 'call-frame-pointer',
+      },
+    );
+    const content = parseContent(response);
+
+    expect(response.status).toBe('error');
+    expect(content).toMatchObject({
+      ok: false,
+      code: 'unsupported_target_scope',
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+    });
+    expect(debuggerApi.sendCommand).not.toHaveBeenCalledWith(
+      { tabId: 426 },
+      'Input.dispatchMouseEvent',
+      expect.anything(),
+    );
   });
 
   it('returns screenshots through artifacts instead of model-facing base64 content', async () => {

@@ -4,6 +4,7 @@ import {
   HostPageAutomationExecutor,
   isHostPageAutomationToolName,
 } from './executor';
+import { addBrowserActionEvidence } from './action-trace';
 import type {
   HostPageAutomationClientToolCall,
   HostPageAutomationClientToolHandler,
@@ -48,6 +49,23 @@ function getStructuredErrorDetails(error: unknown): Record<string, unknown> {
     : {};
 }
 
+function hasFailedActionOutcome(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Reflect.get(value, 'outcome') === 'verification_failed'
+  );
+}
+
+function getAutomationUrl(options: HostPageAutomationOptions): string {
+  const rootDocument =
+    options.root && 'location' in options.root
+      ? options.root
+      : options.root?.ownerDocument;
+  return rootDocument?.location?.href ?? globalThis.location?.href ?? '';
+}
+
 export function createHostPageAutomationClientToolHandler(
   options: HostPageAutomationOptions = {},
 ): HostPageAutomationClientToolHandler {
@@ -62,16 +80,26 @@ export function createHostPageAutomationClientToolHandler(
     }
 
     try {
-      const result = await executor.execute(
+      const result = addBrowserActionEvidence(
         call.name,
-        normalizeParams(call.params),
+        getAutomationUrl(options),
+        await executor.execute(call.name, normalizeParams(call.params)),
       );
-      return createToolMessage(call, 'success', { ok: true, result });
+      const failed = hasFailedActionOutcome(result);
+      return createToolMessage(call, failed ? 'error' : 'success', {
+        ok: !failed,
+        result,
+      });
     } catch (error) {
+      const details = addBrowserActionEvidence(
+        call.name,
+        getAutomationUrl(options),
+        getStructuredErrorDetails(error),
+      );
       return createToolMessage(call, 'error', {
         ok: false,
         error: getErrorMessage(error),
-        ...getStructuredErrorDetails(error),
+        ...(details as Record<string, unknown>),
       });
     }
   };

@@ -28,7 +28,7 @@ describe('extension config', () => {
         },
         overlay: { width: 1200, height: 20, position: 'top-left' },
         pet: { scale: 1.8, boundsPadding: 140 },
-        hostAutomation: { enabled: false },
+        hostAutomation: { enabled: false, provider: 'isolated_runner' },
       }),
     ).toMatchObject({
       frameUrl: 'https://chat.example/frame',
@@ -45,7 +45,7 @@ describe('extension config', () => {
       },
       overlay: { width: 900, height: 360, position: 'top-left' },
       pet: { scale: 1.8, boundsPadding: 140 },
-      hostAutomation: { enabled: false },
+      hostAutomation: { enabled: false, provider: 'isolated_runner' },
     });
   });
 

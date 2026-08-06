@@ -73,6 +73,75 @@ describe('createHostPageAutomationClientToolHandler', () => {
     });
   });
 
+  it('maps failed postcondition outcomes to error tool messages', async () => {
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <input data-testid="status" value="pending" />
+      <input data-testid="status" value="pending" />
+    `;
+    const button = document.getElementById('save');
+    if (!button) {
+      throw new Error('Missing button element.');
+    }
+    mockRect(button, createDomRect(10, 20, 80, 30));
+    const restoreElementsFromPoint = mockElementsFromPoint([button]);
+    const handler = createHostPageAutomationClientToolHandler();
+    const snapshotResponse = await handler({
+      name: 'host_page_snapshot',
+      id: 'snapshot-1',
+    });
+    const snapshot = readContent(snapshotResponse.content).result;
+
+    try {
+      const response = await handler({
+        name: 'host_page_click',
+        id: 'click-1',
+        params: {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.documents[0].documentRef,
+          ref: snapshot.elements[0].ref,
+          expectation: {
+            type: 'field_contains',
+            target: {
+              documentScope: 'same_document',
+              documentRef: snapshot.documents[0].documentRef,
+              kind: 'test_id',
+              testId: 'status',
+            },
+            value: 'saved',
+          },
+        },
+      });
+
+      expect(response.status).toBe('error');
+      expect(readContent(response.content)).toMatchObject({
+        ok: false,
+        result: {
+          dispatched: true,
+          outcome: 'verification_failed',
+          verification: { status: 'failed' },
+          evidence: {
+            timestamp: expect.any(String),
+            pageStateId: snapshot.pageStateId,
+            action: 'host_page_click',
+            outcome: 'verification_failed',
+            requested: expect.objectContaining({
+              kind: 'ref',
+              ref: snapshot.elements[0].ref,
+            }),
+            resolution: expect.objectContaining({
+              strategy: 'ref',
+              pageStateId: snapshot.pageStateId,
+            }),
+            verification: { status: 'failed' },
+          },
+        },
+      });
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
   it('returns tool errors for unknown tools', async () => {
     const handler = createHostPageAutomationClientToolHandler();
 
@@ -101,9 +170,51 @@ describe('createHostPageAutomationClientToolHandler', () => {
       tool_call_id: 'tool-call-1',
       status: 'error',
     });
-    expect(readContent(response.content).error).toContain(
-      'Unknown element ref',
+    expect(readContent(response.content)).toMatchObject({
+      code: 'stale_target',
+      outcome: 'rejected_before_execution',
+      dispatched: false,
+    });
+  });
+
+  it('preserves browser approval tokens for the server HITL flow', async () => {
+    document.body.innerHTML = `<input id="password" type="password" />`;
+    const handler = createHostPageAutomationClientToolHandler();
+    const snapshotResponse = await handler({
+      name: 'host_page_snapshot',
+      params: {},
+      id: 'snapshot-approval-1',
+    });
+    const snapshotContent = readContent(snapshotResponse.content) as {
+      result: {
+        pageStateId: string;
+        documents: Array<{ documentRef: string }>;
+        elements: Array<{ ref: string; documentRef: string; tag: string }>;
+      };
+    };
+    const target = snapshotContent.result.elements.find(
+      (element) => element.tag === 'input',
     );
+
+    const response = await handler({
+      name: 'host_page_fill',
+      params: {
+        pageStateId: snapshotContent.result.pageStateId,
+        documentRef: target?.documentRef,
+        ref: target?.ref,
+        value: 'secret',
+      },
+      id: 'fill-approval-1',
+    });
+
+    expect(response.status).toBe('error');
+    expect(readContent(response.content)).toMatchObject({
+      ok: false,
+      code: 'approval_required',
+      dispatched: false,
+      actionToken: expect.any(String),
+      risks: ['password_input'],
+    });
   });
 
   it('preserves structured occlusion details in tool error messages', async () => {

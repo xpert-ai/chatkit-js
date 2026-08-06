@@ -6,6 +6,7 @@ import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
 
 import { validateConfig } from '../../config';
 import {
+  BROWSER_RUNNER_COMMAND_MESSAGE,
   OPEN_OVERLAY_MESSAGE,
   RUN_HOST_AUTOMATION_IN_TAB_MESSAGE,
   RUN_HOST_AUTOMATION_MESSAGE,
@@ -14,7 +15,18 @@ import {
 import { readConfig } from '../../storage';
 import type { ChatKitExtensionConfig } from '../../types';
 import { withDefaultHostAutomationResultDelay } from '../../host-automation-delay';
-import { runCdpHostAutomation, type ChromeDebuggerApi } from './cdp-automation';
+import {
+  clearCdpAutomationStateForTab,
+  runCdpHostAutomation,
+  type ChromeDebuggerApi,
+} from './cdp-automation';
+import {
+  createNativeRunnerBridge,
+  type BrowserRunnerStatus,
+  type ChromeRuntimePort,
+  type NativeRunnerRequest,
+  type NativeRunnerResponse,
+} from './native-runner';
 
 export type ChromeTab = {
   id?: number;
@@ -53,6 +65,8 @@ export type ChromeApi = {
   runtime: {
     getURL: (path: string) => string;
     openOptionsPage: () => Promise<void> | void;
+    sendMessage?: (message: Record<string, unknown>) => Promise<unknown>;
+    connectNative?: (application: string) => ChromeRuntimePort;
     onMessage?: {
       addListener: (
         listener: (
@@ -95,6 +109,9 @@ export type ChromeApi = {
     ) => Promise<unknown>;
     onUpdated?: {
       addListener: (listener: ChromeTabUpdateListener) => void;
+    };
+    onRemoved?: {
+      addListener: (listener: (tabId: number) => void) => void;
     };
   };
   scripting: {
@@ -217,6 +234,33 @@ function hasAccessibilityRefTarget(call: HostPageAutomationClientToolCall) {
   return Boolean(hasAxRef && !hasDomRef);
 }
 
+function hasV2PageState(call: HostPageAutomationClientToolCall) {
+  return Boolean(
+    call.params &&
+    typeof call.params === 'object' &&
+    !Array.isArray(call.params) &&
+    'pageStateId' in call.params &&
+    typeof call.params.pageStateId === 'string' &&
+    call.params.pageStateId.trim(),
+  );
+}
+
+function isStructuredBrowserAutomationError(response: ClientToolMessageInput) {
+  if (typeof response.content !== 'string') return false;
+  try {
+    const content = JSON.parse(response.content);
+    return Boolean(
+      content &&
+      typeof content === 'object' &&
+      !Array.isArray(content) &&
+      (typeof content.code === 'string' ||
+        content.outcome === 'rejected_before_execution'),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function createHostAutomationToolMessage(
   call: HostPageAutomationClientToolCall,
   status: 'success' | 'error',
@@ -294,7 +338,12 @@ async function runHostAutomationForTab(
     const cdpResponse = await withDefaultHostAutomationResultDelay(call, () =>
       runCdpHostAutomation(api, tab, call),
     );
-    if (cdpResponse.status !== 'error' || hasAccessibilityRefTarget(call)) {
+    if (
+      cdpResponse.status !== 'error' ||
+      hasAccessibilityRefTarget(call) ||
+      hasV2PageState(call) ||
+      isStructuredBrowserAutomationError(cdpResponse)
+    ) {
       return cdpResponse;
     }
   }
@@ -306,7 +355,62 @@ async function runHostAutomationForTab(
   return unwrapHostAutomationResponse(response);
 }
 
+function readNativeRunnerResponse(value: unknown): NativeRunnerResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid browser runner response.');
+  }
+  const response = value as NativeRunnerResponse;
+  if (response.ok !== true) {
+    throw new Error(response.error ?? 'The browser runner command failed.');
+  }
+  return response;
+}
+
 export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
+  const requestBrowserRunner = async (request: NativeRunnerRequest) => {
+    if (!api.runtime.sendMessage) {
+      throw new Error('Chrome runtime messaging is not available.');
+    }
+    return readNativeRunnerResponse(
+      await api.runtime.sendMessage({
+        type: BROWSER_RUNNER_COMMAND_MESSAGE,
+        ...request,
+      }),
+    );
+  };
+
+  const getBrowserRunnerStatus = async (): Promise<BrowserRunnerStatus> => {
+    const response = await requestBrowserRunner({ command: 'status' });
+    return response.status ?? { state: 'stopped' };
+  };
+
+  const startBrowserRunner = async (startUrl?: string) => {
+    const response = await requestBrowserRunner({
+      command: 'start',
+      ...(startUrl ? { startUrl } : {}),
+    });
+    return response.status ?? { state: 'stopped' as const };
+  };
+
+  const stopBrowserRunner = async () => {
+    const response = await requestBrowserRunner({ command: 'stop' });
+    return response.status ?? { state: 'stopped' as const };
+  };
+
+  const runHostAutomationInBrowserRunner = async (
+    call: HostPageAutomationClientToolCall,
+  ): Promise<ClientToolMessageInput> => {
+    await requestBrowserRunner({ command: 'start' });
+    const response = await requestBrowserRunner({
+      command: 'execute',
+      call,
+    });
+    if (!response.result) {
+      throw new Error('The browser runner returned no tool result.');
+    }
+    return response.result as ClientToolMessageInput;
+  };
+
   const openOptionsPage = async () => {
     await api.runtime.openOptionsPage();
   };
@@ -352,6 +456,10 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
         throw new Error('Host page automation is disabled.');
       }
 
+      if (config.hostAutomation.provider === 'isolated_runner') {
+        return runHostAutomationInBrowserRunner(call);
+      }
+
       const tab = await queryActiveTab(api);
       return runHostAutomationForTab(api, tab, call);
     };
@@ -367,6 +475,9 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
   };
 
   const initializeBackground = () => {
+    const nativeRunnerBridge = api.runtime.connectNative
+      ? createNativeRunnerBridge(api.runtime.connectNative)
+      : undefined;
     const configure = () => {
       void restrictStorageAccess();
       void api.sidePanel?.setPanelBehavior?.({
@@ -375,6 +486,51 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
     };
 
     api.runtime.onMessage?.addListener((message, sender, sendResponse) => {
+      if (message.type === BROWSER_RUNNER_COMMAND_MESSAGE) {
+        if (!nativeRunnerBridge) {
+          sendResponse({
+            requestId: '',
+            ok: false,
+            error: 'Chrome Native Messaging is not available.',
+          });
+          return false;
+        }
+        const command = message.command;
+        if (
+          command !== 'status' &&
+          command !== 'start' &&
+          command !== 'stop' &&
+          command !== 'execute'
+        ) {
+          sendResponse({
+            requestId: '',
+            ok: false,
+            error: 'Invalid browser runner command.',
+          });
+          return false;
+        }
+        void nativeRunnerBridge
+          .request({
+            command,
+            ...(typeof message.startUrl === 'string'
+              ? { startUrl: message.startUrl }
+              : {}),
+            ...(message.call &&
+            typeof message.call === 'object' &&
+            !Array.isArray(message.call)
+              ? { call: message.call as Record<string, unknown> }
+              : {}),
+          })
+          .then(sendResponse, (error) =>
+            sendResponse({
+              requestId: '',
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+        return true;
+      }
+
       if (message.type !== RUN_HOST_AUTOMATION_IN_TAB_MESSAGE) {
         return false;
       }
@@ -396,6 +552,29 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
         .then((config) => {
           if (!config.hostAutomation.enabled) {
             throw new Error('Host page automation is disabled.');
+          }
+
+          if (config.hostAutomation.provider === 'isolated_runner') {
+            if (!nativeRunnerBridge) {
+              throw new Error('Chrome Native Messaging is not available.');
+            }
+            return nativeRunnerBridge
+              .request({ command: 'start' })
+              .then((response) => readNativeRunnerResponse(response))
+              .then(() =>
+                nativeRunnerBridge.request({
+                  command: 'execute',
+                  call: call as Record<string, unknown>,
+                }),
+              )
+              .then((response) => {
+                if (response.ok !== true || !response.result) {
+                  throw new Error(
+                    response.error ?? 'The browser runner returned no result.',
+                  );
+                }
+                return response.result as ClientToolMessageInput;
+              });
           }
 
           return runHostAutomationForTab(
@@ -428,6 +607,7 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
 
       void openPageOverlayForTab({ ...tab, id: tabId }).catch(() => undefined);
     });
+    api.tabs.onRemoved?.addListener(clearCdpAutomationStateForTab);
   };
 
   return {
@@ -438,6 +618,9 @@ export function createChromeExtensionPlatform(api: ChromeApi = getChromeApi()) {
     togglePageOverlayForActiveTab,
     openPageOverlayForTab,
     runHostAutomationForActiveTab,
+    getBrowserRunnerStatus,
+    startBrowserRunner,
+    stopBrowserRunner,
     restrictStorageAccess,
     initializeBackground,
   };

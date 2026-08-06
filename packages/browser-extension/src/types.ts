@@ -40,6 +40,7 @@ export type ChatKitExtensionConfig = {
   pet: ChatKitPetConfig;
   hostAutomation: {
     enabled: boolean;
+    provider: 'current_tab' | 'isolated_runner';
   };
 };
 

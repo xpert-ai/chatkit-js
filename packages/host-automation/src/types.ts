@@ -85,7 +85,190 @@ export type HostPageAutomationClientToolHandler = (
   call: HostPageAutomationClientToolCall,
 ) => Promise<ClientToolMessageInput> | ClientToolMessageInput;
 
+export type BrowserAutomationV2Capabilities = {
+  targetingVersion: 2;
+  strictRefs: true;
+  strictCoordinates: true;
+  freshState: true;
+  postconditions: boolean;
+  policyGate: boolean;
+  actionTrace: boolean;
+};
+
+export type BrowserDocumentDescriptor = {
+  documentRef: string;
+  frameRef?: string;
+  parentDocumentRef?: string;
+  sameOrigin: boolean;
+};
+
+export type PageBoundTarget = {
+  pageStateId: string;
+  documentRef: string;
+};
+
+export type SemanticIdentity =
+  | { role: string; name: string }
+  | { role: string; text: string };
+
+export type TargetDescriptor =
+  | (PageBoundTarget & { kind: 'ref'; ref: string })
+  | (PageBoundTarget & { kind: 'ax_ref'; axRef: string })
+  | (PageBoundTarget & { kind: 'test_id'; testId: string })
+  | (PageBoundTarget & { kind: 'selector'; selector: string })
+  | (PageBoundTarget & {
+      kind: 'semantic';
+      match: 'exact';
+      identity: SemanticIdentity;
+    });
+
+export type CoordinateTargetDescriptor = PageBoundTarget & {
+  kind: 'coordinate';
+  x: number;
+  y: number;
+  coordinateSpace: 'viewport-css-px' | 'viewport_normalized';
+  targetText: string;
+  targetRole?: string;
+  targetContext?: string;
+};
+
+export type ElementDescriptor = {
+  documentRef: string;
+  ref?: string;
+  axRef?: string;
+  tag: string;
+  role?: string;
+  name?: string;
+  text?: string;
+  testId?: string;
+  rect: { x: number; y: number; width: number; height: number };
+};
+
+export type TargetResolution = {
+  requested: TargetDescriptor | CoordinateTargetDescriptor;
+  strategy:
+    | 'ref'
+    | 'ax_ref'
+    | 'test_id'
+    | 'unique_selector'
+    | 'semantic_exact'
+    | 'coordinate';
+  resolved?: ElementDescriptor;
+  candidates?: ElementDescriptor[];
+  adjustment?: 'actionable_ancestor' | 'associated_label_control';
+  point?: { x: number; y: number };
+  hitTarget?: ElementDescriptor;
+  hitStack?: ElementDescriptor[];
+  pageStateId: string;
+};
+
+export type BrowserAutomationErrorCode =
+  | 'stale_page_state'
+  | 'stale_target'
+  | 'target_not_found'
+  | 'ambiguous_target'
+  | 'unsafe_selector'
+  | 'non_unique_selector'
+  | 'target_disabled'
+  | 'target_occluded'
+  | 'coordinate_target_mismatch'
+  | 'coordinate_target_ambiguous'
+  | 'unsupported_target_scope'
+  | 'approval_required';
+
+export type BrowserActionRisk =
+  | 'password_input'
+  | 'file_input'
+  | 'form_submit'
+  | 'cross_origin_navigation'
+  | 'download';
+
+export type BrowserActionApprovalReason =
+  | 'approval_required'
+  | 'invalid_or_used_token'
+  | 'expired_token'
+  | 'state_mismatch'
+  | 'action_mismatch';
+
+export type BrowserAutomationError = {
+  code: BrowserAutomationErrorCode;
+  message: string;
+  recoverable: boolean;
+  resolution?: TargetResolution;
+  actionToken?: string;
+  approvalReason?: BrowserActionApprovalReason;
+  expiresAt?: string;
+  risks?: BrowserActionRisk[];
+};
+
+export type ActionOutcome =
+  | 'verified'
+  | 'verification_failed'
+  | 'executed_unverified'
+  | 'rejected_before_execution';
+
+export type ObservationScope =
+  | { documentScope: 'same_document'; documentRef: string }
+  | { documentScope: 'current_top' };
+
+export type ObservationTargetDescriptor =
+  | (ObservationScope & { kind: 'test_id'; testId: string })
+  | (ObservationScope & { kind: 'selector'; selector: string })
+  | (ObservationScope & {
+      kind: 'semantic';
+      match: 'exact';
+      identity: SemanticIdentity;
+    });
+
+export type ActionExpectation =
+  | {
+      type: 'field_contains';
+      target: ObservationTargetDescriptor;
+      value: string;
+    }
+  | {
+      type: 'checked_equals';
+      target: ObservationTargetDescriptor;
+      value: boolean;
+    }
+  | { type: 'element_visible'; target: ObservationTargetDescriptor }
+  | { type: 'element_hidden'; target: ObservationTargetDescriptor }
+  | { type: 'url_matches'; mode: 'exact' | 'prefix'; value: string }
+  | { type: 'text_visible'; scope: ObservationScope; value: string };
+
+export type VerificationResult = {
+  status: 'passed' | 'failed' | 'timed_out';
+  expectation: ActionExpectation;
+  elapsedMs: number;
+  actual?: string | boolean | null;
+};
+
+export type ClientActionEvidence = {
+  timestamp: string;
+  pageStateId: string;
+  url: string;
+  requested?: TargetDescriptor | CoordinateTargetDescriptor;
+  resolution?: TargetResolution;
+  action: HostPageAutomationToolName;
+  outcome: ActionOutcome;
+  verification?: VerificationResult;
+  beforeScreenshotId?: string;
+  afterScreenshotId?: string;
+};
+
+export type BrowserActionResult = {
+  dispatched: boolean;
+  outcome: ActionOutcome;
+  requiresFreshSnapshot: boolean;
+  invalidatedPageStateId?: string;
+  resolution?: TargetResolution;
+  verification?: VerificationResult;
+  evidence?: ClientActionEvidence;
+  error?: BrowserAutomationError;
+};
+
 export type HostPageAutomationElementSnapshot = {
+  documentRef: string;
   ref: string;
   tag: string;
   role?: string;
@@ -224,15 +407,17 @@ export type HostPageReadableContent = {
 };
 
 export type HostPageSnapshot = {
+  pageStateId: string;
   url: string;
   title: string;
-  capabilities?: {
+  capabilities: BrowserAutomationV2Capabilities & {
     cdp?: boolean;
     realInput?: boolean;
     screenshot?: boolean;
     accessibility?: boolean;
     networkState?: boolean;
   };
+  documents: BrowserDocumentDescriptor[];
   viewport: {
     width: number;
     height: number;
