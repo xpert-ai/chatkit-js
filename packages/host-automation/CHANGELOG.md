@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-host-automation
 
+## 0.4.0
+
+### Minor Changes
+
+- 74d5cfe: Implement the Browser Automation v2 contract and add isolated browser runner support.
+
 ## 0.3.7
 
 ### Patch Changes
