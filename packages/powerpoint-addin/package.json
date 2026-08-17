@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-powerpoint-addin",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "PowerPoint task pane add-in that embeds Xpert ChatKit and exposes Office.js client tools.",
   "sideEffects": false,
   "type": "module",

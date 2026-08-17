@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [cfae5c6]
+  - @xpert-ai/chatkit-types@0.5.0
+
 ## 0.4.1
 
 ### Patch Changes
