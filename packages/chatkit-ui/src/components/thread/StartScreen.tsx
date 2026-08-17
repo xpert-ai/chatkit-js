@@ -87,16 +87,16 @@ export function StartScreen({
                   disabled={promptSendDisabled}
                   onClick={() => onPromptClick?.(item.prompt)}
                   className={cn(
-                    'flex min-w-0 flex-1 items-center gap-3 p-4 text-left',
+                    'flex min-w-0 flex-1 items-center gap-3 p-4 text-left overflow-hidden',
                     'focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
                   )}
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     {getIconComponent(item.icon)}
                   </span>
-                  <span className="text-sm font-medium text-foreground">
+                  <div className="text-sm font-medium text-foreground line-clamp-3 overflow-hidden" title={item.label}>
                     {item.label}
-                  </span>
+                  </div>
                 </button>
                 <button
                   type="button"

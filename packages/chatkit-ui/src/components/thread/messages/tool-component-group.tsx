@@ -897,7 +897,7 @@ function DefaultToolCallOutput({ data }: ComponentMessageDetailsRendererProps) {
 }
 
 function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
-  const { t } = useChatkitTranslation();
+  const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
   if (isSandboxShellStep(data)) {
     return (
@@ -923,6 +923,7 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   }
 
   const OutputRenderer = getToolCallOutputRenderer(data);
+  const toolName = resolveLocalizedText(data.tool, i18n.language);
   const hasInput = data.input !== undefined && data.input !== null;
   const hasOutput =
     data.error !== undefined ||
@@ -934,8 +935,18 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
     <div className="ml-6 mt-1 max-h-60 overflow-auto rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
       {hasInput && (
         <div className="space-y-1">
-          <div className="text-[11px] font-medium text-muted-foreground">
-            {t('message.toolGroup.inputTitle')}
+          <div className="flex min-w-0 items-baseline gap-1 text-[11px] font-medium text-muted-foreground">
+            {toolName ? (
+              <>
+                <span className="min-w-0 break-all font-mono text-foreground/80">
+                  {toolName}
+                </span>
+                <span aria-hidden="true">·</span>
+              </>
+            ) : null}
+            <span className="shrink-0">
+              {t('message.toolGroup.inputTitle')}
+            </span>
           </div>
           <ToolCallValueBlock value={data.input} />
         </div>

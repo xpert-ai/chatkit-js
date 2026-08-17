@@ -537,6 +537,28 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('file contents')).toBeInTheDocument();
   });
 
+  it('shows the stable tool name before the input label when the row uses a summary title', () => {
+    renderAssistant([
+      createToolComponent('bom_lifecycle_save_observation', {
+        title: 'Completed technical agreement extraction',
+        input: {
+          caseId: 'case-1',
+          changeSummary: 'Saved three observations',
+        },
+      }),
+    ]);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /Completed technical agreement extraction/,
+      }),
+    );
+
+    expect(screen.getByText('Input').parentElement).toHaveTextContent(
+      'bom_lifecycle_save_observation·Input',
+    );
+  });
+
   it('preserves expanded tool row state when appending to the same group', () => {
     const firstTool = createToolComponent('read_file', {
       input: {
