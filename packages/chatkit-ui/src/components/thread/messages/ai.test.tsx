@@ -537,6 +537,41 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('file contents')).toBeInTheDocument();
   });
 
+  it('renders immutable tool-output image artifacts before the raw output', () => {
+    renderAssistant([
+      createToolComponent('knowledge_document_view_images', {
+        output: {
+          message: 'The image will be attached to the next model step.',
+        },
+        artifact: {
+          type: 'xpert.tool-output',
+          version: 1,
+          attachments: [
+            {
+              type: 'image',
+              artifactId: 'artifact-1',
+              artifactVersionId: 'version-1',
+              sha256: 'a'.repeat(64),
+              mimeType: 'image/png',
+              title: 'Picture 1 on page 75',
+              source: 'knowledge-document',
+              modelDetail: 'high',
+            },
+          ],
+        },
+      }),
+    ]);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /knowledge_document_view_images/ }),
+    );
+
+    expect(screen.getByTestId('tool-output-attachments')).toBeInTheDocument();
+    expect(
+      screen.getByText(/The image will be attached to the next model step/),
+    ).toBeInTheDocument();
+  });
+
   it('shows the stable tool name before the input label when the row uses a summary title', () => {
     renderAssistant([
       createToolComponent('bom_lifecycle_save_observation', {

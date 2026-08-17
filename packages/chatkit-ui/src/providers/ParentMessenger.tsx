@@ -13,6 +13,7 @@ import {
   type ChatKitReferenceCompositionMode,
   type FollowUpBehavior,
   type SendUserMessageParams,
+  type ToolOutputAttachmentPreviewRequest,
 } from '@xpert-ai/chatkit-types';
 import type { Capability } from '@xpert-ai/chatkit-web-shared';
 import type { Message } from '@xpert-ai/xpert-sdk';
@@ -36,6 +37,7 @@ type CommandMessageMap = {
   onFocusComposer: null;
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
+  onToolOutputAttachmentPreview: ToolOutputAttachmentPreviewRequest;
   onWorkbenchClientCommand: {
     commandKey: string;
     payload?: unknown;
