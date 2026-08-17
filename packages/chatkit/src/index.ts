@@ -6,5 +6,6 @@ export * from './message.js';
 export * from './options.js';
 export * from './pet.js';
 export * from './task-summary.js';
+export * from './tool-output.js';
 export * from './chatkit.js';
 export * from './commands.js';

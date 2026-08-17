@@ -29,9 +29,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { type LocalizedText, resolveLocalizedText } from '../../../i18n/localized-text';
+import {
+  type LocalizedText,
+  resolveLocalizedText,
+} from '../../../i18n/localized-text';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { isThreadContextUsageRenderArtifact } from '../../../lib/thread-context-usage';
+import { parseToolOutputPresentation } from '../../../lib/tool-output-attachments';
 import { cn } from '../../../lib/utils';
 import {
   detectJsonValue,
@@ -54,6 +58,7 @@ import {
   isSandboxShellStep,
   SandboxShellToolCallCard,
 } from './sandbox-shell-tool-call';
+import { ToolOutputAttachments } from './tool-output-attachments';
 
 /** Partial step data: during streaming, fields arrive incrementally */
 export type PartialStepData = ComponentMessagePartialStepData;
@@ -151,7 +156,9 @@ function normalizeStepCategory(category: unknown): string {
   return category;
 }
 
-export function getToolStepData(content: TMessageContentComponent): PartialStepData {
+export function getToolStepData(
+  content: TMessageContentComponent,
+): PartialStepData {
   const data = (content.data ?? {}) as PartialStepData;
   const category = normalizeStepCategory(data.category);
 
@@ -247,7 +254,8 @@ function useToolStepDurationLabel(
   const explicitEndedAt = parseStepDate(data.end_date);
   const status = options?.status ?? data.status;
   const endedAt =
-    explicitEndedAt ?? (status !== 'running' ? (options?.fallbackEndedAt ?? null) : null);
+    explicitEndedAt ??
+    (status !== 'running' ? (options?.fallbackEndedAt ?? null) : null);
 
   React.useEffect(() => {
     if (status !== 'running' || createdAt === null || endedAt !== null) {
@@ -276,7 +284,9 @@ function isComponentContent(
   return content.type === 'component';
 }
 
-function isTextContent(content: TMessageContentComplex): content is TMessageContentText {
+function isTextContent(
+  content: TMessageContentComplex,
+): content is TMessageContentText {
   return content.type === 'text';
 }
 
@@ -326,11 +336,16 @@ function isSkippableToolGroupSeparator(
 
 function normalizeToolToken(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   return normalized || null;
 }
 
-function classifyToolToken(value: LocalizedText | unknown): ToolGroupCategory | null {
+function classifyToolToken(
+  value: LocalizedText | unknown,
+): ToolGroupCategory | null {
   const normalized = normalizeToolToken(
     typeof value === 'string' ? value : resolveLocalizedText(value, 'en-US'),
   );
@@ -354,7 +369,8 @@ function classifyToolToken(value: LocalizedText | unknown): ToolGroupCategory | 
     return 'commands';
   }
   if (normalized.includes('list')) return 'lists';
-  if (normalized.includes('task') || normalized.includes('todo')) return 'tasks';
+  if (normalized.includes('task') || normalized.includes('todo'))
+    return 'tasks';
   if (normalized.includes('knowledge') || normalized.includes('retriever')) {
     return 'knowledges';
   }
@@ -362,7 +378,9 @@ function classifyToolToken(value: LocalizedText | unknown): ToolGroupCategory | 
   return null;
 }
 
-function getToolGroupCategory(content: TMessageContentComponent): ToolGroupCategory {
+function getToolGroupCategory(
+  content: TMessageContentComponent,
+): ToolGroupCategory {
   const data = getToolStepData(content);
   if (isSandboxShellStep(data)) return 'commands';
 
@@ -378,11 +396,14 @@ function getToolGroupCategory(content: TMessageContentComponent): ToolGroupCateg
 function getToolGroupCategoryCounts(
   items: TMessageContentComponent[],
 ): Partial<Record<ToolGroupCategory, number>> {
-  return items.reduce<Partial<Record<ToolGroupCategory, number>>>((counts, item) => {
-    const category = getToolGroupCategory(item);
-    counts[category] = (counts[category] ?? 0) + 1;
-    return counts;
-  }, {});
+  return items.reduce<Partial<Record<ToolGroupCategory, number>>>(
+    (counts, item) => {
+      const category = getToolGroupCategory(item);
+      counts[category] = (counts[category] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
 }
 
 export function getToolActivityLabel(
@@ -471,7 +492,8 @@ function getToolCallOutputRenderer(
   data: PartialStepData,
 ): ComponentMessageDetailsRenderer {
   const keys = [data.tool, data.type].filter(
-    (value): value is string => typeof value === 'string' && Boolean(value.trim()),
+    (value): value is string =>
+      typeof value === 'string' && Boolean(value.trim()),
   );
 
   for (const key of keys) {
@@ -516,7 +538,8 @@ function createToolsetIconUrl(
 }
 
 function createToolsetAvatarUrl(toolsetId: unknown, apiUrl?: string) {
-  const normalizedToolsetId = typeof toolsetId === 'string' ? toolsetId.trim() : '';
+  const normalizedToolsetId =
+    typeof toolsetId === 'string' ? toolsetId.trim() : '';
   if (!normalizedToolsetId) return null;
 
   const path = `/api/xpert-toolset/${encodeURIComponent(normalizedToolsetId)}/avatar`;
@@ -537,7 +560,11 @@ function shouldUseToolsetAvatar(toolset: unknown) {
   return normalized === 'mcp' || normalized === 'openapi';
 }
 
-function useToolsetAvatar(toolsetId: unknown, enabled: boolean, apiUrl?: string) {
+function useToolsetAvatar(
+  toolsetId: unknown,
+  enabled: boolean,
+  apiUrl?: string,
+) {
   const avatarUrl = enabled ? createToolsetAvatarUrl(toolsetId, apiUrl) : null;
   const [avatar, setAvatar] = React.useState<unknown>(null);
 
@@ -610,7 +637,9 @@ function ToolAvatarIcon({
           className,
         )}
         data-slot="tool-step-icon"
-        style={avatar.background ? { background: avatar.background } : undefined}
+        style={
+          avatar.background ? { background: avatar.background } : undefined
+        }
         title={label}
       >
         {emoji}
@@ -684,11 +713,7 @@ function ToolStepIcon({
   apiUrl?: string;
 }) {
   const usesToolsetAvatar = shouldUseToolsetAvatar(data.toolset);
-  const avatar = useToolsetAvatar(
-    data.toolset_id,
-    usesToolsetAvatar,
-    apiUrl,
-  );
+  const avatar = useToolsetAvatar(data.toolset_id, usesToolsetAvatar, apiUrl);
   const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
   const [failedIconUrl, setFailedIconUrl] = React.useState<string | null>(null);
 
@@ -844,7 +869,8 @@ function ToolCallValueBlock({
     <Tabs defaultValue="tree" className="min-w-0">
       <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-          {t('message.toolGroup.jsonTitle')} · {getJsonValueSummary(detected.value)}
+          {t('message.toolGroup.jsonTitle')} ·{' '}
+          {getJsonValueSummary(detected.value)}
         </span>
         <div className="flex shrink-0 items-center gap-1">
           <ToolCallCopyButton value={detected.raw} />
@@ -868,9 +894,13 @@ function ToolCallValueBlock({
   );
 }
 
-function DefaultToolCallOutput({ data }: ComponentMessageDetailsRendererProps) {
+function DefaultToolCallOutput({
+  content,
+  data,
+}: ComponentMessageDetailsRendererProps) {
   const { t } = useChatkitTranslation();
-  const output = data.output ?? null;
+  const presentation = parseToolOutputPresentation(data.artifact);
+  const output = data.output ?? (presentation ? null : data.artifact) ?? null;
   const error = data.error ?? null;
 
   if (error) {
@@ -884,20 +914,27 @@ function DefaultToolCallOutput({ data }: ComponentMessageDetailsRendererProps) {
     );
   }
 
-  if (output === null) return null;
+  if (output === null && !presentation) return null;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       <div className="text-[11px] font-medium text-muted-foreground">
         {t('message.toolGroup.outputTitle')}
       </div>
-      <ToolCallValueBlock value={output} />
+      {presentation ? (
+        <ToolOutputAttachments
+          presentation={presentation}
+          toolCallId={content.id}
+          executionId={content.executionId}
+        />
+      ) : null}
+      {output !== null ? <ToolCallValueBlock value={output} /> : null}
     </div>
   );
 }
 
 function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
-  const { t } = useChatkitTranslation();
+  const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
   if (isSandboxShellStep(data)) {
     return (
@@ -923,10 +960,12 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
   }
 
   const OutputRenderer = getToolCallOutputRenderer(data);
+  const toolName = resolveLocalizedText(data.tool, i18n.language);
   const hasInput = data.input !== undefined && data.input !== null;
   const hasOutput =
     data.error !== undefined ||
-    data.output !== undefined;
+    data.output !== undefined ||
+    data.artifact !== undefined;
 
   if (!hasInput && !hasOutput) return null;
 
@@ -934,8 +973,18 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
     <div className="ml-6 mt-1 max-h-60 overflow-auto rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
       {hasInput && (
         <div className="space-y-1">
-          <div className="text-[11px] font-medium text-muted-foreground">
-            {t('message.toolGroup.inputTitle')}
+          <div className="flex min-w-0 items-baseline gap-1 text-[11px] font-medium text-muted-foreground">
+            {toolName ? (
+              <>
+                <span className="min-w-0 break-all font-mono text-foreground/80">
+                  {toolName}
+                </span>
+                <span aria-hidden="true">·</span>
+              </>
+            ) : null}
+            <span className="shrink-0">
+              {t('message.toolGroup.inputTitle')}
+            </span>
           </div>
           <ToolCallValueBlock value={data.input} />
         </div>
@@ -992,6 +1041,7 @@ function ToolCallRowContent({
     data.input !== undefined ||
     data.error !== undefined ||
     data.output !== undefined ||
+    data.artifact !== undefined ||
     hasCustomDetails;
   const fallbackEndedAt = useFrozenTimestamp(
     data.status === 'running' && status === 'fail',
@@ -1003,10 +1053,13 @@ function ToolCallRowContent({
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   React.useEffect(() => {
-    if (status === 'running' && data.output !== undefined) {
+    if (
+      status === 'running' &&
+      (data.output !== undefined || data.artifact !== undefined)
+    ) {
       setIsExpanded(true);
     }
-  }, [data.output, status]);
+  }, [data.artifact, data.output, status]);
 
   return (
     <li className="ck-tool-call-row-enter min-w-0">
@@ -1124,12 +1177,7 @@ export function ToolComponentGroup({
         onClick={() => setIsExpanded((prev) => !prev)}
       >
         <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
-          <StatusIcon
-            className={cn(
-              'h-4 w-4 shrink-0',
-              config.iconClass,
-            )}
-          />
+          <StatusIcon className={cn('h-4 w-4 shrink-0', config.iconClass)} />
           <span className="truncate">{summary}</span>
         </div>
         <ChevronRight

@@ -5,6 +5,10 @@ import type {
   ThreadGoal,
   ThreadGoalStatus,
 } from './message';
+import type {
+  ToolOutputAttachmentPreview,
+  ToolOutputAttachmentPreviewRequest,
+} from './tool-output';
 import type * as Widgets from './widgets';
 
 export * from './widgets';
@@ -609,6 +613,19 @@ export type ChatKitOptions = {
     id?: string;
     tool_call_id?: string;
   }) => Promise<ClientToolMessageInput> | ClientToolMessageInput;
+
+  /**
+   * Resolves private, immutable tool-output attachments for display.
+   *
+   * The handler should authorize the current user, pin the requested Artifact
+   * version, and return a short-lived preview URL. ChatKit never persists the
+   * returned URL and calls the handler again after expiry or page reload.
+   */
+  toolOutputAttachments?: {
+    onRequestPreview: (
+      request: ToolOutputAttachmentPreviewRequest,
+    ) => Promise<ToolOutputAttachmentPreview> | ToolOutputAttachmentPreview;
+  };
 
   /**
    * Whether to show the header in ChatKit. A configuration object can be

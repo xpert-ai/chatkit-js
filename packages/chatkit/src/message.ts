@@ -4,6 +4,7 @@ import type { FollowUpBehavior } from './options';
 import type { ChatKitCommandSource } from './commands';
 import type { LocalizedText } from './localized-text';
 import type { TChatTaskSummaryContribution } from './task-summary';
+import type { ImageDetail, ToolMessageArtifact } from './tool-output';
 import {
   CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
@@ -29,7 +30,7 @@ export type TChatMessageStep<T = any> = TMessageComponent<
   TMessageComponentStep<T>
 >;
 
-export type ImageDetail = 'auto' | 'low' | 'high';
+export type { ImageDetail } from './tool-output';
 export type MessageContentText = {
   type: 'text';
   text: string;
@@ -304,7 +305,7 @@ export type TMessageComponentStep<T = unknown> = {
   data?: T;
   input?: any;
   output?: unknown;
-  artifact?: any;
+  artifact?: ToolMessageArtifact;
   taskSummary?: TChatTaskSummaryContribution;
 };
 

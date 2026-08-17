@@ -425,6 +425,19 @@
       "copy": "Copy",
       "copied": "Copied",
       "separator": ", ",
+      "attachments": {
+        "imageTitle": "Image {{index}}",
+        "loading": "Loading {{title}}",
+        "unavailable": "Preview unavailable",
+        "retry": "Retry",
+        "open": "Open {{title}}",
+        "close": "Close image preview",
+        "modelDetail": "Model detail: {{detail}}",
+        "sources": {
+          "knowledge-document": "Knowledge document",
+          "sandbox": "Sandbox"
+        }
+      },
       "shell": {
         "success": "Success",
         "running": "Running",

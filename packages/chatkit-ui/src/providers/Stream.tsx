@@ -71,6 +71,7 @@ import {
 } from '../lib/client-secret';
 import { createMissingApiConfigurationError } from '../lib/api-config';
 import { normalizeRequestContextAndConfig } from '../lib/request-options';
+import { waitForActiveThreadRunId } from '../lib/thread-runs';
 import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import type { ParentMessenger } from './ParentMessenger';
@@ -3228,20 +3229,40 @@ const StreamSession = ({
         conversationDetail.status ?? conversation.status ?? '',
       ).toLowerCase();
       if (status === 'interrupted') return;
-      const shouldJoinStream =
+      const conversationMayBeRunning =
         !status || status === 'running' || status === 'busy';
-      if (!shouldJoinStream) return;
 
-      const lastAiMessageResult = await client.conversations.searchMessages(
-        conversation.id,
-        {
-          where: { role: 'ai' },
-          order: { createdAt: 'DESC' },
-          limit: 1,
-        },
-      );
-      const runId = lastAiMessageResult.items?.[0]?.executionId ?? null;
+      let runId: string | null = null;
+      let runLookupFailed = false;
+      try {
+        runId = await waitForActiveThreadRunId(
+          () => client.runs.list(threadId, { limit: 100 }),
+          {
+            attempts: conversationMayBeRunning ? 20 : 1,
+            shouldContinue: () => activeThreadIdRef.current === threadId,
+          },
+        );
+      } catch (runsError) {
+        console.warn(
+          '[chatkit-ui] Failed to resolve the active execution from thread runs',
+          runsError,
+        );
+        runLookupFailed = true;
+      }
+
+      // Compatibility fallback for completed or legacy conversations whose
+      // execution can only be recovered from a persisted assistant message.
+      if (!runId && runLookupFailed && conversationMayBeRunning) {
+        const lastAiMessageResult =
+          await client.conversations.searchMessages(conversation.id, {
+            where: { role: 'ai' },
+            order: { createdAt: 'DESC' },
+            limit: 1,
+          });
+        runId = lastAiMessageResult.items?.[0]?.executionId ?? null;
+      }
       if (!runId) return;
+      if (activeThreadIdRef.current !== threadId) return;
       lastExecutionIdRef.current = runId;
 
       await runStream(threadId, null, { joinExistingThread: true }, runId);

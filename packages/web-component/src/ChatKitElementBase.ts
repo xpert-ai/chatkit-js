@@ -8,6 +8,7 @@ import type {
   ChatKitOptions,
   Entity,
   ListView,
+  ToolOutputAttachmentPreviewRequest,
 } from '@xpert-ai/chatkit-types';
 import { normalizePetOptions } from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
@@ -162,6 +163,20 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
           );
         }
         return onClientTool({ name, params, id, tool_call_id });
+      },
+      onToolOutputAttachmentPreview: async (
+        request: ToolOutputAttachmentPreviewRequest,
+      ) => {
+        const onRequestPreview =
+          this.#opts?.toolOutputAttachments?.onRequestPreview;
+        if (!onRequestPreview) {
+          this.#emitAndThrow(
+            new IntegrationError(
+              'No handler for tool-output attachment previews. Add toolOutputAttachments.onRequestPreview to your ChatKit options.',
+            ),
+          );
+        }
+        return onRequestPreview(request);
       },
       onWorkbenchClientCommand: async ({
         commandKey,
