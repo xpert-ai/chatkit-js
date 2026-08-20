@@ -1,5 +1,8 @@
 import * as React from 'react';
-import type { ChatConversationStatus, ChatConversation as ThreadRecord } from '@xpert-ai/xpert-sdk';
+import type {
+  ChatConversationStatus,
+  ChatConversation as ThreadRecord,
+} from '@xpert-ai/xpert-sdk';
 import { useStreamContext } from '../providers/Stream';
 import { i18n, initI18n } from '../i18n';
 
@@ -88,7 +91,9 @@ const sortThreadRecords = (threadRecords: ThreadRecord[]): ThreadRecord[] => {
   return [...threadRecords].sort((a, b) => {
     const aTime = Date.parse(a.updatedAt ?? '');
     const bTime = Date.parse(b.updatedAt ?? '');
-    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+    return (
+      (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+    );
   });
 };
 
@@ -97,6 +102,7 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     client,
     threadId,
     assistantId,
+    projectId,
     isReady,
     isLoading: isStreamLoading,
     error: streamError,
@@ -117,7 +123,7 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     setError(null);
     try {
       const { items } = await client.conversations.search({
-        where: { xpertId: assistantId },
+        where: { xpertId: assistantId, ...(projectId ? { projectId } : {}) },
         limit,
         order: { updatedAt: 'DESC' },
       });
@@ -127,12 +133,15 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [client, limit, assistantId]);
+  }, [client, limit, assistantId, projectId]);
 
   const createThread = React.useCallback(
     async (input?: CreateThreadInput) => {
       setError(null);
-      const payload: Partial<ThreadRecord> = {};
+      const payload: Partial<ThreadRecord> = {
+        xpertId: assistantId,
+        ...(projectId ? { projectId } : {}),
+      };
       if (input?.recordId) payload.id = input.recordId;
       if (input?.threadId) payload.threadId = input.threadId;
       if (input?.title) payload.title = input.title;
@@ -142,7 +151,7 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
       upsertThreadRecord(created);
       return created;
     },
-    [client, upsertThreadRecord],
+    [assistantId, client, projectId, upsertThreadRecord],
   );
 
   const updateThread = React.useCallback(

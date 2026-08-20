@@ -51,6 +51,7 @@ const options = {
   api: {
     apiUrl: '/api/ai',
     xpertId: 'xpert-1',
+    projectId: 'project-1',
     getClientSecret: async () => 'secret',
   },
 } satisfies ChatKitOptions;
@@ -69,6 +70,7 @@ describe('App', () => {
         apiKey: undefined,
         apiUrl: '/api/ai',
         xpertId: 'xpert-1',
+        projectId: 'project-1',
       }),
       undefined,
     );
@@ -99,6 +101,7 @@ describe('App', () => {
         organizationId: 'org-1',
         apiUrl: '/api/ai',
         xpertId: 'xpert-1',
+        projectId: 'project-1',
       }),
       undefined,
     );

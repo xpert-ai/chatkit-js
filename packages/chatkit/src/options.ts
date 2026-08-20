@@ -401,6 +401,9 @@ type HostedApiConfig = {
   apiUrl: string;
 
   xpertId?: string;
+
+  /** Platform Chat Project used for conversations and workspace files. */
+  projectId?: string;
 };
 
 export type ChatKitClientSecretObject = {

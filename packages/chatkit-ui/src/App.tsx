@@ -1,10 +1,10 @@
 import * as React from 'react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import { A2UIProvider } from "@xpert-ai/a2ui-react";
-import { Chat } from "./components/chat";
-import { StreamProvider } from "./providers/Stream";
-import { ThemeProvider } from "./providers/Theme";
-import { getLanguage, setLanguage } from "./i18n";
+import { A2UIProvider } from '@xpert-ai/a2ui-react';
+import { Chat } from './components/chat';
+import { StreamProvider } from './providers/Stream';
+import { ThemeProvider } from './providers/Theme';
+import { getLanguage, setLanguage } from './i18n';
 import { useParentMessenger } from './hooks/useParentMessenger';
 import { WorkbenchShell } from './workbench/WorkbenchShell';
 
@@ -60,14 +60,25 @@ export function App({
   return (
     <ThemeProvider theme={theme}>
       <div className="flex h-screen">
-        <A2UIProvider onAction={(action) => {
-          if (isParentAvailable) sendCommand('onWidgetAction', { action: action.actionId, widgetItem: action.context });
-        }}>
+        <A2UIProvider
+          onAction={(action) => {
+            if (isParentAvailable)
+              sendCommand('onWidgetAction', {
+                action: action.actionId,
+                widgetItem: action.context,
+              });
+          }}
+        >
           <StreamProvider
             apiKey={apiKey}
             organizationId={organizationId}
             apiUrl={options?.api.apiUrl || apiUrl}
             xpertId={options?.api.xpertId || resolvedXpertId || xpertId}
+            projectId={
+              options?.api && 'projectId' in options.api
+                ? options.api.projectId
+                : undefined
+            }
             initialThread={options?.initialThread ?? null}
             locale={requestLocale}
             additionalContext={
