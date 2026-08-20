@@ -2235,16 +2235,17 @@ describe('Chat plan mode payload', () => {
     renderChat();
 
     const textbox = screen.getByRole('textbox');
+    const send = screen.getByRole('button', { name: 'send' });
     fireEvent.compositionStart(textbox);
     textbox.textContent = 'pin';
-    fireEvent.input(textbox);
+    fireEvent.input(textbox, { isComposing: true });
     expect(screen.getByRole('textbox')).toBe(textbox);
+    expect(send).toBeDisabled();
 
     textbox.textContent = '拼';
     fireEvent.compositionEnd(textbox);
     expect(screen.getByRole('textbox')).toBe(textbox);
 
-    const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
     fireEvent.click(send);
 

@@ -2,6 +2,7 @@ import type { EventSourceMessage, FetchEventSourceInit } from "@microsoft/fetch-
 import { EventEmitter } from "./EventEmitter"
 import { fetchEventSourceWithRetry } from "./fetchEventSourceWithRetry.js"
 import { safeRandomUUID } from "./safeRandomUUID.js"
+import { isTrustedChatKitMessageEvent } from "./messageChannel.js"
 import type { AnyFunction } from "./types"
 import { FrameSafeHttpError, HttpError } from "./errors/HttpError"
 import { FrameSafeIntegrationError, IntegrationError } from "./errors/IntegrationError"
@@ -60,6 +61,7 @@ export abstract class BaseMessenger<
 > {
   private targetOrigin: string
   private target: () => Window | null
+  private channelId?: string
   private commandHandlers: Record<string, AnyFunction>
   private _fetch: typeof window.fetch
 
@@ -70,10 +72,12 @@ export abstract class BaseMessenger<
     handlers,
     target,
     targetOrigin,
+    channelId,
     fetch = window.fetch,
   }: {
     target: () => Window | null
     targetOrigin: string
+    channelId?: string
     fetch?: typeof window.fetch
     handlers: {
       [K in keyof ReceivedCommands as K extends `${infer C}${infer S}`
@@ -86,6 +90,7 @@ export abstract class BaseMessenger<
     this.commandHandlers = handlers
     this.target = target
     this.targetOrigin = targetOrigin
+    this.channelId = channelId?.trim() || undefined
     this._fetch = ((...args) => fetch(...args)) as typeof window.fetch
   }
 
@@ -110,6 +115,7 @@ export abstract class BaseMessenger<
   private sendMessage(data: ChatKitMessage, transfer?: Transferable[]) {
     const message = {
       __xpaiChatKit: true,
+      ...(this.channelId ? { channelId: this.channelId } : {}),
       ...data,
     }
     this.target()?.postMessage(message, this.targetOrigin, transfer)
@@ -244,10 +250,11 @@ export abstract class BaseMessenger<
 
   private handleMessage = async (event: MessageEvent) => {
     if (
-      !event.data ||
-      event.data.__xpaiChatKit !== true ||
-      event.origin !== this.targetOrigin ||
-      event.source !== this.target()
+      !isTrustedChatKitMessageEvent(event, {
+        channelId: this.channelId,
+        expectedOrigin: this.targetOrigin,
+        expectedSource: this.target(),
+      })
     ) {
       return
     }

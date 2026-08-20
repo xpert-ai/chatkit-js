@@ -15,7 +15,10 @@ import {
   type SendUserMessageParams,
   type ToolOutputAttachmentPreviewRequest,
 } from '@xpert-ai/chatkit-types';
-import type { Capability } from '@xpert-ai/chatkit-web-shared';
+import {
+  isTrustedChatKitMessageEvent,
+  type Capability,
+} from '@xpert-ai/chatkit-web-shared';
 import type { Message } from '@xpert-ai/xpert-sdk';
 import { useStreamManager } from '../hooks/useStream';
 import { buildInjectedRequestOptions } from '../lib/request-options';
@@ -101,7 +104,10 @@ type ParentMessage =
   | ParentResponseMessage
   | ParentEventMessage;
 
-type ParentEnvelope = Partial<ParentMessage> & { __xpaiChatKit: true };
+type ParentEnvelope = Partial<ParentMessage> & {
+  __xpaiChatKit: true;
+  channelId?: string;
+};
 
 const handledSendUserMessageNonces = new Set<string>();
 const handledSendUserMessageEvents = new WeakSet<MessageEvent>();
@@ -162,10 +168,12 @@ export const ParentMessengerContext =
   createContext<ParentMessengerContextValue | null>(null);
 
 export type ParentMessengerProviderProps = {
+  channelId?: string;
   children: ReactNode;
 };
 
 export function ParentMessengerProvider({
+  channelId,
   children,
 }: ParentMessengerProviderProps) {
   const { streamRef } = useStreamManager();
@@ -252,6 +260,7 @@ export function ParentMessengerProvider({
     ) => {
       const message: ParentEnvelope = {
         __xpaiChatKit: true,
+        ...(channelId ? { channelId } : {}),
         type: 'response',
         nonce,
         response,
@@ -261,18 +270,17 @@ export function ParentMessengerProvider({
     };
 
     const handleMessage = (event: MessageEvent) => {
-      if (event.source !== window.parent) return;
-      if (!event.data || typeof event.data !== 'object') return;
       if (
-        parentOriginRef.current !== '*' &&
-        typeof event.origin === 'string' &&
-        event.origin !== parentOriginRef.current
+        !isTrustedChatKitMessageEvent(event, {
+          channelId,
+          expectedOrigin: parentOriginRef.current,
+          expectedSource: window.parent,
+        })
       ) {
         return;
       }
 
-      const payload = event.data as Partial<ParentEnvelope>;
-      if (payload.__xpaiChatKit !== true) return;
+      const payload = event.data as ParentEnvelope;
 
       if (
         payload.type === 'command' &&
@@ -541,7 +549,7 @@ export function ParentMessengerProvider({
       });
       pendingRef.current.clear();
     };
-  }, [isParentAvailable, streamRef]);
+  }, [channelId, isParentAvailable, streamRef]);
 
   const sendCommand = useCallback(
     <K extends keyof CommandMessageMap>(
@@ -556,6 +564,7 @@ export function ParentMessengerProvider({
       const nonce = createNonce();
       const message: ParentEnvelope = {
         __xpaiChatKit: true,
+        ...(channelId ? { channelId } : {}),
         type: 'command',
         nonce,
         command,
@@ -567,7 +576,7 @@ export function ParentMessengerProvider({
         window.parent.postMessage(message, parentOriginRef.current, transfer);
       });
     },
-    [isParentAvailable],
+    [channelId, isParentAvailable],
   );
 
   const sendEvent = useCallback(
@@ -589,13 +598,14 @@ export function ParentMessengerProvider({
       if (!isParentAvailable) return;
       const message: ParentEnvelope = {
         __xpaiChatKit: true,
+        ...(channelId ? { channelId } : {}),
         type: 'event',
         event,
         data,
       };
       window.parent.postMessage(message, parentOriginRef.current, transfer);
     },
-    [isParentAvailable],
+    [channelId, isParentAvailable],
   );
 
   const value = useMemo(

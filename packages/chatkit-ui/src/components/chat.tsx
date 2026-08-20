@@ -614,6 +614,7 @@ export function Chat({
   );
   const attachmentsRef = React.useRef<ChatAttachmentsHandle>(null);
   const composerInputRef = React.useRef<HTMLDivElement>(null);
+  const isComposerComposingRef = React.useRef(false);
   const slashPaletteRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
     [],
@@ -1608,13 +1609,20 @@ export function Chat({
 
   const handleComposerInput = React.useCallback(
     (event: React.FormEvent<HTMLDivElement>) => {
+      if (isComposerComposingRef.current) return;
+
       syncComposerInputFromElement(event.currentTarget);
     },
     [syncComposerInputFromElement],
   );
 
+  const handleComposerCompositionStart = React.useCallback(() => {
+    isComposerComposingRef.current = true;
+  }, []);
+
   const handleComposerCompositionEnd = React.useCallback(
     (event: React.CompositionEvent<HTMLDivElement>) => {
+      isComposerComposingRef.current = false;
       syncComposerInputFromElement(event.currentTarget);
     },
     [syncComposerInputFromElement],
@@ -3570,6 +3578,7 @@ export function Chat({
               }
               suppressContentEditableWarning
               onInput={handleComposerInput}
+              onCompositionStart={handleComposerCompositionStart}
               onCompositionEnd={handleComposerCompositionEnd}
               onSelect={handleComposerSelect}
               onPaste={handleComposerPaste}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isTrustedChatKitMessageEvent } from '@xpert-ai/chatkit-web-shared';
 
 const mocks = vi.hoisted(() => ({
   stream: {
@@ -79,6 +80,28 @@ describe('ParentMessengerProvider', () => {
       configurable: true,
       value: originalParent,
     });
+  });
+
+  it('does not let a matching channel bypass the expected origin', () => {
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        channelId: 'matching-channel',
+      },
+      origin: 'https://untrusted.example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: { postMessage: vi.fn() },
+    });
+
+    expect(
+      isTrustedChatKitMessageEvent(event, {
+        channelId: 'matching-channel',
+        expectedOrigin: 'https://trusted.example.com',
+        expectedSource: window,
+      }),
+    ).toBe(false);
   });
 
   it('passes planMode through sendUserMessage input and state', async () => {
@@ -351,6 +374,85 @@ describe('ParentMessengerProvider', () => {
       }),
       '*',
     );
+  });
+
+  it('accepts a matching channel when a WebView exposes a different parent source proxy', async () => {
+    const onSetComposerValue = vi.fn();
+    render(
+      <ParentMessengerProvider channelId="dingtalk-channel">
+        <ComposerValueProbe onSetComposerValue={onSetComposerValue} />
+      </ParentMessengerProvider>,
+    );
+
+    const data = {
+      __xpaiChatKit: true,
+      channelId: 'dingtalk-channel',
+      type: 'command',
+      command: 'onSetComposerValue',
+      nonce: 'dingtalk-source-proxy-test',
+      data: {
+        text: 'Bridge restored',
+      },
+    };
+    const event = new MessageEvent('message', {
+      data,
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: { postMessage: vi.fn() },
+    });
+
+    window.dispatchEvent(event);
+
+    await waitFor(() =>
+      expect(onSetComposerValue).toHaveBeenCalledWith({
+        text: 'Bridge restored',
+      }),
+    );
+    expect(parentWindow.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __xpaiChatKit: true,
+        channelId: 'dingtalk-channel',
+        type: 'response',
+        nonce: 'dingtalk-source-proxy-test',
+        response: { ok: true },
+      }),
+      '*',
+    );
+  });
+
+  it('rejects an incorrect channel when the parent source also differs', async () => {
+    const onSetComposerValue = vi.fn();
+    render(
+      <ParentMessengerProvider channelId="expected-channel">
+        <ComposerValueProbe onSetComposerValue={onSetComposerValue} />
+      </ParentMessengerProvider>,
+    );
+
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        channelId: 'wrong-channel',
+        type: 'command',
+        command: 'onSetComposerValue',
+        nonce: 'wrong-channel-test',
+        data: {
+          text: 'Do not accept this',
+        },
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', {
+      configurable: true,
+      value: { postMessage: vi.fn() },
+    });
+
+    window.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(onSetComposerValue).not.toHaveBeenCalled();
+    expect(parentWindow.postMessage).not.toHaveBeenCalled();
   });
 
   it('sends chat minimize events to the parent frame', () => {
