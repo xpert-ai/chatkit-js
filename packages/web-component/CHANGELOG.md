@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-web-component
 
+## 0.5.1
+
+### Patch Changes
+
+- 573d1bd: Authenticate iframe messages with a per-frame channel when embedded WebViews expose non-canonical window source proxies.
+  Defer composer state synchronization until IME composition ends in embedded WebViews.
+- Updated dependencies [573d1bd]
+  - @xpert-ai/chatkit-web-shared@0.4.3
+
 ## 0.5.0
 
 ### Minor Changes
