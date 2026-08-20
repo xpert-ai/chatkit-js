@@ -1,6 +1,9 @@
 /// <reference path="./import-meta-env.d.ts" />
 
-import { encodeBase64 } from '@xpert-ai/chatkit-web-shared';
+import {
+  createSecureChannelId,
+  encodeBase64,
+} from '@xpert-ai/chatkit-web-shared';
 
 import { ChatFrameMessenger } from './ChatFrameMessenger';
 import type {
@@ -111,8 +114,10 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #loaded = new Promise<void>((resolve) => {
     this.#resolveLoaded = resolve;
   });
+  #channelId = createSecureChannelId();
 
   #messenger = new ChatFrameMessenger({
+    channelId: this.#channelId ?? undefined,
     fetch: ((...args) => {
       const customFetch =
         this.#opts?.api && 'fetch' in this.#opts.api && this.#opts.api.fetch;
@@ -840,6 +845,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       options: getInnerOptions(this.#getFrameOptions(this.#opts)),
       referrer: window.location.origin,
       profile: this.profile,
+      ...(this.#channelId ? { channelId: this.#channelId } : {}),
     } satisfies ChatKitFrameParams);
     this.#messenger.connect();
     this.#frame.src = frameURL.toString();
