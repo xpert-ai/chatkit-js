@@ -1301,6 +1301,27 @@ describe('AssistantMessage tool components', () => {
     ).toBeInTheDocument();
   });
 
+  it('uses a trusted tool-specific inline SVG icon before fallback icons', () => {
+    const { container } = renderAssistant([
+      createToolComponent('view-images', {
+        type: 'tool',
+        title: 'View governed source images',
+        status: 'success',
+        icon: {
+          type: 'svg',
+          value:
+            '<svg viewBox="0 0 24 24" data-icon="eye"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+        },
+      }),
+    ]);
+
+    expect(
+      container.querySelector(
+        '[data-slot="tool-step-icon"] [data-icon="eye"]',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('uses smaller density-aware text for grouped tool rows', () => {
     renderAssistant([
       createToolComponent('run-command', {

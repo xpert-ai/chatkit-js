@@ -296,6 +296,8 @@ export type TMessageComponentStep<T = unknown> = {
   toolset: string;
   toolset_id: string;
   tool?: string;
+  /** Optional tool-specific display icon supplied by the trusted runtime. */
+  icon?: IconDefinition;
   title: string;
   message: string;
   status: 'success' | 'fail' | 'running';

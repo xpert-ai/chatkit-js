@@ -45,6 +45,7 @@ import {
   RawJsonBlock,
 } from '../json-tree-view';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { IconDefinitionRenderer } from '../../ui/icon-definition';
 import { normalizeChatkitAvatar } from '../../ui/chatkit-avatar';
 import {
   getComponentMessageRenderer,
@@ -720,6 +721,23 @@ function ToolStepIcon({
   React.useEffect(() => {
     setFailedIconUrl(null);
   }, [iconUrl]);
+
+  if (data.icon) {
+    return (
+      <IconDefinitionRenderer
+        icon={data.icon}
+        className={className}
+        dataSlot="tool-step-icon"
+        fallback={
+          <CircleHelp
+            className={className}
+            aria-hidden="true"
+            data-slot="tool-step-icon"
+          />
+        }
+      />
+    );
+  }
 
   if (avatar) {
     return (
