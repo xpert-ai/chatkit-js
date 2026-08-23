@@ -16,6 +16,7 @@ import { createLangGraphEventState } from './langGraphEventMapper';
 import {
   applyStreamEvent,
   buildSteerFollowUpRunInput,
+  createAssistantThreadPayload,
   createConversationMessagesPageQuery,
   createLanguageHeaders,
   createFetchWithClientSecretRefresh,
@@ -36,6 +37,22 @@ import {
   resolveClientToolCallResponse,
   shouldBroadcastThreadChange,
 } from './Stream';
+
+describe('assistant thread creation', () => {
+  it('binds generated threads to the current assistant', () => {
+    expect(createAssistantThreadPayload('assistant-1')).toEqual({
+      assistantId: 'assistant-1',
+    });
+  });
+
+  it('binds caller-provided thread ids to the current assistant', () => {
+    expect(createAssistantThreadPayload('assistant-1', 'thread-1')).toEqual({
+      assistantId: 'assistant-1',
+      threadId: 'thread-1',
+      ifExists: 'raise',
+    });
+  });
+});
 
 describe('conversation message history pagination', () => {
   it('builds reverse-created-at page queries for conversation messages', () => {

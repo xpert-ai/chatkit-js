@@ -1,5 +1,21 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.0
+
+### Minor Changes
+
+- cfae5c6: Add a secure Tool Output Attachment protocol for immutable model-viewed images,
+  host-authorized short-lived preview resolution, inline tool-call galleries, and
+  accessible full-image previews without persisting signed URLs or base64 data.
+
+## 0.4.7
+
+### Patch Changes
+
+- 4610ece: Add an opt-in Remote Views workbench with responsive split and drawer layouts,
+  an isolated iframe protocol bridge, chat context and client-command integration,
+  and the public `workbench` options.
+
 ## 0.4.6
 
 ### Patch Changes

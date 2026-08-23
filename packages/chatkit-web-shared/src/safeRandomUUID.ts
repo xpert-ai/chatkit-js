@@ -1,4 +1,4 @@
-export function safeRandomUUID(): string {
+export function createSecureChannelId(): string | null {
   const cryptoRef = globalThis.crypto
 
   if (typeof cryptoRef?.randomUUID === "function") {
@@ -18,5 +18,12 @@ export function safeRandomUUID(): string {
       .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5")
   }
 
-  return `ck_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  return null
+}
+
+export function safeRandomUUID(): string {
+  return (
+    createSecureChannelId() ??
+    `ck_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  )
 }

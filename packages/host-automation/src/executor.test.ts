@@ -70,6 +70,27 @@ function mockElementsFromPoint(elements: Element[]): () => void {
   };
 }
 
+function mockElementsFromPointBy(
+  resolve: (x: number, y: number) => Element[],
+): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    document,
+    'elementsFromPoint',
+  );
+  Object.defineProperty(document, 'elementsFromPoint', {
+    configurable: true,
+    value: vi.fn(resolve),
+  });
+
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(document, 'elementsFromPoint', descriptor);
+    } else {
+      delete (document as unknown as Record<string, unknown>).elementsFromPoint;
+    }
+  };
+}
+
 function mockVisibleTree(root: ParentNode = document.body) {
   Array.from(root.querySelectorAll('*')).forEach((element, index) => {
     mockRect(element, createDomRect(10, 10 + index * 24, 320, 20));
@@ -93,6 +114,8 @@ describe('HostPageAutomationExecutor', () => {
     expect(input?.ref).toBeTruthy();
 
     await executor.execute('host_page_fill', {
+      pageStateId: snapshot.pageStateId,
+      documentRef: input?.documentRef,
       ref: input?.ref,
       value: 'Grace',
     });
@@ -102,16 +125,826 @@ describe('HostPageAutomationExecutor', () => {
     ).toBe('Grace');
   });
 
+  it('rejects actions from an older page state before dispatch', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const buttonElement = document.getElementById('save');
+    if (!buttonElement) {
+      throw new Error('Missing button element.');
+    }
+    const click = vi.fn();
+    buttonElement.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const firstSnapshot = executor.snapshot();
+    const button = firstSnapshot.elements[0];
+
+    executor.snapshot();
+
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: firstSnapshot.pageStateId,
+        documentRef: button?.documentRef,
+        ref: button?.ref,
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'stale_page_state',
+        dispatched: false,
+        outcome: 'rejected_before_execution',
+      }),
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('requires page and document identity after a v2 snapshot', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const click = vi.fn();
+    document.getElementById('save')?.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    await expect(
+      executor.execute('host_page_click', {
+        ref: snapshot.elements[0]?.ref,
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'stale_page_state' }),
+    });
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        ref: snapshot.elements[0]?.ref,
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'unsupported_target_scope' }),
+    });
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: snapshot.elements[0]?.documentRef,
+        ref: snapshot.elements[0]?.ref,
+        selector: '#save',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'ambiguous_target' }),
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('requires the current page state for targetless actions', async () => {
+    document.body.innerHTML = `<input id="field" />`;
+    const keydown = vi.fn();
+    document.getElementById('field')?.addEventListener('keydown', keydown);
+    const executor = new HostPageAutomationExecutor();
+    executor.snapshot();
+
+    await expect(
+      executor.execute('host_page_press', { key: 'Enter' }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'stale_page_state',
+        dispatched: false,
+        outcome: 'rejected_before_execution',
+      }),
+    });
+    expect(keydown).not.toHaveBeenCalled();
+  });
+
+  it('omits resolution for targetless actions', async () => {
+    document.body.innerHTML = `<input id="field" />`;
+    document.getElementById('field')?.focus();
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    const result = await executor.execute('host_page_press', {
+      pageStateId: snapshot.pageStateId,
+      key: 'Escape',
+    });
+
+    expect(result).toMatchObject({
+      dispatched: true,
+      outcome: 'executed_unverified',
+      requiresFreshSnapshot: true,
+    });
+    expect(result).not.toHaveProperty('resolution');
+  });
+
+  it('reuses the same snapshot state for paginated snapshot reads', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const executor = new HostPageAutomationExecutor();
+    const first = await executor.execute('host_page_snapshot', {});
+    if (!first || typeof first !== 'object' || !('pageStateId' in first)) {
+      throw new Error('Missing first snapshot.');
+    }
+    const firstSnapshot = first as ReturnType<
+      HostPageAutomationExecutor['snapshot']
+    >;
+
+    const second = await executor.execute('host_page_snapshot', {
+      pageStateId: firstSnapshot.pageStateId,
+    });
+
+    expect(second).toMatchObject({
+      pageStateId: firstSnapshot.pageStateId,
+      elements: [
+        expect.objectContaining({ ref: firstSnapshot.elements[0]?.ref }),
+      ],
+    });
+  });
+
+  it('expires cached snapshot state after two minutes', async () => {
+    const now = new Date('2026-08-05T00:00:00.000Z').getTime();
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      document.body.innerHTML = `<button id="save">Save</button>`;
+      const executor = new HostPageAutomationExecutor();
+      const snapshot = executor.snapshot();
+      const click = vi.fn();
+      document.getElementById('save')?.addEventListener('click', click);
+
+      dateNow.mockReturnValue(now + 2 * 60_000 + 1);
+
+      await expect(
+        executor.execute('host_page_snapshot', {
+          pageStateId: snapshot.pageStateId,
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'stale_page_state',
+          requiresFreshSnapshot: true,
+          invalidatedPageStateId: snapshot.pageStateId,
+        }),
+      });
+      await expect(
+        executor.execute('host_page_click', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.elements[0]?.documentRef,
+          ref: snapshot.elements[0]?.ref,
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({ code: 'stale_page_state' }),
+      });
+      expect(click).not.toHaveBeenCalled();
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  it('invalidates the current page state after structural mutations', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
+
+    document.body.append(document.createElement('section'));
+    await Promise.resolve();
+
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: button?.documentRef,
+        ref: button?.ref,
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'stale_page_state' }),
+    });
+  });
+
+  it('keeps page state current after unrelated text-only mutations', async () => {
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <p id="status">Waiting</p>
+    `;
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements.find(
+      (element) => element.tag === 'button',
+    );
+    const status = document.getElementById('status');
+    const click = vi.fn();
+    document.getElementById('save')?.addEventListener('click', click);
+    if (!status?.firstChild) {
+      throw new Error('Missing text mutation fixture.');
+    }
+
+    status.firstChild.textContent = 'Ready';
+    await Promise.resolve();
+
+    await executor.execute('host_page_click', {
+      pageStateId: snapshot.pageStateId,
+      documentRef: button?.documentRef,
+      ref: button?.ref,
+    });
+
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a ref when its node was replaced without selecting a same-name fallback', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const original = document.getElementById('save');
+    const button = snapshot.elements[0];
+    if (!original || !button) {
+      throw new Error('Missing button fixture.');
+    }
+    const replacement = original.cloneNode(true) as HTMLButtonElement;
+    const replacementClick = vi.fn();
+    replacement.addEventListener('click', replacementClick);
+    original.replaceWith(replacement);
+
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: button.documentRef,
+        ref: button.ref,
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'stale_target',
+        dispatched: false,
+      }),
+    });
+    expect(replacementClick).not.toHaveBeenCalled();
+  });
+
   it('clicks a target by ref', async () => {
     document.body.innerHTML = `<button id="save">Save</button>`;
     const click = vi.fn();
     document.getElementById('save')?.addEventListener('click', click);
     const executor = new HostPageAutomationExecutor();
-    const button = executor.snapshot().elements[0];
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
 
-    await executor.execute('host_page_click', { ref: button?.ref });
+    await executor.execute('host_page_click', {
+      pageStateId: snapshot.pageStateId,
+      documentRef: button?.documentRef,
+      ref: button?.ref,
+    });
 
     expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a target nested inside a disabled actionable ancestor', async () => {
+    document.body.innerHTML = `
+      <button id="save" disabled><span data-testid="save-icon">Save</span></button>
+    `;
+    const button = document.getElementById('save');
+    if (!button) {
+      throw new Error('Missing disabled button fixture.');
+    }
+    const click = vi.fn();
+    button.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: snapshot.documents[0]?.documentRef,
+        testId: 'save-icon',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'target_disabled',
+        dispatched: false,
+        outcome: 'rejected_before_execution',
+      }),
+    });
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('requires a single-use approval token before filling a password', async () => {
+    document.body.innerHTML = `<input id="password" type="password" />`;
+    const field = document.querySelector<HTMLInputElement>('#password');
+    if (!field) {
+      throw new Error('Missing password field fixture.');
+    }
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find((element) => element.tag === 'input');
+    const params = {
+      pageStateId: snapshot.pageStateId,
+      documentRef: target?.documentRef,
+      ref: target?.ref,
+      value: 'correct horse battery staple',
+    };
+
+    let actionToken = '';
+    try {
+      await executor.execute('host_page_fill', params);
+      throw new Error('Expected password fill to require approval.');
+    } catch (error) {
+      expect(error).toMatchObject({
+        details: expect.objectContaining({
+          code: 'approval_required',
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          actionToken: expect.any(String),
+          risks: ['password_input'],
+        }),
+      });
+      actionToken = (error as { details: { actionToken: string } }).details
+        .actionToken;
+    }
+    expect(field.value).toBe('');
+
+    await expect(
+      executor.execute('host_page_fill', {
+        ...params,
+        value: 'changed secret',
+        actionToken,
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'approval_required',
+        dispatched: false,
+        approvalReason: 'action_mismatch',
+      }),
+    });
+    expect(field.value).toBe('');
+
+    let replacementToken = '';
+    try {
+      await executor.execute('host_page_fill', { ...params, actionToken });
+      throw new Error('Expected the consumed approval token to be rejected.');
+    } catch (error) {
+      expect(error).toMatchObject({
+        details: expect.objectContaining({
+          code: 'approval_required',
+          dispatched: false,
+          approvalReason: 'invalid_or_used_token',
+          actionToken: expect.any(String),
+        }),
+      });
+      replacementToken = (error as { details: { actionToken: string } }).details
+        .actionToken;
+    }
+    expect(field.value).toBe('');
+
+    await executor.execute('host_page_fill', {
+      ...params,
+      actionToken: replacementToken,
+    });
+    expect(field.value).toBe('correct horse battery staple');
+  });
+
+  it('rejects an expired action approval token before dispatch', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `<input id="password" type="password" />`;
+    const field = document.querySelector<HTMLInputElement>('#password');
+    if (!field) {
+      throw new Error('Missing expiring approval fixture.');
+    }
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find((element) => element.tag === 'input');
+    const params = {
+      pageStateId: snapshot.pageStateId,
+      documentRef: target?.documentRef,
+      ref: target?.ref,
+      value: 'secret',
+    };
+
+    try {
+      let actionToken = '';
+      try {
+        await executor.execute('host_page_fill', params);
+      } catch (error) {
+        actionToken = (error as { details: { actionToken: string } }).details
+          .actionToken;
+      }
+      vi.advanceTimersByTime(60_001);
+
+      await expect(
+        executor.execute('host_page_fill', { ...params, actionToken }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'approval_required',
+          dispatched: false,
+          approvalReason: 'expired_token',
+        }),
+      });
+      expect(field.value).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects an approved action when the page changes before dispatch', async () => {
+    document.body.innerHTML = `<input id="password" type="password" />`;
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find((element) => element.tag === 'input');
+    const params = {
+      pageStateId: snapshot.pageStateId,
+      documentRef: target?.documentRef,
+      ref: target?.ref,
+      value: 'secret',
+    };
+    let actionToken = '';
+    try {
+      await executor.execute('host_page_fill', params);
+    } catch (error) {
+      actionToken = (error as { details: { actionToken: string } }).details
+        .actionToken;
+    }
+
+    document.body.append(document.createElement('section'));
+    await Promise.resolve();
+
+    await expect(
+      executor.execute('host_page_fill', { ...params, actionToken }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'stale_page_state',
+        dispatched: false,
+      }),
+    });
+    expect(document.querySelector<HTMLInputElement>('#password')?.value).toBe(
+      '',
+    );
+  });
+
+  it('requires approval before interacting with a file input', async () => {
+    document.body.innerHTML = `<input id="upload" type="file" />`;
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find((element) => element.tag === 'input');
+
+    await expect(
+      executor.execute('host_page_fill', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: target?.documentRef,
+        ref: target?.ref,
+        value: '/tmp/document.pdf',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'approval_required',
+        dispatched: false,
+        risks: ['file_input'],
+      }),
+    });
+  });
+
+  it('requires approval before activating a form submit control', async () => {
+    document.body.innerHTML = `
+      <input id="before" />
+      <form><button id="submit" type="submit">Submit</button></form>
+    `;
+    const before = document.getElementById('before');
+    const button = document.getElementById('submit');
+    if (!(before instanceof HTMLInputElement) || !button) {
+      throw new Error('Missing submit approval fixture.');
+    }
+    before.focus();
+    mockRect(button, createDomRect(10, 20, 80, 30));
+    const restoreElementsFromPoint = mockElementsFromPoint([button]);
+    const click = vi.fn((event: Event) => event.preventDefault());
+    button.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find(
+      (element) => element.tag === 'button',
+    );
+
+    try {
+      await expect(
+        executor.execute('host_page_click', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: target?.documentRef,
+          ref: target?.ref,
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'approval_required',
+          actionToken: expect.any(String),
+          risks: ['form_submit'],
+        }),
+      });
+      expect(click).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(before);
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
+  it.each([
+    {
+      label: 'download link',
+      attributes: 'href="/export.csv" download',
+      risk: 'download',
+    },
+  ])(
+    'requires approval before activating a $label',
+    async ({ attributes, risk }) => {
+      document.body.innerHTML = `<a id="target" ${attributes}>Open</a>`;
+      const anchor = document.getElementById('target');
+      if (!anchor) {
+        throw new Error('Missing policy-gated link fixture.');
+      }
+      mockRect(anchor, createDomRect(10, 20, 80, 30));
+      const restoreElementsFromPoint = mockElementsFromPoint([anchor]);
+      const click = vi.fn((event: Event) => event.preventDefault());
+      anchor.addEventListener('click', click);
+      const executor = new HostPageAutomationExecutor();
+      const snapshot = executor.snapshot();
+      const target = snapshot.elements.find((element) => element.tag === 'a');
+
+      try {
+        await expect(
+          executor.execute('host_page_click', {
+            pageStateId: snapshot.pageStateId,
+            documentRef: target?.documentRef,
+            ref: target?.ref,
+          }),
+        ).rejects.toMatchObject({
+          details: expect.objectContaining({
+            code: 'approval_required',
+            dispatched: false,
+            risks: [risk],
+          }),
+        });
+        expect(click).not.toHaveBeenCalled();
+      } finally {
+        restoreElementsFromPoint();
+      }
+    },
+  );
+
+  it('allows activating a cross-origin link without approval', async () => {
+    document.body.innerHTML =
+      '<a id="target" href="https://other.example/path">Open</a>';
+    const anchor = document.getElementById('target');
+    if (!anchor) {
+      throw new Error('Missing cross-origin link fixture.');
+    }
+    mockRect(anchor, createDomRect(10, 20, 80, 30));
+    const restoreElementsFromPoint = mockElementsFromPoint([anchor]);
+    const click = vi.fn((event: Event) => event.preventDefault());
+    anchor.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find((element) => element.tag === 'a');
+
+    try {
+      await expect(
+        executor.execute('host_page_click', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: target?.documentRef,
+          ref: target?.ref,
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          dispatched: true,
+          clicked: expect.objectContaining({ tag: 'a' }),
+        }),
+      );
+      expect(click).toHaveBeenCalledOnce();
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
+  it('cannot bypass submit approval with a keyboard activation', async () => {
+    document.body.innerHTML = `
+      <form><button id="submit" type="submit">Submit</button></form>
+    `;
+    const button = document.getElementById('submit');
+    if (!button) {
+      throw new Error('Missing keyboard submit fixture.');
+    }
+    const keydown = vi.fn();
+    button.addEventListener('keydown', keydown);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const target = snapshot.elements.find(
+      (element) => element.tag === 'button',
+    );
+
+    await expect(
+      executor.execute('host_page_press', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: target?.documentRef,
+        ref: target?.ref,
+        key: 'Enter',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'approval_required',
+        dispatched: false,
+        risks: ['form_submit'],
+      }),
+    });
+    expect(keydown).not.toHaveBeenCalled();
+  });
+
+  it('returns an unverified action outcome and invalidates state after dispatch', async () => {
+    document.body.innerHTML = `<button id="save">Save</button>`;
+    const buttonElement = document.getElementById('save');
+    if (!buttonElement) {
+      throw new Error('Missing button element.');
+    }
+    mockRect(buttonElement, createDomRect(10, 20, 80, 30));
+    const restoreElementFromPoint = mockElementFromPoint(buttonElement);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
+
+    try {
+      const result = await executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: button?.documentRef,
+        ref: button?.ref,
+      });
+
+      expect(result).toMatchObject({
+        dispatched: true,
+        outcome: 'executed_unverified',
+        requiresFreshSnapshot: true,
+        invalidatedPageStateId: snapshot.pageStateId,
+        resolution: {
+          strategy: 'ref',
+          pageStateId: snapshot.pageStateId,
+          resolved: expect.objectContaining({
+            documentRef: button?.documentRef,
+            ref: button?.ref,
+            name: 'Save',
+          }),
+        },
+      });
+      await expect(
+        executor.execute('host_page_click', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: button?.documentRef,
+          ref: button?.ref,
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({ code: 'stale_page_state' }),
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('polls fresh DOM state until an action postcondition is verified', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <input data-testid="status" value="pending" />
+    `;
+    const buttonElement = document.getElementById('save');
+    const status = document.querySelector<HTMLInputElement>(
+      '[data-testid="status"]',
+    );
+    if (!buttonElement || !status) {
+      throw new Error('Missing postcondition fixture.');
+    }
+    mockRect(buttonElement, createDomRect(10, 20, 80, 30));
+    const restoreElementFromPoint = mockElementFromPoint(buttonElement);
+    buttonElement.addEventListener('click', () => {
+      setTimeout(() => {
+        status.value = 'saved';
+      }, 50);
+    });
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements.find(
+      (element) => element.tag === 'button',
+    );
+    const documentRef = snapshot.documents[0]?.documentRef;
+
+    try {
+      const resultPromise = executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef,
+        ref: button?.ref,
+        expectation: {
+          type: 'field_contains',
+          target: {
+            documentScope: 'same_document',
+            documentRef,
+            kind: 'test_id',
+            testId: 'status',
+          },
+          value: 'saved',
+        },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(resultPromise).resolves.toMatchObject({
+        dispatched: true,
+        outcome: 'verified',
+        requiresFreshSnapshot: true,
+        verification: {
+          status: 'passed',
+          actual: 'saved',
+        },
+      });
+    } finally {
+      restoreElementFromPoint();
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns verification_failed with the last observed value after postcondition timeout', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <input data-testid="status" value="pending" />
+    `;
+    const buttonElement = document.getElementById('save');
+    if (!buttonElement) {
+      throw new Error('Missing timeout postcondition fixture.');
+    }
+    mockRect(buttonElement, createDomRect(10, 20, 80, 30));
+    const restoreElementFromPoint = mockElementFromPoint(buttonElement);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements.find(
+      (element) => element.tag === 'button',
+    );
+    const documentRef = snapshot.documents[0]?.documentRef;
+
+    try {
+      const resultPromise = executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef,
+        ref: button?.ref,
+        expectation: {
+          type: 'field_contains',
+          target: {
+            documentScope: 'same_document',
+            documentRef,
+            kind: 'test_id',
+            testId: 'status',
+          },
+          value: 'saved',
+        },
+      });
+      await vi.advanceTimersByTimeAsync(10_100);
+
+      await expect(resultPromise).resolves.toMatchObject({
+        dispatched: true,
+        outcome: 'verification_failed',
+        verification: {
+          status: 'timed_out',
+          actual: 'pending',
+        },
+      });
+    } finally {
+      restoreElementFromPoint();
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails a postcondition immediately when its observation target is ambiguous', async () => {
+    document.body.innerHTML = `
+      <button id="save">Save</button>
+      <input data-testid="status" value="first" />
+      <input data-testid="status" value="second" />
+    `;
+    const buttonElement = document.getElementById('save');
+    if (!buttonElement) {
+      throw new Error('Missing ambiguous postcondition fixture.');
+    }
+    mockRect(buttonElement, createDomRect(10, 20, 80, 30));
+    const restoreElementFromPoint = mockElementFromPoint(buttonElement);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements.find(
+      (element) => element.tag === 'button',
+    );
+    const documentRef = snapshot.documents[0]?.documentRef;
+
+    try {
+      await expect(
+        executor.execute('host_page_click', {
+          pageStateId: snapshot.pageStateId,
+          documentRef,
+          ref: button?.ref,
+          expectation: {
+            type: 'field_contains',
+            target: {
+              documentScope: 'same_document',
+              documentRef,
+              kind: 'test_id',
+              testId: 'status',
+            },
+            value: 'first',
+          },
+        }),
+      ).resolves.toMatchObject({
+        dispatched: true,
+        outcome: 'verification_failed',
+        verification: {
+          status: 'failed',
+          actual: null,
+        },
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
   });
 
   it('shows the optional click effect before clicking a target', async () => {
@@ -133,10 +966,15 @@ describe('HostPageAutomationExecutor', () => {
       expect(requested).toBe(buttonElement);
     });
     const executor = new HostPageAutomationExecutor({ showClickEffect });
-    const button = executor.snapshot().elements[0];
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
 
     try {
-      await executor.execute('host_page_click', { ref: button?.ref });
+      await executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: button?.documentRef,
+        ref: button?.ref,
+      });
     } finally {
       restoreElementFromPoint();
     }
@@ -167,10 +1005,13 @@ describe('HostPageAutomationExecutor', () => {
       expect(point).toEqual({ x: 50, y: 235 });
     });
     const executor = new HostPageAutomationExecutor({ showClickEffect });
-    const button = executor.snapshot().elements[0];
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
 
     try {
       const result = await executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: button?.documentRef,
         ref: button?.ref,
       });
 
@@ -197,10 +1038,15 @@ describe('HostPageAutomationExecutor', () => {
         throw new Error('effect failed');
       },
     });
-    const button = executor.snapshot().elements[0];
+    const snapshot = executor.snapshot();
+    const button = snapshot.elements[0];
 
     try {
-      await executor.execute('host_page_click', { ref: button?.ref });
+      await executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: button?.documentRef,
+        ref: button?.ref,
+      });
     } finally {
       restoreElementFromPoint();
     }
@@ -327,6 +1173,78 @@ describe('HostPageAutomationExecutor', () => {
     expect(click).toHaveBeenCalledTimes(1);
   });
 
+  it('fails closed when an exact semantic target is ambiguous', async () => {
+    document.body.innerHTML = `
+      <button>Confirm</button>
+      <button>Confirm</button>
+    `;
+    const clicks = vi.fn();
+    document.querySelectorAll('button').forEach((button) => {
+      button.addEventListener('click', clicks);
+    });
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    await expect(
+      executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: snapshot.documents[0]?.documentRef,
+        role: 'button',
+        name: 'Confirm',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'ambiguous_target',
+        resolution: expect.objectContaining({
+          strategy: 'semantic_exact',
+          candidates: expect.arrayContaining([
+            expect.objectContaining({ name: 'Confirm' }),
+          ]),
+        }),
+      }),
+    });
+    expect(clicks).not.toHaveBeenCalled();
+  });
+
+  it('omits weak selectors and rejects unsafe or non-unique selectors', async () => {
+    document.body.innerHTML = `
+      <button class="save">Save A</button>
+      <button class="save">Save B</button>
+    `;
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const scope = {
+      pageStateId: snapshot.pageStateId,
+      documentRef: snapshot.documents[0]?.documentRef,
+    };
+
+    expect(snapshot.elements.map((element) => element.selector)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    await expect(
+      executor.execute('host_page_click', { ...scope, selector: 'button' }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({ code: 'unsafe_selector' }),
+    });
+    await expect(
+      executor.execute('host_page_click', {
+        ...scope,
+        selector: 'button.save',
+      }),
+    ).rejects.toMatchObject({
+      details: expect.objectContaining({
+        code: 'non_unique_selector',
+        resolution: expect.objectContaining({
+          candidates: expect.arrayContaining([
+            expect.objectContaining({ name: 'Save A' }),
+            expect.objectContaining({ name: 'Save B' }),
+          ]),
+        }),
+      }),
+    });
+  });
+
   it('includes richer page state and actionability metadata in snapshots', () => {
     document.body.innerHTML = `<button data-testid="save-action">Save</button>`;
     const buttonElement = document.querySelector('button');
@@ -357,10 +1275,25 @@ describe('HostPageAutomationExecutor', () => {
       cdp: false,
       realInput: false,
       screenshot: false,
+      targetingVersion: 2,
+      strictRefs: true,
+      strictCoordinates: true,
+      freshState: true,
+      postconditions: true,
+      policyGate: true,
+      actionTrace: true,
     });
+    expect(snapshot.pageStateId).toEqual(expect.any(String));
+    expect(snapshot.documents).toEqual([
+      expect.objectContaining({
+        documentRef: expect.any(String),
+        sameOrigin: true,
+      }),
+    ]);
     expect(snapshot.page?.readyState).toBe(document.readyState);
     expect(snapshot.viewport.devicePixelRatio).toBe(window.devicePixelRatio);
     expect(button).toMatchObject({
+      documentRef: snapshot.documents?.[0]?.documentRef,
       testId: 'save-action',
       enabled: true,
       visible: true,
@@ -455,9 +1388,7 @@ describe('HostPageAutomationExecutor', () => {
       );
       expect(listBlock).toMatchObject({
         heading: '關於這個商品',
-        preview: expect.arrayContaining([
-          '這款孔眼上衣採用 100% 優質棉製成。',
-        ]),
+        preview: expect.arrayContaining(['這款孔眼上衣採用 100% 優質棉製成。']),
         readHint: {
           tool: 'host_page_read',
           args: {
@@ -552,10 +1483,14 @@ describe('HostPageAutomationExecutor', () => {
     });
     const restoreElementFromPoint = mockElementFromPoint(button);
     const executor = new HostPageAutomationExecutor();
-    executor.snapshot();
+    const snapshot = executor.snapshot();
 
     try {
-      await executor.execute('host_page_click', { selector: '#change' });
+      await executor.execute('host_page_click', {
+        pageStateId: snapshot.pageStateId,
+        documentRef: snapshot.documents[0]?.documentRef,
+        selector: '#change',
+      });
       const result = await executor.execute('host_page_read', {
         query: 'New item',
       });
@@ -815,6 +1750,137 @@ describe('HostPageAutomationExecutor', () => {
     }
   });
 
+  it('rejects ambiguous coordinate targets before pointer dispatch', async () => {
+    document.body.innerHTML = `
+      <button id="top">Execute</button>
+      <button id="bottom">Execute</button>
+    `;
+    const top = document.getElementById('top');
+    const bottom = document.getElementById('bottom');
+    if (!top || !bottom) {
+      throw new Error('Missing coordinate ambiguity fixture.');
+    }
+    mockRect(top, createDomRect(10, 10, 100, 30));
+    mockRect(bottom, createDomRect(10, 70, 100, 30));
+    const restoreElementsFromPoint = mockElementsFromPointBy((_x, y) =>
+      y < 50 ? [top] : [bottom],
+    );
+    const click = vi.fn();
+    top.addEventListener('click', click);
+    bottom.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    try {
+      await expect(
+        executor.execute('host_page_pointer', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.documents[0]?.documentRef,
+          action: 'click',
+          x: 50,
+          y: 25,
+          coordinateSpace: 'viewport-css-px',
+          targetText: 'Execute',
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'coordinate_target_ambiguous',
+          dispatched: false,
+        }),
+      });
+      expect(click).not.toHaveBeenCalled();
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
+  it('revalidates a coordinate target after the click effect before dispatch', async () => {
+    document.body.innerHTML = `
+      <button id="target">Execute</button>
+      <div id="overlay">Loading overlay</div>
+    `;
+    const target = document.getElementById('target');
+    const overlay = document.getElementById('overlay');
+    if (!target || !overlay) {
+      throw new Error('Missing coordinate revalidation fixture.');
+    }
+    mockRect(target, createDomRect(10, 10, 100, 30));
+    mockRect(overlay, createDomRect(0, 0, 200, 100));
+    let effectCompleted = false;
+    const restoreElementsFromPoint = mockElementsFromPointBy(() =>
+      effectCompleted ? [overlay, target] : [target],
+    );
+    const click = vi.fn();
+    target.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor({
+      showVisualEffect: () => {
+        effectCompleted = true;
+      },
+    });
+    const snapshot = executor.snapshot();
+
+    try {
+      await expect(
+        executor.execute('host_page_pointer', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.documents[0]?.documentRef,
+          action: 'click',
+          x: 50,
+          y: 25,
+          coordinateSpace: 'viewport-css-px',
+          targetText: 'Execute',
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'coordinate_target_mismatch',
+          dispatched: false,
+        }),
+      });
+      expect(click).not.toHaveBeenCalled();
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
+  it('cannot bypass submit approval with a coordinate pointer click', async () => {
+    document.body.innerHTML = `
+      <form><button id="submit" type="submit">Submit</button></form>
+    `;
+    const button = document.getElementById('submit');
+    if (!button) {
+      throw new Error('Missing pointer submit fixture.');
+    }
+    mockRect(button, createDomRect(10, 20, 80, 30));
+    const restoreElementsFromPoint = mockElementsFromPoint([button]);
+    const click = vi.fn((event: Event) => event.preventDefault());
+    button.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    try {
+      await expect(
+        executor.execute('host_page_pointer', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.documents[0]?.documentRef,
+          action: 'click',
+          x: 50,
+          y: 35,
+          coordinateSpace: 'viewport-css-px',
+          targetText: 'Submit',
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'approval_required',
+          dispatched: false,
+          risks: ['form_submit'],
+        }),
+      });
+      expect(click).not.toHaveBeenCalled();
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
   it('rejects explicit coordinate clicks without targetText', async () => {
     document.body.innerHTML = `<button id="menu">其他菜单</button>`;
     const menu = document.getElementById('menu');
@@ -951,12 +2017,171 @@ describe('HostPageAutomationExecutor', () => {
     );
   });
 
+  it('scopes strict targets to one same-origin document', async () => {
+    document.body.innerHTML = `
+      <input data-testid="shared-field" value="top" />
+      <iframe></iframe>
+    `;
+    const frameDocument = document.querySelector('iframe')?.contentDocument;
+    if (!frameDocument) {
+      throw new Error('Missing same-origin frame document.');
+    }
+    frameDocument.body.innerHTML =
+      '<input data-testid="shared-field" value="frame" />';
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const frameInput = snapshot.elements.find(
+      (element) =>
+        element.testId === 'shared-field' &&
+        element.documentRef !== snapshot.documents[0]?.documentRef,
+    );
+
+    expect(snapshot.documents).toHaveLength(2);
+    expect(frameInput?.documentRef).toBe(snapshot.documents[1]?.documentRef);
+    await executor.execute('host_page_fill', {
+      pageStateId: snapshot.pageStateId,
+      documentRef: frameInput?.documentRef,
+      testId: 'shared-field',
+      value: 'updated',
+    });
+
+    expect(
+      frameDocument.querySelector<HTMLInputElement>(
+        '[data-testid="shared-field"]',
+      )?.value,
+    ).toBe('updated');
+    expect(
+      document.querySelector<HTMLInputElement>('[data-testid="shared-field"]')
+        ?.value,
+    ).toBe('top');
+  });
+
+  it('uses top viewport coordinates for pointer clicks in same-origin documents', async () => {
+    document.body.innerHTML = '<iframe></iframe>';
+    const frame = document.querySelector('iframe');
+    const frameDocument = frame?.contentDocument;
+    if (!frame || !frameDocument) {
+      throw new Error('Missing same-origin coordinate frame fixture.');
+    }
+    frameDocument.body.innerHTML = '<button id="execute">Execute</button>';
+    const button = frameDocument.getElementById('execute');
+    if (!button) {
+      throw new Error('Missing same-origin coordinate target.');
+    }
+    mockRect(frame, createDomRect(300, 400, 500, 300));
+    mockRect(button, createDomRect(20, 30, 100, 40));
+    const elementsFromPoint = vi.fn((x: number, y: number) =>
+      x === 70 && y === 50 ? [button] : [],
+    );
+    Object.defineProperty(frameDocument, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+    const mousedown = vi.fn();
+    const click = vi.fn();
+    button.addEventListener('mousedown', mousedown);
+    button.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const frameDocumentRef = snapshot.documents.find(
+      (entry) => entry.parentDocumentRef,
+    )?.documentRef;
+
+    const result = await executor.execute('host_page_pointer', {
+      pageStateId: snapshot.pageStateId,
+      documentRef: frameDocumentRef,
+      action: 'click',
+      x: 370,
+      y: 450,
+      coordinateSpace: 'viewport-css-px',
+      targetText: 'Execute',
+    });
+
+    expect(result).toMatchObject({
+      pointer: 'click',
+      point: { x: 370, y: 450 },
+      targetTextMatched: true,
+    });
+    expect(elementsFromPoint).toHaveBeenCalledWith(70, 50);
+    expect(mousedown).toHaveBeenCalledWith(
+      expect.objectContaining({ clientX: 70, clientY: 50 }),
+    );
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects coordinate targeting of an inaccessible frame element', async () => {
+    document.body.innerHTML =
+      '<iframe id="payment-frame" role="button" aria-label="Payment"></iframe>';
+    const frame = document.getElementById('payment-frame');
+    if (!(frame instanceof HTMLIFrameElement)) {
+      throw new Error('Missing inaccessible frame fixture.');
+    }
+    Object.defineProperty(frame, 'contentDocument', {
+      configurable: true,
+      get: () => null,
+    });
+    mockRect(frame, createDomRect(20, 30, 300, 200));
+    const restoreElementsFromPoint = mockElementsFromPoint([frame]);
+    const click = vi.fn();
+    frame.addEventListener('click', click);
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+
+    try {
+      await expect(
+        executor.execute('host_page_pointer', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.documents[0]?.documentRef,
+          action: 'click',
+          x: 100,
+          y: 100,
+          coordinateSpace: 'viewport-css-px',
+          targetText: 'Payment',
+          targetRole: 'button',
+        }),
+      ).rejects.toMatchObject({
+        details: expect.objectContaining({
+          code: 'unsupported_target_scope',
+          dispatched: false,
+        }),
+      });
+      expect(click).not.toHaveBeenCalled();
+    } finally {
+      restoreElementsFromPoint();
+    }
+  });
+
   it('rejects non-http navigation URLs', async () => {
     const executor = new HostPageAutomationExecutor();
 
     await expect(
       executor.execute('host_page_navigate', { url: 'chrome://extensions' }),
     ).rejects.toThrow('HTTP(S)');
+  });
+
+  it('allows cross-origin navigation without approval', async () => {
+    const executor = new HostPageAutomationExecutor();
+    const snapshot = executor.snapshot();
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    try {
+      await expect(
+        executor.execute('host_page_navigate', {
+          pageStateId: snapshot.pageStateId,
+          documentRef: snapshot.documents[0]?.documentRef,
+          url: 'https://other.example/path',
+        }),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          dispatched: true,
+          navigated: 'https://other.example/path',
+        }),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('fails writes when automation is disabled', async () => {

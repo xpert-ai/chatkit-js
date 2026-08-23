@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { STORAGE_KEY } from './config';
+import { BROWSER_RUNNER_COMMAND_MESSAGE } from './messages';
 
 function installChromeStorageMock(initialConfig: unknown) {
   const data: Record<string, unknown> = {
@@ -20,6 +21,14 @@ function installChromeStorageMock(initialConfig: unknown) {
   const set = vi.fn(async (items: Record<string, unknown>) => {
     Object.assign(data, items);
   });
+  const sendMessage = vi.fn(async (message: Record<string, unknown>) => ({
+    requestId: 'runner-request-1',
+    ok: true,
+    status: {
+      state: message.command === 'stop' ? 'stopped' : 'running',
+      sessionId: 'runner-session-1',
+    },
+  }));
 
   (
     globalThis as typeof globalThis & {
@@ -29,6 +38,7 @@ function installChromeStorageMock(initialConfig: unknown) {
     runtime: {
       getURL: (path: string) => path,
       openOptionsPage: vi.fn(),
+      sendMessage,
     },
     storage: {
       local: { get, set },
@@ -43,7 +53,7 @@ function installChromeStorageMock(initialConfig: unknown) {
     },
   };
 
-  return { get, set };
+  return { get, set, sendMessage };
 }
 
 async function importOptionsPage() {
@@ -114,5 +124,40 @@ describe('extension options page', () => {
       activeAssistantId: 'assistant-2',
     });
     expect(saved).not.toHaveProperty('clientSecret');
+  });
+
+  it('shows isolated browser status without manual runner controls', async () => {
+    const { sendMessage } = installChromeStorageMock({});
+    await importOptionsPage();
+
+    expect(
+      document.querySelector('input[name="browserRunnerStartUrl"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-role="start-browser-runner"]'),
+    ).toBeNull();
+    expect(
+      document.querySelector('[data-role="stop-browser-runner"]'),
+    ).toBeNull();
+
+    const refreshButton = document.querySelector<HTMLButtonElement>(
+      '[data-role="refresh-browser-runner"]',
+    );
+    expect(refreshButton).not.toBeNull();
+    sendMessage.mockClear();
+    refreshButton?.click();
+
+    await vi.waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: BROWSER_RUNNER_COMMAND_MESSAGE,
+        command: 'status',
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector('[data-role="browser-runner-status"]')
+          ?.textContent,
+      ).toContain('running'),
+    );
   });
 });

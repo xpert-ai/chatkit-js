@@ -32,6 +32,7 @@ type PetInput = {
 
 type HostAutomationInput = {
   enabled?: unknown;
+  provider?: unknown;
 };
 
 type AssistantInput = {
@@ -82,6 +83,7 @@ export const DEFAULT_EXTENSION_CONFIG: ChatKitExtensionConfig = {
   },
   hostAutomation: {
     enabled: true,
+    provider: 'current_tab',
   },
 };
 
@@ -358,6 +360,10 @@ export function normalizeConfig(value: unknown): ChatKitExtensionConfig {
         sourceHostAutomation.enabled,
         DEFAULT_EXTENSION_CONFIG.hostAutomation.enabled,
       ),
+      provider:
+        sourceHostAutomation.provider === 'isolated_runner'
+          ? 'isolated_runner'
+          : 'current_tab',
     },
   };
 }

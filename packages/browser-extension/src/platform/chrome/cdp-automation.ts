@@ -1,5 +1,6 @@
 import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
 import {
+  addBrowserActionEvidence,
   HOST_PAGE_AUTOMATION_TOOL_NAMES,
   type HostPageAutomationClientToolCall,
 } from 'packages/host-automation/src';
@@ -94,12 +95,136 @@ type CdpResolvedPoint = {
   target?: unknown;
   requested?: unknown;
   actionability?: unknown;
+  resolution?: unknown;
+};
+
+type CdpActionRisk =
+  | 'password_input'
+  | 'file_input'
+  | 'form_submit'
+  | 'cross_origin_navigation'
+  | 'download';
+
+type CdpActionInspection = {
+  pageStateId: string;
+  url: string;
+  origin: string;
+  risks: CdpActionRisk[];
+  target?: unknown;
+  resolution?: unknown;
+};
+
+type PendingCdpActionApproval = {
+  tabId: number;
+  action: string;
+  actionHash: string;
+  targetHash: string;
+  pageStateId: string;
+  url: string;
+  origin: string;
+  risks: CdpActionRisk[];
+  expiresAt: number;
 };
 
 const CDP_PROTOCOL_VERSION = '1.3';
+const BROWSER_AUTOMATION_ERROR_PREFIX = '__XPERT_BROWSER_AUTOMATION_ERROR__:';
+const CDP_ACTION_APPROVAL_TTL_MS = 60_000;
+const CDP_SNAPSHOT_CACHE_TTL_MS = 2 * 60_000;
+const CDP_SNAPSHOT_CACHE_MAX_TABS = 32;
 const HOST_PAGE_TOOL_NAME_SET = new Set<string>(
   HOST_PAGE_AUTOMATION_TOOL_NAMES,
 );
+const cdpSnapshotStateByTab = new Map<
+  number,
+  {
+    pageStateId: string;
+    axTree: unknown;
+    snapshot?: Record<string, unknown>;
+    createdAt: number;
+  }
+>();
+const pendingCdpActionApprovals = new Map<string, PendingCdpActionApproval>();
+
+function clearPendingCdpActionApprovalsForTab(tabId: number) {
+  for (const [token, pending] of pendingCdpActionApprovals) {
+    if (pending.tabId === tabId) {
+      pendingCdpActionApprovals.delete(token);
+    }
+  }
+}
+
+export function clearCdpAutomationStateForTab(tabId: number) {
+  cdpSnapshotStateByTab.delete(tabId);
+  clearPendingCdpActionApprovalsForTab(tabId);
+}
+
+function getCurrentCdpSnapshotState(tabId: number) {
+  const state = cdpSnapshotStateByTab.get(tabId);
+  if (state && Date.now() - state.createdAt > CDP_SNAPSHOT_CACHE_TTL_MS) {
+    clearCdpAutomationStateForTab(tabId);
+    return undefined;
+  }
+  return state;
+}
+
+function cacheCdpSnapshotState(
+  tabId: number,
+  state: Omit<
+    NonNullable<ReturnType<typeof getCurrentCdpSnapshotState>>,
+    'createdAt'
+  >,
+) {
+  clearCdpAutomationStateForTab(tabId);
+  cdpSnapshotStateByTab.set(tabId, { ...state, createdAt: Date.now() });
+  while (cdpSnapshotStateByTab.size > CDP_SNAPSHOT_CACHE_MAX_TABS) {
+    const oldestTabId = cdpSnapshotStateByTab.keys().next().value;
+    if (typeof oldestTabId !== 'number') {
+      break;
+    }
+    clearCdpAutomationStateForTab(oldestTabId);
+  }
+}
+
+function assertCurrentCdpSnapshotState(
+  tabId: number,
+  params: Record<string, unknown>,
+) {
+  const requestedPageStateId = readParamRef(params, 'pageStateId');
+  if (!requestedPageStateId) {
+    return;
+  }
+  const state = getCurrentCdpSnapshotState(tabId);
+  if (state?.pageStateId === requestedPageStateId) {
+    return;
+  }
+  throw new CdpBrowserAutomationError(
+    'The requested page state is stale. Take a new snapshot.',
+    {
+      code: 'stale_page_state',
+      message: 'The requested page state is stale. Take a new snapshot.',
+      recoverable: true,
+      dispatched: false,
+      outcome: 'rejected_before_execution',
+      requiresFreshSnapshot: true,
+      invalidatedPageStateId: requestedPageStateId,
+    },
+  );
+}
+
+export function resetCdpAutomationStateForTesting() {
+  cdpSnapshotStateByTab.clear();
+  pendingCdpActionApprovals.clear();
+}
+
+class CdpBrowserAutomationError extends Error {
+  constructor(
+    message: string,
+    readonly details: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'CdpBrowserAutomationError';
+  }
+}
 
 type HostPageScreenshotArtifact = ScreenshotMetadata & {
   type: 'host_page_screenshot';
@@ -111,6 +236,40 @@ function normalizeParams(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function canonicalizeCdpActionValue(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeCdpActionValue);
+  }
+  if (typeof value !== 'object') {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key, entry]) => key !== 'actionToken' && entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, canonicalizeCdpActionValue(entry)]),
+  );
+}
+
+async function hashCdpActionValue(value: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(
+    JSON.stringify(canonicalizeCdpActionValue(value)),
+  );
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
 }
 
 function readParamRef(params: Record<string, unknown>, key: string) {
@@ -141,6 +300,34 @@ function createToolMessage(
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function readCdpBrowserAutomationError(
+  error: unknown,
+): CdpBrowserAutomationError | undefined {
+  if (error instanceof CdpBrowserAutomationError) {
+    return error;
+  }
+  const message = getErrorMessage(error);
+  const prefixIndex = message.indexOf(BROWSER_AUTOMATION_ERROR_PREFIX);
+  if (prefixIndex < 0) {
+    return undefined;
+  }
+
+  try {
+    const details = JSON.parse(
+      message.slice(prefixIndex + BROWSER_AUTOMATION_ERROR_PREFIX.length),
+    );
+    if (!details || typeof details !== 'object' || Array.isArray(details)) {
+      return undefined;
+    }
+    const record = details as Record<string, unknown>;
+    const parsedMessage =
+      typeof record.message === 'string' ? record.message : message;
+    return new CdpBrowserAutomationError(parsedMessage, record);
+  } catch {
+    return undefined;
+  }
 }
 
 function getFiniteNumber(value: unknown): number | undefined {
@@ -293,12 +480,14 @@ function getEvaluationValue(value: unknown): unknown {
   const evaluation = value as CdpRuntimeEvaluation;
   if (evaluation.exceptionDetails) {
     const exception = evaluation.exceptionDetails.exception;
-    throw new Error(
+    const message =
       typeof exception?.value === 'string'
         ? exception.value
         : (exception?.description ??
-            evaluation.exceptionDetails.text ??
-            'CDP Runtime.evaluate failed.'),
+          evaluation.exceptionDetails.text ??
+          'CDP Runtime.evaluate failed.');
+    throw (
+      readCdpBrowserAutomationError(new Error(message)) ?? new Error(message)
     );
   }
 
@@ -560,8 +749,10 @@ function pageReadableContentScript(rawArgs: unknown) {
     value.length > maxChars
       ? `${value.slice(0, maxChars)}... [truncated ${value.length - maxChars} chars]`
       : value;
-  const truncateOptionalText = (value: string | undefined, maxChars = MAX_TEXT_CHARS) =>
-    value ? truncateText(value, maxChars) : undefined;
+  const truncateOptionalText = (
+    value: string | undefined,
+    maxChars = MAX_TEXT_CHARS,
+  ) => (value ? truncateText(value, maxChars) : undefined);
   const getElementText = (element: Element) => {
     const text = normalizeText(element.textContent);
     return text ? truncateText(text) : undefined;
@@ -743,7 +934,9 @@ function pageReadableContentScript(rawArgs: unknown) {
         index,
         score: getSuggestedReadScore(block),
       }))
-      .sort((left, right) => right.score - left.score || left.index - right.index)
+      .sort(
+        (left, right) => right.score - left.score || left.index - right.index,
+      )
       .slice(0, MAX_SUGGESTED_READS)
       .sort((left, right) => left.index - right.index)
       .map(({ block }) => ({
@@ -1042,40 +1235,55 @@ function pageReadableContentScript(rawArgs: unknown) {
       : undefined;
     if (block?.fields) {
       return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
-        const bounds = pageBounds(block.fields?.length ?? 0, page, candidatePageSize);
+        const bounds = pageBounds(
+          block.fields?.length ?? 0,
+          page,
+          candidatePageSize,
+        );
         return {
           ...block,
           fields: block.fields?.slice(bounds.start, bounds.end),
           page: bounds.page,
           pageSize: bounds.pageSize,
           pageCount: bounds.pageCount,
-          nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+          nextPage:
+            bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
         };
       });
     }
     if (block?.items) {
       return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
-        const bounds = pageBounds(block.items?.length ?? 0, page, candidatePageSize);
+        const bounds = pageBounds(
+          block.items?.length ?? 0,
+          page,
+          candidatePageSize,
+        );
         return {
           ...block,
           items: block.items?.slice(bounds.start, bounds.end),
           page: bounds.page,
           pageSize: bounds.pageSize,
           pageCount: bounds.pageCount,
-          nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+          nextPage:
+            bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
         };
       });
     }
     if (block?.rows) {
       return fitReadResult(maxChars, pageSize, (candidatePageSize) => {
-        const bounds = pageBounds(block.rows?.length ?? 0, page, candidatePageSize);
+        const bounds = pageBounds(
+          block.rows?.length ?? 0,
+          page,
+          candidatePageSize,
+        );
         return {
           ...block,
           rows: block.rows?.slice(bounds.start, bounds.end),
           page: bounds.page,
           pageSize: bounds.pageSize,
           pageCount: bounds.pageCount,
-          nextPage: bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
+          nextPage:
+            bounds.page < bounds.pageCount ? bounds.page + 1 : undefined,
         };
       });
     }
@@ -1109,7 +1317,7 @@ function pageReadableContentScript(rawArgs: unknown) {
 function pageSnapshotScript(rawArgs: unknown) {
   const args =
     typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
-      ? (rawArgs as { maxElements?: number })
+      ? (rawArgs as { maxElements?: number; pageStateId?: string })
       : {};
   const maxElements =
     typeof args.maxElements === 'number' && Number.isFinite(args.maxElements)
@@ -1118,16 +1326,90 @@ function pageSnapshotScript(rawArgs: unknown) {
   const globalObject = globalThis as typeof globalThis & {
     __xpertaiChatKitHostAutomation?: {
       refs: Record<string, Element>;
+      refMetadata: Record<
+        string,
+        {
+          pageStateId: string;
+          documentRef: string;
+          fingerprint: string;
+        }
+      >;
       nextRef: number;
+      pageStateId: string;
+      url: string;
+      invalidated: boolean;
+      documents: Array<{
+        document: Document;
+        documentRef: string;
+        frameRef?: string;
+        parentDocumentRef?: string;
+      }>;
+      identities: Array<{
+        element: Element;
+        documentRef: string;
+        role?: string;
+        name?: string;
+        text?: string;
+      }>;
+      snapshot?: unknown;
+      observers: MutationObserver[];
+      lastResolved?: Element;
+      lastResolution?: unknown;
     };
   };
-  const store: {
-    refs: Record<string, Element>;
-    nextRef: number;
-  } = (globalObject.__xpertaiChatKitHostAutomation = {
+  const previousStore = globalObject.__xpertaiChatKitHostAutomation;
+  if (typeof args.pageStateId === 'string' && args.pageStateId.trim()) {
+    const requestedPageStateId = args.pageStateId.trim();
+    if (
+      previousStore?.pageStateId === requestedPageStateId &&
+      !previousStore.invalidated &&
+      previousStore.url === location.href &&
+      previousStore.snapshot
+    ) {
+      return previousStore.snapshot;
+    }
+    const resolution = {
+      requested: {
+        kind: 'ref',
+        pageStateId: requestedPageStateId,
+        documentRef: 'd1',
+        ref: '',
+      },
+      strategy: 'ref',
+      pageStateId: requestedPageStateId,
+    };
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code: 'stale_page_state',
+          message: 'The requested page state is no longer current.',
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
+  }
+  previousStore?.observers?.forEach((observer) => observer.disconnect());
+  const pageStateId =
+    typeof globalObject.crypto?.randomUUID === 'function'
+      ? globalObject.crypto.randomUUID()
+      : `ps-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  type HostAutomationStore = NonNullable<
+    (typeof globalObject)['__xpertaiChatKitHostAutomation']
+  >;
+  const store: HostAutomationStore = {
     refs: {},
+    refMetadata: {},
     nextRef: 1,
-  });
+    pageStateId,
+    url: location.href,
+    invalidated: false,
+    documents: [],
+    identities: [],
+    observers: [],
+  };
+  globalObject.__xpertaiChatKitHostAutomation = store;
   const candidateSelector = [
     'a[href]',
     'button',
@@ -1174,6 +1456,35 @@ function pageSnapshotScript(rawArgs: unknown) {
       return null;
     }
   };
+  const indexDocumentTree = (
+    doc: Document,
+    parentDocumentRef?: string,
+    frameRef?: string,
+  ) => {
+    const existing = store.documents.find((entry) => entry.document === doc);
+    if (existing) return existing.documentRef;
+    const documentRef = `d${store.documents.length + 1}`;
+    store.documents.push({
+      document: doc,
+      documentRef,
+      ...(frameRef ? { frameRef } : {}),
+      ...(parentDocumentRef ? { parentDocumentRef } : {}),
+    });
+    Array.from(doc.querySelectorAll('iframe')).forEach((frame, index) => {
+      const childDocument = getFrameDocument(frame);
+      if (childDocument) {
+        indexDocumentTree(
+          childDocument,
+          documentRef,
+          `${documentRef}:frame:${index + 1}`,
+        );
+      }
+    });
+    return documentRef;
+  };
+  indexDocumentTree(document);
+  const getDocumentRef = (doc: Document) =>
+    store.documents.find((entry) => entry.document === doc)?.documentRef;
   const getFrameOffset = (doc: Document) => {
     let x = 0;
     let y = 0;
@@ -1597,19 +1908,65 @@ function pageSnapshotScript(rawArgs: unknown) {
     if (nearbyText) return nearbyText;
     return getText(element);
   };
+  const normalizeIdentity = (value: string | undefined) =>
+    (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const getIdentityFingerprint = (element: Element) =>
+    JSON.stringify({
+      tag: element.tagName.toLowerCase(),
+      role: normalizeIdentity(getRole(element)),
+      ariaLabel: normalizeIdentity(
+        element.getAttribute('aria-label') ?? undefined,
+      ),
+      ariaLabelledBy: normalizeIdentity(
+        element.getAttribute('aria-labelledby') ?? undefined,
+      ),
+      title: normalizeIdentity(element.getAttribute('title') ?? undefined),
+      nameAttribute: normalizeIdentity(
+        element.getAttribute('name') ?? undefined,
+      ),
+      text: normalizeIdentity(getText(element)),
+      testId: normalizeIdentity(
+        element.getAttribute('data-testid') ??
+          element.getAttribute('data-test-id') ??
+          element.getAttribute('data-qa') ??
+          undefined,
+      ),
+    });
   const getSelector = (element: Element) => {
     const escape = (value: string) =>
       typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(value)
         : value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    if (element.id) return `#${escape(element.id)}`;
+    if (element.getRootNode().nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+      return undefined;
+    }
+    const isUnique = (selector: string) => {
+      try {
+        return (
+          element.ownerDocument.querySelectorAll(selector).length === 1 &&
+          element.ownerDocument.querySelector(selector) === element
+        );
+      } catch {
+        return false;
+      }
+    };
+    if (element.id) {
+      const selector = `#${escape(element.id)}`;
+      if (isUnique(selector)) return selector;
+    }
     for (const attribute of ['data-testid', 'data-test-id', 'data-qa']) {
       const testId = element.getAttribute(attribute);
-      if (testId) return `[${attribute}="${escape(testId)}"]`;
+      if (testId) {
+        const selector = `[${attribute}="${escape(testId)}"]`;
+        if (isUnique(selector)) return selector;
+      }
     }
     const name = element.getAttribute('name');
-    if (name) return `${element.tagName.toLowerCase()}[name="${escape(name)}"]`;
-    return element.tagName.toLowerCase();
+    if (name) {
+      const selector = `${element.tagName.toLowerCase()}[name="${escape(name)}"]`;
+      if (isUnique(selector)) return selector;
+    }
+    return undefined;
   };
   const isDisabled = (element: Element) => {
     if (
@@ -1683,10 +2040,27 @@ function pageSnapshotScript(rawArgs: unknown) {
     const ref = `e${store.nextRef}`;
     store.nextRef += 1;
     store.refs[ref] = element;
+    const documentRef = getDocumentRef(element.ownerDocument);
+    if (!documentRef) {
+      throw new Error('Could not identify the element document scope.');
+    }
+    store.refMetadata[ref] = {
+      pageStateId,
+      documentRef,
+      fingerprint: getIdentityFingerprint(element),
+    };
+    store.identities.push({
+      element,
+      documentRef,
+      role: getRole(element),
+      name: getName(element),
+      text: getText(element),
+    });
     const rect = getGlobalRect(element);
     const actionability = getActionability(element);
     return {
       ref,
+      documentRef,
       tag: element.tagName.toLowerCase(),
       role: getRole(element),
       name: getName(element),
@@ -1785,7 +2159,8 @@ function pageSnapshotScript(rawArgs: unknown) {
     },
   );
 
-  return {
+  const snapshot = {
+    pageStateId,
     url: location.href,
     title: document.title,
     capabilities: {
@@ -1794,7 +2169,22 @@ function pageSnapshotScript(rawArgs: unknown) {
       screenshot: true,
       accessibility: true,
       networkState: true,
+      targetingVersion: 2 as const,
+      strictRefs: true as const,
+      strictCoordinates: true as const,
+      freshState: true as const,
+      postconditions: true,
+      policyGate: true,
+      actionTrace: true,
     },
+    documents: store.documents.map(
+      ({ documentRef, frameRef, parentDocumentRef }) => ({
+        documentRef,
+        ...(frameRef ? { frameRef } : {}),
+        ...(parentDocumentRef ? { parentDocumentRef } : {}),
+        sameOrigin: true,
+      }),
+    ),
     viewport: {
       width: innerWidth,
       height: innerHeight,
@@ -1823,6 +2213,75 @@ function pageSnapshotScript(rawArgs: unknown) {
     readableContent,
     elements,
   };
+  store.snapshot = snapshot;
+
+  const isInternalEffectNode = (node: Node) => {
+    const element =
+      node.nodeType === Node.ELEMENT_NODE
+        ? (node as Element)
+        : node.parentElement;
+    return Boolean(
+      element?.id === 'xpertai-chatkit-visual-effect-style' ||
+      element?.matches('[data-xpertai-chatkit-visual-effect]') ||
+      element?.closest('[data-xpertai-chatkit-visual-effect]'),
+    );
+  };
+  const invalidatesPageState = (records: MutationRecord[]) =>
+    records.some((record) => {
+      if (record.type === 'attributes') {
+        return !isInternalEffectNode(record.target);
+      }
+      const changedNodes = [
+        ...Array.from(record.addedNodes),
+        ...Array.from(record.removedNodes),
+      ];
+      return (
+        changedNodes.length > 0 &&
+        changedNodes.some((node) => !isInternalEffectNode(node))
+      );
+    });
+  const observedRoots = new Set<Node>();
+  const collectObservedRoots = (root: Document | ShadowRoot) => {
+    const target =
+      root.nodeType === Node.DOCUMENT_NODE
+        ? (root as Document).documentElement
+        : root;
+    if (!target || observedRoots.has(target)) return;
+    observedRoots.add(target);
+    Array.from(root.querySelectorAll('*')).forEach((element) => {
+      if (element.shadowRoot) collectObservedRoots(element.shadowRoot);
+    });
+  };
+  store.documents.forEach(({ document: scopedDocument }) =>
+    collectObservedRoots(scopedDocument),
+  );
+  observedRoots.forEach((root) => {
+    const observer = new MutationObserver((records) => {
+      if (invalidatesPageState(records)) store.invalidated = true;
+    });
+    observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: [
+        'id',
+        'role',
+        'aria-label',
+        'aria-labelledby',
+        'data-testid',
+        'data-test-id',
+        'data-qa',
+        'name',
+        'disabled',
+        'aria-disabled',
+        'hidden',
+        'src',
+      ],
+    });
+    store.observers.push(observer);
+  });
+
+  return snapshot;
 }
 
 function pageNormalizePointerPointScript(rawArgs: unknown) {
@@ -1844,17 +2303,20 @@ function pageNormalizePointerPointScript(rawArgs: unknown) {
       : { x, y };
   const targetText =
     typeof params.targetText === 'string' && params.targetText.trim()
-      ? params.targetText.trim().toLowerCase()
+      ? params.targetText.replace(/\s+/g, ' ').trim().toLowerCase()
       : undefined;
   const getText = (element: Element) =>
     [
       element.getAttribute('aria-label'),
       element.getAttribute('title'),
       element.textContent,
-      element instanceof HTMLInputElement ||
-      element instanceof HTMLTextAreaElement ||
-      element instanceof HTMLSelectElement
-        ? element.value
+      ['input', 'textarea', 'select'].includes(element.tagName.toLowerCase())
+        ? (
+            element as
+              | HTMLInputElement
+              | HTMLTextAreaElement
+              | HTMLSelectElement
+          ).value
         : undefined,
     ]
       .filter((text): text is string => Boolean(text))
@@ -1906,7 +2368,226 @@ function pageNormalizePointerPointScript(rawArgs: unknown) {
     }
     return result;
   };
-  const hitTarget = getDeepHitStack(point)[0];
+  const hitStack = getDeepHitStack(point);
+  const hitTarget = hitStack[0];
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      pageStateId?: string;
+      documents?: Array<{ document: Document; documentRef: string }>;
+      lastResolved?: Element;
+      lastResolution?: unknown;
+    };
+  };
+  const store = globalObject.__xpertaiChatKitHostAutomation;
+  if (store?.pageStateId) {
+    const pageStateId =
+      typeof params.pageStateId === 'string' ? params.pageStateId : '';
+    const documentRef =
+      typeof params.documentRef === 'string' ? params.documentRef : '';
+    const coordinateSpace =
+      params.coordinateSpace === 'viewport_normalized'
+        ? 'viewport_normalized'
+        : params.coordinateSpace === 'viewport-css-px'
+          ? 'viewport-css-px'
+          : undefined;
+    const targetRole =
+      typeof params.targetRole === 'string' && params.targetRole.trim()
+        ? params.targetRole.trim().toLowerCase()
+        : undefined;
+    const targetContext =
+      typeof params.targetContext === 'string' && params.targetContext.trim()
+        ? params.targetContext.trim().toLowerCase()
+        : undefined;
+    const requested = {
+      kind: 'coordinate',
+      pageStateId,
+      documentRef,
+      x,
+      y,
+      coordinateSpace: coordinateSpace ?? '',
+      targetText: targetText ?? '',
+      ...(targetRole ? { targetRole } : {}),
+      ...(targetContext ? { targetContext } : {}),
+    };
+    const describe = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      const offset = getFrameOffset(element.ownerDocument);
+      const role =
+        element.getAttribute('role')?.trim().toLowerCase() ||
+        (element.tagName.toLowerCase() === 'button'
+          ? 'button'
+          : element.tagName.toLowerCase() === 'a'
+            ? 'link'
+            : undefined);
+      const name =
+        element.getAttribute('aria-label')?.trim() ||
+        element.getAttribute('title')?.trim() ||
+        element.textContent?.replace(/\s+/g, ' ').trim() ||
+        undefined;
+      return {
+        documentRef:
+          store.documents?.find(
+            (entry) => entry.document === element.ownerDocument,
+          )?.documentRef ?? documentRef,
+        tag: element.tagName.toLowerCase(),
+        role,
+        name,
+        text: element.textContent?.replace(/\s+/g, ' ').trim() || undefined,
+        rect: {
+          x: rect.left + offset.x,
+          y: rect.top + offset.y,
+          width: rect.width,
+          height: rect.height,
+        },
+      };
+    };
+    const baseResolution = {
+      requested,
+      strategy: 'coordinate',
+      pageStateId,
+      point,
+      hitTarget: hitTarget ? describe(hitTarget) : undefined,
+      hitStack: hitStack.slice(0, 8).map(describe),
+    };
+    const reject = (
+      code: string,
+      message: string,
+      resolution: Record<string, unknown> = baseResolution,
+    ): never => {
+      throw new Error(
+        '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+          JSON.stringify({
+            code,
+            message,
+            recoverable: true,
+            dispatched: false,
+            outcome: 'rejected_before_execution',
+            resolution,
+          }),
+      );
+    };
+    const scopedDocument = store.documents?.find(
+      (entry) => entry.documentRef === documentRef,
+    )?.document;
+    if (!coordinateSpace || !targetText) {
+      return reject(
+        'coordinate_target_mismatch',
+        'A strict coordinate target requires coordinateSpace and exact targetText.',
+      );
+    }
+    if (!scopedDocument) {
+      return reject(
+        'unsupported_target_scope',
+        'The coordinate target document is unavailable or cross-origin.',
+      );
+    }
+    if (
+      hitTarget &&
+      isFrameElement(hitTarget) &&
+      !getFrameDocument(hitTarget)
+    ) {
+      return reject(
+        'unsupported_target_scope',
+        'The coordinate hit belongs to an inaccessible frame document.',
+      );
+    }
+    const normalize = (value: string | undefined) =>
+      (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const getRole = (element: Element) => {
+      const explicit = element.getAttribute('role')?.trim().toLowerCase();
+      if (explicit) return explicit;
+      const tag = element.tagName.toLowerCase();
+      if (tag === 'button' || tag === 'summary') return 'button';
+      if (tag === 'a') return 'link';
+      if (tag === 'input') {
+        const type = (element as HTMLInputElement).type;
+        if (type === 'checkbox') return 'checkbox';
+        if (type === 'radio') return 'radio';
+        if (['button', 'submit', 'reset'].includes(type)) return 'button';
+        return 'textbox';
+      }
+      if (tag === 'textarea') return 'textbox';
+      if (tag === 'select') return 'combobox';
+      return undefined;
+    };
+    const getName = (element: Element) =>
+      element.getAttribute('aria-label')?.trim() ||
+      element.getAttribute('title')?.trim() ||
+      element.textContent?.replace(/\s+/g, ' ').trim() ||
+      undefined;
+    const isActionable = (element: Element) =>
+      element.matches(
+        'a[href],button,input,textarea,select,summary,[role="button"],[role="link"],[role="menuitem"],[role="tab"],[role="option"],[role="checkbox"],[role="radio"]',
+      ) ||
+      element.ownerDocument.defaultView?.getComputedStyle(element).cursor ===
+        'pointer';
+    const matchesIdentity = (element: Element) =>
+      element.ownerDocument === scopedDocument &&
+      isActionable(element) &&
+      (!targetRole || getRole(element) === targetRole) &&
+      (normalize(getName(element)) === targetText ||
+        normalize(element.textContent ?? '') === targetText) &&
+      (!targetContext ||
+        (() => {
+          let ancestor = element.parentElement;
+          let depth = 0;
+          while (ancestor && depth < 4) {
+            if (normalize(ancestor.textContent ?? '').includes(targetContext)) {
+              return true;
+            }
+            ancestor = ancestor.parentElement;
+            depth += 1;
+          }
+          return false;
+        })());
+    const regions = Array.from(
+      scopedDocument.querySelectorAll(
+        'a[href],button,input,textarea,select,summary,[role],[tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter(matchesIdentity);
+    if (regions.length > 1) {
+      reject(
+        'coordinate_target_ambiguous',
+        `The coordinate identity matched ${regions.length} actionable regions.`,
+        {
+          ...baseResolution,
+          candidates: regions.slice(0, 12).map(describe),
+        },
+      );
+    }
+    let resolvedTarget: Element | undefined;
+    let current: Element | null | undefined = hitTarget;
+    let depth = 0;
+    while (current && depth < 5) {
+      if (matchesIdentity(current)) {
+        resolvedTarget = current;
+        break;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    if (
+      regions.length !== 1 ||
+      !resolvedTarget ||
+      regions[0] !== resolvedTarget
+    ) {
+      return reject(
+        'coordinate_target_mismatch',
+        'The current hit target does not exactly match the coordinate identity.',
+        {
+          ...baseResolution,
+          ...(regions.length ? { candidates: regions.map(describe) } : {}),
+        },
+      );
+    }
+    const resolution = {
+      ...baseResolution,
+      resolved: describe(resolvedTarget),
+    };
+    store.lastResolved = resolvedTarget;
+    store.lastResolution = resolution;
+    return { point, targetTextMatched: true, resolution };
+  }
   let targetTextMatched: boolean | undefined;
   if (targetText && hitTarget) {
     let current: Element | null = hitTarget;
@@ -1985,6 +2666,349 @@ function pageExpectedAfterClickScript(rawArgs: unknown) {
   };
 }
 
+async function pageVerifyExpectationScript(rawArgs: unknown) {
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  const expectation =
+    params.expectation &&
+    typeof params.expectation === 'object' &&
+    !Array.isArray(params.expectation)
+      ? (params.expectation as Record<string, unknown>)
+      : undefined;
+  if (!expectation || typeof expectation.type !== 'string') {
+    return undefined;
+  }
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      documents?: Array<{ document: Document; documentRef: string }>;
+    };
+  };
+  const normalize = (value: string | undefined) =>
+    (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const getRole = (element: Element) => {
+    const explicit = element.getAttribute('role')?.trim();
+    if (explicit) return explicit.toLowerCase();
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'button' || tag === 'summary') return 'button';
+    if (tag === 'a') return 'link';
+    if (tag === 'textarea') return 'textbox';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'input') {
+      const input = element as HTMLInputElement;
+      if (input.type === 'checkbox') return 'checkbox';
+      if (input.type === 'radio') return 'radio';
+      if (['button', 'submit', 'reset'].includes(input.type)) return 'button';
+      return 'textbox';
+    }
+    return undefined;
+  };
+  const getName = (element: Element) => {
+    const labelledBy = element.getAttribute('aria-labelledby')?.trim();
+    if (labelledBy) {
+      const labelledText = labelledBy
+        .split(/\s+/)
+        .map(
+          (id) => element.ownerDocument.getElementById(id)?.textContent ?? '',
+        )
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (labelledText) return labelledText;
+    }
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    if (ariaLabel) return ariaLabel;
+    if (
+      element.tagName.toLowerCase() === 'input' ||
+      element.tagName.toLowerCase() === 'textarea' ||
+      element.tagName.toLowerCase() === 'select'
+    ) {
+      const labels = Array.from(
+        (element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement)
+          .labels ?? [],
+      )
+        .map((label) => label.textContent?.replace(/\s+/g, ' ').trim())
+        .filter((value): value is string => Boolean(value));
+      if (labels.length) return labels.join(' ');
+    }
+    return (
+      element.getAttribute('title')?.trim() ||
+      element.textContent?.replace(/\s+/g, ' ').trim() ||
+      undefined
+    );
+  };
+  const getScopeDocument = (scope: Record<string, unknown>) => {
+    if (scope.documentScope === 'current_top') return document;
+    if (
+      scope.documentScope === 'same_document' &&
+      typeof scope.documentRef === 'string'
+    ) {
+      return globalObject.__xpertaiChatKitHostAutomation?.documents?.find(
+        (entry) => entry.documentRef === scope.documentRef,
+      )?.document;
+    }
+    return undefined;
+  };
+  const resolveObservationTarget = (rawTarget: unknown) => {
+    if (
+      !rawTarget ||
+      typeof rawTarget !== 'object' ||
+      Array.isArray(rawTarget)
+    ) {
+      return { status: 'not_found' as const };
+    }
+    const target = rawTarget as Record<string, unknown>;
+    const scopedDocument = getScopeDocument(target);
+    if (!scopedDocument) return { status: 'not_found' as const };
+    let candidates: Element[] = [];
+    if (target.kind === 'selector' && typeof target.selector === 'string') {
+      const selector = target.selector.trim();
+      if (
+        selector === '*' ||
+        /^[a-z][a-z0-9-]*$/i.test(selector) ||
+        /^\.[a-z0-9_-]+$/i.test(selector) ||
+        /^\[role(?:=|\])/i.test(selector)
+      ) {
+        return { status: 'ambiguous' as const };
+      }
+      try {
+        candidates = Array.from(scopedDocument.querySelectorAll(selector));
+      } catch {
+        return { status: 'not_found' as const };
+      }
+    } else if (target.kind === 'test_id' && typeof target.testId === 'string') {
+      candidates = Array.from(scopedDocument.querySelectorAll('*')).filter(
+        (element) =>
+          (element.getAttribute('data-testid') ??
+            element.getAttribute('data-test-id') ??
+            element.getAttribute('data-qa')) === target.testId,
+      );
+    } else if (
+      target.kind === 'semantic' &&
+      target.identity &&
+      typeof target.identity === 'object' &&
+      !Array.isArray(target.identity)
+    ) {
+      const identity = target.identity as Record<string, unknown>;
+      const role =
+        typeof identity.role === 'string' ? identity.role.toLowerCase() : '';
+      const name =
+        typeof identity.name === 'string' ? identity.name : undefined;
+      const text =
+        typeof identity.text === 'string' ? identity.text : undefined;
+      if (!role || Boolean(name) === Boolean(text)) {
+        return { status: 'ambiguous' as const };
+      }
+      candidates = Array.from(scopedDocument.querySelectorAll('*')).filter(
+        (element) =>
+          getRole(element) === role &&
+          (!name || normalize(getName(element)) === normalize(name)) &&
+          (!text || normalize(element.textContent ?? '') === normalize(text)),
+      );
+    }
+    if (candidates.length === 0) return { status: 'not_found' as const };
+    if (candidates.length > 1) return { status: 'ambiguous' as const };
+    return { status: 'unique' as const, element: candidates[0] };
+  };
+  const isVisible = (element: Element) => {
+    const view = element.ownerDocument.defaultView ?? window;
+    const style = view.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      style.opacity !== '0' &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  };
+  const check = () => {
+    if (expectation.type === 'url_matches') {
+      const actual = location.href;
+      const value =
+        typeof expectation.value === 'string' ? expectation.value : '';
+      return {
+        matched:
+          expectation.mode === 'exact'
+            ? actual === value
+            : actual.startsWith(value),
+        actual,
+      };
+    }
+    if (expectation.type === 'text_visible') {
+      const scope =
+        expectation.scope &&
+        typeof expectation.scope === 'object' &&
+        !Array.isArray(expectation.scope)
+          ? (expectation.scope as Record<string, unknown>)
+          : {};
+      const scopedDocument = getScopeDocument(scope);
+      const actual =
+        scopedDocument?.body?.innerText ??
+        scopedDocument?.body?.textContent ??
+        '';
+      const value =
+        typeof expectation.value === 'string' ? expectation.value : '';
+      return {
+        matched: normalize(actual).includes(normalize(value)),
+        actual,
+      };
+    }
+    const resolved = resolveObservationTarget(expectation.target);
+    if (resolved.status === 'ambiguous') {
+      return { matched: false, terminal: true, actual: null };
+    }
+    if (resolved.status === 'not_found') {
+      return {
+        matched: expectation.type === 'element_hidden',
+        actual: null,
+      };
+    }
+    const element = resolved.element;
+    if (expectation.type === 'field_contains') {
+      const actual =
+        'value' in element && typeof element.value === 'string'
+          ? element.value
+          : null;
+      const value =
+        typeof expectation.value === 'string' ? expectation.value : '';
+      return {
+        matched:
+          typeof actual === 'string' &&
+          actual.toLowerCase().includes(value.toLowerCase()),
+        actual,
+      };
+    }
+    if (expectation.type === 'checked_equals') {
+      const actual =
+        element.tagName.toLowerCase() === 'input'
+          ? (element as HTMLInputElement).checked
+          : null;
+      return { matched: actual === expectation.value, actual };
+    }
+    const actual = isVisible(element);
+    return {
+      matched: expectation.type === 'element_visible' ? actual : !actual,
+      actual,
+    };
+  };
+
+  const startedAt = Date.now();
+  let lastActual: string | boolean | null | undefined;
+  while (Date.now() - startedAt <= 10_000) {
+    const result = check();
+    lastActual = result.actual;
+    if (result.matched) {
+      return {
+        status: 'passed',
+        expectation,
+        elapsedMs: Date.now() - startedAt,
+        actual: lastActual,
+      };
+    }
+    if (result.terminal) {
+      return {
+        status: 'failed',
+        expectation,
+        elapsedMs: Date.now() - startedAt,
+        actual: lastActual,
+      };
+    }
+    if (Date.now() - startedAt >= 10_000) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return {
+    status: 'timed_out',
+    expectation,
+    elapsedMs: Date.now() - startedAt,
+    actual: lastActual,
+  };
+}
+
+function pageFinalizeActionScript(rawArgs: unknown) {
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      pageStateId?: string;
+      invalidated?: boolean;
+      lastResolution?: unknown;
+    };
+  };
+  const store = globalObject.__xpertaiChatKitHostAutomation;
+  const requestedPageStateId =
+    typeof params.pageStateId === 'string' ? params.pageStateId : undefined;
+  if (
+    store &&
+    store.pageStateId === requestedPageStateId &&
+    params.invalidate === true
+  ) {
+    store.invalidated = true;
+  }
+  return {
+    invalidated: Boolean(store?.invalidated),
+    resolution: store?.lastResolution,
+  };
+}
+
+function pageAssertCurrentStateScript(rawArgs: unknown) {
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      pageStateId?: string;
+      url?: string;
+      invalidated?: boolean;
+      documents?: Array<{ documentRef: string }>;
+      lastResolved?: Element;
+      lastResolution?: unknown;
+    };
+  };
+  const store = globalObject.__xpertaiChatKitHostAutomation;
+  if (!store?.pageStateId) return { strict: false };
+  const requestedPageStateId =
+    typeof params.pageStateId === 'string' && params.pageStateId.trim()
+      ? params.pageStateId.trim()
+      : undefined;
+  const resolution = {
+    requested: {
+      kind: 'ref',
+      pageStateId: requestedPageStateId ?? '',
+      documentRef:
+        typeof params.documentRef === 'string' ? params.documentRef : '',
+      ref: '',
+    },
+    strategy: 'ref',
+    pageStateId: requestedPageStateId ?? store.pageStateId,
+  };
+  if (
+    !requestedPageStateId ||
+    requestedPageStateId !== store.pageStateId ||
+    store.invalidated ||
+    store.url !== location.href
+  ) {
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code: 'stale_page_state',
+          message: 'The requested page state is stale. Take a fresh snapshot.',
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
+  }
+  delete store.lastResolved;
+  delete store.lastResolution;
+  return { strict: true, pageStateId: store.pageStateId };
+}
+
 function pageResolveTargetScript(rawArgs: unknown) {
   const params =
     typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
@@ -1993,7 +3017,32 @@ function pageResolveTargetScript(rawArgs: unknown) {
   const globalObject = globalThis as typeof globalThis & {
     __xpertaiChatKitHostAutomation?: {
       refs: Record<string, Element>;
+      refMetadata?: Record<
+        string,
+        {
+          pageStateId: string;
+          documentRef: string;
+          fingerprint: string;
+        }
+      >;
+      pageStateId?: string;
+      url?: string;
+      invalidated?: boolean;
+      documents?: Array<{
+        document: Document;
+        documentRef: string;
+        frameRef?: string;
+        parentDocumentRef?: string;
+      }>;
+      identities?: Array<{
+        element: Element;
+        documentRef: string;
+        role?: string;
+        name?: string;
+        text?: string;
+      }>;
       lastResolved?: Element;
+      lastResolution?: unknown;
     };
   };
   const store =
@@ -2206,7 +3255,319 @@ function pageResolveTargetScript(rawArgs: unknown) {
     score -= Math.min(80, getElementDepth(element));
     return score;
   };
+  const strictMode = Boolean(store.pageStateId);
+  let strictResolution: Record<string, unknown> | undefined;
+  const normalizeExact = (value: string | undefined) =>
+    (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const getTestId = (element: Element) =>
+    element.getAttribute('data-testid') ??
+    element.getAttribute('data-test-id') ??
+    element.getAttribute('data-qa') ??
+    undefined;
+  const getIdentityFingerprint = (element: Element) =>
+    JSON.stringify({
+      tag: element.tagName.toLowerCase(),
+      role: normalizeExact(getRole(element)),
+      ariaLabel: normalizeExact(
+        element.getAttribute('aria-label') ?? undefined,
+      ),
+      ariaLabelledBy: normalizeExact(
+        element.getAttribute('aria-labelledby') ?? undefined,
+      ),
+      title: normalizeExact(element.getAttribute('title') ?? undefined),
+      nameAttribute: normalizeExact(element.getAttribute('name') ?? undefined),
+      text: normalizeExact(getText(element)),
+      testId: normalizeExact(getTestId(element)),
+    });
+  const getRefForElement = (element: Element) =>
+    Object.entries(store.refs).find(
+      ([, candidate]) => candidate === element,
+    )?.[0];
+  const describeStrictElement = (element: Element, documentRef: string) => {
+    const rect = getGlobalRect(element);
+    const ref = getRefForElement(element);
+    const identity = store.identities?.find(
+      (candidate) => candidate.element === element,
+    );
+    return {
+      documentRef,
+      ...(ref ? { ref } : {}),
+      tag: element.tagName.toLowerCase(),
+      role: identity?.role ?? getRole(element),
+      name: identity?.name ?? getName(element),
+      text: (identity?.text ?? getText(element)) || undefined,
+      testId: getTestId(element),
+      rect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      },
+    };
+  };
+  const throwStrictError = (
+    code: string,
+    message: string,
+    resolution: Record<string, unknown>,
+  ): never => {
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code,
+          message,
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
+  };
+  const resolveStrict = () => {
+    const requestedPageStateId = getString(params.pageStateId);
+    const requestedDocumentRef = getString(params.documentRef);
+    const domRef = getString(params.ref);
+    const axRef = getString(params.axRef);
+    const ref = domRef ?? axRef;
+    const selector = getString(params.selector);
+    const testId = getString(params.testId);
+    const role = getString(params.role)?.toLowerCase();
+    const name = getString(params.name);
+    const text = getString(params.text);
+    const semanticRequested = Boolean(role || name || text);
+    const locatorCount = [
+      Boolean(domRef),
+      Boolean(axRef),
+      Boolean(selector),
+      Boolean(testId),
+      semanticRequested,
+    ].filter(Boolean).length;
+    const strategy = domRef
+      ? 'ref'
+      : axRef
+        ? 'ax_ref'
+        : selector
+          ? 'unique_selector'
+          : testId
+            ? 'test_id'
+            : 'semantic_exact';
+    const requested = domRef
+      ? {
+          kind: 'ref',
+          pageStateId: requestedPageStateId ?? '',
+          documentRef: requestedDocumentRef ?? '',
+          ref: domRef,
+        }
+      : axRef
+        ? {
+            kind: 'ax_ref',
+            pageStateId: requestedPageStateId ?? '',
+            documentRef: requestedDocumentRef ?? '',
+            axRef,
+          }
+        : selector
+          ? {
+              kind: 'selector',
+              pageStateId: requestedPageStateId ?? '',
+              documentRef: requestedDocumentRef ?? '',
+              selector,
+            }
+          : testId
+            ? {
+                kind: 'test_id',
+                pageStateId: requestedPageStateId ?? '',
+                documentRef: requestedDocumentRef ?? '',
+                testId,
+              }
+            : {
+                kind: 'semantic',
+                pageStateId: requestedPageStateId ?? '',
+                documentRef: requestedDocumentRef ?? '',
+                match: 'exact',
+                identity: {
+                  ...(role ? { role } : {}),
+                  ...(name ? { name } : {}),
+                  ...(text ? { text } : {}),
+                },
+              };
+    const baseResolution = {
+      requested,
+      strategy,
+      pageStateId: requestedPageStateId ?? store.pageStateId ?? '',
+    };
+    if (
+      !requestedPageStateId ||
+      requestedPageStateId !== store.pageStateId ||
+      store.invalidated ||
+      store.url !== location.href
+    ) {
+      throwStrictError(
+        'stale_page_state',
+        'The target page state is missing or no longer current. Take a fresh snapshot.',
+        baseResolution,
+      );
+    }
+    if (!requestedDocumentRef) {
+      return throwStrictError(
+        'unsupported_target_scope',
+        'A v2 target must include documentRef.',
+        baseResolution,
+      );
+    }
+    const documentEntry = store.documents?.find(
+      (entry) => entry.documentRef === requestedDocumentRef,
+    );
+    if (!documentEntry) {
+      return throwStrictError(
+        'unsupported_target_scope',
+        `Document scope "${requestedDocumentRef}" is unavailable or cross-origin.`,
+        baseResolution,
+      );
+    }
+    const scopedDocumentRef = requestedDocumentRef;
+    const scopedDocument = documentEntry.document;
+    if (locatorCount !== 1) {
+      throwStrictError(
+        'ambiguous_target',
+        'A v2 action must use exactly one target locator family.',
+        baseResolution,
+      );
+    }
+    if (semanticRequested && (!role || Boolean(name) === Boolean(text))) {
+      throwStrictError(
+        'ambiguous_target',
+        'A semantic v2 target requires role with exactly one of name or text.',
+        baseResolution,
+      );
+    }
+
+    let matches: Element[] = [];
+    if (ref) {
+      const element = store.refs[ref];
+      const metadata = store.refMetadata?.[ref];
+      if (
+        !element ||
+        !metadata ||
+        metadata.pageStateId !== requestedPageStateId ||
+        metadata.documentRef !== requestedDocumentRef ||
+        !element.isConnected ||
+        element.ownerDocument !== scopedDocument ||
+        metadata.fingerprint !== getIdentityFingerprint(element)
+      ) {
+        throwStrictError(
+          'stale_target',
+          `Target ref "${ref}" is stale. Take a fresh snapshot.`,
+          baseResolution,
+        );
+      }
+      matches = [element];
+    } else if (selector) {
+      const unsafeSelector =
+        selector === '*' ||
+        /^[a-z][a-z0-9-]*$/i.test(selector) ||
+        /^\.[a-z0-9_-]+$/i.test(selector) ||
+        /^\[role(?:=|\])/i.test(selector);
+      if (unsafeSelector) {
+        throwStrictError(
+          'unsafe_selector',
+          `Selector "${selector}" is too broad for strict execution.`,
+          baseResolution,
+        );
+      }
+      try {
+        matches = Array.from(scopedDocument.querySelectorAll(selector));
+      } catch {
+        throwStrictError(
+          'unsafe_selector',
+          `Selector "${selector}" is invalid.`,
+          baseResolution,
+        );
+      }
+    } else if (testId) {
+      const escaped =
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+          ? CSS.escape(testId)
+          : testId.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+      matches = Array.from(
+        scopedDocument.querySelectorAll(
+          `[data-testid="${escaped}"],[data-test-id="${escaped}"],[data-qa="${escaped}"]`,
+        ),
+      );
+    } else {
+      const expectedName = normalizeExact(name);
+      const expectedText = normalizeExact(text);
+      const snapshotIdentities = store.identities?.filter(
+        (identity) =>
+          identity.documentRef === scopedDocumentRef &&
+          identity.element.isConnected,
+      );
+      matches = snapshotIdentities
+        ? snapshotIdentities
+            .filter((identity) => {
+              if (normalizeExact(identity.role) !== role) return false;
+              if (
+                expectedName &&
+                normalizeExact(identity.name) !== expectedName
+              ) {
+                return false;
+              }
+              if (
+                expectedText &&
+                normalizeExact(identity.text) !== expectedText
+              ) {
+                return false;
+              }
+              return true;
+            })
+            .map((identity) => identity.element)
+        : Array.from(scopedDocument.querySelectorAll(candidateSelector)).filter(
+            (candidate) => {
+              if (normalizeExact(getRole(candidate)) !== role) return false;
+              if (
+                expectedName &&
+                normalizeExact(getName(candidate)) !== expectedName
+              ) {
+                return false;
+              }
+              if (
+                expectedText &&
+                normalizeExact(getText(candidate)) !== expectedText
+              ) {
+                return false;
+              }
+              return true;
+            },
+          );
+    }
+
+    const candidates = matches
+      .slice(0, 12)
+      .map((candidate) => describeStrictElement(candidate, scopedDocumentRef));
+    const candidateResolution = {
+      ...baseResolution,
+      ...(candidates.length ? { candidates } : {}),
+    };
+    if (matches.length === 0) {
+      throwStrictError(
+        'target_not_found',
+        'No target matched the strict descriptor.',
+        candidateResolution,
+      );
+    }
+    if (matches.length > 1) {
+      throwStrictError(
+        selector ? 'non_unique_selector' : 'ambiguous_target',
+        `The strict descriptor matched ${matches.length} targets.`,
+        candidateResolution,
+      );
+    }
+    strictResolution = {
+      ...baseResolution,
+      resolved: describeStrictElement(matches[0], scopedDocumentRef),
+    };
+    return matches[0];
+  };
   const resolve = () => {
+    if (strictMode) return resolveStrict();
     const ref = getString(params.ref) ?? getString(params.axRef);
     if (ref && store?.refs[ref]) return store.refs[ref];
     const selector = getString(params.selector);
@@ -2282,6 +3643,29 @@ function pageResolveTargetScript(rawArgs: unknown) {
       return hitTarget ? containsOrEquals(candidate, hitTarget) : false;
     });
   };
+  const isDisabled = (candidate: Element) => {
+    let current: Element | null = candidate;
+    while (current) {
+      const tag = current.tagName.toLowerCase();
+      if (
+        (['button', 'input', 'select', 'textarea'].includes(tag) &&
+          Boolean(
+            (
+              current as
+                | HTMLButtonElement
+                | HTMLInputElement
+                | HTMLSelectElement
+                | HTMLTextAreaElement
+            ).disabled,
+          )) ||
+        current.getAttribute('aria-disabled') === 'true'
+      ) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
   const findSemanticVisibleFallback = (requested: Element) => {
     const requestedRole = getRole(requested);
     const requestedName = normalizeSemanticText(getName(requested));
@@ -2321,8 +3705,14 @@ function pageResolveTargetScript(rawArgs: unknown) {
   if (!element) {
     throw new Error('Could not resolve host page target.');
   }
+  if (strictMode && isDisabled(element)) {
+    throwStrictError(
+      'target_disabled',
+      `Target "${getName(element) ?? element.tagName.toLowerCase()}" is disabled.`,
+      strictResolution ?? {},
+    );
+  }
   element.scrollIntoView?.({ block: 'center', inline: 'center' });
-  if (isHtmlElement(element)) element.focus?.();
   const rect = getGlobalRect(element);
   const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
   const hitStack = getHitStack(center);
@@ -2331,23 +3721,41 @@ function pageResolveTargetScript(rawArgs: unknown) {
     ? getReceivesEventsPoint(element)
     : undefined;
   let targetingStrategy = 'resolved_target';
+  let strictAdjustment: string | undefined;
   const hitTarget = hitStack[0];
+  if (!point && strictMode && element.tagName.toLowerCase() === 'label') {
+    const control = (element as HTMLLabelElement).control;
+    if (
+      control &&
+      control.ownerDocument === element.ownerDocument &&
+      !isDisabled(control)
+    ) {
+      const controlPoint = getReceivesEventsPoint(control);
+      if (controlPoint) {
+        target = control;
+        point = controlPoint;
+        targetingStrategy = 'associated_label_control';
+        strictAdjustment = 'associated_label_control';
+      }
+    }
+  }
   if (!point) {
     let current = element.parentElement;
     while (current && !point) {
-      if (isActionable(current)) {
+      if (isActionable(current) && !isDisabled(current)) {
         const ancestorPoint = getReceivesEventsPoint(current);
         if (ancestorPoint) {
           target = current;
           point = ancestorPoint;
           targetingStrategy = 'ancestor_actionable';
+          strictAdjustment = 'actionable_ancestor';
           break;
         }
       }
       current = current.parentElement;
     }
   }
-  if (!point) {
+  if (!point && !strictMode) {
     const fallback = findSemanticVisibleFallback(element);
     if (fallback) {
       target = fallback.candidate;
@@ -2356,11 +3764,56 @@ function pageResolveTargetScript(rawArgs: unknown) {
     }
   }
   if (!point) {
+    if (strictMode) {
+      const occlusionResolution = {
+        ...(strictResolution ?? {}),
+        resolved: describeStrictElement(
+          element,
+          getString(params.documentRef) ?? '',
+        ),
+        hitTarget: hitTarget
+          ? describeStrictElement(
+              hitTarget,
+              getString(params.documentRef) ?? '',
+            )
+          : undefined,
+        hitStack: hitStack
+          .slice(0, 8)
+          .map((candidate) =>
+            describeStrictElement(
+              candidate,
+              getString(params.documentRef) ?? '',
+            ),
+          ),
+      };
+      throwStrictError(
+        'target_occluded',
+        `Target "${getName(element) ?? element.tagName.toLowerCase()}" has no safe pointer point.`,
+        occlusionResolution,
+      );
+    }
     throw new Error(
       `Target "${getName(element) ?? element.tagName.toLowerCase()}" is not receiving pointer events. Use host_page_screenshot or host_page_pointer coordinates.`,
     );
   }
   store.lastResolved = target;
+  if (strictMode) {
+    const pointHitStack = getHitStack(point);
+    const documentRef = getString(params.documentRef) ?? '';
+    strictResolution = {
+      ...(strictResolution ?? {}),
+      resolved: describeStrictElement(target, documentRef),
+      ...(strictAdjustment ? { adjustment: strictAdjustment } : {}),
+      point,
+      hitTarget: pointHitStack[0]
+        ? describeStrictElement(pointHitStack[0], documentRef)
+        : undefined,
+      hitStack: pointHitStack
+        .slice(0, 8)
+        .map((candidate) => describeStrictElement(candidate, documentRef)),
+    };
+    store.lastResolution = strictResolution;
+  }
   return {
     point,
     target: summarize(target),
@@ -2369,22 +3822,33 @@ function pageResolveTargetScript(rawArgs: unknown) {
     actionability: {
       visible: rect.width > 0 && rect.height > 0,
       receivesEvents: Boolean(
-        hitTarget &&
-        (element === hitTarget ||
-          element.contains(hitTarget)),
+        hitTarget && (element === hitTarget || element.contains(hitTarget)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
     },
+    ...(strictResolution ? { resolution: strictResolution } : {}),
   };
 }
 
-function pageResolveElementHandleScript(this: Element) {
+function pageResolveElementHandleScript(this: Element, rawArgs?: unknown) {
   const element = this;
+  const params =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
   const globalObject = globalThis as typeof globalThis & {
     __xpertaiChatKitHostAutomation?: {
       refs: Record<string, Element>;
+      pageStateId?: string;
+      url?: string;
+      invalidated?: boolean;
+      documents?: Array<{
+        document: Document;
+        documentRef: string;
+      }>;
       lastResolved?: Element;
+      lastResolution?: unknown;
     };
   };
   const store =
@@ -2465,6 +3929,84 @@ function pageResolveElementHandleScript(this: Element) {
     role: getRole(target),
     name: getName(target),
   });
+  const getString = (value: unknown) =>
+    typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  const strictMode = Boolean(store.pageStateId);
+  const requestedPageStateId = getString(params.pageStateId);
+  const documentRef = getString(params.documentRef);
+  const axRef = getString(params.axRef) ?? '';
+  const describe = (target: Element) => {
+    const rect = getGlobalRect(target);
+    return {
+      documentRef: documentRef ?? '',
+      axRef,
+      tag: target.tagName.toLowerCase(),
+      role: getRole(target),
+      name: getName(target),
+      text: getText(target) || undefined,
+      rect: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      },
+    };
+  };
+  const baseResolution = {
+    requested: {
+      kind: 'ax_ref',
+      pageStateId: requestedPageStateId ?? '',
+      documentRef: documentRef ?? '',
+      axRef,
+    },
+    strategy: 'ax_ref',
+    pageStateId: requestedPageStateId ?? store.pageStateId ?? '',
+  };
+  const reject = (
+    code: string,
+    message: string,
+    resolution: Record<string, unknown> = baseResolution,
+  ): never => {
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code,
+          message,
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
+  };
+  if (strictMode) {
+    if (
+      !requestedPageStateId ||
+      requestedPageStateId !== store.pageStateId ||
+      store.invalidated ||
+      store.url !== location.href
+    ) {
+      reject(
+        'stale_page_state',
+        'The accessibility target page state is no longer current.',
+      );
+    }
+    const scopedDocument = store.documents?.find(
+      (entry) => entry.documentRef === documentRef,
+    )?.document;
+    if (!documentRef || !scopedDocument) {
+      reject(
+        'unsupported_target_scope',
+        'The accessibility target document scope is unavailable.',
+      );
+    }
+    if (!element.isConnected || element.ownerDocument !== scopedDocument) {
+      reject(
+        'stale_target',
+        `Accessibility ref "${axRef}" no longer resolves in its document.`,
+      );
+    }
+  }
   const isActionable = (target: Element) => {
     if (!(isHtmlElement(target) || isSvgElement(target))) return false;
     const style = getElementView(target).getComputedStyle(target);
@@ -2532,13 +4074,42 @@ function pageResolveElementHandleScript(this: Element) {
       return hitTarget ? containsOrEquals(target, hitTarget) : false;
     });
   };
+  const isDisabledTarget = (candidate: Element) => {
+    let current: Element | null = candidate;
+    while (current) {
+      const tag = current.tagName.toLowerCase();
+      if (
+        (['button', 'input', 'select', 'textarea'].includes(tag) &&
+          Boolean(
+            (
+              current as
+                | HTMLButtonElement
+                | HTMLInputElement
+                | HTMLSelectElement
+                | HTMLTextAreaElement
+            ).disabled,
+          )) ||
+        current.getAttribute('aria-disabled') === 'true'
+      ) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
 
   let target = element;
   let point = isActionable(target) ? getReceivesEventsPoint(target) : undefined;
   let targetingStrategy = 'ax_resolved_target';
+  if (strictMode && isDisabledTarget(element)) {
+    reject('target_disabled', `Accessibility ref "${axRef}" is disabled.`, {
+      ...baseResolution,
+      resolved: describe(element),
+    });
+  }
   let current = element.parentElement;
   while (!point && current) {
-    if (isActionable(current)) {
+    if (isActionable(current) && !isDisabledTarget(current)) {
       const ancestorPoint = getReceivesEventsPoint(current);
       if (ancestorPoint) {
         target = current;
@@ -2552,13 +4123,31 @@ function pageResolveElementHandleScript(this: Element) {
 
   const rect = getGlobalRect(element);
   const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  if (!point) {
+  if (!point && !strictMode) {
     point = center;
     targetingStrategy = 'ax_center_fallback';
+  }
+  if (!point) {
+    return reject(
+      'target_occluded',
+      `Accessibility ref "${axRef}" has no safe pointer point.`,
+      { ...baseResolution, resolved: describe(element) },
+    );
   }
   const hitStack = getDeepHitStack(point);
   const hitTarget = hitStack[0];
   store.lastResolved = target;
+  const resolution = strictMode
+    ? {
+        ...baseResolution,
+        resolved: describe(target),
+        ...(target === element ? {} : { adjustment: 'actionable_ancestor' }),
+        point,
+        hitTarget: hitTarget ? describe(hitTarget) : undefined,
+        hitStack: hitStack.slice(0, 8).map(describe),
+      }
+    : undefined;
+  if (resolution) store.lastResolution = resolution;
   return {
     point,
     target: summarize(target),
@@ -2567,13 +4156,118 @@ function pageResolveElementHandleScript(this: Element) {
     actionability: {
       visible: rect.width > 0 && rect.height > 0,
       receivesEvents: Boolean(
-        hitTarget &&
-        (target === hitTarget ||
-          target.contains(hitTarget)),
+        hitTarget && (target === hitTarget || target.contains(hitTarget)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
     },
+    ...(resolution ? { resolution } : {}),
+  };
+}
+
+function pageInspectActionRiskScript(rawArgs: unknown) {
+  const input =
+    typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+      ? (rawArgs as Record<string, unknown>)
+      : {};
+  const action = typeof input.action === 'string' ? input.action : '';
+  const params =
+    input.params &&
+    typeof input.params === 'object' &&
+    !Array.isArray(input.params)
+      ? (input.params as Record<string, unknown>)
+      : {};
+  const globalObject = globalThis as typeof globalThis & {
+    __xpertaiChatKitHostAutomation?: {
+      pageStateId?: string;
+      lastResolved?: Element;
+      lastResolution?: unknown;
+      documents?: Array<{ document: Document; documentRef: string }>;
+      refs?: Record<string, Element>;
+    };
+  };
+  const store = globalObject.__xpertaiChatKitHostAutomation;
+  const hasExplicitTarget = [
+    'ref',
+    'axRef',
+    'selector',
+    'testId',
+    'role',
+    'name',
+    'text',
+  ].some(
+    (key) => typeof params[key] === 'string' && Boolean(params[key].trim()),
+  );
+  const target =
+    action === 'host_page_press' && !hasExplicitTarget
+      ? document.activeElement
+      : store?.lastResolved;
+  const risks = new Set<CdpActionRisk>();
+  const isInput = (element: Element): element is HTMLInputElement =>
+    element.tagName.toLowerCase() === 'input';
+
+  if (action === 'host_page_fill' && target && isInput(target)) {
+    if (target.type === 'password') risks.add('password_input');
+    if (target.type === 'file') risks.add('file_input');
+  }
+
+  const isActivation =
+    action === 'host_page_click' ||
+    (action === 'host_page_pointer' &&
+      (typeof params.action !== 'string' || params.action === 'click')) ||
+    (action === 'host_page_press' &&
+      (params.key === 'Enter' || params.key === ' '));
+  if (isActivation && target) {
+    let current: Element | null = target;
+    while (current) {
+      const tag = current.tagName.toLowerCase();
+      if (
+        (tag === 'button' &&
+          (current as HTMLButtonElement).form !== null &&
+          (current as HTMLButtonElement).type === 'submit') ||
+        (isInput(current) &&
+          current.form !== null &&
+          (current.type === 'submit' || current.type === 'image'))
+      ) {
+        risks.add('form_submit');
+      }
+      if (tag === 'a') {
+        const anchor = current as HTMLAnchorElement;
+        if (anchor.hasAttribute('download')) risks.add('download');
+      }
+      current = current.parentElement;
+    }
+  }
+
+  const describe = (element: Element) => ({
+    documentRef:
+      store?.documents?.find(
+        (entry) => entry.document === element.ownerDocument,
+      )?.documentRef ?? '',
+    ref: Object.entries(store?.refs ?? {}).find(
+      ([, candidate]) => candidate === element,
+    )?.[0],
+    tag: element.tagName.toLowerCase(),
+    role: element.getAttribute('role')?.trim() || undefined,
+    name:
+      element.getAttribute('aria-label')?.trim() ||
+      element.getAttribute('title')?.trim() ||
+      element.textContent?.replace(/\s+/g, ' ').trim() ||
+      undefined,
+    testId:
+      element.getAttribute('data-testid') ??
+      element.getAttribute('data-test-id') ??
+      element.getAttribute('data-qa') ??
+      undefined,
+  });
+
+  return {
+    pageStateId: store?.pageStateId ?? '',
+    url: location.href,
+    origin: location.origin,
+    risks: Array.from(risks),
+    ...(target ? { target: describe(target) } : {}),
+    ...(store?.lastResolution ? { resolution: store.lastResolution } : {}),
   };
 }
 
@@ -2667,11 +4361,59 @@ function pageMeasureLastResolvedTargetScript() {
   const globalObject = globalThis as typeof globalThis & {
     __xpertaiChatKitHostAutomation?: {
       lastResolved?: Element;
+      pageStateId?: string;
+      url?: string;
+      invalidated?: boolean;
+      documents?: Array<{ document: Document; documentRef: string }>;
+      refs?: Record<string, Element>;
+      lastResolution?: unknown;
     };
   };
-  const target = globalObject.__xpertaiChatKitHostAutomation?.lastResolved;
+  const store = globalObject.__xpertaiChatKitHostAutomation;
+  const target = store?.lastResolved;
   if (!target) {
     throw new Error('No resolved host page target to measure.');
+  }
+  if (
+    store?.pageStateId &&
+    (store.invalidated || store.url !== location.href)
+  ) {
+    const resolution =
+      store.lastResolution &&
+      typeof store.lastResolution === 'object' &&
+      !Array.isArray(store.lastResolution)
+        ? store.lastResolution
+        : { pageStateId: store.pageStateId };
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code: 'stale_page_state',
+          message: 'The page state changed before input dispatch.',
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
+  }
+  if (store?.pageStateId && !target.isConnected) {
+    const resolution =
+      store.lastResolution &&
+      typeof store.lastResolution === 'object' &&
+      !Array.isArray(store.lastResolution)
+        ? store.lastResolution
+        : { pageStateId: store.pageStateId };
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code: 'stale_target',
+          message: 'The resolved target was replaced before input dispatch.',
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
   }
 
   const rect = getGlobalRect(target);
@@ -2688,26 +4430,84 @@ function pageMeasureLastResolvedTargetScript() {
           { x: center.x, y: rect.y + rect.height - insetY },
         ]
       : [center];
-  const point =
-    candidates.find((candidate) => {
-      const hitTarget = getDeepHitStack(candidate)[0];
-      return hitTarget ? containsOrEquals(target, hitTarget) : false;
-    }) ?? center;
+  const safePoint = candidates.find((candidate) => {
+    const hitTarget = getDeepHitStack(candidate)[0];
+    return hitTarget ? containsOrEquals(target, hitTarget) : false;
+  });
+  if (!safePoint && store?.pageStateId) {
+    const resolution =
+      store.lastResolution &&
+      typeof store.lastResolution === 'object' &&
+      !Array.isArray(store.lastResolution)
+        ? store.lastResolution
+        : { pageStateId: store.pageStateId };
+    throw new Error(
+      '__XPERT_BROWSER_AUTOMATION_ERROR__:' +
+        JSON.stringify({
+          code: 'target_occluded',
+          message:
+            'The target stopped receiving pointer events before input dispatch.',
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        }),
+    );
+  }
+  const point = safePoint ?? center;
   const hitStack = getDeepHitStack(point);
   const hitTarget = hitStack[0];
+  const documentRef =
+    store?.documents?.find((entry) => entry.document === target.ownerDocument)
+      ?.documentRef ?? '';
+  const describe = (element: Element) => {
+    const elementRect = getGlobalRect(element);
+    const ref = Object.entries(store?.refs ?? {}).find(
+      ([, candidate]) => candidate === element,
+    )?.[0];
+    return {
+      documentRef,
+      ...(ref ? { ref } : {}),
+      tag: element.tagName.toLowerCase(),
+      role: getRole(element),
+      name: getName(element),
+      text: getText(element) || undefined,
+      rect: {
+        x: elementRect.x,
+        y: elementRect.y,
+        width: elementRect.width,
+        height: elementRect.height,
+      },
+    };
+  };
+  const previousResolution =
+    store?.lastResolution &&
+    typeof store.lastResolution === 'object' &&
+    !Array.isArray(store.lastResolution)
+      ? store.lastResolution
+      : undefined;
+  const resolution = previousResolution
+    ? {
+        ...previousResolution,
+        resolved: describe(target),
+        point,
+        hitTarget: hitTarget ? describe(hitTarget) : undefined,
+        hitStack: hitStack.slice(0, 8).map(describe),
+      }
+    : undefined;
+  if (store && resolution) store.lastResolution = resolution;
   return {
     point,
     target: summarize(target),
     actionability: {
       visible: rect.width > 0 && rect.height > 0,
       receivesEvents: Boolean(
-        hitTarget &&
-          (target === hitTarget ||
-            target.contains(hitTarget)),
+        hitTarget && (target === hitTarget || target.contains(hitTarget)),
       ),
       hitTarget: hitTarget ? summarize(hitTarget) : undefined,
       hitStack: hitStack.slice(0, 5).map(summarize),
     },
+    ...(resolution ? { resolution } : {}),
   };
 }
 
@@ -2841,7 +4641,6 @@ function pageScrollScript(rawArgs: unknown) {
     typeof params.text === 'string' ||
     typeof params.testId === 'string';
   if (hasTarget) {
-    pageResolveTargetScript(params);
     const store = (
       globalThis as typeof globalThis & {
         __xpertaiChatKitHostAutomation?: {
@@ -2849,6 +4648,9 @@ function pageScrollScript(rawArgs: unknown) {
         };
       }
     ).__xpertaiChatKitHostAutomation;
+    if (!store?.lastResolved) {
+      pageResolveTargetScript(params);
+    }
     const element =
       store?.lastResolved ??
       (typeof params.selector === 'string'
@@ -2872,9 +4674,35 @@ function pageScrollScript(rawArgs: unknown) {
   return { scroll: { x: scrollX, y: scrollY } };
 }
 
-function pageFocusScript(rawArgs: unknown) {
-  const target = pageResolveTargetScript(rawArgs) as { target?: unknown };
-  return { focused: target.target };
+function pageFocusResolvedTargetScript() {
+  const store = (
+    globalThis as typeof globalThis & {
+      __xpertaiChatKitHostAutomation?: {
+        lastResolved?: Element;
+        lastResolution?: unknown;
+      };
+    }
+  ).__xpertaiChatKitHostAutomation;
+  const target = store?.lastResolved;
+  if (!target) {
+    throw new Error('No resolved host page target to focus.');
+  }
+  const view = target.ownerDocument.defaultView ?? window;
+  if (target instanceof view.HTMLElement) {
+    target.focus();
+  }
+  return {
+    focused: {
+      tag: target.tagName.toLowerCase(),
+      role: target.getAttribute('role')?.trim() || undefined,
+      name:
+        target.getAttribute('aria-label')?.trim() ||
+        target.getAttribute('title')?.trim() ||
+        target.textContent?.replace(/\s+/g, ' ').trim() ||
+        undefined,
+    },
+    resolution: store?.lastResolution,
+  };
 }
 
 function pageWaitForScript(rawArgs: unknown) {
@@ -3096,6 +4924,25 @@ async function executeSnapshot(
   tabId: number,
   params: Record<string, unknown>,
 ) {
+  const requestedPageStateId = readParamRef(params, 'pageStateId');
+  const cachedState = getCurrentCdpSnapshotState(tabId);
+  if (
+    requestedPageStateId &&
+    (!cachedState || cachedState.pageStateId !== requestedPageStateId)
+  ) {
+    throw new CdpBrowserAutomationError(
+      'The requested page state is stale. Take a new snapshot.',
+      {
+        code: 'stale_page_state',
+        message: 'The requested page state is stale. Take a new snapshot.',
+        recoverable: true,
+        dispatched: false,
+        outcome: 'rejected_before_execution',
+        requiresFreshSnapshot: true,
+        invalidatedPageStateId: requestedPageStateId,
+      },
+    );
+  }
   await sendCdpCommand(sendCommand, tabId, 'Runtime.enable').catch(
     () => undefined,
   );
@@ -3106,10 +4953,30 @@ async function executeSnapshot(
     [params],
     [pageReadableContentScript],
   );
+  const snapshotRecord =
+    snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+      ? (snapshot as Record<string, unknown>)
+      : {};
+  const pageStateId = readParamRef(snapshotRecord, 'pageStateId');
+  if (
+    requestedPageStateId &&
+    requestedPageStateId === pageStateId &&
+    cachedState?.pageStateId === pageStateId &&
+    cachedState.snapshot
+  ) {
+    return cachedState.snapshot;
+  }
+  const cachedAxTree =
+    requestedPageStateId &&
+    requestedPageStateId === pageStateId &&
+    cachedState?.pageStateId === pageStateId
+      ? cachedState.axTree
+      : undefined;
   const [axTree, domSnapshot] = await Promise.all([
-    sendCdpCommand(sendCommand, tabId, 'Accessibility.getFullAXTree').catch(
-      (error) => ({ error: getErrorMessage(error) }),
-    ),
+    cachedAxTree ??
+      sendCdpCommand(sendCommand, tabId, 'Accessibility.getFullAXTree').catch(
+        (error) => ({ error: getErrorMessage(error) }),
+      ),
     sendCdpCommand(sendCommand, tabId, 'DOMSnapshot.captureSnapshot', {
       computedStyles: [
         'display',
@@ -3121,13 +4988,23 @@ async function executeSnapshot(
     }).catch((error) => ({ error: getErrorMessage(error) })),
   ]);
 
-  return {
-    ...(snapshot && typeof snapshot === 'object' ? snapshot : {}),
+  const enrichedSnapshot = {
+    ...snapshotRecord,
     accessibility: summarizeAxTree(axTree),
     cdp: {
       domSnapshot: summarizeDomSnapshot(domSnapshot),
     },
   };
+
+  if (pageStateId && !cachedAxTree) {
+    cacheCdpSnapshotState(tabId, {
+      pageStateId,
+      axTree,
+      snapshot: enrichedSnapshot,
+    });
+  }
+
+  return enrichedSnapshot;
 }
 
 function readBackendDomNodeIdFromAxTree(value: unknown, axRef: string) {
@@ -3150,14 +5027,58 @@ async function resolveAccessibilityRefPoint(
   sendCommand: ChromeDebuggerApi['sendCommand'],
   tabId: number,
   axRef: string,
+  params: Record<string, unknown>,
 ) {
-  const axTree = await sendCdpCommand(
-    sendCommand,
-    tabId,
-    'Accessibility.getFullAXTree',
-  );
+  const cachedState = getCurrentCdpSnapshotState(tabId);
+  const requestedPageStateId = readParamRef(params, 'pageStateId');
+  const requestedDocumentRef = readParamRef(params, 'documentRef');
+  const resolution = {
+    requested: {
+      kind: 'ax_ref',
+      pageStateId: requestedPageStateId ?? '',
+      documentRef: requestedDocumentRef ?? '',
+      axRef,
+    },
+    strategy: 'ax_ref',
+    pageStateId: requestedPageStateId ?? cachedState?.pageStateId ?? '',
+  };
+  if (
+    cachedState &&
+    (!requestedPageStateId ||
+      requestedPageStateId !== cachedState.pageStateId ||
+      !requestedDocumentRef)
+  ) {
+    throw new CdpBrowserAutomationError(
+      'The accessibility ref is not bound to the current page state and document.',
+      {
+        code: 'stale_page_state',
+        message:
+          'The accessibility ref is not bound to the current page state and document.',
+        recoverable: true,
+        dispatched: false,
+        outcome: 'rejected_before_execution',
+        resolution,
+      },
+    );
+  }
+  const axTree =
+    cachedState?.axTree ??
+    (await sendCdpCommand(sendCommand, tabId, 'Accessibility.getFullAXTree'));
   const backendNodeId = readBackendDomNodeIdFromAxTree(axTree, axRef);
   if (backendNodeId === undefined) {
+    if (cachedState) {
+      throw new CdpBrowserAutomationError(
+        `Accessibility ref "${axRef}" is stale. Take a fresh snapshot.`,
+        {
+          code: 'stale_target',
+          message: `Accessibility ref "${axRef}" is stale. Take a fresh snapshot.`,
+          recoverable: true,
+          dispatched: false,
+          outcome: 'rejected_before_execution',
+          resolution,
+        },
+      );
+    }
     throw new Error(
       `Unknown accessibility ref: ${axRef}. Take a new snapshot.`,
     );
@@ -3182,6 +5103,7 @@ async function resolveAccessibilityRefPoint(
       {
         objectId,
         functionDeclaration: pageResolveElementHandleScript.toString(),
+        arguments: [{ value: params }],
         awaitPromise: true,
         returnByValue: true,
         userGesture: true,
@@ -3207,12 +5129,127 @@ async function resolvePoint(
       sendCommand,
       tabId,
       axRef,
+      params,
     ) as Promise<CdpResolvedPoint>;
   }
 
   return evaluatePageScript(sendCommand, tabId, pageResolveTargetScript, [
     params,
   ]) as Promise<CdpResolvedPoint>;
+}
+
+async function requireCdpActionApproval(
+  sendCommand: ChromeDebuggerApi['sendCommand'],
+  tabId: number,
+  action: string,
+  params: Record<string, unknown>,
+) {
+  if (!readParamRef(params, 'pageStateId')) {
+    return;
+  }
+  const inspected = await evaluatePageScript(
+    sendCommand,
+    tabId,
+    pageInspectActionRiskScript,
+    [{ action, params }],
+  );
+  if (!inspected || typeof inspected !== 'object' || Array.isArray(inspected)) {
+    throw new Error('Could not inspect browser action risk.');
+  }
+  const inspectionRecord = inspected as Record<string, unknown>;
+  const allowedRisks = new Set<CdpActionRisk>([
+    'password_input',
+    'file_input',
+    'form_submit',
+    'download',
+  ]);
+  const risks = Array.isArray(inspectionRecord.risks)
+    ? inspectionRecord.risks.filter(
+        (risk): risk is CdpActionRisk =>
+          typeof risk === 'string' && allowedRisks.has(risk as CdpActionRisk),
+      )
+    : [];
+  if (risks.length === 0) {
+    return;
+  }
+
+  const inspection: CdpActionInspection = {
+    pageStateId:
+      typeof inspectionRecord.pageStateId === 'string'
+        ? inspectionRecord.pageStateId
+        : '',
+    url: typeof inspectionRecord.url === 'string' ? inspectionRecord.url : '',
+    origin:
+      typeof inspectionRecord.origin === 'string'
+        ? inspectionRecord.origin
+        : '',
+    risks,
+    target: inspectionRecord.target,
+    resolution: inspectionRecord.resolution,
+  };
+  const actionHash = await hashCdpActionValue({ action, params });
+  const targetHash = await hashCdpActionValue(inspection.target ?? null);
+  const providedToken = readParamRef(params, 'actionToken');
+  let approvalReason = 'approval_required';
+
+  if (providedToken) {
+    const pending = pendingCdpActionApprovals.get(providedToken);
+    pendingCdpActionApprovals.delete(providedToken);
+    if (!pending) {
+      approvalReason = 'invalid_or_used_token';
+    } else if (pending.expiresAt <= Date.now()) {
+      approvalReason = 'expired_token';
+    } else if (
+      pending.tabId !== tabId ||
+      pending.pageStateId !== inspection.pageStateId ||
+      pending.origin !== inspection.origin ||
+      pending.url !== inspection.url
+    ) {
+      approvalReason = 'state_mismatch';
+    } else if (
+      pending.action !== action ||
+      pending.actionHash !== actionHash ||
+      pending.targetHash !== targetHash ||
+      pending.risks.join('\0') !== risks.join('\0')
+    ) {
+      approvalReason = 'action_mismatch';
+    } else {
+      return;
+    }
+  }
+
+  for (const [token, pending] of pendingCdpActionApprovals) {
+    if (pending.expiresAt <= Date.now()) {
+      pendingCdpActionApprovals.delete(token);
+    }
+  }
+  const actionToken = globalThis.crypto.randomUUID();
+  const expiresAt = Date.now() + CDP_ACTION_APPROVAL_TTL_MS;
+  pendingCdpActionApprovals.set(actionToken, {
+    tabId,
+    action,
+    actionHash,
+    targetHash,
+    pageStateId: inspection.pageStateId,
+    url: inspection.url,
+    origin: inspection.origin,
+    risks,
+    expiresAt,
+  });
+  const message = `Action requires user approval: ${risks.join(', ')}.`;
+  throw new CdpBrowserAutomationError(message, {
+    code: 'approval_required',
+    message,
+    recoverable: true,
+    dispatched: false,
+    outcome: 'rejected_before_execution',
+    requiresFreshSnapshot: false,
+    actionToken,
+    approvalReason,
+    expiresAt: new Date(expiresAt).toISOString(),
+    risks,
+    resolution: inspection.resolution,
+  });
 }
 
 function getMouseButton(value: unknown): 'left' | 'middle' | 'right' {
@@ -3255,6 +5292,78 @@ async function resolvePointAfterEffect(
   )
     .then((value) => (isCdpResolvedPoint(value) ? value : fallback))
     .catch(() => fallback);
+}
+
+async function completeV2CdpAction(
+  sendCommand: ChromeDebuggerApi['sendCommand'],
+  tabId: number,
+  params: Record<string, unknown>,
+  result: Record<string, unknown>,
+  options: {
+    invalidate: boolean;
+    resolution?: unknown;
+  },
+) {
+  const pageStateId = readParamRef(params, 'pageStateId');
+  if (!pageStateId) {
+    return result;
+  }
+  let verification: unknown;
+  if (params.expectation && typeof params.expectation === 'object') {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt <= 10_000) {
+      try {
+        verification = await evaluatePageScript(
+          sendCommand,
+          tabId,
+          pageVerifyExpectationScript,
+          [params],
+        );
+        break;
+      } catch {
+        if (Date.now() - startedAt >= 10_000) {
+          verification = {
+            status: 'timed_out',
+            expectation: params.expectation,
+            elapsedMs: Date.now() - startedAt,
+            actual: null,
+          };
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    }
+  }
+  const finalState = (await evaluatePageScript(
+    sendCommand,
+    tabId,
+    pageFinalizeActionScript,
+    [{ pageStateId, invalidate: options.invalidate }],
+  ).catch(() => undefined)) as
+    | { invalidated?: boolean; resolution?: unknown }
+    | undefined;
+  const verificationRecord =
+    verification && typeof verification === 'object'
+      ? (verification as Record<string, unknown>)
+      : undefined;
+  const outcome = verificationRecord
+    ? verificationRecord.status === 'passed'
+      ? 'verified'
+      : 'verification_failed'
+    : 'executed_unverified';
+  const requiresFreshSnapshot =
+    options.invalidate || Boolean(finalState?.invalidated);
+  const resolution = options.resolution ?? finalState?.resolution;
+
+  return {
+    ...result,
+    dispatched: true,
+    outcome,
+    requiresFreshSnapshot,
+    ...(requiresFreshSnapshot ? { invalidatedPageStateId: pageStateId } : {}),
+    ...(resolution === undefined ? {} : { resolution }),
+    ...(verificationRecord ? { verification: verificationRecord } : {}),
+  };
 }
 
 async function dispatchMouseClick(
@@ -3338,6 +5447,21 @@ export async function runCdpHostAutomation(
       tab.id,
       async (sendCommand) => {
         const params = normalizeParams(call.params);
+        if (call.name !== 'host_page_snapshot') {
+          assertCurrentCdpSnapshotState(tab.id, params);
+        }
+        if (
+          call.name !== 'host_page_snapshot' &&
+          call.name !== 'host_page_read' &&
+          call.name !== 'host_page_screenshot'
+        ) {
+          await evaluatePageScript(
+            sendCommand,
+            tab.id,
+            pageAssertCurrentStateScript,
+            [params],
+          );
+        }
         switch (call.name) {
           case 'host_page_snapshot':
             return executeSnapshot(sendCommand, tab.id, params);
@@ -3350,6 +5474,12 @@ export async function runCdpHostAutomation(
             );
           case 'host_page_click': {
             const resolved = await resolvePoint(sendCommand, tab.id, params);
+            await requireCdpActionApproval(
+              sendCommand,
+              tab.id,
+              call.name,
+              params,
+            );
             const button = getMouseButton(params.button);
             const clickCount = getClickCount(params.clickCount);
             await showCdpVisualEffect(sendCommand, tab.id, {
@@ -3365,16 +5495,25 @@ export async function runCdpHostAutomation(
               button,
               clickCount,
             });
-            return {
-              clicked: latest.target ?? resolved.target,
-              requested: latest.requested ?? resolved.requested,
-              point: latest.point,
-              button,
-              clickCount,
-              strategy: 'cdp_mouse',
-              coordinateSpace: 'viewport-css-px',
-              actionability: latest.actionability ?? resolved.actionability,
-            };
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
+              params,
+              {
+                clicked: latest.target ?? resolved.target,
+                requested: latest.requested ?? resolved.requested,
+                point: latest.point,
+                button,
+                clickCount,
+                strategy: 'cdp_mouse',
+                coordinateSpace: 'viewport-css-px',
+                actionability: latest.actionability ?? resolved.actionability,
+              },
+              {
+                invalidate: true,
+                resolution: latest.resolution ?? resolved.resolution,
+              },
+            );
           }
           case 'host_page_hover': {
             const resolved = await resolvePoint(sendCommand, tab.id, params);
@@ -3397,26 +5536,64 @@ export async function runCdpHostAutomation(
                 y: latest.point.y,
               },
             );
-            return {
-              hovered: latest.target ?? resolved.target,
-              point: latest.point,
-              strategy: 'cdp_mouse',
-            };
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
+              params,
+              {
+                hovered: latest.target ?? resolved.target,
+                point: latest.point,
+                strategy: 'cdp_mouse',
+              },
+              {
+                invalidate: false,
+                resolution: latest.resolution ?? resolved.resolution,
+              },
+            );
           }
           case 'host_page_press': {
-            await evaluatePageScript(sendCommand, tab.id, pageFocusScript, [
-              params,
-            ]).catch(() => undefined);
+            const hasPressTarget = [
+              'ref',
+              'axRef',
+              'selector',
+              'testId',
+              'role',
+              'name',
+              'text',
+            ].some((key) => readParamRef(params, key));
+            const pressResolved = hasPressTarget
+              ? await resolvePoint(sendCommand, tab.id, params)
+              : undefined;
             const key = typeof params.key === 'string' ? params.key : '';
             if (!key) {
               throw new Error('key must be a non-empty string.');
             }
+            await requireCdpActionApproval(
+              sendCommand,
+              tab.id,
+              call.name,
+              params,
+            );
             const keyDef = getKeyDefinition(key);
             await showCdpVisualEffect(sendCommand, tab.id, {
               type: 'press',
               key,
               anchor: 'target',
             });
+            const pressLatest = pressResolved
+              ? await resolvePointAfterEffect(
+                  sendCommand,
+                  tab.id,
+                  pressResolved,
+                )
+              : undefined;
+            if (pressLatest) {
+              await evaluatePageScript(
+                sendCommand,
+                tab.id,
+                pageFocusResolvedTargetScript,
+              );
+            }
             await sendCdpCommand(
               sendCommand,
               tab.id,
@@ -3440,7 +5617,16 @@ export async function runCdpHostAutomation(
                 nativeVirtualKeyCode: keyDef.code,
               },
             );
-            return { pressed: key, strategy: 'cdp_keyboard' };
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
+              params,
+              { pressed: key, strategy: 'cdp_keyboard' },
+              {
+                invalidate: true,
+                resolution: pressLatest?.resolution,
+              },
+            );
           }
           case 'host_page_pointer': {
             const action =
@@ -3453,11 +5639,7 @@ export async function runCdpHostAutomation(
               typeof params.targetText === 'string' && params.targetText.trim()
                 ? params.targetText.trim()
                 : undefined;
-            if (
-              action === 'click' &&
-              hasExplicitPoint &&
-              !targetText
-            ) {
+            if (action === 'click' && hasExplicitPoint && !targetText) {
               throw new Error(
                 'Pointer coordinate clicks require targetText to avoid unintended navigation.',
               );
@@ -3497,8 +5679,25 @@ export async function runCdpHostAutomation(
                           }
                         ).point
                       : { x: params.x as number, y: params.y as number },
+                  ...(normalizedPoint &&
+                  typeof normalizedPoint === 'object' &&
+                  'resolution' in normalizedPoint
+                    ? {
+                        resolution: (
+                          normalizedPoint as { resolution?: unknown }
+                        ).resolution,
+                      }
+                    : {}),
                 }
               : await resolvePoint(sendCommand, tab.id, params);
+            if (action === 'click') {
+              await requireCdpActionApproval(
+                sendCommand,
+                tab.id,
+                call.name,
+                params,
+              );
+            }
             const eventMap: Record<string, string[]> = {
               move: ['mouseMoved'],
               down: ['mousePressed'],
@@ -3514,13 +5713,37 @@ export async function runCdpHostAutomation(
                   ? { point: resolved.point, anchor: 'point' }
                   : { anchor: 'target' }),
               });
-              latest = hasExplicitPoint
-                ? resolved
-                : await resolvePointAfterEffect(
-                    sendCommand,
-                    tab.id,
-                    resolved,
-                  );
+              if (hasExplicitPoint) {
+                const revalidated = await evaluatePageScript(
+                  sendCommand,
+                  tab.id,
+                  pageNormalizePointerPointScript,
+                  [params],
+                );
+                latest =
+                  revalidated &&
+                  typeof revalidated === 'object' &&
+                  'point' in revalidated
+                    ? {
+                        point: (
+                          revalidated as { point: { x: number; y: number } }
+                        ).point,
+                        ...('resolution' in revalidated
+                          ? {
+                              resolution: (
+                                revalidated as { resolution?: unknown }
+                              ).resolution,
+                            }
+                          : {}),
+                      }
+                    : resolved;
+              } else {
+                latest = await resolvePointAfterEffect(
+                  sendCommand,
+                  tab.id,
+                  resolved,
+                );
+              }
               await dispatchMouseClick(sendCommand, tab.id, latest.point, {
                 button,
                 clickCount,
@@ -3535,11 +5758,7 @@ export async function runCdpHostAutomation(
               });
               latest = hasExplicitPoint
                 ? resolved
-                : await resolvePointAfterEffect(
-                    sendCommand,
-                    tab.id,
-                    resolved,
-                  );
+                : await resolvePointAfterEffect(sendCommand, tab.id, resolved);
               for (const type of events) {
                 await sendCdpCommand(
                   sendCommand,
@@ -3569,39 +5788,74 @@ export async function runCdpHostAutomation(
                     [params],
                   ).catch(() => undefined)
                 : undefined;
-            return {
-              pointer: action,
-              point: latest.point,
-              button,
-              clickCount,
-              strategy: 'cdp_mouse',
-              targetTextMatched:
-                normalizedPoint &&
-                typeof normalizedPoint === 'object' &&
-                'targetTextMatched' in normalizedPoint
-                  ? (
-                      normalizedPoint as {
-                        targetTextMatched?: boolean;
-                      }
-                    ).targetTextMatched
-                  : undefined,
-              expectedAfterClick,
-              ...hitTest,
-            };
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
+              params,
+              {
+                pointer: action,
+                point: latest.point,
+                button,
+                clickCount,
+                strategy: 'cdp_mouse',
+                targetTextMatched:
+                  normalizedPoint &&
+                  typeof normalizedPoint === 'object' &&
+                  'targetTextMatched' in normalizedPoint
+                    ? (
+                        normalizedPoint as {
+                          targetTextMatched?: boolean;
+                        }
+                      ).targetTextMatched
+                    : undefined,
+                expectedAfterClick,
+                ...hitTest,
+              },
+              {
+                invalidate: action === 'click',
+                resolution: latest.resolution ?? resolved.resolution,
+              },
+            );
           }
           case 'host_page_fill': {
-            await resolvePoint(sendCommand, tab.id, params);
+            const resolved = await resolvePoint(sendCommand, tab.id, params);
+            await requireCdpActionApproval(
+              sendCommand,
+              tab.id,
+              call.name,
+              params,
+            );
             await showCdpVisualEffect(sendCommand, tab.id, {
               type: 'fill',
               anchor: 'target',
               value: typeof params.value === 'string' ? params.value : '',
             });
-            return evaluatePageScript(sendCommand, tab.id, pageFillScript, [
+            const latest = await resolvePointAfterEffect(
+              sendCommand,
+              tab.id,
+              resolved,
+            );
+            const fillResult = await evaluatePageScript(
+              sendCommand,
+              tab.id,
+              pageFillScript,
+              [params],
+            );
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
               params,
-            ]);
+              fillResult && typeof fillResult === 'object'
+                ? (fillResult as Record<string, unknown>)
+                : {},
+              {
+                invalidate: true,
+                resolution: latest.resolution ?? resolved.resolution,
+              },
+            );
           }
           case 'host_page_select': {
-            await resolvePoint(sendCommand, tab.id, params);
+            const resolved = await resolvePoint(sendCommand, tab.id, params);
             const values = Array.isArray(params.values)
               ? params.values.filter((value) => typeof value === 'string')
               : typeof params.value === 'string'
@@ -3612,9 +5866,29 @@ export async function runCdpHostAutomation(
               anchor: 'target',
               values,
             });
-            return evaluatePageScript(sendCommand, tab.id, pageSelectScript, [
+            const latest = await resolvePointAfterEffect(
+              sendCommand,
+              tab.id,
+              resolved,
+            );
+            const selectResult = await evaluatePageScript(
+              sendCommand,
+              tab.id,
+              pageSelectScript,
+              [params],
+            );
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
               params,
-            ]);
+              selectResult && typeof selectResult === 'object'
+                ? (selectResult as Record<string, unknown>)
+                : {},
+              {
+                invalidate: true,
+                resolution: latest.resolution ?? resolved.resolution,
+              },
+            );
           }
           case 'host_page_scroll': {
             const hasTarget =
@@ -3650,7 +5924,13 @@ export async function runCdpHostAutomation(
                   deltaY: typeof params.deltaY === 'number' ? params.deltaY : 0,
                 },
               );
-              return { scrolled: 'page', strategy: 'cdp_mouse_wheel' };
+              return completeV2CdpAction(
+                sendCommand,
+                tab.id,
+                params,
+                { scrolled: 'page', strategy: 'cdp_mouse_wheel' },
+                { invalidate: true },
+              );
             }
             const resolved = hasTarget
               ? await resolvePoint(sendCommand, tab.id, params)
@@ -3661,9 +5941,27 @@ export async function runCdpHostAutomation(
               deltaX: typeof params.deltaX === 'number' ? params.deltaX : 0,
               deltaY: typeof params.deltaY === 'number' ? params.deltaY : 0,
             });
-            return evaluatePageScript(sendCommand, tab.id, pageScrollScript, [
+            const latest = resolved
+              ? await resolvePointAfterEffect(sendCommand, tab.id, resolved)
+              : undefined;
+            const scrollResult = await evaluatePageScript(
+              sendCommand,
+              tab.id,
+              pageScrollScript,
+              [params],
+            );
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
               params,
-            ]);
+              scrollResult && typeof scrollResult === 'object'
+                ? (scrollResult as Record<string, unknown>)
+                : {},
+              {
+                invalidate: true,
+                resolution: latest?.resolution ?? resolved?.resolution,
+              },
+            );
           }
           case 'host_page_navigate': {
             const rawUrl = typeof params.url === 'string' ? params.url : '';
@@ -3671,20 +5969,51 @@ export async function runCdpHostAutomation(
             if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
               throw new Error('Navigation only supports HTTP(S) URLs.');
             }
+            await requireCdpActionApproval(
+              sendCommand,
+              tab.id,
+              call.name,
+              params,
+            );
             await sendCdpCommand(sendCommand, tab.id, 'Page.navigate', {
               url: nextUrl.toString(),
             });
-            return { navigated: nextUrl.toString(), strategy: 'cdp_page' };
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
+              params,
+              { navigated: nextUrl.toString(), strategy: 'cdp_page' },
+              { invalidate: true },
+            );
           }
           case 'host_page_focus': {
-            await resolvePoint(sendCommand, tab.id, params);
+            const resolved = await resolvePoint(sendCommand, tab.id, params);
             await showCdpVisualEffect(sendCommand, tab.id, {
               type: 'focus',
               anchor: 'target',
             });
-            return evaluatePageScript(sendCommand, tab.id, pageFocusScript, [
+            const latest = await resolvePointAfterEffect(
+              sendCommand,
+              tab.id,
+              resolved,
+            );
+            const focusResult = await evaluatePageScript(
+              sendCommand,
+              tab.id,
+              pageFocusResolvedTargetScript,
+            );
+            return completeV2CdpAction(
+              sendCommand,
+              tab.id,
               params,
-            ]);
+              focusResult && typeof focusResult === 'object'
+                ? (focusResult as Record<string, unknown>)
+                : {},
+              {
+                invalidate: false,
+                resolution: latest.resolution ?? resolved.resolution,
+              },
+            );
           }
           case 'host_page_screenshot': {
             const format = params.format === 'png' ? 'png' : 'jpeg';
@@ -3770,6 +6099,12 @@ export async function runCdpHostAutomation(
       },
     );
 
+    const actionResult = addBrowserActionEvidence(
+      call.name,
+      tab.url ?? '',
+      result,
+    );
+
     if (call.name === 'host_page_screenshot') {
       const screenshot = createScreenshotToolContent(result);
       return createToolMessage(
@@ -3780,11 +6115,35 @@ export async function runCdpHostAutomation(
       );
     }
 
-    return createToolMessage(call, 'success', { ok: true, result });
+    if (
+      actionResult &&
+      typeof actionResult === 'object' &&
+      !Array.isArray(actionResult) &&
+      (actionResult as Record<string, unknown>).outcome ===
+        'verification_failed'
+    ) {
+      return createToolMessage(call, 'error', {
+        ok: false,
+        result: actionResult,
+      });
+    }
+
+    return createToolMessage(call, 'success', {
+      ok: true,
+      result: actionResult,
+    });
   } catch (error) {
+    const browserError = readCdpBrowserAutomationError(error);
+    const details = addBrowserActionEvidence(
+      call.name,
+      tab.url ?? '',
+      browserError?.details,
+    );
     return createToolMessage(call, 'error', {
       ok: false,
-      error: getErrorMessage(error),
+      ...(browserError
+        ? (details as Record<string, unknown>)
+        : { error: getErrorMessage(error) }),
     });
   }
 }

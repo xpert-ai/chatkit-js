@@ -22,20 +22,31 @@ const getParentOrigin = () => {
 /**
  * Decode base64 options from URL hash
  */
-function decodeOptionsFromUrl(): ChatKitOptions | null {
-  if (typeof window === 'undefined') return null;
+type ChatKitFrameUrlParams = {
+  channelId?: string;
+  options?: ChatKitOptions;
+};
+
+function decodeFrameParamsFromUrl(): ChatKitFrameUrlParams {
+  if (typeof window === 'undefined') return {};
 
   const hash = window.location.hash;
   const encoded = hash.startsWith('#') ? hash.slice(1) : hash;
 
-  if (!encoded) return null;
+  if (!encoded) return {};
 
   try {
-    const params = decodeBase64<{ options?: ChatKitOptions }>(encoded);
-    return params?.options ?? null;
+    const params = decodeBase64<ChatKitFrameUrlParams>(encoded);
+    return {
+      channelId:
+        typeof params?.channelId === 'string' && params.channelId.trim()
+          ? params.channelId
+          : undefined,
+      options: params?.options,
+    };
   } catch (error) {
     console.warn('[chatkit-ui] Failed to decode options from URL hash:', error);
-    return null;
+    return {};
   }
 }
 
@@ -45,7 +56,8 @@ const initialClientSecret =
     : new URLSearchParams(window.location.search).get('clientSecret') ?? '';
 
 // Parse options from URL on initial load
-const initialOptions = decodeOptionsFromUrl();
+const initialFrameParams = decodeFrameParamsFromUrl();
+const initialOptions = initialFrameParams.options ?? null;
 
 const AppContainer = () => {
   const [clientSecret, setClientSecret] = React.useState(initialClientSecret);
@@ -149,7 +161,7 @@ const AppContainer = () => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <NuqsAdapter>
-      <ParentMessengerProvider>
+      <ParentMessengerProvider channelId={initialFrameParams.channelId}>
         <AppContainer />
       </ParentMessengerProvider>
     </NuqsAdapter>

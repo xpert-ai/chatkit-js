@@ -12,6 +12,14 @@ export type JsonSchema = {
 };
 
 const targetProperties = {
+  pageStateId: {
+    type: 'string',
+    description: 'Opaque page state id from the latest v2 host_page_snapshot.',
+  },
+  documentRef: {
+    type: 'string',
+    description: 'Document scope from the latest v2 host_page_snapshot.',
+  },
   ref: {
     type: ['string', 'number'],
     description: 'Element ref from host_page_snapshot.',
@@ -40,6 +48,9 @@ const targetProperties = {
     type: 'string',
     description: 'Visible text to match.',
   },
+} satisfies Record<string, JsonSchema>;
+
+const pointerCoordinateProperties = {
   x: {
     type: 'number',
     description: 'Viewport x coordinate.',
@@ -48,9 +59,6 @@ const targetProperties = {
     type: 'number',
     description: 'Viewport y coordinate.',
   },
-} satisfies Record<string, JsonSchema>;
-
-const pointerCoordinateProperties = {
   coordinateSpace: {
     type: 'string',
     enum: ['viewport-css-px', 'viewport_normalized'],
@@ -58,6 +66,70 @@ const pointerCoordinateProperties = {
       'Coordinate space for x/y. Use viewport_normalized for screenshot-derived points.',
   },
 } satisfies Record<string, JsonSchema>;
+
+const observationTargetSchema = {
+  type: 'object',
+  properties: {
+    documentScope: {
+      type: 'string',
+      enum: ['same_document', 'current_top'],
+    },
+    documentRef: { type: 'string' },
+    kind: {
+      type: 'string',
+      enum: ['test_id', 'selector', 'semantic'],
+    },
+    testId: { type: 'string' },
+    selector: { type: 'string' },
+    match: { const: 'exact' },
+    identity: {
+      type: 'object',
+      properties: {
+        role: { type: 'string' },
+        name: { type: 'string' },
+        text: { type: 'string' },
+      },
+      required: ['role'],
+      additionalProperties: false,
+    },
+  },
+  required: ['documentScope', 'kind'],
+  additionalProperties: false,
+} satisfies JsonSchema;
+
+const actionExpectationSchema = {
+  type: 'object',
+  properties: {
+    type: {
+      type: 'string',
+      enum: [
+        'field_contains',
+        'checked_equals',
+        'element_visible',
+        'element_hidden',
+        'url_matches',
+        'text_visible',
+      ],
+    },
+    target: observationTargetSchema,
+    scope: {
+      type: 'object',
+      properties: {
+        documentScope: {
+          type: 'string',
+          enum: ['same_document', 'current_top'],
+        },
+        documentRef: { type: 'string' },
+      },
+      required: ['documentScope'],
+      additionalProperties: false,
+    },
+    mode: { type: 'string', enum: ['exact', 'prefix'] },
+    value: { type: ['string', 'boolean'] },
+  },
+  required: ['type'],
+  additionalProperties: false,
+} satisfies JsonSchema;
 
 const expectedAfterClickSchema = {
   type: 'object',
@@ -82,13 +154,20 @@ const expectedAfterClickSchema = {
 export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
   host_page_snapshot: {
     type: 'object',
-    properties: {},
+    properties: {
+      pageStateId: {
+        type: 'string',
+        description:
+          'Reuse the cached snapshot state when reading another paginated page.',
+      },
+    },
     additionalProperties: false,
   },
   host_page_click: {
     type: 'object',
     properties: {
       ...targetProperties,
+      expectation: actionExpectationSchema,
     },
     additionalProperties: false,
   },
@@ -100,6 +179,7 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
         type: 'string',
         description: 'Text value to set on the target field.',
       },
+      expectation: actionExpectationSchema,
     },
     required: ['value'],
     additionalProperties: false,
@@ -112,6 +192,7 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
         type: 'string',
         description: 'Keyboard key to press.',
       },
+      expectation: actionExpectationSchema,
     },
     required: ['key'],
     additionalProperties: false,
@@ -130,6 +211,7 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
         description: 'Select option values.',
         items: { type: 'string' },
       },
+      expectation: actionExpectationSchema,
     },
     additionalProperties: false,
   },
@@ -145,16 +227,28 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
         type: 'number',
         description: 'Vertical scroll delta.',
       },
+      x: {
+        type: 'number',
+        description: 'Absolute horizontal scroll position.',
+      },
+      y: {
+        type: 'number',
+        description: 'Absolute vertical scroll position.',
+      },
+      expectation: actionExpectationSchema,
     },
     additionalProperties: false,
   },
   host_page_navigate: {
     type: 'object',
     properties: {
+      pageStateId: targetProperties.pageStateId,
+      documentRef: targetProperties.documentRef,
       url: {
         type: 'string',
         description: 'HTTP(S) URL to navigate to.',
       },
+      expectation: actionExpectationSchema,
     },
     required: ['url'],
     additionalProperties: false,
@@ -194,8 +288,17 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
       targetText: {
         type: 'string',
         description:
-          'Required for explicit coordinate clicks. The actual hit target or near ancestor must contain this text.',
+          'Required for explicit coordinate clicks. Must exactly match the hit target or a finite actionable ancestor.',
       },
+      targetRole: {
+        type: 'string',
+        description: 'Exact role used to disambiguate coordinate targets.',
+      },
+      targetContext: {
+        type: 'string',
+        description: 'Nearby exact context used to disambiguate coordinates.',
+      },
+      expectation: actionExpectationSchema,
       expectedAfterClick: expectedAfterClickSchema,
     },
     additionalProperties: false,
@@ -225,11 +328,13 @@ export const HOST_PAGE_AUTOMATION_TOOL_SCHEMAS = {
       scope: {
         type: 'string',
         enum: ['visible'],
-        description: 'Visible content scope. Use blockId when a specific readable block is known.',
+        description:
+          'Visible content scope. Use blockId when a specific readable block is known.',
       },
       query: {
         type: 'string',
-        description: 'Optional text query for selecting relevant readable blocks.',
+        description:
+          'Optional text query for selecting relevant readable blocks.',
       },
       page: {
         type: 'number',

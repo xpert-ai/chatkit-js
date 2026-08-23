@@ -1,5 +1,7 @@
 export * from './BaseMessenger'
 export * from './frameEncoding'
+export * from './messageChannel'
+export { createSecureChannelId } from './safeRandomUUID'
 export * from './types/index'
 export * from './types/capabilities.types'
 export * from './capabilities'

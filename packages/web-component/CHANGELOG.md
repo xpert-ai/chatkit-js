@@ -1,5 +1,38 @@
 # @xpert-ai/chatkit-web-component
 
+## 0.5.1
+
+### Patch Changes
+
+- 573d1bd: Authenticate iframe messages with a per-frame channel when embedded WebViews expose non-canonical window source proxies.
+  Defer composer state synchronization until IME composition ends in embedded WebViews.
+- Updated dependencies [573d1bd]
+  - @xpert-ai/chatkit-web-shared@0.4.3
+
+## 0.5.0
+
+### Minor Changes
+
+- cfae5c6: Add a secure Tool Output Attachment protocol for immutable model-viewed images,
+  host-authorized short-lived preview resolution, inline tool-call galleries, and
+  accessible full-image previews without persisting signed URLs or base64 data.
+
+### Patch Changes
+
+- Updated dependencies [cfae5c6]
+  - @xpert-ai/chatkit-types@0.5.0
+  - @xpert-ai/chatkit-web-shared@0.4.2
+
+## 0.4.1
+
+### Patch Changes
+
+- 4610ece: Add an opt-in Remote Views workbench with responsive split and drawer layouts,
+  an isolated iframe protocol bridge, chat context and client-command integration,
+  and the public `workbench` options.
+- Updated dependencies [4610ece]
+  - @xpert-ai/chatkit-types@0.4.7
+
 ## 0.4.0
 
 ### Minor Changes
