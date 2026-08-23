@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.1
+
+### Patch Changes
+
+- d6a31c8: Add projectId
+- f92b405: tool icon
+
 ## 0.5.0
 
 ### Minor Changes
