@@ -183,6 +183,15 @@ export type StateType = { messages: ChatKitAIMessage[] };
 
 type StreamRunInput = TChatRequest | TXpertChatResumeRequest;
 
+function withProjectId(
+  input: StreamRunInput | null | undefined,
+  projectId?: string,
+): StreamRunInput | null | undefined {
+  if (!projectId || !input || ('action' in input && input.action === 'resume'))
+    return input;
+  return { ...input, projectId };
+}
+
 export type HistoryMessagePaginationState = {
   conversationId: string | null;
   loadedCount: number;
@@ -259,6 +268,7 @@ export type StreamContextType = {
   authenticatedFetch: typeof fetch;
   apiUrl: string;
   assistantId: string;
+  projectId?: string;
   apiKey: string;
   organizationId?: string;
   threadId: string | null;
@@ -590,7 +600,9 @@ function normalizeThreadIdentifier(threadId?: string | null): string | null {
   return normalized ? normalized : null;
 }
 
-function normalizeMessageFiles(value: unknown): Record<string, unknown>[] | undefined {
+function normalizeMessageFiles(
+  value: unknown,
+): Record<string, unknown>[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }
@@ -1051,8 +1063,10 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const id = typeof raw.id === 'string' ? raw.id : createMessageId();
   const executionId =
     typeof raw.executionId === 'string' ? raw.executionId : undefined;
-  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : undefined;
-  const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined;
+  const createdAt =
+    typeof raw.createdAt === 'string' ? raw.createdAt : undefined;
+  const updatedAt =
+    typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined;
   const references = extractMessageReferences(raw);
   const submittedInput =
     extractSubmittedInput(raw) ??
@@ -1060,8 +1074,12 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
   const toolCalls = extractClientToolCalls(raw);
-  const attachments = normalizeMessageFiles((raw as { attachments?: unknown }).attachments);
-  const fileAssets = normalizeMessageFiles((raw as { fileAssets?: unknown }).fileAssets);
+  const attachments = normalizeMessageFiles(
+    (raw as { attachments?: unknown }).attachments,
+  );
+  const fileAssets = normalizeMessageFiles(
+    (raw as { fileAssets?: unknown }).fileAssets,
+  );
   const rawAgentRuns = (raw as { agentRuns?: unknown }).agentRuns;
   const agentRuns = Array.isArray(rawAgentRuns)
     ? rawAgentRuns
@@ -1116,8 +1134,12 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
   const submittedInput = extractSubmittedInput(raw);
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
-  const attachments = normalizeMessageFiles((raw as { attachments?: unknown }).attachments);
-  const fileAssets = normalizeMessageFiles((raw as { fileAssets?: unknown }).fileAssets);
+  const attachments = normalizeMessageFiles(
+    (raw as { attachments?: unknown }).attachments,
+  );
+  const fileAssets = normalizeMessageFiles(
+    (raw as { fileAssets?: unknown }).fileAssets,
+  );
   const clientToolCalls = extractClientToolCalls(raw);
   if (references.length > 0) {
     meta.references = references;
@@ -1830,6 +1852,7 @@ const StreamSession = ({
   organizationId,
   apiUrl,
   assistantId,
+  projectId,
   initialThread,
   locale,
   additionalContext,
@@ -1839,6 +1862,7 @@ const StreamSession = ({
   organizationId?: string;
   apiUrl: string;
   assistantId: string;
+  projectId?: string;
   initialThread?: string | null;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
@@ -1938,8 +1962,7 @@ const StreamSession = ({
           ) => HistoryMessagePaginationState),
     ) => {
       setHistoryMessagePagination((previous) => {
-        const resolved =
-          typeof next === 'function' ? next(previous) : next;
+        const resolved = typeof next === 'function' ? next(previous) : next;
         historyMessagePaginationRef.current = resolved;
         return resolved;
       });
@@ -2362,9 +2385,7 @@ const StreamSession = ({
     if (ids.length === 0) return;
     const idSet = new Set(ids);
     steerPriorityFollowUpIdsRef.current = new Set(
-      [...steerPriorityFollowUpIdsRef.current].filter(
-        (id) => !idSet.has(id),
-      ),
+      [...steerPriorityFollowUpIdsRef.current].filter((id) => !idSet.has(id)),
     );
   }, []);
 
@@ -2506,9 +2527,7 @@ const StreamSession = ({
       }
       const page = normalizeConversationMessagesPage(response);
       steerPriorityFollowUpIdsRef.current = new Set();
-      const autoDrainIds = getAutoDrainQueuedFollowUpIds(
-        page.pendingFollowUps,
-      );
+      const autoDrainIds = getAutoDrainQueuedFollowUpIds(page.pendingFollowUps);
       autoQueuedFollowUpIdsRef.current = new Set(autoDrainIds);
       pendingFollowUpsRef.current = page.pendingFollowUps;
       setAutoQueuedFollowUpIds(autoDrainIds);
@@ -2998,11 +3017,12 @@ const StreamSession = ({
           ),
           config: options?.config,
         });
+        const scopedInput = withProjectId(input, projectId);
         const stream =
           options?.joinExistingThread && runId
             ? client.runs.joinStream(nextThreadId, runId)
             : client.runs.stream(nextThreadId, assistantId, {
-                input: input ?? null,
+                input: scopedInput ?? null,
                 context: normalizedRequest.context,
                 config: normalizedRequest.config as Config | undefined,
                 checkpoint: options?.checkpoint ?? undefined,
@@ -3017,7 +3037,7 @@ const StreamSession = ({
         const langGraphEventState = createLangGraphEventState();
         const eventContext: LangGraphEventContext = {
           threadId: nextThreadId,
-          input,
+          input: scopedInput,
         };
         for await (const chunk of stream) {
           if (chunk?.id) {
@@ -3369,14 +3389,10 @@ const StreamSession = ({
         const addPending = (prev: PendingFollowUp[]) => {
           const remaining = prev.filter((item) => item.id !== pending.id);
           if (pending.mode === 'steer') {
-            return movePendingFollowUpBeforeQueuedItems(
-              remaining,
-              pending.id,
-              {
-                ...pending,
-                queuedFromSteer: true,
-              },
-            );
+            return movePendingFollowUpBeforeQueuedItems(remaining, pending.id, {
+              ...pending,
+              queuedFromSteer: true,
+            });
           }
 
           return [...remaining, pending];
@@ -3471,18 +3487,41 @@ const StreamSession = ({
         setThreadId(desiredThreadId);
       }
       if (!nextThreadId && desiredThreadId) {
-        const created = await client.threads.create(
-          createAssistantThreadPayload(assistantId, desiredThreadId),
-        );
-        nextThreadId = created.thread_id;
-        setThreadId(created.thread_id);
+        if (projectId) {
+          const created = await client.conversations.create({
+            threadId: desiredThreadId,
+            xpertId: assistantId,
+            projectId,
+          });
+          nextThreadId = getConversationThreadId(created);
+          conversationIdRef.current = created.id;
+        } else {
+          const created = await client.threads.create(
+            createAssistantThreadPayload(assistantId, desiredThreadId),
+          );
+          nextThreadId = created.thread_id;
+        }
+        if (!nextThreadId)
+          throw new Error('Conversation did not return a thread id');
+        setThreadId(nextThreadId);
       }
       if (!nextThreadId) {
-        const created = await client.threads.create(
-          createAssistantThreadPayload(assistantId),
-        );
-        nextThreadId = created.thread_id;
-        setThreadId(created.thread_id);
+        if (projectId) {
+          const created = await client.conversations.create({
+            xpertId: assistantId,
+            projectId,
+          });
+          nextThreadId = getConversationThreadId(created);
+          conversationIdRef.current = created.id;
+        } else {
+          const created = await client.threads.create(
+            createAssistantThreadPayload(assistantId),
+          );
+          nextThreadId = created.thread_id;
+        }
+        if (!nextThreadId)
+          throw new Error('Conversation did not return a thread id');
+        setThreadId(nextThreadId);
       }
       if (desiredThreadId && desiredThreadId !== nextThreadId) {
         nextThreadId = desiredThreadId;
@@ -3522,6 +3561,8 @@ const StreamSession = ({
       sendSteerFollowUp,
       setThreadId,
       threadId,
+      assistantId,
+      projectId,
       updateConversationId,
       updateHistoryMessagePagination,
       updateTodos,
@@ -3540,6 +3581,7 @@ const StreamSession = ({
     authenticatedFetch: fetchWithClientSecretRefresh,
     apiUrl,
     assistantId,
+    projectId,
     apiKey: runtimeClientSecret,
     organizationId: runtimeOrganizationId,
     threadId: threadId ?? null,
@@ -3585,6 +3627,7 @@ export const StreamProvider: React.FC<{
   organizationId?: string;
   apiUrl?: string;
   xpertId?: string;
+  projectId?: string;
   initialThread?: string | null;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
@@ -3594,6 +3637,7 @@ export const StreamProvider: React.FC<{
   organizationId,
   apiUrl,
   xpertId,
+  projectId,
   initialThread,
   locale,
   additionalContext,
@@ -3604,6 +3648,7 @@ export const StreamProvider: React.FC<{
       organizationId={organizationId}
       apiUrl={apiUrl ?? defaultApiUrl}
       assistantId={xpertId ?? 'your-xpert-id'}
+      projectId={projectId}
       initialThread={initialThread}
       locale={locale}
       additionalContext={additionalContext}
