@@ -3486,38 +3486,23 @@ const StreamSession = ({
         activeThreadIdRef.current = desiredThreadId;
         setThreadId(desiredThreadId);
       }
-      if (!nextThreadId && desiredThreadId) {
-        if (projectId) {
-          const created = await client.conversations.create({
-            threadId: desiredThreadId,
-            xpertId: assistantId,
-            projectId,
-          });
-          nextThreadId = getConversationThreadId(created);
-          conversationIdRef.current = created.id;
-        } else {
-          const created = await client.threads.create(
-            createAssistantThreadPayload(assistantId, desiredThreadId),
-          );
-          nextThreadId = created.thread_id;
-        }
-        if (!nextThreadId)
-          throw new Error('Conversation did not return a thread id');
-        setThreadId(nextThreadId);
-      }
       if (!nextThreadId) {
+        const createdThread = await client.threads.create(
+          createAssistantThreadPayload(
+            assistantId,
+            desiredThreadId ?? undefined,
+          ),
+        );
+        nextThreadId = createdThread.thread_id;
+
         if (projectId) {
-          const created = await client.conversations.create({
+          const createdConversation = await client.conversations.create({
+            threadId: nextThreadId,
             xpertId: assistantId,
             projectId,
           });
-          nextThreadId = getConversationThreadId(created);
-          conversationIdRef.current = created.id;
-        } else {
-          const created = await client.threads.create(
-            createAssistantThreadPayload(assistantId),
-          );
-          nextThreadId = created.thread_id;
+          nextThreadId = getConversationThreadId(createdConversation);
+          conversationIdRef.current = createdConversation.id;
         }
         if (!nextThreadId)
           throw new Error('Conversation did not return a thread id');
