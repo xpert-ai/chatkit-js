@@ -3121,6 +3121,7 @@ export function Chat({
                           organizationId={stream.organizationId}
                           apiUrl={stream.apiUrl}
                           pet={effectivePet}
+                          mcpApps={options?.mcpApps}
                         />
                       ) : (
                         <>

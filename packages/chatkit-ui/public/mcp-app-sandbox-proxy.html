@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MCP App Sandbox</title>
+    <style>
+      html,
+      body,
+      #app {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        const parentOrigin = params.get('parentOrigin');
+        const container = document.getElementById('app');
+        let appFrame = null;
+
+        function isAllowedParentOrigin(value) {
+          if (!value) return false;
+          try {
+            const url = new URL(value);
+            return (
+              url.origin === value &&
+              (url.protocol === 'https:' ||
+                (url.protocol === 'http:' &&
+                  (url.hostname === 'localhost' ||
+                    url.hostname === '127.0.0.1' ||
+                    url.hostname === '[::1]')))
+            );
+          } catch {
+            return false;
+          }
+        }
+
+        if (!container || !isAllowedParentOrigin(parentOrigin)) return;
+
+        function postToHost(message) {
+          window.parent.postMessage(message, parentOrigin);
+        }
+
+        function iframeAllow(permissions) {
+          if (!permissions || typeof permissions !== 'object') return '';
+          const policies = [];
+          if (permissions.camera) policies.push('camera *');
+          if (permissions.microphone) policies.push('microphone *');
+          if (permissions.geolocation) policies.push('geolocation *');
+          if (permissions.clipboardWrite) policies.push('clipboard-write *');
+          return policies.join('; ');
+        }
+
+        function loadResource(params) {
+          if (!params || typeof params.html !== 'string' || appFrame) return;
+          const iframe = document.createElement('iframe');
+          iframe.title = 'MCP App';
+          iframe.referrerPolicy = 'no-referrer';
+          iframe.sandbox.value =
+            typeof params.sandbox === 'string'
+              ? params.sandbox
+              : 'allow-forms allow-modals allow-scripts';
+          const allow = iframeAllow(params.permissions);
+          if (allow) iframe.allow = allow;
+          iframe.srcdoc = params.html;
+          appFrame = iframe;
+          container.replaceChildren(iframe);
+        }
+
+        window.addEventListener('message', (event) => {
+          if (event.source === window.parent) {
+            if (event.origin !== parentOrigin) return;
+            if (
+              event.data?.method === 'ui/notifications/sandbox-resource-ready'
+            ) {
+              loadResource(event.data.params);
+              return;
+            }
+            appFrame?.contentWindow?.postMessage(event.data, '*');
+            return;
+          }
+
+          if (appFrame && event.source === appFrame.contentWindow) {
+            postToHost(event.data);
+          }
+        });
+
+        postToHost({
+          jsonrpc: '2.0',
+          method: 'ui/notifications/sandbox-proxy-ready',
+          params: {},
+        });
+      })();
+    </script>
+  </body>
+</html>

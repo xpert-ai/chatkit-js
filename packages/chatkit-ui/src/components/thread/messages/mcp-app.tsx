@@ -2,22 +2,36 @@ import * as React from 'react';
 
 import {
   resolveLocalizedText,
+  type ChatRequestFile,
+  type ChatKitMcpAppsOptions,
   type TMessageComponentMcpAppData,
 } from '@xpert-ai/chatkit-types';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import type { McpAppReviveQuery } from '@xpert-ai/xpert-sdk';
+import {
+  AlertCircle,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  PictureInPicture2,
+  ShieldAlert,
+} from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 import { useStreamContext } from '../../../providers/Stream';
 import { Badge } from '../../ui/badge';
+import { Button } from '../../ui/button';
 import { IconDefinitionRenderer } from '../../ui/icon-definition';
-
-type JsonRpcRequest = {
-  jsonrpc?: '2.0';
-  id?: string | number | null;
-  method?: string;
-  params?: unknown;
-};
+import {
+  isMcpAppRpcSuccess,
+  readMcpAppDisplayMode,
+  readMcpAppPendingApproval,
+  triggerMcpAppDownloads,
+  withMcpAppApprovalId,
+  type McpAppDisplayMode,
+  type McpAppJsonRpcRequest as JsonRpcRequest,
+  type McpAppPendingApproval,
+} from './mcp-app/host';
 
 type JsonObject = Record<string, unknown>;
 
@@ -79,6 +93,12 @@ type NormalizedMcpAppResource = {
   rawToolResult: unknown;
 };
 
+type ResolvedMcpAppSandboxProxy = {
+  url: string;
+  origin: string;
+  dedicatedOrigin: boolean;
+};
+
 const EMPTY_INPUT_SCHEMA: McpJsonSchemaObject = {
   type: 'object',
   properties: {},
@@ -124,67 +144,29 @@ function readIconDefinition(
 
 function readStringList(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const strings = value.filter((item): item is string => typeof item === 'string');
+  const strings = value.filter(
+    (item): item is string => typeof item === 'string',
+  );
   return strings.length ? strings : undefined;
 }
 
-function buildXpertApiUrl(apiUrl: string, path: string) {
-  const normalizedApiUrl = apiUrl.trim();
-  if (!normalizedApiUrl) return path;
-
-  try {
-    const url = new URL(normalizedApiUrl);
-    return `${url.origin}${path}`;
-  } catch {
-    return path;
-  }
-}
-
-function appendQuery(path: string, params: URLSearchParams) {
-  const query = params.toString();
-  return query ? `${path}?${query}` : path;
-}
-
-function buildMcpAppReviveParams(
+function buildMcpAppReviveQuery(
   data: TMessageComponentMcpAppData,
   options?: {
     appInstanceToken?: string;
     messageId?: string;
   },
-) {
-  const params = new URLSearchParams();
-  const add = (key: string, value?: string) => {
-    if (value) {
-      params.set(key, value);
-    }
+): McpAppReviveQuery {
+  return {
+    toolsetId: data.toolsetId,
+    serverName: data.serverName,
+    toolName: data.toolName,
+    toolCallId: data.toolCallId,
+    resourceUri: data.resourceUri,
+    title: typeof data.title === 'string' ? data.title : undefined,
+    messageId: options?.messageId,
+    token: options?.appInstanceToken ?? data.appInstanceToken,
   };
-
-  add('toolsetId', data.toolsetId);
-  add('serverName', data.serverName);
-  add('toolName', data.toolName);
-  add('toolCallId', data.toolCallId);
-  add('resourceUri', data.resourceUri);
-  add('title', typeof data.title === 'string' ? data.title : undefined);
-  add('messageId', options?.messageId);
-  add('token', options?.appInstanceToken ?? data.appInstanceToken);
-
-  return params;
-}
-
-function buildMcpAppEndpointPath(
-  data: TMessageComponentMcpAppData,
-  endpoint: 'resource' | 'rpc',
-  options?: {
-    appInstanceToken?: string;
-    messageId?: string;
-  },
-) {
-  return appendQuery(
-    `/api/xpert-toolset/mcp-apps/${encodeURIComponent(
-      data.appInstanceId,
-    )}/${endpoint}`,
-    buildMcpAppReviveParams(data, options),
-  );
 }
 
 function escapeHtmlAttribute(value: string) {
@@ -196,7 +178,12 @@ function escapeHtmlAttribute(value: string) {
 }
 
 function domains(values?: string[]) {
-  return values?.filter((value) => value.trim()).join(' ') ?? '';
+  return (
+    values
+      ?.map((value) => value.trim())
+      .filter((value) => value && !/[\s;'"<>]/.test(value))
+      .join(' ') ?? ''
+  );
 }
 
 function buildCsp(csp?: TMessageComponentMcpAppData['csp']) {
@@ -213,7 +200,9 @@ function buildCsp(csp?: TMessageComponentMcpAppData['csp']) {
     `media-src data: blob: ${resourceDomains}`.trim(),
     `font-src data: ${resourceDomains}`.trim(),
     `connect-src ${connectDomains}`,
+    `form-action ${connectDomains}`,
     `frame-src ${frameDomains}`,
+    "object-src 'none'",
     `base-uri ${baseUriDomains}`,
   ].join('; ');
 }
@@ -329,13 +318,19 @@ function jsonRpcResult(id: JsonRpcRequest['id'], result: unknown) {
   };
 }
 
-function jsonRpcError(id: JsonRpcRequest['id'], message: string) {
+function jsonRpcError(
+  id: JsonRpcRequest['id'],
+  message: string,
+  code = -32000,
+  data?: unknown,
+) {
   return {
     jsonrpc: '2.0',
     id: id ?? null,
     error: {
-      code: -32000,
+      code,
       message,
+      ...(data === undefined ? {} : { data }),
     },
   };
 }
@@ -403,11 +398,7 @@ const MCP_APP_THEME_COLOR_TOKENS = [
   ['--background', '--mcp-app-color-background', 'oklch(1 0 0)'],
   ['--foreground', '--mcp-app-color-foreground', 'oklch(0.145 0 0)'],
   ['--card', '--mcp-app-color-card', 'oklch(1 0 0)'],
-  [
-    '--card-foreground',
-    '--mcp-app-color-card-foreground',
-    'oklch(0.145 0 0)',
-  ],
+  ['--card-foreground', '--mcp-app-color-card-foreground', 'oklch(0.145 0 0)'],
   ['--popover', '--mcp-app-color-popover', 'oklch(1 0 0)'],
   [
     '--popover-foreground',
@@ -438,11 +429,7 @@ const MCP_APP_THEME_COLOR_TOKENS = [
     '--mcp-app-color-accent-foreground',
     'oklch(0.205 0 0)',
   ],
-  [
-    '--destructive',
-    '--mcp-app-color-destructive',
-    'oklch(0.577 0.245 27.325)',
-  ],
+  ['--destructive', '--mcp-app-color-destructive', 'oklch(0.577 0.245 27.325)'],
   [
     '--destructive-foreground',
     '--mcp-app-color-destructive-foreground',
@@ -611,13 +598,10 @@ function normalizeMcpAppToolInfo(
       ...rawTool,
       name: originalName,
       title: readLocalizedText(rawTool.title) ?? title,
-      inputSchema: normalizeInputSchema(
-        rawTool.inputSchema ?? raw.inputSchema,
-      ),
+      inputSchema: normalizeInputSchema(rawTool.inputSchema ?? raw.inputSchema),
       ...(description
         ? {
-            description:
-              readLocalizedText(rawTool.description) ?? description,
+            description: readLocalizedText(rawTool.description) ?? description,
           }
         : {}),
       ...(icon ? { icon: readIconDefinition(rawTool.icon) ?? icon } : {}),
@@ -652,9 +636,93 @@ function buildIframeAllow(
 }
 
 function buildSandboxAttribute() {
-  return ['allow-downloads', 'allow-forms', 'allow-modals', 'allow-scripts'].join(
-    ' ',
+  return ['allow-forms', 'allow-modals', 'allow-scripts'].join(' ');
+}
+
+function isLoopbackHostname(hostname: string) {
+  return (
+    hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
   );
+}
+
+function normalizeRequestedDomain(value?: string) {
+  const domain = value?.trim().toLowerCase().replace(/\.$/, '');
+  if (!domain || /[/:?#@]/.test(domain)) return null;
+
+  try {
+    const parsed = new URL(`https://${domain}`);
+    return parsed.hostname === domain && !parsed.port ? domain : null;
+  } catch {
+    return null;
+  }
+}
+
+function domainMatchesAllowlist(domain: string, allowedDomains?: string[]) {
+  return Boolean(
+    allowedDomains?.some((value) => {
+      const entry = value.trim().toLowerCase().replace(/\.$/, '');
+      if (entry.startsWith('*.')) {
+        const suffix = entry.slice(2);
+        return (
+          Boolean(suffix) && domain !== suffix && domain.endsWith(`.${suffix}`)
+        );
+      }
+      return domain === entry;
+    }),
+  );
+}
+
+/**
+ * Resolves only host-owned sandbox URLs. A server-provided `ui.domain` may
+ * select an approved hostname, but is never treated as a URL by itself.
+ */
+export function resolveMcpAppSandboxProxy(
+  options: ChatKitMcpAppsOptions | undefined,
+  requestedDomain: string | undefined,
+  hostLocation = window.location.href,
+): ResolvedMcpAppSandboxProxy | null {
+  const configuredUrl = options?.sandboxProxyUrl?.trim();
+  if (!configuredUrl) return null;
+
+  try {
+    const hostOrigin = new URL(hostLocation).origin;
+    const proxyUrl = new URL(configuredUrl, hostLocation);
+    if (
+      proxyUrl.protocol !== 'https:' &&
+      !(proxyUrl.protocol === 'http:' && isLoopbackHostname(proxyUrl.hostname))
+    ) {
+      return null;
+    }
+
+    const domain = normalizeRequestedDomain(requestedDomain);
+    const dedicatedOrigin = Boolean(
+      domain &&
+      (domain === proxyUrl.hostname.toLowerCase() ||
+        domainMatchesAllowlist(domain, options?.allowedDomains)),
+    );
+    if (domain && dedicatedOrigin) {
+      proxyUrl.hostname = domain;
+      proxyUrl.port = '';
+    }
+    if (proxyUrl.origin === hostOrigin) return null;
+
+    const fragment = new URLSearchParams(proxyUrl.hash.slice(1));
+    fragment.set('parentOrigin', hostOrigin);
+    proxyUrl.hash = fragment.toString();
+    return {
+      url: proxyUrl.toString(),
+      origin: proxyUrl.origin,
+      dedicatedOrigin,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildMcpAppInnerSandbox(dedicatedOrigin: boolean) {
+  return dedicatedOrigin
+    ? `${buildSandboxAttribute()} allow-same-origin`
+    : buildSandboxAttribute();
 }
 
 function stringifyToolResult(value: unknown) {
@@ -824,27 +892,151 @@ function isHttpUrl(value: string) {
   }
 }
 
-function contentBlocksToText(content: unknown) {
-  if (!Array.isArray(content)) return null;
+const MCP_APP_MESSAGE_MAX_BINARY_BYTES = 25 * 1024 * 1024;
 
-  const parts = content
-    .map((item) => {
-      if (!isRecord(item)) return '';
-      if (item.type === 'text' && typeof item.text === 'string') {
-        return item.text;
-      }
-      if (item.type === 'resource_link' && typeof item.uri === 'string') {
-        return item.uri;
-      }
-      if (item.type === 'image' || item.type === 'audio') {
-        return `[${item.type}]`;
-      }
-      return stringifyToolResult(item);
-    })
-    .map((part) => part.trim())
-    .filter(Boolean);
+type McpAppMessageInput = {
+  input: string;
+  files: ChatRequestFile[];
+};
 
-  return parts.length ? parts.join('\n\n') : null;
+function normalizeMcpMimeType(value: unknown, fallback?: string) {
+  const mimeType = typeof value === 'string' ? value.trim() : fallback;
+  return mimeType &&
+    /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i.test(mimeType)
+    ? mimeType.toLowerCase()
+    : null;
+}
+
+function normalizeMcpBase64(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const data = value.replace(/\s/g, '');
+  if (!data || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+    return null;
+  }
+  return data;
+}
+
+function decodedBase64Bytes(data: string) {
+  const padding = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
+  return (data.length / 4) * 3 - padding;
+}
+
+function mcpMessageFile(
+  data: string,
+  mimeType: string,
+  name: string,
+): ChatRequestFile {
+  return {
+    name,
+    originalName: name,
+    mimeType,
+    fileUrl: `data:${mimeType};base64,${data}`,
+  };
+}
+
+function resourceLabel(resource: JsonObject) {
+  const details = {
+    uri: readString(resource.uri),
+    mimeType: readString(resource.mimeType),
+  };
+  return `[Resource ${stringifyToolResult(details)}]`;
+}
+
+function resourceLinkLabel(resourceLink: JsonObject) {
+  const details = {
+    uri: readString(resourceLink.uri),
+    name: readString(resourceLink.name),
+    description: readString(resourceLink.description),
+    mimeType: readString(resourceLink.mimeType),
+    size: typeof resourceLink.size === 'number' ? resourceLink.size : undefined,
+  };
+  return `[Resource link ${stringifyToolResult(details)}]`;
+}
+
+function contentBlocksToChatInput(content: unknown): McpAppMessageInput {
+  if (!Array.isArray(content)) {
+    throw new Error('ui/message content must be an array');
+  }
+
+  const text: string[] = [];
+  const files: ChatRequestFile[] = [];
+  let binaryBytes = 0;
+
+  content.forEach((item, index) => {
+    if (!isRecord(item) || typeof item.type !== 'string') {
+      throw new Error(`ui/message content block ${index + 1} is invalid`);
+    }
+
+    if (item.type === 'text') {
+      if (typeof item.text !== 'string') {
+        throw new Error(`ui/message text block ${index + 1} is invalid`);
+      }
+      if (item.text.length) text.push(item.text);
+      return;
+    }
+
+    if (item.type === 'image' || item.type === 'audio') {
+      const mimeType = normalizeMcpMimeType(item.mimeType);
+      const data = normalizeMcpBase64(item.data);
+      if (!mimeType || !data || !mimeType.startsWith(`${item.type}/`)) {
+        throw new Error(
+          `ui/message ${item.type} block ${index + 1} is invalid`,
+        );
+      }
+      binaryBytes += decodedBase64Bytes(data);
+      files.push(
+        mcpMessageFile(data, mimeType, `mcp-app-${item.type}-${index + 1}`),
+      );
+      return;
+    }
+
+    if (item.type === 'resource') {
+      const resource = readRecord(item.resource);
+      if (!resource || typeof resource.uri !== 'string') {
+        throw new Error(`ui/message resource block ${index + 1} is invalid`);
+      }
+      const label = resourceLabel(resource);
+      if (typeof resource.text === 'string') {
+        text.push(`${label}\n${resource.text}`);
+        return;
+      }
+      const data = normalizeMcpBase64(resource.blob);
+      const mimeType = normalizeMcpMimeType(
+        resource.mimeType,
+        'application/octet-stream',
+      );
+      if (!data || !mimeType) {
+        throw new Error(`ui/message resource block ${index + 1} is invalid`);
+      }
+      binaryBytes += decodedBase64Bytes(data);
+      text.push(label);
+      files.push(
+        mcpMessageFile(data, mimeType, `mcp-app-resource-${index + 1}`),
+      );
+      return;
+    }
+
+    if (item.type === 'resource_link' && typeof item.uri === 'string') {
+      text.push(resourceLinkLabel(item));
+      return;
+    }
+
+    throw new Error(
+      `ui/message content block ${index + 1} uses an unsupported type`,
+    );
+  });
+
+  if (binaryBytes > MCP_APP_MESSAGE_MAX_BINARY_BYTES) {
+    throw new Error('ui/message binary content exceeds the 25 MiB limit');
+  }
+  if (!text.length && !files.length) {
+    throw new Error('ui/message content is empty');
+  }
+
+  return {
+    input: text.join('\n\n'),
+    files,
+  };
 }
 
 export function isMcpAppComponentData(
@@ -862,81 +1054,236 @@ export function McpAppMessage({
   data,
   messageId,
   className,
+  mcpApps,
 }: {
   data: TMessageComponentMcpAppData;
   messageId?: string;
   className?: string;
+  mcpApps?: ChatKitMcpAppsOptions;
 }) {
   const { i18n } = useChatkitTranslation();
-  const {
-    apiUrl,
-    authenticatedFetch,
-    isLoading: streamIsLoading,
-    submit,
-  } = useStreamContext();
+  const { client, isLoading: streamIsLoading, submit } = useStreamContext();
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const appWindowRef = React.useRef<Window | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const initializedRef = React.useRef(false);
   const sentInitialResultRef = React.useRef(false);
   const modelContextRef = React.useRef<unknown>(null);
+  const pendingApprovalRef = React.useRef<McpAppPendingApproval | null>(null);
+  const approvalActionRef = React.useRef<'approve' | 'reject' | null>(null);
+  const runtimeAppInstanceTokenRef = React.useRef<string | undefined>(
+    data.appInstanceToken,
+  );
+  const teardownGenerationRef = React.useRef(0);
+  const teardownStartedRef = React.useRef(false);
+  const activeAppInstanceIdRef = React.useRef(data.appInstanceId);
   const [resource, setResource] =
     React.useState<NormalizedMcpAppResource | null>(null);
-  const [runtimeAppInstanceToken, setRuntimeAppInstanceToken] =
-    React.useState<string | undefined>(data.appInstanceToken);
+  const [runtimeAppInstanceToken, setRuntimeAppInstanceToken] = React.useState<
+    string | undefined
+  >(data.appInstanceToken);
   const [srcDoc, setSrcDoc] = React.useState<string | null>(null);
   const [height, setHeight] = React.useState(420);
+  const [displayMode, setDisplayMode] =
+    React.useState<McpAppDisplayMode>('inline');
+  const [pendingApproval, setPendingApproval] =
+    React.useState<McpAppPendingApproval | null>(null);
+  const [approvalAction, setApprovalAction] = React.useState<
+    'approve' | 'reject' | null
+  >(null);
+  const [approvalError, setApprovalError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isTornDown, setIsTornDown] = React.useState(false);
 
-  const resourceUrl = React.useMemo(
-    () =>
-      buildXpertApiUrl(
-        apiUrl,
-        buildMcpAppEndpointPath(data, 'resource', {
-          messageId,
-        }),
-      ),
-    [apiUrl, data, messageId],
+  const sandboxProxy = React.useMemo(
+    () => resolveMcpAppSandboxProxy(mcpApps, resource?.domain ?? data.domain),
+    [data.domain, mcpApps, resource?.domain],
   );
 
-  const rpcUrl = React.useMemo(
-    () =>
-      buildXpertApiUrl(
-        apiUrl,
-        buildMcpAppEndpointPath(data, 'rpc', {
-          appInstanceToken: runtimeAppInstanceToken,
-          messageId,
-        }),
-      ),
-    [apiUrl, data, messageId, runtimeAppInstanceToken],
+  React.useEffect(() => {
+    runtimeAppInstanceTokenRef.current = runtimeAppInstanceToken;
+  }, [runtimeAppInstanceToken]);
+
+  const bindIframeRef = React.useCallback(
+    (iframe: HTMLIFrameElement | null) => {
+      iframeRef.current = iframe;
+      if (iframe?.contentWindow) {
+        appWindowRef.current = iframe.contentWindow;
+      }
+    },
+    [],
   );
 
-  const postToApp = React.useCallback((message: unknown) => {
-    iframeRef.current?.contentWindow?.postMessage(message, '*');
-  }, []);
+  const postToApp = React.useCallback(
+    (message: unknown) => {
+      iframeRef.current?.contentWindow?.postMessage(
+        message,
+        sandboxProxy?.origin ?? '*',
+      );
+    },
+    [sandboxProxy?.origin],
+  );
 
   const callHostRpc = React.useCallback(
     async (request: JsonRpcRequest) => {
-      const response = await authenticatedFetch(rpcUrl, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
+      return client.mcp.apps.rpc(
+        data.appInstanceId,
+        {
           jsonrpc: '2.0',
           id: request.id ?? null,
           method: request.method,
           params: request.params,
+        },
+        buildMcpAppReviveQuery(data, {
+          appInstanceToken: runtimeAppInstanceToken,
+          messageId,
         }),
-      });
+      );
+    },
+    [client, data, messageId, runtimeAppInstanceToken],
+  );
 
-      if (!response.ok) {
-        throw new Error(`MCP App RPC failed with ${response.status}`);
+  const clearPendingApproval = React.useCallback(() => {
+    pendingApprovalRef.current = null;
+    approvalActionRef.current = null;
+    setPendingApproval(null);
+    setApprovalAction(null);
+    setApprovalError(null);
+  }, []);
+
+  const isSupersededStrictModeTeardown = React.useCallback(
+    (generation: number, appInstanceId: string) =>
+      teardownGenerationRef.current !== generation &&
+      activeAppInstanceIdRef.current === appInstanceId,
+    [],
+  );
+
+  const processHostRpcResponse = React.useCallback(
+    (request: JsonRpcRequest, response: unknown) => {
+      const nextApproval = readMcpAppPendingApproval(response, request);
+      if (nextApproval) {
+        if (pendingApprovalRef.current) {
+          postToApp(
+            jsonRpcError(
+              request.id,
+              'Another MCP App approval request is already pending',
+              -32004,
+            ),
+          );
+          return;
+        }
+        pendingApprovalRef.current = nextApproval;
+        setPendingApproval(nextApproval);
+        setApprovalError(null);
+        return;
       }
 
-      return response.json() as Promise<unknown>;
+      const nextDisplayMode = readMcpAppDisplayMode(response);
+      if (request.method === 'ui/request-display-mode' && nextDisplayMode) {
+        setDisplayMode(nextDisplayMode);
+      }
+
+      if (
+        request.method === 'ui/download-file' &&
+        isMcpAppRpcSuccess(response)
+      ) {
+        try {
+          triggerMcpAppDownloads(request.params);
+        } catch (downloadError) {
+          postToApp(
+            jsonRpcError(request.id, getErrorMessage(downloadError), -32005),
+          );
+          return;
+        }
+      }
+
+      postToApp(response);
     },
-    [authenticatedFetch, rpcUrl],
+    [postToApp],
+  );
+
+  const dispatchHostRpc = React.useCallback(
+    async (request: JsonRpcRequest) => {
+      try {
+        processHostRpcResponse(request, await callHostRpc(request));
+      } catch (rpcError) {
+        postToApp(jsonRpcError(request.id, getErrorMessage(rpcError)));
+      }
+    },
+    [callHostRpc, postToApp, processHostRpcResponse],
+  );
+
+  const resolvePendingApproval = React.useCallback(
+    async (action: 'approve' | 'reject') => {
+      const approval = pendingApprovalRef.current;
+      if (!approval || approvalActionRef.current) return;
+      if (approval.expiresAt <= Date.now()) {
+        clearPendingApproval();
+        postToApp(
+          jsonRpcError(
+            approval.request.id,
+            'The MCP App approval request expired',
+            -32003,
+          ),
+        );
+        return;
+      }
+
+      approvalActionRef.current = action;
+      setApprovalAction(action);
+      setApprovalError(null);
+      const query = buildMcpAppReviveQuery(data, {
+        appInstanceToken: runtimeAppInstanceToken,
+        messageId,
+      });
+      try {
+        if (action === 'reject') {
+          await client.mcp.apps.reject(
+            data.appInstanceId,
+            approval.approvalId,
+            query,
+          );
+          clearPendingApproval();
+          postToApp(
+            jsonRpcError(
+              approval.request.id,
+              'The user rejected the MCP App action',
+              -32002,
+              { approvalId: approval.approvalId, rejected: true },
+            ),
+          );
+          return;
+        }
+
+        await client.mcp.apps.approve(
+          data.appInstanceId,
+          approval.approvalId,
+          query,
+        );
+        const retryRequest = withMcpAppApprovalId(
+          approval.request,
+          approval.approvalId,
+        );
+        const response = await callHostRpc(retryRequest);
+        clearPendingApproval();
+        processHostRpcResponse(retryRequest, response);
+      } catch (approvalRequestError) {
+        approvalActionRef.current = null;
+        setApprovalAction(null);
+        setApprovalError(getErrorMessage(approvalRequestError));
+      }
+    },
+    [
+      callHostRpc,
+      clearPendingApproval,
+      client,
+      data,
+      messageId,
+      postToApp,
+      processHostRpcResponse,
+      runtimeAppInstanceToken,
+    ],
   );
 
   const sendInitialToolNotifications = React.useCallback(() => {
@@ -972,7 +1319,16 @@ export function McpAppMessage({
     const controller = new AbortController();
     initializedRef.current = false;
     sentInitialResultRef.current = false;
+    pendingApprovalRef.current = null;
+    approvalActionRef.current = null;
     setRuntimeAppInstanceToken(data.appInstanceToken);
+    runtimeAppInstanceTokenRef.current = data.appInstanceToken;
+    teardownStartedRef.current = false;
+    setIsTornDown(false);
+    setDisplayMode('inline');
+    setPendingApproval(null);
+    setApprovalAction(null);
+    setApprovalError(null);
     setIsLoading(true);
     setError(null);
     setResource(null);
@@ -980,23 +1336,21 @@ export function McpAppMessage({
 
     void (async () => {
       try {
-        const response = await authenticatedFetch(resourceUrl, {
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`MCP App resource failed with ${response.status}`);
-        }
-
-        const payload = await response.json();
+        const payload = await client.mcp.apps.getResource(
+          data.appInstanceId,
+          buildMcpAppReviveQuery(data, { messageId }),
+          { signal: controller.signal },
+        );
         const normalizedResource = normalizeMcpAppResourceResponse(
           payload,
           data,
         );
 
         setResource(normalizedResource);
-        setRuntimeAppInstanceToken(
-          normalizedResource.appInstanceToken ?? data.appInstanceToken,
-        );
+        const nextAppInstanceToken =
+          normalizedResource.appInstanceToken ?? data.appInstanceToken;
+        runtimeAppInstanceTokenRef.current = nextAppInstanceToken;
+        setRuntimeAppInstanceToken(nextAppInstanceToken);
         const hostLocale = normalizeHostLocale(i18n.language);
         setSrcDoc(
           injectMcpAppTheme(
@@ -1022,27 +1376,147 @@ export function McpAppMessage({
       controller.abort();
     };
   }, [
-    authenticatedFetch,
+    client,
     data,
     data.appInstanceId,
     data.appInstanceToken,
     data.csp,
     i18n.language,
-    resourceUrl,
+    messageId,
   ]);
+
+  React.useEffect(() => {
+    const generation = ++teardownGenerationRef.current;
+    activeAppInstanceIdRef.current = data.appInstanceId;
+    return () => {
+      const appWindow = appWindowRef.current;
+      const appOrigin = sandboxProxy?.origin ?? '*';
+      const query = buildMcpAppReviveQuery(data, {
+        appInstanceToken: runtimeAppInstanceTokenRef.current,
+        messageId,
+      });
+      const approval = pendingApprovalRef.current;
+      queueMicrotask(() => {
+        if (isSupersededStrictModeTeardown(generation, data.appInstanceId)) {
+          return;
+        }
+        if (teardownStartedRef.current) {
+          return;
+        }
+        teardownStartedRef.current = true;
+        try {
+          appWindow?.postMessage(
+            {
+              jsonrpc: '2.0',
+              id: `xpert-teardown-${data.appInstanceId}`,
+              method: 'ui/resource-teardown',
+              params: { reason: 'host-unmount' },
+            },
+            appOrigin,
+          );
+        } catch {
+          // Detached iframe windows can disappear before React effect cleanup.
+        }
+        void (async () => {
+          if (approval) {
+            await client.mcp.apps
+              .reject(data.appInstanceId, approval.approvalId, query)
+              .catch(() => undefined);
+          }
+          await client.mcp.apps
+            .teardown(data.appInstanceId, query)
+            .catch(() => undefined);
+        })();
+      });
+    };
+  }, [
+    client,
+    data,
+    data.appInstanceId,
+    isSupersededStrictModeTeardown,
+    messageId,
+    sandboxProxy?.origin,
+  ]);
+
+  React.useEffect(() => {
+    if (!pendingApproval) return;
+    const remaining = pendingApproval.expiresAt - Date.now();
+    if (remaining <= 0) {
+      clearPendingApproval();
+      postToApp(
+        jsonRpcError(
+          pendingApproval.request.id,
+          'The MCP App approval request expired',
+          -32003,
+        ),
+      );
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      if (
+        pendingApprovalRef.current?.approvalId !== pendingApproval.approvalId
+      ) {
+        return;
+      }
+      clearPendingApproval();
+      postToApp(
+        jsonRpcError(
+          pendingApproval.request.id,
+          'The MCP App approval request expired',
+          -32003,
+        ),
+      );
+    }, remaining);
+    return () => window.clearTimeout(timeout);
+  }, [clearPendingApproval, pendingApproval, postToApp]);
 
   React.useEffect(() => {
     sendInitialToolNotifications();
   }, [sendInitialToolNotifications]);
 
   React.useEffect(() => {
+    if (!initializedRef.current) return;
+    postToApp({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/host-context-changed',
+      params: {
+        displayMode,
+        containerDimensions: getContainerDimensions(containerRef.current),
+      },
+    });
+  }, [displayMode, height, postToApp]);
+
+  React.useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) {
+        return;
+      }
+      if (sandboxProxy && event.origin !== sandboxProxy.origin) {
         return;
       }
 
       const request = normalizeJsonRpcMessage(event.data);
       if (!request?.method) {
+        return;
+      }
+
+      if (
+        request.method === 'ui/notifications/sandbox-proxy-ready' &&
+        sandboxProxy &&
+        srcDoc
+      ) {
+        const permissions = resource?.permissions ?? data.permissions;
+        const csp = resource?.csp ?? data.csp;
+        postToApp({
+          jsonrpc: '2.0',
+          method: 'ui/notifications/sandbox-resource-ready',
+          params: {
+            html: srcDoc,
+            sandbox: buildMcpAppInnerSandbox(sandboxProxy.dedicatedOrigin),
+            ...(csp ? { csp } : {}),
+            ...(permissions ? { permissions } : {}),
+          },
+        });
         return;
       }
 
@@ -1059,6 +1533,40 @@ export function McpAppMessage({
             : null;
         if (nextHeight !== null) {
           setHeight(Math.min(900, Math.max(240, Math.round(nextHeight))));
+        }
+        return;
+      }
+
+      if (request.method === 'ui/notifications/request-teardown') {
+        if (teardownStartedRef.current) {
+          return;
+        }
+        teardownStartedRef.current = true;
+        postToApp({
+          jsonrpc: '2.0',
+          id: `xpert-teardown-${data.appInstanceId}`,
+          method: 'ui/resource-teardown',
+          params: { reason: 'app-requested' },
+        });
+        const query = buildMcpAppReviveQuery(data, {
+          appInstanceToken: runtimeAppInstanceTokenRef.current,
+          messageId,
+        });
+        const approval = pendingApprovalRef.current;
+        try {
+          if (approval) {
+            await client.mcp.apps.reject(
+              data.appInstanceId,
+              approval.approvalId,
+              query,
+            );
+          }
+          await client.mcp.apps.teardown(data.appInstanceId, query);
+          clearPendingApproval();
+          setIsTornDown(true);
+        } catch (teardownError) {
+          teardownStartedRef.current = false;
+          setError(getErrorMessage(teardownError));
         }
         return;
       }
@@ -1088,6 +1596,10 @@ export function McpAppMessage({
               logging: {},
               message: {
                 text: {},
+                image: {},
+                audio: {},
+                resource: {},
+                resourceLink: {},
               },
               updateModelContext: {
                 text: {},
@@ -1097,28 +1609,35 @@ export function McpAppMessage({
                 ...(permissions ? { permissions } : {}),
                 ...(csp ? { csp } : {}),
               },
+              downloadFile: {},
             },
             hostContext: {
               toolInfo,
               theme: theme.mode,
+              styles: {
+                variables: theme.cssVariables,
+              },
               themeCssVariables: theme.cssVariables,
               locale: hostLocale,
               language: hostLanguage,
               direction: hostDirection,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              displayMode: 'inline',
-              availableDisplayModes: ['inline'],
+              displayMode,
+              availableDisplayModes: ['inline', 'fullscreen', 'pip'],
               containerDimensions: getContainerDimensions(containerRef.current),
               userAgent: 'xpert-chatkit',
               platform: 'web',
               deviceCapabilities: {
                 touch: navigator.maxTouchPoints > 0,
-                hover: window.matchMedia('(hover: hover)').matches,
+                hover:
+                  typeof window.matchMedia === 'function'
+                    ? window.matchMedia('(hover: hover)').matches
+                    : false,
               },
             },
             // Legacy compatibility for apps written before the 2026-01-26 result shape.
             capabilities: {
-              displayModes: ['inline'],
+              displayModes: ['inline', 'fullscreen', 'pip'],
               serverTools: true,
               serverResources: true,
               openLinks: true,
@@ -1131,8 +1650,8 @@ export function McpAppMessage({
               language: hostLanguage,
               direction: hostDirection,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              displayMode: 'inline',
-              availableDisplayModes: ['inline'],
+              displayMode,
+              availableDisplayModes: ['inline', 'fullscreen', 'pip'],
               containerDimensions: getContainerDimensions(containerRef.current),
               userAgent: navigator.userAgent,
               platform: navigator.platform,
@@ -1147,24 +1666,38 @@ export function McpAppMessage({
         const href =
           isRecord(request.params) && typeof request.params.url === 'string'
             ? request.params.url
-            : isRecord(request.params) && typeof request.params.href === 'string'
+            : isRecord(request.params) &&
+                typeof request.params.href === 'string'
               ? request.params.href
               : null;
-        if (href && isHttpUrl(href)) {
-          window.open(href, '_blank', 'noopener,noreferrer');
+        if (!href || !isHttpUrl(href)) {
           if (request.id !== undefined) {
-            postToApp(jsonRpcResult(request.id, {}));
+            postToApp(jsonRpcError(request.id, 'Invalid URL'));
           }
-        } else if (request.id !== undefined) {
-          postToApp(jsonRpcResult(request.id, { isError: true }));
+          return;
+        }
+        try {
+          const response = await callHostRpc({
+            ...request,
+            params: { url: href },
+          });
+          if (isMcpAppRpcSuccess(response)) {
+            window.open(href, '_blank', 'noopener,noreferrer');
+          }
+          postToApp(response);
+        } catch (linkError) {
+          postToApp(jsonRpcError(request.id, getErrorMessage(linkError)));
         }
         return;
       }
 
       if (request.method === 'ui/update-model-context') {
-        modelContextRef.current = request.params;
         try {
-          postToApp(await callHostRpc(request));
+          const response = await callHostRpc(request);
+          if (isMcpAppRpcSuccess(response)) {
+            modelContextRef.current = request.params;
+          }
+          postToApp(response);
         } catch (rpcError) {
           postToApp(jsonRpcError(request.id, getErrorMessage(rpcError)));
         }
@@ -1189,15 +1722,15 @@ export function McpAppMessage({
             return;
           }
 
-          const inputText = contentBlocksToText(request.params.content);
-          if (!inputText) {
-            throw new Error('ui/message content did not include text');
-          }
+          const messageInput = contentBlocksToChatInput(request.params.content);
 
           await submit(
             {
               input: {
-                input: inputText,
+                input: messageInput.input,
+                ...(messageInput.files.length
+                  ? { files: messageInput.files }
+                  : {}),
               },
             },
             {
@@ -1225,11 +1758,7 @@ export function McpAppMessage({
         return;
       }
 
-      try {
-        postToApp(await callHostRpc(request));
-      } catch (rpcError) {
-        postToApp(jsonRpcError(request.id, getErrorMessage(rpcError)));
-      }
+      await dispatchHostRpc(request);
     };
 
     window.addEventListener('message', handleMessage);
@@ -1238,19 +1767,20 @@ export function McpAppMessage({
     };
   }, [
     callHostRpc,
-    data.appInstanceId,
-    data.csp,
-    data.permissions,
-    data.resourceUri,
-    data.title,
-    data.toolCallId,
-    data.toolName,
+    clearPendingApproval,
+    client,
+    data,
+    dispatchHostRpc,
+    displayMode,
     i18n.language,
+    messageId,
     postToApp,
     resource?.csp,
     resource?.permissions,
     resource?.toolInfo,
+    sandboxProxy,
     sendInitialToolNotifications,
+    srcDoc,
     streamIsLoading,
     submit,
   ]);
@@ -1260,9 +1790,10 @@ export function McpAppMessage({
     () => buildIframeAllow(iframePermissions),
     [iframePermissions],
   );
-  const sandbox = React.useMemo(() => buildSandboxAttribute(), []);
-  const prefersBorder =
-    resource?.prefersBorder ?? data.prefersBorder ?? true;
+  const sandbox = sandboxProxy
+    ? 'allow-scripts allow-same-origin'
+    : buildSandboxAttribute();
+  const prefersBorder = resource?.prefersBorder ?? data.prefersBorder ?? true;
   const displayTitle =
     resolveLocalizedText(resource?.title ?? data.title, i18n.language) ??
     data.toolName;
@@ -1271,60 +1802,217 @@ export function McpAppMessage({
     i18n.language,
   );
   const displayIcon = resource?.icon ?? data.icon;
+  const elevatedDisplayMode = displayMode !== 'inline';
+
+  if (isTornDown) {
+    return null;
+  }
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'overflow-hidden rounded-lg border bg-background shadow-sm',
-        !prefersBorder && 'border-transparent shadow-none',
-        className,
-      )}
-    >
-      <div className="flex min-h-10 items-center justify-between gap-3 border-b px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {displayIcon ? (
-            <IconDefinitionRenderer
-              icon={displayIcon}
-              size={18}
-              className="shrink-0"
-              decorative
-            />
-          ) : null}
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{displayTitle}</div>
-            <div className="truncate text-[11px] text-muted-foreground">
-              {displayDescription ?? data.resourceUri}
-            </div>
-          </div>
-        </div>
-        <Badge variant="secondary" className="shrink-0 rounded-md">
-          MCP App
-        </Badge>
-      </div>
-
-      {isLoading ? (
-        <div className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>{i18n.t('message.mcpApp.loading')}</span>
-        </div>
-      ) : error ? (
-        <div className="flex h-40 items-center justify-center gap-2 px-4 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 break-words">{error}</span>
-        </div>
-      ) : srcDoc ? (
-        <iframe
-          ref={iframeRef}
-          title={displayTitle}
-          srcDoc={srcDoc}
-          className="block w-full bg-background"
-          style={{ height }}
-          sandbox={sandbox}
-          allow={iframeAllow}
-          referrerPolicy="no-referrer"
+    <>
+      {displayMode === 'fullscreen' ? (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-[79] bg-background/80 backdrop-blur-sm"
         />
       ) : null}
-    </div>
+      <div
+        ref={containerRef}
+        data-display-mode={displayMode}
+        className={cn(
+          'relative flex flex-col overflow-hidden rounded-lg border bg-background shadow-sm',
+          displayMode === 'fullscreen' && 'fixed inset-4 z-[80] shadow-2xl',
+          displayMode === 'pip' &&
+            'fixed right-4 bottom-4 z-[80] h-[min(640px,calc(100vh-2rem))] w-[min(480px,calc(100vw-2rem))] shadow-2xl',
+          !prefersBorder && 'border-transparent shadow-none',
+          className,
+        )}
+      >
+        <div className="flex min-h-10 items-center justify-between gap-3 border-b px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {displayIcon ? (
+              <IconDefinitionRenderer
+                icon={displayIcon}
+                size={18}
+                className="shrink-0"
+                decorative
+              />
+            ) : null}
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium">{displayTitle}</div>
+              <div className="truncate text-[11px] text-muted-foreground">
+                {displayDescription ?? data.resourceUri}
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {displayMode !== 'fullscreen' ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                title={i18n.t('message.mcpApp.fullscreen')}
+                aria-label={i18n.t('message.mcpApp.fullscreen')}
+                onClick={() => setDisplayMode('fullscreen')}
+              >
+                <Maximize2 />
+              </Button>
+            ) : null}
+            {displayMode !== 'pip' ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                title={i18n.t('message.mcpApp.pictureInPicture')}
+                aria-label={i18n.t('message.mcpApp.pictureInPicture')}
+                onClick={() => setDisplayMode('pip')}
+              >
+                <PictureInPicture2 />
+              </Button>
+            ) : null}
+            {elevatedDisplayMode ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                title={i18n.t('message.mcpApp.returnInline')}
+                aria-label={i18n.t('message.mcpApp.returnInline')}
+                onClick={() => setDisplayMode('inline')}
+              >
+                <Minimize2 />
+              </Button>
+            ) : null}
+            <Badge variant="secondary" className="ml-1 rounded-md">
+              MCP App
+            </Badge>
+          </div>
+        </div>
+
+        {pendingApproval ? (
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={`mcp-app-approval-${pendingApproval.approvalId}`}
+            className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm"
+          >
+            <div className="flex max-h-full w-full max-w-lg flex-col gap-4 overflow-hidden rounded-lg border bg-background p-4 shadow-xl">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-destructive/10 p-2 text-destructive">
+                  <ShieldAlert className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3
+                      id={`mcp-app-approval-${pendingApproval.approvalId}`}
+                      className="text-sm font-semibold"
+                    >
+                      {i18n.t('message.mcpApp.approvalTitle')}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className="border-destructive/40 text-destructive"
+                    >
+                      {pendingApproval.risk}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {i18n.t(
+                      pendingApproval.kind === 'download'
+                        ? 'message.mcpApp.downloadApprovalDescription'
+                        : 'message.mcpApp.toolApprovalDescription',
+                      { tool: pendingApproval.toolName },
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="min-h-0">
+                <div className="mb-1 text-xs font-medium">
+                  {i18n.t('message.mcpApp.requestDetails')}
+                </div>
+                <pre className="max-h-48 overflow-auto rounded-md border bg-muted/40 p-3 text-[11px] leading-5 whitespace-pre-wrap break-all">
+                  {pendingApproval.details}
+                </pre>
+              </div>
+
+              {approvalError ? (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 text-xs text-destructive"
+                >
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <span>{approvalError}</span>
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={approvalAction !== null}
+                  onClick={() => void resolvePendingApproval('reject')}
+                >
+                  {approvalAction === 'reject' ? (
+                    <Loader2 className="animate-spin" />
+                  ) : null}
+                  {i18n.t('message.mcpApp.reject')}
+                </Button>
+                <Button
+                  type="button"
+                  variant={
+                    pendingApproval.risk === 'destructive'
+                      ? 'destructive'
+                      : 'default'
+                  }
+                  disabled={approvalAction !== null}
+                  onClick={() => void resolvePendingApproval('approve')}
+                >
+                  {approvalAction === 'approve' ? (
+                    <Loader2 className="animate-spin" />
+                  ) : null}
+                  {i18n.t('message.mcpApp.approve')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isLoading ? (
+          <div
+            className={cn(
+              'flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground',
+              elevatedDisplayMode && 'min-h-0 flex-1',
+            )}
+          >
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>{i18n.t('message.mcpApp.loading')}</span>
+          </div>
+        ) : error ? (
+          <div
+            className={cn(
+              'flex h-40 items-center justify-center gap-2 px-4 text-sm text-destructive',
+              elevatedDisplayMode && 'min-h-0 flex-1',
+            )}
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">{error}</span>
+          </div>
+        ) : srcDoc ? (
+          <iframe
+            ref={bindIframeRef}
+            title={displayTitle}
+            {...(sandboxProxy ? { src: sandboxProxy.url } : { srcDoc })}
+            className={cn(
+              'block w-full bg-background',
+              elevatedDisplayMode && 'min-h-0 flex-1',
+            )}
+            style={elevatedDisplayMode ? undefined : { height }}
+            sandbox={sandbox}
+            allow={iframeAllow}
+            referrerPolicy="no-referrer"
+          />
+        ) : null}
+      </div>
+    </>
   );
 }

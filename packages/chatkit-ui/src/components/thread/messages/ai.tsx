@@ -68,6 +68,15 @@ export type AssistantMessageProps = {
   organizationId?: string;
   apiUrl?: string;
   pet?: ChatKitOptions['pet'] | null;
+  mcpApps?: ChatKitOptions['mcpApps'];
+};
+
+type AssistantContentRenderOptions = {
+  isThreadRunning?: boolean;
+  organizationId?: string;
+  apiUrl?: string;
+  isAgentOutput?: boolean;
+  mcpApps?: ChatKitOptions['mcpApps'];
 };
 
 const assistantMessageStackClassName =
@@ -425,12 +434,7 @@ function renderContentItem(
   index: number,
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
-  options?: {
-    isThreadRunning?: boolean;
-    organizationId?: string;
-    apiUrl?: string;
-    isAgentOutput?: boolean;
-  },
+  options?: AssistantContentRenderOptions,
 ): React.ReactNode {
   const messageId = message.id;
   const textClassName = options?.isAgentOutput
@@ -508,7 +512,11 @@ function renderContentItem(
     if (isMcpAppComponent(content)) {
       return (
         <div key={content.id ?? `mcp-app-${index}`}>
-          <McpAppMessage messageId={messageId} data={content.data} />
+          <McpAppMessage
+            messageId={messageId}
+            data={content.data}
+            mcpApps={options?.mcpApps}
+          />
         </div>
       );
     }
@@ -565,12 +573,7 @@ function renderContentUnit(
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
   hasFollowingItem: boolean,
-  options?: {
-    isThreadRunning?: boolean;
-    organizationId?: string;
-    apiUrl?: string;
-    isAgentOutput?: boolean;
-  },
+  options?: AssistantContentRenderOptions,
 ): React.ReactNode {
   if (unit.type === 'item') {
     return renderContentItem(unit.item, unit.index, message, lookupMessages, {
@@ -578,6 +581,7 @@ function renderContentUnit(
       organizationId: options?.organizationId,
       apiUrl: options?.apiUrl,
       isAgentOutput: options?.isAgentOutput,
+      mcpApps: options?.mcpApps,
     });
   }
 
@@ -599,12 +603,7 @@ function renderEntryBatch(
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
   hasFollowingItem: boolean,
-  options?: {
-    isThreadRunning?: boolean;
-    organizationId?: string;
-    apiUrl?: string;
-    isAgentOutput?: boolean;
-  },
+  options?: AssistantContentRenderOptions,
 ) {
   if (entries.length === 0) return null;
 
@@ -632,12 +631,7 @@ function renderAssistantRenderUnits(
   units: AssistantRenderUnit[],
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
-  options?: {
-    isThreadRunning?: boolean;
-    organizationId?: string;
-    apiUrl?: string;
-    isAgentOutput?: boolean;
-  },
+  options?: AssistantContentRenderOptions,
   depth = 0,
 ) {
   const rendered: React.ReactNode[] = [];
@@ -693,11 +687,7 @@ function renderAssistantRenderUnits(
 function renderContent(
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
-  options?: {
-    isThreadRunning?: boolean;
-    organizationId?: string;
-    apiUrl?: string;
-  },
+  options?: AssistantContentRenderOptions,
 ) {
   const renderTree = buildAssistantRenderTree(
     message as AssistantMessageWithAgentRuns,
@@ -795,6 +785,7 @@ export function AssistantMessage({
   organizationId,
   apiUrl,
   pet,
+  mcpApps,
 }: AssistantMessageProps) {
   const { t } = useChatkitTranslation();
   const renderTree = buildAssistantRenderTree(
@@ -820,6 +811,7 @@ export function AssistantMessage({
     isThreadRunning,
     organizationId,
     apiUrl,
+    mcpApps,
   });
   const reasoningNode = hasReasoning ? (
     <ReasoningBlock reasoning={rootReasoning ?? []} />

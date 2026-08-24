@@ -341,7 +341,16 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
-      "loading": "正在加载 MCP App"
+      "loading": "正在加载 MCP App",
+      "fullscreen": "全屏显示",
+      "pictureInPicture": "画中画显示",
+      "returnInline": "返回行内显示",
+      "approvalTitle": "确认 MCP App 操作",
+      "toolApprovalDescription": "App 请求运行“{{tool}}”。请检查请求内容后再决定是否允许。",
+      "downloadApprovalDescription": "App 请求将文件下载到此设备。请检查文件详情后再决定是否允许。",
+      "requestDetails": "请求详情",
+      "approve": "允许",
+      "reject": "拒绝"
     },
     "contextCompression": {
       "running": "正在自动压缩上下文",
