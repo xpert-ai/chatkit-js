@@ -341,7 +341,16 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
-      "loading": "Loading MCP App"
+      "loading": "Loading MCP App",
+      "fullscreen": "Open fullscreen",
+      "pictureInPicture": "Open picture in picture",
+      "returnInline": "Return inline",
+      "approvalTitle": "Confirm MCP App action",
+      "toolApprovalDescription": "The app wants to run \"{{tool}}\". Review the request before allowing it.",
+      "downloadApprovalDescription": "The app wants to download files to this device. Review the file details before allowing it.",
+      "requestDetails": "Request details",
+      "approve": "Allow",
+      "reject": "Reject"
     },
     "contextCompression": {
       "running": "Automatically compressing context",
