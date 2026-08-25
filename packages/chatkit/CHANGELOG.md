@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.2
+
+### Patch Changes
+
+- 2ca5cd6: Use the Xpert SDK for MCP App runtime requests and add isolated sandbox, approval, teardown, display mode, message, and download support.
+
 ## 0.5.1
 
 ### Patch Changes
