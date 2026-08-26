@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.4
+
+### Patch Changes
+
+- 75c95ef: Render tagged MCP boolean Elicitation interrupts as required True or False fields instead of generic action-review arguments.
+- Updated dependencies [75c95ef]
+  - @xpert-ai/chatkit-types@0.5.3
+
 ## 0.5.3
 
 ### Patch Changes
