@@ -62,6 +62,36 @@ describe('HITL interrupt normalization', () => {
     expect(normalizeHITLRequest(request)).toEqual(request);
   });
 
+  it('preserves explicit MCP boolean elicitation metadata', () => {
+    const request = {
+      elicitation: {
+        kind: 'mcp_elicitation',
+        actionName: 'MCP Elicitation',
+        field: {
+          name: 'approved',
+          type: 'boolean',
+          title: 'Approve',
+          required: true,
+        },
+      },
+      actionRequests: [
+        {
+          name: 'MCP Elicitation',
+          args: { approved: false },
+          description: 'Approve OAuth MCP tool test',
+        },
+      ],
+      reviewConfigs: [
+        {
+          actionName: 'MCP Elicitation',
+          allowedDecisions: ['approve', 'reject'],
+        },
+      ],
+    };
+
+    expect(normalizeHITLRequest(request)).toEqual(request);
+  });
+
   it('normalizes the LangChain snake_case HITL payload shape', () => {
     expect(
       normalizeHITLRequest({

@@ -321,6 +321,208 @@ export function HITLApprovalPanel({
   attachToComposer = true,
   className,
 }: HITLApprovalPanelProps) {
+  if (request?.request.elicitation?.kind === 'mcp_elicitation') {
+    return (
+      <MCPBooleanElicitationPanel
+        request={request}
+        onSubmit={onSubmit}
+        onDismiss={onDismiss}
+        attachToComposer={attachToComposer}
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <ActionReviewPanel
+      request={request}
+      onSubmit={onSubmit}
+      onDismiss={onDismiss}
+      attachToComposer={attachToComposer}
+      className={className}
+    />
+  );
+}
+
+function MCPBooleanElicitationPanel({
+  request,
+  onSubmit,
+  onDismiss,
+  attachToComposer = true,
+  className,
+}: HITLApprovalPanelProps) {
+  const { t } = useChatkitTranslation();
+  const rounded = useRoundedClasses();
+  const [decision, setDecision] = React.useState<'approve' | 'reject' | null>(
+    null,
+  );
+  const elicitation = request?.request.elicitation;
+  const action = request?.request.actionRequests.find(
+    (candidate) => candidate.name === elicitation?.actionName,
+  );
+
+  React.useEffect(() => {
+    setDecision(null);
+  }, [request?.id]);
+
+  React.useEffect(() => {
+    if (!request || !onDismiss) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+      if (event.key !== 'Escape' && event.key !== 'Esc') return;
+
+      event.preventDefault();
+      onDismiss();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onDismiss, request]);
+
+  if (!request || !elicitation || !action) return null;
+
+  const fieldTitle = elicitation.field.title ?? action.name;
+  const options = [
+    {
+      decision: 'approve' as const,
+      label: t('composer.hitl.true'),
+    },
+    {
+      decision: 'reject' as const,
+      label: t('composer.hitl.false'),
+    },
+  ];
+
+  return (
+    <section
+      aria-label={t('composer.hitl.mcpElicitationTitle')}
+      aria-live="polite"
+      className={cn(
+        'mx-2 border border-border bg-background/95 shadow-sm',
+        rounded.density.section,
+        attachToComposer ? 'border-b-0' : null,
+        attachToComposer ? rounded.top : rounded.panel,
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          'flex items-center gap-1.5 font-medium text-muted-foreground',
+          rounded.density.eyebrow,
+        )}
+      >
+        <ShieldCheck className="h-3.5 w-3.5" />
+        <span>{t('composer.hitl.mcpElicitationTitle')}</span>
+      </div>
+
+      <div className={cn('space-y-2.5', rounded.density.body)}>
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-medium text-muted-foreground">
+          <span>
+            {t('composer.hitl.fieldProgress', { current: 1, total: 1 })}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            {decision
+              ? t('composer.hitl.requiredAnswered')
+              : t('composer.hitl.requiredUnanswered')}
+          </span>
+        </div>
+
+        <div>
+          <h3
+            className={cn(
+              'font-semibold text-foreground',
+              rounded.density.title,
+            )}
+          >
+            {fieldTitle}
+          </h3>
+          {action.description ? (
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-5 text-muted-foreground">
+              {action.description}
+            </p>
+          ) : null}
+        </div>
+
+        <div role="radiogroup" aria-label={fieldTitle} className="grid gap-1.5">
+          {options.map((option) => {
+            const selected = decision === option.decision;
+            return (
+              <button
+                key={option.decision}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setDecision(option.decision)}
+                className={cn(
+                  'flex w-full items-center gap-2.5 border px-3 py-2 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  rounded.control,
+                  selected
+                    ? 'border-primary/50 bg-primary/10 text-foreground'
+                    : 'border-border bg-background text-foreground/85 hover:bg-muted/70',
+                )}
+              >
+                <span
+                  className={cn(
+                    'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                    selected ? 'border-primary' : 'border-muted-foreground/45',
+                  )}
+                >
+                  {selected ? (
+                    <span className="h-2 w-2 rounded-full bg-primary" />
+                  ) : null}
+                </span>
+                <span>{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div
+        className={cn('flex items-center justify-end', rounded.density.footer)}
+      >
+        {onDismiss ? (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className={cn(
+              'inline-flex items-center justify-center font-medium text-muted-foreground hover:text-foreground',
+              rounded.control,
+              rounded.density.dismissButton,
+            )}
+          >
+            {t('composer.hitl.cancel')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={!decision}
+          onClick={() => {
+            if (decision) onSubmit([{ type: decision }]);
+          }}
+          className={cn(
+            'inline-flex shrink-0 items-center justify-center gap-1.5 bg-primary font-semibold text-primary-foreground hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-45',
+            rounded.control,
+            rounded.density.continueButton,
+          )}
+        >
+          <CornerDownLeft className={rounded.density.continueIcon} />
+          <span>{t('composer.hitl.elicitationSubmit')}</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ActionReviewPanel({
+  request,
+  onSubmit,
+  onDismiss,
+  attachToComposer = true,
+  className,
+}: HITLApprovalPanelProps) {
   const { t } = useChatkitTranslation();
   const rounded = useRoundedClasses();
   const [drafts, setDrafts] = React.useState<Record<string, DecisionDraft>>(

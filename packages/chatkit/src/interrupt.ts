@@ -86,9 +86,23 @@ export interface HITLReviewConfig {
   argsSchema?: Record<string, unknown>;
 }
 
+export interface HITLBooleanElicitationField {
+  name: string;
+  type: 'boolean';
+  title?: string;
+  required: true;
+}
+
+export interface HITLMCPElicitation {
+  kind: 'mcp_elicitation';
+  actionName: string;
+  field: HITLBooleanElicitationField;
+}
+
 export interface HITLRequest {
   actionRequests: HITLActionRequest[];
   reviewConfigs: HITLReviewConfig[];
+  elicitation?: HITLMCPElicitation;
 }
 
 export interface HITLApproveDecision {
@@ -321,6 +335,36 @@ function normalizeHITLReviewConfig(
   };
 }
 
+function normalizeHITLMCPElicitation(
+  value: unknown,
+): HITLMCPElicitation | null {
+  if (!isRecord(value) || value.kind !== 'mcp_elicitation') return null;
+
+  const actionName = readStringField(value, 'actionName');
+  const field = readRecordField(value, 'field');
+  if (!actionName || !field) return null;
+
+  const name = readStringField(field, 'name');
+  if (!name || field.type !== 'boolean' || field.required !== true) {
+    return null;
+  }
+  if (field.title !== undefined && typeof field.title !== 'string') {
+    return null;
+  }
+
+  const title = readStringField(field, 'title');
+  return {
+    kind: 'mcp_elicitation',
+    actionName,
+    field: {
+      name,
+      type: 'boolean',
+      required: true,
+      ...(title ? { title } : {}),
+    },
+  };
+}
+
 export function normalizeHITLRequest(value: unknown): HITLRequest | null {
   if (!isRecord(value)) return null;
 
@@ -356,9 +400,33 @@ export function normalizeHITLRequest(value: unknown): HITLRequest | null {
     return null;
   }
 
+  const elicitation =
+    value.elicitation === undefined
+      ? undefined
+      : normalizeHITLMCPElicitation(value.elicitation);
+  if (value.elicitation !== undefined && !elicitation) return null;
+  if (elicitation) {
+    const action = normalizedActionRequests.find(
+      (request) => request?.name === elicitation.actionName,
+    );
+    const config = normalizedReviewConfigs.find(
+      (reviewConfig) => reviewConfig?.actionName === elicitation.actionName,
+    );
+    if (
+      !action ||
+      !config ||
+      typeof action.args[elicitation.field.name] !== 'boolean' ||
+      !config.allowedDecisions.includes('approve') ||
+      !config.allowedDecisions.includes('reject')
+    ) {
+      return null;
+    }
+  }
+
   return {
     actionRequests: normalizedActionRequests as HITLActionRequest[],
     reviewConfigs: normalizedReviewConfigs as HITLReviewConfig[],
+    ...(elicitation ? { elicitation } : {}),
   };
 }
 

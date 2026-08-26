@@ -15,6 +15,14 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
     t: (key: string, values?: Record<string, string | number>) => {
       const labels: Record<string, string> = {
         'composer.hitl.title': 'Action review',
+        'composer.hitl.mcpElicitationTitle': 'MCP Elicitation',
+        'composer.hitl.fieldProgress': `Field ${values?.current}/${values?.total}`,
+        'composer.hitl.requiredUnanswered': '1 required unanswered',
+        'composer.hitl.requiredAnswered': 'All required fields answered',
+        'composer.hitl.true': 'True',
+        'composer.hitl.false': 'False',
+        'composer.hitl.cancel': 'Cancel',
+        'composer.hitl.elicitationSubmit': 'Submit',
         'composer.hitl.actionProgress': `${values?.current} of ${values?.total}`,
         'composer.hitl.previousAction': 'Previous action',
         'composer.hitl.nextAction': 'Next action',
@@ -78,6 +86,34 @@ function createRequest(
   };
 }
 
+function createMcpElicitationRequest(): PendingHITLRequest {
+  return createRequest({
+    elicitation: {
+      kind: 'mcp_elicitation',
+      actionName: 'MCP Elicitation',
+      field: {
+        name: 'approved',
+        type: 'boolean',
+        title: 'Approve',
+        required: true,
+      },
+    },
+    actionRequests: [
+      {
+        name: 'MCP Elicitation',
+        args: { approved: false },
+        description: 'Approve OAuth MCP tool test',
+      },
+    ],
+    reviewConfigs: [
+      {
+        actionName: 'MCP Elicitation',
+        allowedDecisions: ['approve', 'reject'],
+      },
+    ],
+  });
+}
+
 describe('HITLApprovalPanel', () => {
   beforeEach(() => {
     themeMock.theme = {
@@ -101,6 +137,75 @@ describe('HITLApprovalPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
 
     expect(onSubmit).toHaveBeenCalledWith([{ type: 'approve' }]);
+  });
+
+  it('renders MCP boolean elicitation as a required True or False field', () => {
+    const onSubmit = vi.fn();
+    const request = createMcpElicitationRequest();
+
+    render(<HITLApprovalPanel request={request} onSubmit={onSubmit} />);
+
+    expect(screen.getByLabelText('MCP Elicitation')).toBeInTheDocument();
+    expect(screen.getByText('Field 1/1')).toBeInTheDocument();
+    expect(screen.getByText('1 required unanswered')).toBeInTheDocument();
+    expect(screen.getByText('Approve')).toBeInTheDocument();
+    expect(screen.getByText('Approve OAuth MCP tool test')).toBeInTheDocument();
+    expect(screen.queryByText('Arguments')).not.toBeInTheDocument();
+    expect(screen.queryByText('approved:')).not.toBeInTheDocument();
+
+    const submit = screen.getByRole('button', { name: 'Submit' });
+    expect(submit).toBeDisabled();
+    fireEvent.click(screen.getByRole('radio', { name: 'True' }));
+    expect(
+      screen.getByText('All required fields answered'),
+    ).toBeInTheDocument();
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    expect(onSubmit).toHaveBeenCalledWith([{ type: 'approve' }]);
+  });
+
+  it('submits False as the boolean rejection decision', () => {
+    const onSubmit = vi.fn();
+    render(
+      <HITLApprovalPanel
+        request={createMcpElicitationRequest()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'False' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    expect(onSubmit).toHaveBeenCalledWith([{ type: 'reject' }]);
+  });
+
+  it('does not infer MCP elicitation from the action display name', () => {
+    render(
+      <HITLApprovalPanel
+        request={createRequest({
+          actionRequests: [
+            {
+              name: 'MCP Elicitation',
+              args: { approved: false },
+            },
+          ],
+          reviewConfigs: [
+            {
+              actionName: 'MCP Elicitation',
+              allowedDecisions: ['approve', 'reject'],
+            },
+          ],
+        })}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Action review')).toBeInTheDocument();
+    expect(screen.getByText('Arguments')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: 'True' }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders readonly arguments as a JSON tree', () => {
