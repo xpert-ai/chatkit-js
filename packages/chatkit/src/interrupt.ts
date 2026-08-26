@@ -400,34 +400,31 @@ export function normalizeHITLRequest(value: unknown): HITLRequest | null {
     return null;
   }
 
-  const elicitation =
-    value.elicitation === undefined
-      ? undefined
-      : normalizeHITLMCPElicitation(value.elicitation);
-  if (value.elicitation !== undefined && !elicitation) return null;
-  if (elicitation) {
-    const action = normalizedActionRequests.find(
-      (request) => request?.name === elicitation.actionName,
-    );
-    const config = normalizedReviewConfigs.find(
-      (reviewConfig) => reviewConfig?.actionName === elicitation.actionName,
-    );
-    if (
-      !action ||
-      !config ||
-      typeof action.args[elicitation.field.name] !== 'boolean' ||
-      !config.allowedDecisions.includes('approve') ||
-      !config.allowedDecisions.includes('reject')
-    ) {
-      return null;
-    }
-  }
-
-  return {
+  const normalizedRequest: HITLRequest = {
     actionRequests: normalizedActionRequests as HITLActionRequest[],
     reviewConfigs: normalizedReviewConfigs as HITLReviewConfig[],
-    ...(elicitation ? { elicitation } : {}),
   };
+  const elicitation = normalizeHITLMCPElicitation(value.elicitation);
+  if (!elicitation || normalizedRequest.actionRequests.length !== 1) {
+    return normalizedRequest;
+  }
+
+  const action = normalizedRequest.actionRequests[0];
+  const config = normalizedRequest.reviewConfigs.find(
+    (reviewConfig) => reviewConfig.actionName === elicitation.actionName,
+  );
+  if (
+    !action ||
+    action.name !== elicitation.actionName ||
+    !config ||
+    typeof action.args[elicitation.field.name] !== 'boolean' ||
+    !config.allowedDecisions.includes('approve') ||
+    !config.allowedDecisions.includes('reject')
+  ) {
+    return normalizedRequest;
+  }
+
+  return { ...normalizedRequest, elicitation };
 }
 
 export function isClientToolRequest(

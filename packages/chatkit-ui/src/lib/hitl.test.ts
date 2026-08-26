@@ -92,6 +92,66 @@ describe('HITL interrupt normalization', () => {
     expect(normalizeHITLRequest(request)).toEqual(request);
   });
 
+  it.each([
+    [
+      'string field',
+      {
+        name: 'reason',
+        type: 'string',
+        title: 'Reason',
+        required: true,
+      },
+      { reason: '' },
+    ],
+    [
+      'optional boolean field',
+      {
+        name: 'approved',
+        type: 'boolean',
+        title: 'Approve',
+        required: false,
+      },
+      { approved: false },
+    ],
+  ])('preserves HITL requests with an unsupported MCP %s', (_, field, args) => {
+    const baseRequest = {
+      actionRequests: [
+        {
+          name: 'MCP Elicitation',
+          args,
+        },
+      ],
+      reviewConfigs: [
+        {
+          actionName: 'MCP Elicitation',
+          allowedDecisions: ['approve', 'reject'],
+        },
+      ],
+    };
+    const request = {
+      ...baseRequest,
+      elicitation: {
+        kind: 'mcp_elicitation',
+        actionName: 'MCP Elicitation',
+        field,
+      },
+    };
+
+    expect(normalizeHITLRequest(request)).toEqual(baseRequest);
+
+    const requests = collectHITLRequests({
+      tasks: [
+        {
+          id: 'task-1',
+          interrupts: [{ id: 'interrupt-1', value: request }],
+        },
+      ],
+    });
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.request).toEqual(baseRequest);
+  });
+
   it('normalizes the LangChain snake_case HITL payload shape', () => {
     expect(
       normalizeHITLRequest({

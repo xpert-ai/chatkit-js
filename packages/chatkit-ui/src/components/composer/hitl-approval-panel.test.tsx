@@ -180,6 +180,30 @@ describe('HITLApprovalPanel', () => {
     expect(onSubmit).toHaveBeenCalledWith([{ type: 'reject' }]);
   });
 
+  it('falls back to action review and submits every decision for tagged multi-action requests', () => {
+    const onSubmit = vi.fn();
+    const request = createMcpElicitationRequest();
+    request.request.actionRequests.push({
+      name: 'send_follow_up',
+      args: { recipient: 'user@example.com' },
+    });
+    request.request.reviewConfigs.push({
+      actionName: 'send_follow_up',
+      allowedDecisions: ['approve', 'reject'],
+    });
+
+    render(<HITLApprovalPanel request={request} onSubmit={onSubmit} />);
+
+    expect(screen.getByLabelText('Action review')).toBeInTheDocument();
+    expect(screen.queryByLabelText('MCP Elicitation')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith([
+      { type: 'approve' },
+      { type: 'approve' },
+    ]);
+  });
+
   it('does not infer MCP elicitation from the action display name', () => {
     render(
       <HITLApprovalPanel

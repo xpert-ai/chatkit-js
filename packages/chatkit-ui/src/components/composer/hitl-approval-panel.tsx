@@ -321,7 +321,12 @@ export function HITLApprovalPanel({
   attachToComposer = true,
   className,
 }: HITLApprovalPanelProps) {
-  if (request?.request.elicitation?.kind === 'mcp_elicitation') {
+  if (
+    request?.request.elicitation?.kind === 'mcp_elicitation' &&
+    request.request.actionRequests.length === 1 &&
+    request.request.actionRequests[0]?.name ===
+      request.request.elicitation.actionName
+  ) {
     return (
       <MCPBooleanElicitationPanel
         request={request}
