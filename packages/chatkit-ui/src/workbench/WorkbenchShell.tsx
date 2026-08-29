@@ -8,6 +8,7 @@ import {
 } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitOptions,
+  ChatKitReference,
   ChatKitReferenceCompositionMode,
   ChatRequestFile,
   FollowUpBehavior,
@@ -19,8 +20,11 @@ import {
   PanelRight,
   RotateCcw,
   X,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { useStreamContext } from '../providers/Stream';
+import { StreamProvider } from '../providers/Stream';
+import { Chat, type ChatReferenceRequest } from '../components/chat';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { buildInjectedRequestOptions } from '../lib/request-options';
 import { isRuntimeCapabilitiesSelection } from '../lib/message-metadata';
@@ -43,23 +47,26 @@ import {
   TooltipTrigger,
 } from '../components/ui/tooltip';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
-import {
-  RemoteViewFrame,
-  type RemoteViewHostsClient,
-} from './RemoteViewFrame';
+import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
 import {
   CHATKIT_INTERNAL_PARENT_EVENT,
   normalizeChatKitHostEvent,
 } from './host-events';
+import { WorkbenchContext, type WorkbenchContextValue } from './context';
+import {
+  isSideChatCloseConfirmationDisabled,
+  persistSideChatCloseConfirmationDisabled,
+  SideChatCloseDialog,
+} from './SideChatCloseDialog';
+
+export { useWorkbench, WorkbenchToggleButton } from './context';
 
 const WORKBENCH_SLOT = 'agent.workbench.fixed';
+const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
 const NARROW_BREAKPOINT = 960;
 const CHAT_MIN_WIDTH = 384;
 const WORKBENCH_MIN_WIDTH = 480;
-type WorkbenchViewHostsClient = Pick<
-  Client['viewHosts'],
-  'listSlotViews'
-> &
+type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
 
 export type WorkbenchAssistantContext = {
@@ -67,63 +74,12 @@ export type WorkbenchAssistantContext = {
   context?: Record<string, unknown>;
 };
 
-type WorkbenchContextValue = {
-  enabled: boolean;
-  open: boolean;
-  loading: boolean;
-  available: boolean;
-  disabledReason?: string;
-  toggle: () => void;
+type SideChatSession = {
+  sourceThreadId: string;
+  threadId: string;
+  title: string;
+  referenceRequest: ChatReferenceRequest;
 };
-
-const WorkbenchContext = React.createContext<WorkbenchContextValue>({
-  enabled: false,
-  open: false,
-  loading: false,
-  available: false,
-  toggle: () => undefined,
-});
-
-export function useWorkbench() {
-  return React.useContext(WorkbenchContext);
-}
-
-export function WorkbenchToggleButton() {
-  const workbench = useWorkbench();
-  const { t } = useChatkitTranslation();
-  if (!workbench.enabled || workbench.open) return null;
-
-  const label = t('workbench.open');
-  const tooltip = workbench.disabledReason ?? label;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex h-8 w-8">
-          <button
-            type="button"
-            onClick={workbench.toggle}
-            disabled={!workbench.available}
-            className={cn(
-              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-              'text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
-              'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
-            )}
-            aria-label={label}
-            aria-expanded={false}
-          >
-            {workbench.loading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <PanelRight size={16} />
-            )}
-          </button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 type WorkbenchShellProps = {
   options?: ChatKitOptions | null;
@@ -141,7 +97,9 @@ export function WorkbenchShell({
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
   const parentMessenger = useParentMessenger();
-  const enabled = options?.workbench?.enabled === true;
+  const remoteViewsEnabled = options?.workbench?.enabled === true;
+  const sideChatEnabled = options?.workbench?.sideChat?.enabled === true;
+  const enabled = remoteViewsEnabled || sideChatEnabled;
   const authenticated = Boolean(stream.apiKey.trim());
   const viewHosts = stream.client.viewHosts;
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -160,6 +118,17 @@ export function WorkbenchShell({
   } | null>(null);
   const [hostEvent, setHostEvent] =
     React.useState<XpertRemoteViewHostEventMessage | null>(null);
+  const [sideChat, setSideChat] = React.useState<SideChatSession | null>(null);
+  const [sideChatOpening, setSideChatOpening] = React.useState(false);
+  const [sideChatCloseDialogOpen, setSideChatCloseDialogOpen] =
+    React.useState(false);
+  const [
+    sideChatCloseConfirmationDisabled,
+    setSideChatCloseConfirmationDisabled,
+  ] = React.useState(isSideChatCloseConfirmationDisabled);
+  const sideThreadBySourceRef = React.useRef(
+    new Map<string, string | Promise<string>>(),
+  );
   const contextsRef = React.useRef(
     new Map<string, WorkbenchAssistantContext>(),
   );
@@ -190,13 +159,15 @@ export function WorkbenchShell({
   }, [isNarrow]);
 
   React.useEffect(() => {
-    if (!enabled || !authenticated || !stream.assistantId.trim()) {
+    if (!remoteViewsEnabled || !authenticated || !stream.assistantId.trim()) {
       setViews([]);
-      setActiveViewKey(null);
       setError(null);
       setLoading(false);
-      setOpen(false);
-      setExpanded(false);
+      if (!enabled) {
+        setActiveViewKey(null);
+        setOpen(false);
+        setExpanded(false);
+      }
       contextsRef.current.clear();
       onRequestContextChange({});
       return;
@@ -204,7 +175,9 @@ export function WorkbenchShell({
 
     const controller = new AbortController();
     setViews([]);
-    setActiveViewKey(null);
+    setActiveViewKey((current) =>
+      current === SIDE_CHAT_VIEW_KEY ? current : null,
+    );
     setLoading(true);
     setError(null);
     setOpen(false);
@@ -224,7 +197,8 @@ export function WorkbenchShell({
           .sort(compareWorkbenchViews);
         setViews(supported);
         setActiveViewKey((current) =>
-          current && supported.some((view) => view.key === current)
+          current === SIDE_CHAT_VIEW_KEY ||
+          (current && supported.some((view) => view.key === current))
             ? current
             : (supported[0]?.key ?? null),
         );
@@ -232,7 +206,9 @@ export function WorkbenchShell({
       .catch((loadError: unknown) => {
         if (controller.signal.aborted) return;
         setViews([]);
-        setActiveViewKey(null);
+        setActiveViewKey((current) =>
+          current === SIDE_CHAT_VIEW_KEY ? current : null,
+        );
         setError(getErrorMessage(loadError, t('workbench.loadFailed')));
       })
       .finally(() => {
@@ -242,6 +218,7 @@ export function WorkbenchShell({
     return () => controller.abort();
   }, [
     enabled,
+    remoteViewsEnabled,
     authenticated,
     locale,
     onRequestContextChange,
@@ -267,6 +244,51 @@ export function WorkbenchShell({
 
   const activeView =
     views.find((view) => view.key === activeViewKey) ?? views[0] ?? null;
+
+  const askInSideChat = React.useCallback(
+    async (reference: ChatKitReference) => {
+      if (!sideChatEnabled) return;
+      const sourceThreadId = stream.threadId?.trim();
+      if (!sourceThreadId) {
+        throw new Error(t('workbench.sideChat.threadRequired'));
+      }
+
+      setActiveViewKey(SIDE_CHAT_VIEW_KEY);
+      setOpen(true);
+      setSideChatOpening(true);
+      try {
+        let cachedThread = sideThreadBySourceRef.current.get(sourceThreadId);
+        if (!cachedThread) {
+          cachedThread = stream.client.threads
+            .copy(sourceThreadId)
+            .then((copiedThread) => copiedThread.thread_id);
+          sideThreadBySourceRef.current.set(sourceThreadId, cachedThread);
+        }
+        const sideThreadId = await cachedThread;
+        sideThreadBySourceRef.current.set(sourceThreadId, sideThreadId);
+
+        setSideChat((current) => ({
+          sourceThreadId,
+          threadId: sideThreadId,
+          title:
+            current?.sourceThreadId === sourceThreadId
+              ? current.title
+              : reference.text.trim().slice(0, 32) ||
+                t('workbench.sideChat.title'),
+          referenceRequest: {
+            id: `${Date.now()}-${reference.text.slice(0, 24)}`,
+            reference,
+          },
+        }));
+      } catch (copyError) {
+        sideThreadBySourceRef.current.delete(sourceThreadId);
+        throw copyError;
+      } finally {
+        setSideChatOpening(false);
+      }
+    },
+    [sideChatEnabled, stream.client.threads, stream.threadId, t],
+  );
 
   const publishContexts = React.useCallback(() => {
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
@@ -428,7 +450,10 @@ export function WorkbenchShell({
   );
 
   const available =
-    enabled && authenticated && !loading && Boolean(stream.assistantId.trim());
+    enabled &&
+    authenticated &&
+    Boolean(stream.assistantId.trim()) &&
+    (Boolean(sideChat) || (remoteViewsEnabled && !loading));
   const disabledReason = !stream.assistantId.trim()
     ? t('workbench.missingAssistant')
     : !authenticated
@@ -437,13 +462,42 @@ export function WorkbenchShell({
         ? t('workbench.loading')
         : error
           ? t('workbench.loadFailed')
-          : views.length === 0
+          : views.length === 0 && !sideChatEnabled
             ? t('workbench.empty')
             : undefined;
   const closeWorkbench = React.useCallback(() => {
     setOpen(false);
     setExpanded(false);
   }, []);
+  const closeSideChat = React.useCallback(() => {
+    if (sideChat?.sourceThreadId) {
+      sideThreadBySourceRef.current.delete(sideChat.sourceThreadId);
+    }
+    setSideChat(null);
+    setSideChatOpening(false);
+    setSideChatCloseDialogOpen(false);
+    const nextViewKey = views[0]?.key ?? null;
+    setActiveViewKey(nextViewKey);
+    if (!nextViewKey) closeWorkbench();
+  }, [closeWorkbench, sideChat?.sourceThreadId, views]);
+  const requestCloseSideChat = React.useCallback(() => {
+    if (!sideChat) return;
+    if (sideChatCloseConfirmationDisabled) {
+      closeSideChat();
+      return;
+    }
+    setSideChatCloseDialogOpen(true);
+  }, [closeSideChat, sideChat, sideChatCloseConfirmationDisabled]);
+  const confirmCloseSideChat = React.useCallback(
+    (dontAskAgain: boolean) => {
+      if (dontAskAgain) {
+        persistSideChatCloseConfirmationDisabled(true);
+        setSideChatCloseConfirmationDisabled(true);
+      }
+      closeSideChat();
+    },
+    [closeSideChat],
+  );
   const contextValue = React.useMemo<WorkbenchContextValue>(
     () => ({
       enabled,
@@ -451,6 +505,8 @@ export function WorkbenchShell({
       loading,
       available,
       disabledReason,
+      sideChatEnabled,
+      askInSideChat,
       toggle: () => {
         if (!available) return;
         if (open) {
@@ -460,7 +516,16 @@ export function WorkbenchShell({
         }
       },
     }),
-    [available, closeWorkbench, disabledReason, enabled, loading, open],
+    [
+      askInSideChat,
+      available,
+      closeWorkbench,
+      disabledReason,
+      enabled,
+      loading,
+      open,
+      sideChatEnabled,
+    ],
   );
 
   const resolvedPanelWidth = clampPanelWidth(
@@ -497,6 +562,11 @@ export function WorkbenchShell({
     <WorkbenchPanel
       views={views}
       activeView={activeView}
+      activeViewKey={activeViewKey}
+      sideChat={sideChat}
+      sideChatOpening={sideChatOpening}
+      options={options}
+      stream={stream}
       hostId={stream.assistantId}
       locale={locale}
       hostEvent={hostEvent}
@@ -506,6 +576,7 @@ export function WorkbenchShell({
       loading={loading}
       expanded={expanded}
       onClose={closeWorkbench}
+      onRequestCloseSideChat={requestCloseSideChat}
       onToggleExpanded={() => setExpanded((current) => !current)}
       onReload={() => setReloadVersion((version) => version + 1)}
       onSelect={setActiveViewKey}
@@ -538,22 +609,24 @@ export function WorkbenchShell({
           {children}
         </div>
 
-        {open && !isNarrow && (
+        {(open || Boolean(sideChat)) && !isNarrow && (
           <>
-            {!expanded && (
+            {open && !expanded && (
               <div
                 role="separator"
                 aria-orientation="vertical"
                 aria-label={t('workbench.resize')}
                 onPointerDown={startResize}
-                className="group relative z-20 w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/50"
+                className="group relative z-20 w-0.5 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/50"
               >
                 <div className="absolute inset-y-0 -left-1 -right-1" />
               </div>
             )}
             <aside
+              hidden={!open}
               className={cn(
                 'h-full min-h-0 border-l-0 bg-background',
+                !open && 'hidden',
                 expanded ? 'min-w-0 flex-1' : 'shrink-0',
               )}
               style={expanded ? undefined : { width: resolvedPanelWidth }}
@@ -575,10 +648,12 @@ export function WorkbenchShell({
           }}
         >
           <SheetContent
+            forceMount={isNarrow && sideChat ? true : undefined}
             side="right"
             showCloseButton={false}
             className={cn(
               'flex h-full max-w-none flex-col gap-0 p-0',
+              sideChat && 'data-[state=closed]:hidden',
               expanded ? 'w-screen' : 'w-[min(92vw,720px)]',
             )}
           >
@@ -589,6 +664,11 @@ export function WorkbenchShell({
             {panel}
           </SheetContent>
         </Sheet>
+        <SideChatCloseDialog
+          open={sideChatCloseDialogOpen}
+          onOpenChange={setSideChatCloseDialogOpen}
+          onConfirm={confirmCloseSideChat}
+        />
       </div>
     </WorkbenchContext.Provider>
   );
@@ -597,6 +677,11 @@ export function WorkbenchShell({
 type WorkbenchPanelProps = {
   views: XpertExtensionViewManifest[];
   activeView: XpertExtensionViewManifest | null;
+  activeViewKey: string | null;
+  sideChat: SideChatSession | null;
+  sideChatOpening: boolean;
+  options?: ChatKitOptions | null;
+  stream: ReturnType<typeof useStreamContext>;
   hostId: string;
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
@@ -606,6 +691,7 @@ type WorkbenchPanelProps = {
   loading: boolean;
   expanded: boolean;
   onClose: () => void;
+  onRequestCloseSideChat: () => void;
   onToggleExpanded: () => void;
   onReload: () => void;
   onSelect: (viewKey: string) => void;
@@ -620,6 +706,11 @@ type WorkbenchPanelProps = {
 function WorkbenchPanel({
   views,
   activeView,
+  activeViewKey,
+  sideChat,
+  sideChatOpening,
+  options,
+  stream,
   hostId,
   locale,
   hostEvent,
@@ -629,6 +720,7 @@ function WorkbenchPanel({
   loading,
   expanded,
   onClose,
+  onRequestCloseSideChat,
   onToggleExpanded,
   onReload,
   onSelect,
@@ -639,14 +731,47 @@ function WorkbenchPanel({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-14 shrink-0 items-center gap-2 border-b px-2.5">
-        {views.length > 0 ? (
+        {views.length > 0 || sideChat || sideChatOpening ? (
           <div
             className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
             role="tablist"
             aria-label={t('workbench.views')}
           >
+            {(sideChat || sideChatOpening) && (
+              <div
+                className={cn(
+                  'flex h-10 max-w-64 shrink-0 items-center rounded-xl transition-colors',
+                  activeViewKey === SIDE_CHAT_VIEW_KEY
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                )}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
+                  onClick={() => onSelect(SIDE_CHAT_VIEW_KEY)}
+                  className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
+                >
+                  <MessageSquarePlus size={17} className="shrink-0" />
+                  <span className="truncate">
+                    {sideChat?.title ?? t('workbench.sideChat.title')}
+                  </span>
+                </button>
+                {sideChat && activeViewKey === SIDE_CHAT_VIEW_KEY && (
+                  <button
+                    type="button"
+                    onClick={onRequestCloseSideChat}
+                    className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                    aria-label={`${t('workbench.close')}: ${t('workbench.sideChat.title')}`}
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
+            )}
             {views.map((view) => {
-              const selected = view.key === activeView?.key;
+              const selected = view.key === activeViewKey;
               const label = resolveManifestText(
                 view.workbench?.menu?.label ?? view.title,
                 view.key,
@@ -761,8 +886,27 @@ function WorkbenchPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1">
-        {loading ? (
+      <div className="relative min-h-0 flex-1">
+        {sideChat && (
+          <div
+            hidden={activeViewKey !== SIDE_CHAT_VIEW_KEY}
+            className="h-full min-h-0"
+          >
+            <SideChatView
+              session={sideChat}
+              options={options}
+              stream={stream}
+            />
+          </div>
+        )}
+        {activeViewKey === SIDE_CHAT_VIEW_KEY ? (
+          !sideChat && sideChatOpening ? (
+            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" />
+              {t('workbench.loading')}
+            </div>
+          ) : null
+        ) : loading ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" />
             {t('workbench.loading')}
@@ -802,6 +946,54 @@ function WorkbenchPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function SideChatView({
+  session,
+  options,
+  stream,
+}: {
+  session: SideChatSession;
+  options?: ChatKitOptions | null;
+  stream: ReturnType<typeof useStreamContext>;
+}) {
+  const sideChatOptions = React.useMemo<ChatKitOptions | null>(() => {
+    if (!options) return null;
+    return {
+      ...options,
+      initialThread: session.threadId,
+      header: { ...options.header, enabled: false },
+      history: { ...options.history, enabled: false },
+      taskSummary: { ...options.taskSummary, enabled: false },
+      workbench: {
+        ...options.workbench,
+        enabled: false,
+        sideChat: { enabled: false },
+      },
+      pet: false,
+    };
+  }, [options, session.threadId]);
+
+  return (
+    <StreamProvider
+      apiKey={stream.apiKey}
+      organizationId={stream.organizationId}
+      apiUrl={stream.apiUrl}
+      xpertId={stream.assistantId}
+      projectId={stream.projectId}
+      initialThread={session.threadId}
+      threadStateMode="memory"
+      hostIntegration={false}
+    >
+      <Chat
+        className="h-full"
+        clientSecret={stream.apiKey}
+        options={sideChatOptions}
+        surface="side"
+        referenceRequest={session.referenceRequest}
+      />
+    </StreamProvider>
   );
 }
 

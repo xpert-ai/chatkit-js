@@ -43,6 +43,7 @@ interface SheetContentProps extends React.ComponentProps<typeof SheetPrimitive.C
 function SheetContent({
   side = "right",
   showCloseButton = true,
+  forceMount,
   className,
   children,
   ...props
@@ -56,9 +57,13 @@ function SheetContent({
   };
 
   return (
-    <SheetPortal>
-      <SheetOverlay />
+    <SheetPortal forceMount={forceMount}>
+      <SheetOverlay
+        forceMount={forceMount}
+        className={forceMount ? "data-[state=closed]:hidden" : undefined}
+      />
       <SheetPrimitive.Content
+        forceMount={forceMount}
         className={cn(
           "fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
           sideVariants[side],

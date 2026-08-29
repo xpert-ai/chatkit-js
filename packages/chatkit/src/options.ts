@@ -503,6 +503,11 @@ export type ChatKitWorkbenchOptions = {
    */
   enabled?: boolean;
 
+  /** Native side chat branched from the current thread. Disabled by default. */
+  sideChat?: {
+    enabled?: boolean;
+  };
+
   /**
    * Handles manifest-declared client commands that are not implemented by
    * ChatKit itself.

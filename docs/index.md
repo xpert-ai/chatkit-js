@@ -20,6 +20,7 @@ Welcome to the ChatKit SDK documentation.
 - [Conversation Goals](./guides/goals.md)
 - [Runtime Skills and Plugins Selection](./guides/runtime-capabilities.md)
 - [Remote Views Workbench](./guides/remote-views-workbench.md)
+- [Upgrade Plan: Native Side Chat and Thread Branching](./upgrade-plan.md)
 - [Pet](./guides/pet.md)
 - [Framework-Agnostic Integration](./guides/framework-agnostic-integration.md)
 - [Update Client During Response](./guides/update-client-during-response.md)

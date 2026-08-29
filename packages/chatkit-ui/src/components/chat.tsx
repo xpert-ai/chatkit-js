@@ -5,6 +5,7 @@ import {
   FileText,
   ImageIcon,
   Loader2,
+  MessageSquarePlus,
   Minus,
   Pause,
   Pencil,
@@ -140,7 +141,7 @@ import {
   type ComposerPart,
 } from '../lib/composer-parts';
 import { hasSelectedRuntimeSlashCommand } from '../lib/slash-commands';
-import { WorkbenchToggleButton } from '../workbench/WorkbenchShell';
+import { WorkbenchToggleButton, useWorkbench } from '../workbench/context';
 import {
   ComposerCapabilityToken,
   DetachedRunRuntimeCapabilities,
@@ -180,6 +181,13 @@ export type ChatProps = {
   clientSecret?: string;
   options?: ChatKitOptions | null;
   isClientSecretInitializing?: boolean;
+  surface?: 'main' | 'side';
+  referenceRequest?: ChatReferenceRequest | null;
+};
+
+export type ChatReferenceRequest = {
+  id: string;
+  reference: ChatKitReference;
 };
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
@@ -433,6 +441,8 @@ export function Chat({
   placeholder,
   clientSecret = '',
   isClientSecretInitializing = false,
+  surface = 'main',
+  referenceRequest,
 }: ChatProps) {
   const { t, i18n } = useChatkitTranslation();
   const composer = options?.composer;
@@ -444,6 +454,7 @@ export function Chat({
     options?.messageNavigation?.enabled !== false;
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
+  const workbench = useWorkbench();
   const { theme } = useTheme();
   const effectiveClientSecret = stream.apiKey?.trim()
     ? stream.apiKey
@@ -502,8 +513,8 @@ export function Chat({
   const lastStreamOutputAtRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
-    setStream(stream);
-  }, [setStream, stream]);
+    if (surface === 'main') setStream(stream);
+  }, [setStream, stream, surface]);
 
   // Handle loading dots with minimum display time
   React.useEffect(() => {
@@ -599,6 +610,8 @@ export function Chat({
     React.useState(false);
   const [quoteSelection, setQuoteSelection] =
     React.useState<QuoteSelectionState | null>(null);
+  const [isOpeningSideChat, setIsOpeningSideChat] = React.useState(false);
+  const [sideChatError, setSideChatError] = React.useState<string | null>(null);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
   const [hasUpdatesBelow, setHasUpdatesBelow] = React.useState(false);
   const {
@@ -606,7 +619,7 @@ export function Chat({
     deleteThread,
     refreshThreads,
     isLoading: isThreadsLoading,
-  } = useThreads();
+  } = useThreads(undefined, surface === 'main' && history?.enabled !== false);
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const chatColumnRef = React.useRef<HTMLDivElement>(null);
   const messageNavigationAnchorsRef = React.useRef(
@@ -614,6 +627,7 @@ export function Chat({
   );
   const attachmentsRef = React.useRef<ChatAttachmentsHandle>(null);
   const composerInputRef = React.useRef<HTMLDivElement>(null);
+  const appliedReferenceRequestRef = React.useRef<string | null>(null);
   const isComposerComposingRef = React.useRef(false);
   const slashPaletteRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
@@ -793,13 +807,14 @@ export function Chat({
     hasPendingRequestUserInput || hasPendingHITLRequest;
   const hasPendingTodos = Boolean(stream.todos?.items.length);
   const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(() => {
+    if (surface !== 'main') return null;
     if (isGoalAdapter(options?.goal)) {
       return options.goal;
     }
     return supportsXpertThreadGoalAdapter(stream.client)
       ? createXpertThreadGoalAdapter(stream.client)
       : null;
-  }, [options?.goal, stream.client]);
+  }, [options?.goal, stream.client, surface]);
   const displayedGoalElapsedSeconds = threadGoal
     ? (threadGoal.elapsedSeconds ?? 0) +
       (goalElapsedStartedAt
@@ -807,8 +822,8 @@ export function Chat({
         : 0)
     : 0;
   const goalCommandAvailable = hasSelectedRuntimeSlashCommand(
-    runtimeCapabilities,
-    effectiveSessionRuntimeCapabilities,
+    surface === 'main' ? runtimeCapabilities : null,
+    surface === 'main' ? effectiveSessionRuntimeCapabilities : null,
     'goal',
   );
   const showGoalStatus =
@@ -887,6 +902,20 @@ export function Chat({
     });
   }, []);
 
+  React.useEffect(() => {
+    if (
+      !referenceRequest ||
+      appliedReferenceRequestRef.current === referenceRequest.id
+    ) {
+      return;
+    }
+    appliedReferenceRequestRef.current = referenceRequest.id;
+    setReferences((previous) =>
+      mergeReferences(previous, [referenceRequest.reference]),
+    );
+    requestAnimationFrame(() => composerInputRef.current?.focus());
+  }, [referenceRequest]);
+
   const {
     applyComposerValueRuntimeCapabilities,
     updateRuntimeCapabilityPalette,
@@ -905,72 +934,64 @@ export function Chat({
     focusComposerAt,
   });
 
-  const parentMessenger = useParentMessenger({
-    onSetComposerValue: React.useCallback(
-      (payload: ComposerValuePayload | null) => {
-        if (!payload) {
-          return;
-        }
+  const handleSetComposerValue = React.useCallback(
+    (payload: ComposerValuePayload | null) => {
+      if (!payload) return;
+      const shouldInsertRuntimeCapabilitiesBeforeText =
+        typeof payload.text === 'string' &&
+        payload.insertRuntimeCapabilities === true;
 
-        const shouldInsertRuntimeCapabilitiesBeforeText =
-          typeof payload.text === 'string' &&
-          payload.insertRuntimeCapabilities === true;
-
-        if (typeof payload.text === 'string') {
-          setComposerText(payload.text);
-        }
-
-        if (Array.isArray(payload.references)) {
-          const nextReferences = normalizeReferences(payload.references);
-          setReferences((previous) =>
+      if (typeof payload.text === 'string') setComposerText(payload.text);
+      if (Array.isArray(payload.references)) {
+        const nextReferences = normalizeReferences(payload.references);
+        setReferences((previous) =>
             payload.appendReferences
               ? mergeReferences(previous, nextReferences)
-              : nextReferences,
-          );
-        }
-
-        if (payload.selectedToolId !== undefined) {
-          const nextTool =
-            payload.selectedToolId === null
+            : nextReferences,
+        );
+      }
+      if (payload.selectedToolId !== undefined) {
+        const nextTool =
+          payload.selectedToolId === null
               ? null
               : ((composer?.tools ?? []).find(
                   (tool) => tool.id === payload.selectedToolId,
-                ) ?? null);
-          setSelectedTool(nextTool);
+              ) ?? null);
+        setSelectedTool(nextTool);
+      }
+      applyComposerValueRuntimeCapabilities(
+        payload,
+        shouldInsertRuntimeCapabilitiesBeforeText ? { insertAt: 0 } : undefined,
+      );
+    },
+    [applyComposerValueRuntimeCapabilities, composer?.tools, setComposerText],
+  );
+  const handleSetRuntimeCapabilities = React.useCallback(
+    (selection: RuntimeCapabilitiesSelection | null) => {
+      applyExternalRuntimeCapabilities(selection);
+    },
+    [applyExternalRuntimeCapabilities],
+  );
+  const handleFocusComposer = React.useCallback(() => {
+    composerInputRef.current?.focus();
+  }, []);
+  const handleSetPetEnabled = React.useCallback(
+    (enabled: boolean) => {
+      if (petRequired) return;
+      savePetLocalSettings({ ...displayedPetSettings, enabled });
+    },
+    [displayedPetSettings, petRequired, savePetLocalSettings],
+  );
+  const parentMessenger = useParentMessenger(
+    surface === 'main'
+      ? {
+          onSetComposerValue: handleSetComposerValue,
+          onSetRuntimeCapabilities: handleSetRuntimeCapabilities,
+          onFocusComposer: handleFocusComposer,
+          onSetPetEnabled: handleSetPetEnabled,
         }
-
-        applyComposerValueRuntimeCapabilities(
-          payload,
-          shouldInsertRuntimeCapabilitiesBeforeText
-            ? { insertAt: 0 }
-            : undefined,
-        );
-      },
-      [applyComposerValueRuntimeCapabilities, composer?.tools, setComposerText],
-    ),
-    onSetRuntimeCapabilities: React.useCallback(
-      (selection: RuntimeCapabilitiesSelection | null) => {
-        applyExternalRuntimeCapabilities(selection);
-      },
-      [applyExternalRuntimeCapabilities],
-    ),
-    onFocusComposer: React.useCallback(() => {
-      composerInputRef.current?.focus();
-    }, []),
-    onSetPetEnabled: React.useCallback(
-      (enabled: boolean) => {
-        if (petRequired) {
-          return;
-        }
-
-        savePetLocalSettings({
-          ...displayedPetSettings,
-          enabled,
-        });
-      },
-      [displayedPetSettings, petRequired, savePetLocalSettings],
-    ),
-  });
+      : {},
+  );
   const canMinimizeToPet =
     parentMessenger?.isParentAvailable === true && isPetEnabled(effectivePet);
   const handleMinimizeToPet = React.useCallback(() => {
@@ -978,6 +999,10 @@ export function Chat({
   }, [parentMessenger]);
 
   const syncQuoteSelection = React.useCallback(() => {
+    if (surface !== 'main') {
+      clearQuoteSelection();
+      return;
+    }
     if (typeof window === 'undefined') {
       clearQuoteSelection();
       return;
@@ -1036,7 +1061,7 @@ export function Chat({
       top,
       left,
     });
-  }, [clearQuoteSelection]);
+  }, [clearQuoteSelection, surface]);
 
   const cancelPendingAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -2109,6 +2134,33 @@ export function Chat({
     composerInputRef.current?.focus();
   }, [clearQuoteSelection, quoteSelection]);
 
+  const handleAskInSideChat = React.useCallback(async () => {
+    if (
+      !quoteSelection ||
+      !workbench.sideChatEnabled ||
+      !stream.threadId ||
+      stream.isLoading
+    )
+      return;
+    setIsOpeningSideChat(true);
+    setSideChatError(null);
+    try {
+      await workbench.askInSideChat(quoteSelection.reference);
+      clearQuoteSelection();
+      window.getSelection()?.removeAllRanges();
+    } catch (error) {
+      setSideChatError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsOpeningSideChat(false);
+    }
+  }, [
+    clearQuoteSelection,
+    quoteSelection,
+    stream.isLoading,
+    stream.threadId,
+    workbench,
+  ]);
+
   const handleAttachmentClick = () => {
     attachmentsRef.current?.openFilePicker();
   };
@@ -2445,7 +2497,7 @@ export function Chat({
   );
 
   const loadConversationMessages = React.useCallback(
-    async (recordId: string) => {
+    async (recordId: string, threadId?: string) => {
       if (missingConfig) {
         setHistoryError(missingConfigShortMessage);
         return;
@@ -2453,7 +2505,7 @@ export function Chat({
       setHistoryError(null);
       setIsHistoryLoading(true);
       try {
-        await stream.loadConversationMessages(recordId);
+        await stream.loadConversationMessages(recordId, threadId);
         // setActiveThreadId(threadId ?? null);
       } catch (err) {
         console.warn('Failed to load thread messages', err);
@@ -2536,13 +2588,13 @@ export function Chat({
         thread.recordId &&
         !stream.pendingHITLRequest
       ) {
-        void loadConversationMessages(thread.recordId);
+        void loadConversationMessages(thread.recordId, thread.id);
       }
       return;
     }
     stream.reset(id, []);
     if (thread.recordId) {
-      void loadConversationMessages(thread.recordId);
+      void loadConversationMessages(thread.recordId, thread.id);
     }
   };
 
@@ -2791,13 +2843,14 @@ export function Chat({
       onFiles={handleDroppedFiles}
       className={cn(
         'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
-        className,
-      )}
-    >
-      <div
-        ref={chatColumnRef}
-        data-slot="chatkit-chat-header"
-        className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
+          className,
+        )}
+      >
+        {surface === 'main' && options?.header?.enabled !== false && (
+          <div
+            ref={chatColumnRef}
+            data-slot="chatkit-chat-header"
+        className="mx-auto flex w-full items-center justify-between border-b border-secondary px-2 py-1 sticky top-0 z-10 bg-background"
         style={chatColumnStyle}
       >
         <div className="flex min-w-0 items-center gap-3 overflow-hidden">
@@ -2873,13 +2926,15 @@ export function Chat({
                   aria-label={t('settings.open')}
                 >
                   <Settings size={16} />
-                </button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{t('settings.open')}</TooltipContent>
-          </Tooltip>
+                    </button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {t('settings.open')}
+                </TooltipContent>
+              </Tooltip>
 
-          {/* History controls - only shown when history.enabled is true (default) */}
+              {/* History controls - only shown when history.enabled is true (default) */}
           {history?.enabled !== false && (
             <>
               {/* New thread button */}
@@ -2912,18 +2967,21 @@ export function Chat({
                 onNewThread={handleNewThread}
                 onRefresh={refreshThreads}
                 onSelectThread={handleSelectThread}
-                onDeleteThread={handleDeleteThread}
-                isRefreshing={isThreadsLoading}
-                showDelete={history?.showDelete !== false}
-                disabled={missingConfig || isThreadsLoading || isHistoryLoading}
-              />
-            </>
-          )}
-        </div>
-      </div>
+                    onDeleteThread={handleDeleteThread}
+                    isRefreshing={isThreadsLoading}
+                    showDelete={history?.showDelete !== false}
+                    disabled={
+                      missingConfig || isThreadsLoading || isHistoryLoading
+                    }
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
-      {showMessageNavigation && (
-        <MessageNavigator
+        {showMessageNavigation && (
+          <MessageNavigator
           items={messageNavigationItems}
           viewportRef={viewportRef}
           getAnchor={getMessageNavigationAnchor}
@@ -2969,7 +3027,7 @@ export function Chat({
             promptEditDisabled={isPromptEditDisabled}
           />
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-1">
             {canLoadMoreMessages && (
               <div className="flex items-center gap-3 py-1">
                 <div className="h-px min-w-8 flex-1 bg-border" />
@@ -3044,13 +3102,15 @@ export function Chat({
                   : [];
               const hasHumanAttachments =
                 message.type === 'human' && humanAttachments.length > 0;
-              const canQuoteMessage =
-                message.type === 'human' || isAssistantMessage;
-              const quoteSource =
-                message.type === 'human' ? t('chat.youLabel') : assistantTitle;
-              const messageNavigationId = getMessageNavigationItemId(
-                message as MessageNavigationSourceMessage,
-                index,
+                const canQuoteMessage =
+                  message.type === 'human' || isAssistantMessage;
+                const quoteSource =
+                  message.type === 'human'
+                    ? t('chat.youLabel')
+                    : assistantTitle;
+                const messageNavigationId = getMessageNavigationItemId(
+                  message as MessageNavigationSourceMessage,
+                  index,
               );
 
               if (
@@ -3255,30 +3315,59 @@ export function Chat({
         </div>
       )}
 
-      {quoteSelection && (
-        <div
-          className="pointer-events-none fixed z-50"
-          style={{
-            top: `${quoteSelection.top}px`,
-            left: `${quoteSelection.left}px`,
-            transform: 'translateX(-50%)',
-          }}
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="pointer-events-auto shadow-lg"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={handleQuoteSelection}
-            aria-label={t('composer.quoteSelection')}
+        {quoteSelection && (
+          <div
+            className="pointer-events-none fixed z-50 flex flex-col items-center gap-1"
+            style={{
+              top: `${quoteSelection.top}px`,
+              left: `${quoteSelection.left}px`,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <div className="pointer-events-auto flex overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="rounded-none border-r"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleQuoteSelection}
+                aria-label={t('composer.quoteSelection')}
             title={t('composer.quoteSelection')}
           >
-            <Quote size={14} />
-            {t('composer.quoteSelection')}
-          </Button>
-        </div>
-      )}
+                <Quote size={14} />
+                {t('composer.quoteSelection')}
+              </Button>
+              {workbench.sideChatEnabled && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="rounded-none"
+                  disabled={
+                    isOpeningSideChat || stream.isLoading || !stream.threadId
+                  }
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => void handleAskInSideChat()}
+                  aria-label={t('composer.askInSideChat')}
+                  title={t('composer.askInSideChat')}
+                >
+                  {isOpeningSideChat ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <MessageSquarePlus size={14} />
+                  )}
+                  {t('composer.askInSideChat')}
+                </Button>
+              )}
+            </div>
+            {sideChatError && (
+              <div className="pointer-events-auto max-w-72 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow">
+                {sideChatError}
+              </div>
+            )}
+          </div>
+        )}
 
       <div
         data-slot="chatkit-chat-composer"
@@ -3355,13 +3444,15 @@ export function Chat({
                   <Loader2 className="size-3 animate-spin text-muted-foreground" />
                 )}
               </div>
-              <div
-                className={cn(
-                  'mt-0.5 text-muted-foreground',
-                  threadGoal?.objective && !goalError && isGoalObjectiveExpanded
-                    ? 'whitespace-pre-wrap break-words'
-                    : 'truncate',
-                )}
+                <div
+                  className={cn(
+                    'mt-0.5 text-muted-foreground',
+                    threadGoal?.objective &&
+                      !goalError &&
+                      isGoalObjectiveExpanded
+                      ? 'whitespace-pre-wrap break-words'
+                      : 'truncate',
+                  )}
               >
                 {goalError || threadGoal?.objective}
               </div>
@@ -3401,13 +3492,15 @@ export function Chat({
                       variant="ghost"
                       size="icon-xs"
                       disabled={isGoalLoading}
-                      onClick={() =>
-                        void handleGoalCommand({
-                          args:
-                            threadGoal.status === 'paused' ? 'resume' : 'pause',
-                          commandSource: {
-                            type: 'slash_command',
-                            name: 'goal',
+                        onClick={() =>
+                          void handleGoalCommand({
+                            args:
+                              threadGoal.status === 'paused'
+                                ? 'resume'
+                                : 'pause',
+                            commandSource: {
+                              type: 'slash_command',
+                              name: 'goal',
                             source: 'runtime',
                             executionType: 'insert_invocation',
                           },
