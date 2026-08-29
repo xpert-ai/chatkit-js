@@ -425,7 +425,7 @@ export function AgentRunGroup({
   );
 
   return (
-    <div className={cn('border-l border-border/70 pl-2', depth > 0 ? 'ml-1' : '-mx-2.5')}>
+    <div className={cn('border border-border/70 pl-2 rounded-lg', depth > 0 ? 'ml-1' : '-mx-2.5')}>
       <button
         type="button"
         className="group/agent group-agent flex w-full items-start justify-between gap-2 rounded-md px-0 py-1.5 text-left"

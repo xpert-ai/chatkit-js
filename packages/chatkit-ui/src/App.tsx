@@ -32,7 +32,9 @@ export function App({
   const theme = options?.theme;
   const locale = options?.locale;
   const requestLocale = locale ?? getLanguage();
-  const workbenchEnabled = options?.workbench?.enabled === true;
+  const workbenchEnabled =
+    options?.workbench?.enabled === true ||
+    options?.workbench?.sideChat?.enabled === true;
   const [workbenchRequestContext, setWorkbenchRequestContext] = React.useState<
     Record<string, unknown>
   >({});

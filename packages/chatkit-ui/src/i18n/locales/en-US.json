@@ -16,6 +16,17 @@
     "entryUnavailable": "Remote view content is unavailable.",
     "missingAssistant": "An assistant is required to load views.",
     "retry": "Retry",
+    "sideChat": {
+      "title": "Side chat",
+      "threadRequired": "Start a conversation before opening a side chat.",
+      "closeDialog": {
+        "title": "Close side chat?",
+        "description": "This side chat will be removed from the current workbench and cannot be restored on this page. Its conversation data will be retained.",
+        "dontAskAgain": "Don't ask again",
+        "cancel": "Cancel",
+        "confirm": "Close side chat"
+      }
+    },
     "errors": {
       "contextKeyRequired": "Context key is required.",
       "messageRequired": "Message text is required.",
@@ -191,6 +202,7 @@
     "disablePlanMode": "Turn off plan mode",
     "removeReference": "Remove reference",
     "quoteSelection": "Quote selection",
+    "askInSideChat": "Ask in side chat",
     "requestUserInput": {
       "title": "Input requested",
       "recommended": "Recommended",

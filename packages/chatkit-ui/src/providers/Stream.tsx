@@ -194,6 +194,7 @@ function withProjectId(
 
 export type HistoryMessagePaginationState = {
   conversationId: string | null;
+  threadId: string | null;
   loadedCount: number;
   total: number;
   hasMore: boolean;
@@ -288,7 +289,10 @@ export type StreamContextType = {
   isReady: boolean;
   error: unknown;
   loadThread: (threadId: string) => Promise<void>;
-  loadConversationMessages: (recordId: string) => Promise<ChatKitAIMessage[]>;
+  loadConversationMessages: (
+    recordId: string,
+    threadId?: string,
+  ) => Promise<ChatKitAIMessage[]>;
   loadMoreConversationMessages: () => Promise<ChatKitAIMessage[]>;
   submit: (
     values?: StreamRunInput | null,
@@ -324,6 +328,7 @@ const DEFAULT_HISTORY_PAGE_SIZE = 50;
 function createEmptyHistoryMessagePagination(): HistoryMessagePaginationState {
   return {
     conversationId: null,
+    threadId: null,
     loadedCount: 0,
     total: 0,
     hasMore: false,
@@ -1856,6 +1861,8 @@ const StreamSession = ({
   initialThread,
   locale,
   additionalContext,
+  threadStateMode,
+  hostIntegration,
 }: {
   children: ReactNode;
   apiKey: string;
@@ -1866,8 +1873,25 @@ const StreamSession = ({
   initialThread?: string | null;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
+  threadStateMode: 'url' | 'memory';
+  hostIntegration: boolean;
 }) => {
-  const [threadId, setThreadId] = useQueryState('threadId');
+  const [queryThreadId, setQueryThreadId] = useQueryState('threadId');
+  const [memoryThreadId, setMemoryThreadId] = useState<string | null>(
+    initialThread ?? null,
+  );
+  const threadId =
+    threadStateMode === 'memory' ? memoryThreadId : queryThreadId;
+  const setThreadId = useCallback(
+    (nextThreadId: string | null) => {
+      if (threadStateMode === 'memory') {
+        setMemoryThreadId(nextThreadId);
+        return;
+      }
+      void setQueryThreadId(nextThreadId);
+    },
+    [setQueryThreadId, threadStateMode],
+  );
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
@@ -1938,6 +1962,12 @@ const StreamSession = ({
   );
   const suppressThreadChangeRef = useRef(false);
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
+  const streamSendEvent: ParentMessenger['sendEvent'] = useCallback(
+    (event, data, transfer) => {
+      if (hostIntegration) sendEvent(event, data, transfer);
+    },
+    [hostIntegration, sendEvent],
+  );
   const getRuntimeOrganizationId = useCallback(
     () => runtimeOrganizationIdRef.current,
     [],
@@ -2145,7 +2175,7 @@ const StreamSession = ({
     if (currentThreadId !== null) {
       hasObservedThreadSelectionRef.current = true;
     }
-    if (!isParentAvailable) return;
+    if (!hostIntegration || !isParentAvailable) return;
     if (suppressThreadChangeRef.current) {
       suppressThreadChangeRef.current = false;
       return;
@@ -2159,7 +2189,7 @@ const StreamSession = ({
       return;
     }
     sendEvent('public_event', ['thread.change', { threadId: currentThreadId }]);
-  }, [threadId, isParentAvailable, sendEvent]);
+  }, [threadId, hostIntegration, isParentAvailable, sendEvent]);
 
   const refreshClientSecret =
     useCallback(async (): Promise<ResolvedClientSecret> => {
@@ -2488,7 +2518,7 @@ const StreamSession = ({
   );
 
   const loadConversationMessages = useCallback(
-    async (recordId: string) => {
+    async (recordId: string, requestedThreadId?: string) => {
       const configError = createMissingApiConfigurationError({
         apiUrl,
         clientSecret: runtimeClientSecret,
@@ -2508,6 +2538,7 @@ const StreamSession = ({
       updateHistoryMessagePagination({
         ...createEmptyHistoryMessagePagination(),
         conversationId: recordId,
+        threadId: requestedThreadId ?? null,
       });
       const [conversationDetail, response] = await Promise.all([
         client.conversations.get(recordId).catch((detailError) => {
@@ -2517,10 +2548,12 @@ const StreamSession = ({
           );
           return null;
         }),
-        client.conversations.searchMessages(
-          recordId,
-          createConversationMessagesPageQuery(0),
-        ),
+        client.conversations.searchMessages(recordId, {
+          ...createConversationMessagesPageQuery(0),
+          ...(requestedThreadId
+            ? { where: { threadId: requestedThreadId } }
+            : {}),
+        }),
       ]);
       if (conversationIdRef.current !== recordId) {
         return [];
@@ -2534,13 +2567,16 @@ const StreamSession = ({
       setPendingFollowUps(page.pendingFollowUps);
       const latestExecutionId = getLatestExecutionIdFromMessages(page.messages);
       lastExecutionIdRef.current = latestExecutionId;
-      const loadedThreadId = getConversationThreadId(conversationDetail);
+      const loadedThreadId =
+        normalizeThreadIdentifier(requestedThreadId) ??
+        getConversationThreadId(conversationDetail);
       if (loadedThreadId) {
         activeThreadIdRef.current = loadedThreadId;
         setThreadId(loadedThreadId);
       }
       updateHistoryMessagePagination({
         conversationId: recordId,
+        threadId: loadedThreadId,
         loadedCount: page.loadedCount,
         total: page.total,
         hasMore: page.hasMore,
@@ -2590,10 +2626,12 @@ const StreamSession = ({
     );
 
     try {
-      const response = await client.conversations.searchMessages(
-        recordId,
-        createConversationMessagesPageQuery(pagination.loadedCount),
-      );
+      const response = await client.conversations.searchMessages(recordId, {
+        ...createConversationMessagesPageQuery(pagination.loadedCount),
+        ...(pagination.threadId
+          ? { where: { threadId: pagination.threadId } }
+          : {}),
+      });
       const page = normalizeConversationMessagesPage(
         response,
         pagination.loadedCount,
@@ -2633,6 +2671,7 @@ const StreamSession = ({
         previous.conversationId === recordId
           ? {
               conversationId: recordId,
+              threadId: pagination.threadId,
               loadedCount: page.loadedCount,
               total: page.total,
               hasMore: page.hasMore,
@@ -3047,7 +3086,7 @@ const StreamSession = ({
             chunk as StreamChunk,
             setValues,
             setError,
-            sendEvent,
+            streamSendEvent,
             interrupts,
             langGraphEventState,
             eventContext,
@@ -3157,7 +3196,7 @@ const StreamSession = ({
       assistantId,
       additionalContext,
       client,
-      sendEvent,
+      streamSendEvent,
       handleInterrupt,
       flushSteerFollowUps,
       markPendingFollowUpsAsQueued,
@@ -3198,12 +3237,26 @@ const StreamSession = ({
       activeThreadIdRef.current = threadId;
       lastEventIdRef.current = null;
 
-      const conversationResult = await client.conversations.search({
-        where: { threadId: threadId },
-        limit: 1,
-      });
+      const protocolThread = await client.threads
+        .get(threadId)
+        .catch(() => null);
+      const protocolMetadata = isRecord(protocolThread?.metadata)
+        ? protocolThread.metadata
+        : null;
+      const protocolConversationId =
+        typeof protocolMetadata?.id === 'string'
+          ? protocolMetadata.id.trim()
+          : '';
+      const conversationResult = protocolConversationId
+        ? null
+        : await client.conversations.search({
+            where: { threadId: threadId },
+            limit: 1,
+          });
 
-      const conversation = conversationResult.items?.[0];
+      const conversation = protocolConversationId
+        ? await client.conversations.get(protocolConversationId)
+        : conversationResult?.items?.[0];
       if (!conversation?.id) {
         updateConversationId(null);
         setPendingFollowUps([]);
@@ -3228,7 +3281,10 @@ const StreamSession = ({
       }
 
       updateConversationId(conversation.id);
-      const loadedMessages = await loadConversationMessages(conversation.id);
+      const loadedMessages = await loadConversationMessages(
+        conversation.id,
+        threadId,
+      );
       await refreshSandboxServices({
         targetThreadId: threadId,
         force: true,
@@ -3273,12 +3329,14 @@ const StreamSession = ({
       // Compatibility fallback for completed or legacy conversations whose
       // execution can only be recovered from a persisted assistant message.
       if (!runId && runLookupFailed && conversationMayBeRunning) {
-        const lastAiMessageResult =
-          await client.conversations.searchMessages(conversation.id, {
-            where: { role: 'ai' },
+        const lastAiMessageResult = await client.conversations.searchMessages(
+          conversation.id,
+          {
+            where: { role: 'ai', threadId },
             order: { createdAt: 'DESC' },
             limit: 1,
-          });
+          },
+        );
         runId = lastAiMessageResult.items?.[0]?.executionId ?? null;
       }
       if (!runId) return;
@@ -3486,38 +3544,23 @@ const StreamSession = ({
         activeThreadIdRef.current = desiredThreadId;
         setThreadId(desiredThreadId);
       }
-      if (!nextThreadId && desiredThreadId) {
-        if (projectId) {
-          const created = await client.conversations.create({
-            threadId: desiredThreadId,
-            xpertId: assistantId,
-            projectId,
-          });
-          nextThreadId = getConversationThreadId(created);
-          conversationIdRef.current = created.id;
-        } else {
-          const created = await client.threads.create(
-            createAssistantThreadPayload(assistantId, desiredThreadId),
-          );
-          nextThreadId = created.thread_id;
-        }
-        if (!nextThreadId)
-          throw new Error('Conversation did not return a thread id');
-        setThreadId(nextThreadId);
-      }
       if (!nextThreadId) {
+        const createdThread = await client.threads.create(
+          createAssistantThreadPayload(
+            assistantId,
+            desiredThreadId ?? undefined,
+          ),
+        );
+        nextThreadId = createdThread.thread_id;
+
         if (projectId) {
-          const created = await client.conversations.create({
+          const createdConversation = await client.conversations.create({
+            threadId: nextThreadId,
             xpertId: assistantId,
             projectId,
           });
-          nextThreadId = getConversationThreadId(created);
-          conversationIdRef.current = created.id;
-        } else {
-          const created = await client.threads.create(
-            createAssistantThreadPayload(assistantId),
-          );
-          nextThreadId = created.thread_id;
+          nextThreadId = getConversationThreadId(createdConversation);
+          conversationIdRef.current = createdConversation.id;
         }
         if (!nextThreadId)
           throw new Error('Conversation did not return a thread id');
@@ -3631,6 +3674,8 @@ export const StreamProvider: React.FC<{
   initialThread?: string | null;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
+  threadStateMode?: 'url' | 'memory';
+  hostIntegration?: boolean;
 }> = ({
   children,
   apiKey,
@@ -3641,6 +3686,8 @@ export const StreamProvider: React.FC<{
   initialThread,
   locale,
   additionalContext,
+  threadStateMode = 'url',
+  hostIntegration = true,
 }) => {
   return (
     <StreamSession
@@ -3652,6 +3699,8 @@ export const StreamProvider: React.FC<{
       initialThread={initialThread}
       locale={locale}
       additionalContext={additionalContext}
+      threadStateMode={threadStateMode}
+      hostIntegration={hostIntegration}
     >
       {children}
     </StreamSession>

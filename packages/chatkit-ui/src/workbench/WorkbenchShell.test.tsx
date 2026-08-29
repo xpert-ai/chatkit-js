@@ -13,6 +13,13 @@ import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
 const mocks = vi.hoisted(() => ({
   listSlotViews: vi.fn(),
   submit: vi.fn(),
+  copyThread: vi.fn(),
+  deleteThread: vi.fn(),
+  sideChatProps: null as null | {
+    referenceRequest?: { reference?: { text?: string } };
+  },
+  sideChatMounts: 0,
+  sideChatUnmounts: 0,
   resizeCallback: null as ResizeObserverCallback | null,
   remoteViewProps: null as {
     onClientCommand: (
@@ -35,11 +42,17 @@ const mocks = vi.hoisted(() => ({
         createFileAccessGrant: vi.fn(),
         revokeFileAccessSession: vi.fn(),
       },
+      threads: {
+        copy: vi.fn(),
+        delete: vi.fn(),
+      },
     },
     apiKey: 'cs-x-secret',
     apiUrl: '/api/ai',
     authenticatedFetch: vi.fn(),
     assistantId: 'agent-1',
+    projectId: 'project-1',
+    organizationId: 'organization-1',
     threadId: 'thread-1',
     isLoading: false,
     submit: vi.fn(),
@@ -48,6 +61,20 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../providers/Stream', () => ({
   useStreamContext: () => mocks.stream,
+  StreamProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('../components/chat', () => ({
+  Chat: (props: { referenceRequest?: { reference?: { text?: string } } }) => {
+    React.useEffect(() => {
+      mocks.sideChatMounts += 1;
+      return () => {
+        mocks.sideChatUnmounts += 1;
+      };
+    }, []);
+    mocks.sideChatProps = props;
+    return <div data-testid="side-chat" />;
+  },
 }));
 
 vi.mock('../hooks/useParentMessenger', () => ({
@@ -71,7 +98,12 @@ vi.mock('./RemoteViewFrame', () => ({
   },
 }));
 
-import { WorkbenchShell, WorkbenchToggleButton } from './WorkbenchShell';
+import {
+  WorkbenchShell,
+  WorkbenchToggleButton,
+  useWorkbench,
+} from './WorkbenchShell';
+import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './SideChatCloseDialog';
 
 const manifest: XpertExtensionViewManifest = {
   key: 'provider__documents',
@@ -115,12 +147,20 @@ describe('WorkbenchShell', () => {
   beforeEach(() => {
     mocks.listSlotViews.mockReset();
     mocks.submit.mockReset();
+    mocks.copyThread.mockReset();
+    mocks.deleteThread.mockReset();
     mocks.stream.client.viewHosts.listSlotViews = mocks.listSlotViews;
+    mocks.stream.client.threads.copy = mocks.copyThread;
+    mocks.stream.client.threads.delete = mocks.deleteThread;
     mocks.stream.submit = mocks.submit;
     mocks.resizeCallback = null;
     mocks.remoteViewProps = null;
+    mocks.sideChatProps = null;
+    mocks.sideChatMounts = 0;
+    mocks.sideChatUnmounts = 0;
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
+    window.localStorage.removeItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY);
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
 
@@ -466,6 +506,105 @@ describe('WorkbenchShell', () => {
       hostId: 'agent-1',
       viewKey: manifest.key,
     });
+  });
+
+  it('copies once per source thread and reuses the native side chat for later selections', async () => {
+    mocks.copyThread.mockResolvedValue({ thread_id: 'side-thread-1' });
+
+    function SideChatLauncher() {
+      const workbench = useWorkbench();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              void workbench.askInSideChat({
+                type: 'quote',
+                text: 'first selection',
+              })
+            }
+          >
+            First
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void workbench.askInSideChat({
+                type: 'quote',
+                text: 'second selection',
+              })
+            }
+          >
+            Second
+          </button>
+        </>
+      );
+    }
+
+    render(
+      <WorkbenchShell
+        options={{
+          ...baseOptions,
+          workbench: { sideChat: { enabled: true } },
+        }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <SideChatLauncher />
+      </WorkbenchShell>,
+    );
+    setObservedWidth(1200);
+
+    fireEvent.click(screen.getByRole('button', { name: 'First' }));
+    expect(await screen.findByTestId('side-chat')).toBeInTheDocument();
+    expect(mocks.copyThread).toHaveBeenCalledTimes(1);
+    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1');
+    expect(mocks.sideChatProps?.referenceRequest?.reference?.text).toBe(
+      'first selection',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
+    await waitFor(() =>
+      expect(mocks.sideChatProps?.referenceRequest?.reference?.text).toBe(
+        'second selection',
+      ),
+    );
+    expect(mocks.copyThread).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByLabelText('Close views: Side chat'));
+    expect(
+      screen.getByRole('alertdialog', { name: 'Close side chat?' }),
+    ).toBeInTheDocument();
+    expect(mocks.sideChatMounts).toBe(1);
+    expect(mocks.sideChatUnmounts).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('side-chat')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Close views: Side chat'));
+    fireEvent.click(screen.getByRole('checkbox', { name: "Don't ask again" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close side chat' }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('side-chat')).not.toBeInTheDocument(),
+    );
+    expect(mocks.sideChatUnmounts).toBe(1);
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
+    expect(
+      window.localStorage.getItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY),
+    ).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
+    expect(await screen.findByTestId('side-chat')).toBeInTheDocument();
+    expect(mocks.copyThread).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByLabelText('Close views: Side chat'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('side-chat')).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
   });
 });
 

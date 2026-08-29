@@ -97,7 +97,10 @@ const sortThreadRecords = (threadRecords: ThreadRecord[]): ThreadRecord[] => {
   });
 };
 
-export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
+export function useThreads(
+  limit: number = DEFAULT_LIMIT,
+  enabled: boolean = true,
+): UseThreadsResult {
   const {
     client,
     threadId,
@@ -119,6 +122,7 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
   }, []);
 
   const refreshThreads = React.useCallback(async () => {
+    if (!enabled) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -133,7 +137,7 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
     } finally {
       setIsLoading(false);
     }
-  }, [client, limit, assistantId, projectId]);
+  }, [client, enabled, limit, assistantId, projectId]);
 
   const createThread = React.useCallback(
     async (input?: CreateThreadInput) => {
@@ -175,9 +179,9 @@ export function useThreads(limit: number = DEFAULT_LIMIT): UseThreadsResult {
 
   React.useEffect(() => {
     // Only fetch threads when the client is authenticated
-    if (!isReady) return;
+    if (!enabled || !isReady) return;
     void refreshThreads();
-  }, [refreshThreads, isReady]);
+  }, [enabled, refreshThreads, isReady]);
 
   React.useEffect(() => {
     if (!threadId || !isStreamLoading) return;

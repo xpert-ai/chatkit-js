@@ -16,6 +16,17 @@
     "entryUnavailable": "远程视图内容不可用。",
     "missingAssistant": "需要 Assistant 才能加载视图。",
     "retry": "重试",
+    "sideChat": {
+      "title": "侧边聊天",
+      "threadRequired": "请先开始主对话，再打开侧边聊天。",
+      "closeDialog": {
+        "title": "关闭侧边聊天？",
+        "description": "关闭后，此侧边聊天将从当前工作台移除，当前页面无法恢复；对话数据仍会保留。",
+        "dontAskAgain": "不再询问",
+        "cancel": "取消",
+        "confirm": "关闭侧边聊天"
+      }
+    },
     "errors": {
       "contextKeyRequired": "必须提供上下文键。",
       "messageRequired": "必须提供消息内容。",
@@ -191,6 +202,7 @@
     "disablePlanMode": "关闭计划模式",
     "removeReference": "移除引用",
     "quoteSelection": "引用选中内容",
+    "askInSideChat": "在侧边聊天中提问",
     "requestUserInput": {
       "title": "需要你的输入",
       "recommended": "推荐",
