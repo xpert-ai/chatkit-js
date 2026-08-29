@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.5
+
+### Patch Changes
+
+- a086772: side chat
+- Updated dependencies [a086772]
+  - @xpert-ai/chatkit-types@0.5.4
+
 ## 0.5.4
 
 ### Patch Changes

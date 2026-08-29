@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.4
+
+### Patch Changes
+
+- a086772: side chat
+
 ## 0.5.3
 
 ### Patch Changes
