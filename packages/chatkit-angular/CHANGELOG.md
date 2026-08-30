@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-angular
 
+## 0.4.2
+
+### Patch Changes
+
+- c3d57a3: Add hosted Assistant model discovery, provider avatars, model preference persistence, a compact composer picker, and model-aware send, queue, and retry behavior. Align the web-component source baseline with the already published 0.5.2 release before applying this patch changeset.
+- Updated dependencies [c3d57a3]
+  - @xpert-ai/chatkit-types@0.5.5
+  - @xpert-ai/chatkit-web-component@0.5.3
+
 ## 0.4.1
 
 ### Patch Changes
