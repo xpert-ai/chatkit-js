@@ -6,6 +6,7 @@ import { isTrustedChatKitMessageEvent } from '@xpert-ai/chatkit-web-shared';
 const mocks = vi.hoisted(() => ({
   stream: {
     isLoading: false,
+    selectedModelId: null as string | null,
     submit: vi.fn(),
   },
 }));
@@ -65,6 +66,7 @@ describe('ParentMessengerProvider', () => {
   beforeEach(() => {
     mocks.stream.submit.mockClear();
     mocks.stream.isLoading = false;
+    mocks.stream.selectedModelId = null;
     parentWindow = {
       postMessage: vi.fn(),
     };
@@ -197,6 +199,45 @@ describe('ParentMessengerProvider', () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it('uses an explicit model and otherwise carries the composer selection', async () => {
+    render(
+      <ParentMessengerProvider>
+        <div />
+      </ParentMessengerProvider>,
+    );
+
+    const dispatch = (nonce: string, model?: string) => {
+      const event = new MessageEvent('message', {
+        data: {
+          __xpaiChatKit: true,
+          type: 'command',
+          command: 'onSendUserMessage',
+          nonce,
+          data: { text: nonce, ...(model ? { model } : {}) },
+        },
+        origin: 'https://example.com',
+      });
+      Object.defineProperty(event, 'source', {
+        configurable: true,
+        value: parentWindow,
+      });
+      window.dispatchEvent(event);
+    };
+
+    dispatch('explicit-model', 'mdl_explicit');
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0]?.[0]).toMatchObject({
+      input: { input: 'explicit-model', model: 'mdl_explicit' },
+    });
+
+    mocks.stream.selectedModelId = 'mdl_default';
+    dispatch('selected-model');
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(2));
+    expect(mocks.stream.submit.mock.calls[1]?.[0]).toMatchObject({
+      input: { input: 'selected-model', model: 'mdl_default' },
+    });
   });
 
   it('queues parent sendUserMessage commands while the stream is loading', async () => {

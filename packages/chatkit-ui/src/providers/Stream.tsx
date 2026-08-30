@@ -164,6 +164,7 @@ type ChatKitAIMessage = Message & {
   fileAssets?: Record<string, unknown>[];
   references?: ChatKitReference[];
   submittedInput?: string;
+  model?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   followUpMode?: FollowUpBehavior;
@@ -288,6 +289,8 @@ export type StreamContextType = {
   isLoading: boolean;
   isReady: boolean;
   error: unknown;
+  selectedModelId: string | null;
+  setSelectedModelId: (modelId: string | null) => void;
   loadThread: (threadId: string) => Promise<void>;
   loadConversationMessages: (
     recordId: string,
@@ -697,6 +700,7 @@ function mapChatMessageToUiMessage(
     ...(attachments ? { attachments } : {}),
     ...(fileAssets ? { fileAssets } : {}),
     ...(submittedInput !== undefined ? { submittedInput } : {}),
+    ...(typeof message.model === 'string' ? { model: message.model } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
     ...(taskSummary ? { taskSummary } : {}),
@@ -1901,6 +1905,7 @@ const StreamSession = ({
     );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [todos, setTodos] = useState<TodoListSnapshot | null>(null);
   const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUp[]>(
     [],
@@ -3643,6 +3648,8 @@ const StreamSession = ({
     isLoading,
     isReady,
     error,
+    selectedModelId,
+    setSelectedModelId,
     loadThread,
     loadConversationMessages,
     loadMoreConversationMessages,

@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => {
         },
         assistants: {
           get: vi.fn().mockResolvedValue(null),
+          getModels: vi.fn(),
+          setModelPreference: vi.fn(),
           getRuntimeCapabilities: vi.fn().mockRejectedValue({ status: 404 }),
         },
         conversations: {
@@ -63,6 +65,8 @@ const mocks = vi.hoisted(() => {
       isLoading: false,
       isReady: true,
       error: null as unknown,
+      selectedModelId: null as string | null,
+      setSelectedModelId: vi.fn(),
       loadThread: vi.fn(),
       loadConversationMessages: vi.fn(),
       loadMoreConversationMessages: vi.fn(),
@@ -474,6 +478,17 @@ describe('Chat plan mode payload', () => {
     mocks.stream.client.assistants.getRuntimeCapabilities.mockRejectedValue({
       status: 404,
     });
+    mocks.stream.client.assistants.getModels.mockReset();
+    mocks.stream.client.assistants.getModels.mockRejectedValue({ status: 404 });
+    mocks.stream.client.assistants.setModelPreference.mockReset();
+    mocks.stream.client.assistants.setModelPreference.mockResolvedValue({});
+    mocks.stream.selectedModelId = null;
+    mocks.stream.setSelectedModelId.mockReset();
+    mocks.stream.setSelectedModelId.mockImplementation(
+      (modelId: string | null) => {
+        mocks.stream.selectedModelId = modelId;
+      },
+    );
     mocks.stream.client.conversations.search.mockClear();
     mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
     mocks.stream.client.conversations.update.mockClear();
@@ -535,6 +550,169 @@ describe('Chat plan mode payload', () => {
       'planMode',
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('loads hosted models, submits the selection, and saves picker changes', async () => {
+    mocks.stream.client.assistants.getModels.mockResolvedValue({
+      models: [
+        {
+          id: 'mdl_primary',
+          label: 'Primary',
+          default: true,
+          avatar: {
+            url: 'https://cdn.example.com/provider-primary.svg',
+            background: '#f7f7f7',
+          },
+        },
+        {
+          id: 'mdl_fast',
+          label: 'Fast',
+          avatar: { url: 'https://cdn.example.com/provider-fast.svg' },
+        },
+      ],
+      selected_model_id: 'mdl_primary',
+      preference_persistable: true,
+    });
+
+    renderChat();
+
+    const picker = await screen.findByRole('button', {
+      name: 'chat.modelPicker.label: Primary',
+    });
+    expect(picker.closest('[data-slot="chat-footer"]')).not.toBeNull();
+    expect(picker.closest('[data-slot="composer-action-bar"]')).toBeNull();
+    picker.focus();
+    fireEvent.keyDown(picker, { key: 'Enter', code: 'Enter' });
+    expect(
+      await screen.findByText('chat.modelPicker.futureTitle'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('chat.modelPicker.title')).toHaveClass(
+      'text-popover-foreground',
+    );
+    expect(
+      within(screen.getByRole('menuitemradio', { name: /Primary/ })).getByText(
+        'Primary',
+      ),
+    ).toHaveClass('text-popover-foreground');
+    expect(screen.getByText('chat.modelPicker.futureTitle')).toHaveClass(
+      'text-popover-foreground',
+    );
+    const primaryOption = screen.getByRole('menuitemradio', {
+      name: /Primary/,
+    });
+    expect(primaryOption.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/provider-primary.svg',
+    );
+    const pickerHeader = screen
+      .getByText('chat.modelPicker.title')
+      .closest('div');
+    expect(pickerHeader?.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/provider-primary.svg',
+    );
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Fast' }));
+
+    await waitFor(() =>
+      expect(
+        mocks.stream.client.assistants.setModelPreference,
+      ).toHaveBeenCalledWith('assistant-1', 'mdl_fast'),
+    );
+
+    setComposerText(screen.getByRole('textbox'), 'use fast');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    expect(mocks.stream.submit.mock.calls[0]?.[0]).toMatchObject({
+      input: { input: 'use fast', model: 'mdl_fast' },
+    });
+  });
+
+  it('keeps a programmatic model selection made before the hosted catalog loads', async () => {
+    let resolveCatalog!: (value: {
+      models: Array<{ id: string; label: string; default?: boolean }>;
+      selected_model_id: string;
+      preference_persistable: boolean;
+    }) => void;
+    mocks.stream.client.assistants.getModels.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCatalog = resolve;
+      }),
+    );
+
+    renderChat();
+    act(() => {
+      mocks.parentMessengerOptions?.onSetComposerValue?.({
+        selectedModelId: 'mdl_fast',
+      });
+    });
+    act(() => {
+      resolveCatalog({
+        models: [
+          { id: 'mdl_primary', label: 'Primary', default: true },
+          { id: 'mdl_fast', label: 'Fast' },
+        ],
+        selected_model_id: 'mdl_primary',
+        preference_persistable: true,
+      });
+    });
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'chat.modelPicker.label: Fast',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('uses custom composer models without calling the hosted catalog', async () => {
+    renderChat({
+      composer: {
+        models: [
+          { id: 'custom-primary', label: 'Custom Primary', default: true },
+          { id: 'custom-fast', label: 'Custom Fast' },
+        ],
+      },
+    });
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'chat.modelPicker.label: Custom Primary',
+      }),
+    ).toBeInTheDocument();
+    expect(mocks.stream.client.assistants.getModels).not.toHaveBeenCalled();
+  });
+
+  it('does not silently select another model when the hosted Primary is unavailable', async () => {
+    mocks.stream.client.assistants.getModels.mockResolvedValue({
+      models: [
+        {
+          id: 'mdl_primary',
+          label: 'Primary',
+          default: false,
+          disabled: true,
+        },
+        { id: 'mdl_fast', label: 'Fast' },
+      ],
+      selected_model_id: null,
+      preference_persistable: true,
+    });
+
+    renderChat();
+    await waitFor(() =>
+      expect(mocks.stream.setSelectedModelId.mock.calls.length).toBeGreaterThan(
+        1,
+      ),
+    );
+    expect(mocks.stream.selectedModelId).toBeNull();
+
+    setComposerText(screen.getByRole('textbox'), 'keep primary behavior');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    const payload = mocks.stream.submit.mock.calls[0]?.[0];
+    expect(payload).toMatchObject({
+      input: { input: 'keep primary behavior' },
+    });
+    expect(payload?.input?.model).toBeUndefined();
+    expect(payload?.state?.human?.model).toBeUndefined();
   });
 
   it('queues composer sends by default while a run is active', async () => {
@@ -599,7 +777,9 @@ describe('Chat plan mode payload', () => {
     fireEvent.click(loadMore);
 
     await waitFor(() =>
-      expect(mocks.stream.loadMoreConversationMessages).toHaveBeenCalledTimes(1),
+      expect(mocks.stream.loadMoreConversationMessages).toHaveBeenCalledTimes(
+        1,
+      ),
     );
   });
 
@@ -1401,9 +1581,7 @@ describe('Chat plan mode payload', () => {
 
     rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
 
-    await waitFor(() =>
-      expect(screen.queryByText('ship feature')).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText('ship feature')).toBeNull());
   });
 
   it('localizes remaining built-in slash command labels and descriptions', async () => {
