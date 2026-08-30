@@ -204,6 +204,15 @@ export type ModelOption = {
   /** Optional helper text shown with the option. */
   description?: string;
 
+  /** Copilot model provider avatar shown in model picker clients. */
+  avatar?: {
+    /** Public URL for the provider's small icon. */
+    url?: string;
+
+    /** Provider-defined background color used behind transparent icons. */
+    background?: string;
+  };
+
   /** When true the option is visible but cannot be selected. */
   disabled?: boolean;
 

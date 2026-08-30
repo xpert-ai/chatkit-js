@@ -330,10 +330,18 @@ export function ParentMessengerProvider({
         )
           ? runtimeCapabilitiesCandidate
           : undefined;
+        const requestedModel =
+          typeof params.model === 'string' && params.model.trim()
+            ? params.model.trim()
+            : typeof params.state?.[STATE_VARIABLE_HUMAN]?.model === 'string' &&
+                params.state[STATE_VARIABLE_HUMAN].model.trim()
+              ? params.state[STATE_VARIABLE_HUMAN].model.trim()
+              : streamRef.current?.selectedModelId;
         const requestHumanInput =
           params.planMode === true ||
           params.state?.[STATE_VARIABLE_HUMAN]?.planMode === true ||
-          runtimeCapabilities
+          runtimeCapabilities ||
+          requestedModel
             ? {
                 ...humanInput,
                 ...(params.planMode === true ||
@@ -341,6 +349,7 @@ export function ParentMessengerProvider({
                   ? { planMode: true }
                   : {}),
                 ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
+                ...(requestedModel ? { model: requestedModel } : {}),
               }
             : humanInput;
 
@@ -350,6 +359,7 @@ export function ParentMessengerProvider({
           referenceComposition?: ChatKitReferenceCompositionMode;
           followUpMode?: FollowUpBehavior;
           runtimeCapabilities?: RuntimeCapabilitiesSelection;
+          model?: string;
         } = {
           id: createMessageId(),
           type: 'human',
@@ -360,6 +370,7 @@ export function ParentMessengerProvider({
             : {}),
           ...(references.length > 0 ? { references } : {}),
           ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
+          ...(requestedModel ? { model: requestedModel } : {}),
         };
         const stream = streamRef.current;
         const activeFollowUpMode = stream?.isLoading

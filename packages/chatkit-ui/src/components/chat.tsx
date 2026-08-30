@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 
-import type { Message } from '@xpert-ai/xpert-sdk';
+import type { AssistantModelsResponse, Message } from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
   ChatKitImageReference,
@@ -25,6 +25,7 @@ import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   ChatKitCommandSource,
+  ModelOption,
   ToolOption,
   ThreadGoal,
   ChatKitGoalAdapter,
@@ -48,6 +49,7 @@ import { isNearBottom } from '../lib/scroll';
 import { type AgentFile, type StorageFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
+import { ModelPicker } from './composer/ModelPicker';
 import { SendButton } from './composer/SendButton';
 import { SlashPalette } from './composer/SlashPalette';
 import { HistorySidebar } from './history/HistorySidebar';
@@ -99,6 +101,10 @@ import {
 } from '../lib/references';
 import { getMissingApiConfigurationKind } from '../lib/api-config';
 import { sortVisiblePendingFollowUps } from '../lib/follow-ups';
+import {
+  normalizeModelOptions,
+  resolveSelectedModelId,
+} from '../lib/assistant-models';
 import { useTheme } from '../providers/Theme';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { PetBridge } from './pet/PetBridge';
@@ -191,14 +197,17 @@ export type ChatReferenceRequest = {
 };
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
-  | string
-  | undefined;
+  string | undefined;
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 const GOAL_RUN_INPUT = 'Continue working toward the active goal.';
 const TASK_SUMMARY_PANEL_WIDTH_REM = 20;
 const TASK_SUMMARY_PANEL_EDGE_INSET_REM = 1.25;
 const TASK_SUMMARY_PANEL_SAFE_GAP_REM = 0.75;
+
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
 
 function isGoalAdapter(value: unknown): value is ChatKitGoalAdapter {
   return (
@@ -230,6 +239,7 @@ type HumanMessageWithMeta = Message & {
   referenceComposition?: ChatKitReferenceCompositionMode;
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   runtimeCapabilityOptions?: RuntimeCapabilityOption[];
+  model?: string;
 };
 
 type QuoteSelectionState = {
@@ -595,6 +605,21 @@ export function Chat({
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
     null,
   );
+  const [availableModels, setAvailableModels] = React.useState<ModelOption[]>(
+    [],
+  );
+  const [hostedModelCatalog, setHostedModelCatalog] =
+    React.useState<AssistantModelsResponse | null>(null);
+  const modelAssistantId = stream.assistantId;
+  const modelClient = stream.client;
+  const selectedModelId = stream.selectedModelId;
+  const setSelectedModelId = stream.setSelectedModelId;
+  const selectedModelIdRef = React.useRef(selectedModelId);
+  selectedModelIdRef.current = selectedModelId;
+  const requestedModelIdRef = React.useRef<string | null | undefined>(
+    undefined,
+  );
+  const modelAssistantIdRef = React.useRef(modelAssistantId);
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
   const [petSettingsOpen, setPetSettingsOpen] = React.useState(false);
   const [petLocalSettings, setPetLocalSettings] =
@@ -945,26 +970,40 @@ export function Chat({
       if (Array.isArray(payload.references)) {
         const nextReferences = normalizeReferences(payload.references);
         setReferences((previous) =>
-            payload.appendReferences
-              ? mergeReferences(previous, nextReferences)
+          payload.appendReferences
+            ? mergeReferences(previous, nextReferences)
             : nextReferences,
         );
       }
       if (payload.selectedToolId !== undefined) {
         const nextTool =
           payload.selectedToolId === null
-              ? null
-              : ((composer?.tools ?? []).find(
-                  (tool) => tool.id === payload.selectedToolId,
+            ? null
+            : ((composer?.tools ?? []).find(
+                (tool) => tool.id === payload.selectedToolId,
               ) ?? null);
         setSelectedTool(nextTool);
+      }
+      if (payload.selectedModelId !== undefined) {
+        requestedModelIdRef.current = payload.selectedModelId;
+        setSelectedModelId?.(
+          availableModels.length
+            ? resolveSelectedModelId(availableModels, payload.selectedModelId)
+            : payload.selectedModelId,
+        );
       }
       applyComposerValueRuntimeCapabilities(
         payload,
         shouldInsertRuntimeCapabilitiesBeforeText ? { insertAt: 0 } : undefined,
       );
     },
-    [applyComposerValueRuntimeCapabilities, composer?.tools, setComposerText],
+    [
+      applyComposerValueRuntimeCapabilities,
+      availableModels,
+      composer?.tools,
+      setComposerText,
+      setSelectedModelId,
+    ],
   );
   const handleSetRuntimeCapabilities = React.useCallback(
     (selection: RuntimeCapabilitiesSelection | null) => {
@@ -991,6 +1030,102 @@ export function Chat({
           onSetPetEnabled: handleSetPetEnabled,
         }
       : {},
+  );
+  const sendParentEvent = parentMessenger?.sendEvent;
+
+  React.useEffect(() => {
+    if (modelAssistantIdRef.current !== modelAssistantId) {
+      modelAssistantIdRef.current = modelAssistantId;
+      requestedModelIdRef.current = undefined;
+    }
+
+    if (composer?.models !== undefined) {
+      const models = normalizeModelOptions(composer.models);
+      setAvailableModels(models);
+      setHostedModelCatalog(null);
+      setSelectedModelId?.(
+        resolveSelectedModelId(
+          models,
+          requestedModelIdRef.current === undefined
+            ? selectedModelIdRef.current
+            : requestedModelIdRef.current,
+        ),
+      );
+      return;
+    }
+
+    setAvailableModels([]);
+    setHostedModelCatalog(null);
+    setSelectedModelId?.(null);
+    if (missingConfig || !modelAssistantId) return;
+
+    const assistants = modelClient.assistants;
+    if (typeof assistants?.getModels !== 'function') return;
+
+    const abortController = new AbortController();
+    void assistants
+      .getModels(modelAssistantId, { signal: abortController.signal })
+      .then((response) => {
+        if (abortController.signal.aborted) return;
+        const models = normalizeModelOptions(response.models);
+        setAvailableModels(models);
+        setHostedModelCatalog({ ...response, models });
+        const requestedModelId = requestedModelIdRef.current;
+        setSelectedModelId?.(
+          requestedModelId === undefined
+            ? response.selected_model_id
+              ? resolveSelectedModelId(models, response.selected_model_id)
+              : null
+            : requestedModelId === null
+              ? (models.find((model) => model.default && !model.disabled)?.id ??
+                null)
+              : resolveSelectedModelId(models, requestedModelId),
+        );
+      })
+      .catch((error) => {
+        if (abortController.signal.aborted) return;
+        sendParentEvent?.('public_event', ['error', { error: toError(error) }]);
+      });
+
+    return () => abortController.abort();
+  }, [
+    composer?.models,
+    missingConfig,
+    modelAssistantId,
+    modelClient,
+    sendParentEvent,
+    setSelectedModelId,
+  ]);
+
+  const handleModelSelect = React.useCallback(
+    (modelId: string) => {
+      const nextModelId = resolveSelectedModelId(availableModels, modelId);
+      if (!nextModelId) return;
+
+      requestedModelIdRef.current = nextModelId;
+      setSelectedModelId?.(nextModelId);
+      if (!hostedModelCatalog?.preference_persistable) return;
+
+      const assistants = modelClient.assistants;
+      if (typeof assistants?.setModelPreference !== 'function') return;
+
+      void assistants
+        .setModelPreference(modelAssistantId, nextModelId)
+        .catch((error) => {
+          sendParentEvent?.('public_event', [
+            'error',
+            { error: toError(error) },
+          ]);
+        });
+    },
+    [
+      availableModels,
+      hostedModelCatalog?.preference_persistable,
+      modelAssistantId,
+      modelClient,
+      sendParentEvent,
+      setSelectedModelId,
+    ],
   );
   const canMinimizeToPet =
     parentMessenger?.isParentAvailable === true && isPetEnabled(effectivePet);
@@ -1232,20 +1367,18 @@ export function Chat({
   const liveTaskSummary = React.useMemo(
     () =>
       collectLiveTaskSummary({
-        messages: messages.map(
-          (message): TaskSummaryMessage => ({
-            id: message.id,
-            content: message.content,
-            createdAt: message.createdAt,
-            updatedAt: message.updatedAt,
-            taskSummary: message.taskSummary,
-            references: message.references,
-            attachments: message.attachments,
-            fileAssets: message.fileAssets,
-            agentRuns: message.agentRuns,
-            runtimeCapabilities: message.runtimeCapabilities,
-          }),
-        ),
+        messages: messages.map((message): TaskSummaryMessage => ({
+          id: message.id,
+          content: message.content,
+          createdAt: message.createdAt,
+          updatedAt: message.updatedAt,
+          taskSummary: message.taskSummary,
+          references: message.references,
+          attachments: message.attachments,
+          fileAssets: message.fileAssets,
+          agentRuns: message.agentRuns,
+          runtimeCapabilities: message.runtimeCapabilities,
+        })),
         goal: threadGoal,
         todos: stream.todos,
         pending: liveTaskSummaryPending,
@@ -1707,6 +1840,7 @@ export function Chat({
           : {}),
         ...(filesToSend ? { fileAssets: filesToSend } : {}),
         ...(referencesToSend ? { references: referencesToSend } : {}),
+        ...(stream.selectedModelId ? { model: stream.selectedModelId } : {}),
       };
 
       commitComposerParts([], {
@@ -1723,8 +1857,10 @@ export function Chat({
         planMode?: boolean;
         runtimeCapabilities?: RuntimeCapabilitiesSelection;
         commandSource?: ChatKitCommandSource;
+        model?: string;
       } = {
         ...humanInput,
+        ...(stream.selectedModelId ? { model: stream.selectedModelId } : {}),
       };
       if (filesToSend) {
         inputPayload.files = filesToSend;
@@ -1873,10 +2009,14 @@ export function Chat({
             runtimeCapabilities?: RuntimeCapabilitiesSelection;
             commandSource: ChatKitCommandSource;
             goalRun: true;
+            model?: string;
           } = {
             input: GOAL_RUN_INPUT,
             commandSource,
             goalRun: true,
+            ...(stream.selectedModelId
+              ? { model: stream.selectedModelId }
+              : {}),
             ...(runtimeCapabilitiesForGoalRun
               ? { runtimeCapabilities: runtimeCapabilitiesForGoalRun }
               : {}),
@@ -1891,6 +2031,9 @@ export function Chat({
                 type: 'human',
                 content: visibleInput,
                 submittedInput: visibleInput,
+                ...(stream.selectedModelId
+                  ? { model: stream.selectedModelId }
+                  : {}),
               }
             : null;
 
@@ -2623,8 +2766,7 @@ export function Chat({
     const lastHumanMessage = [...messagesUpToIndex]
       .reverse()
       .find((m) => String(m.type) === 'human') as
-      | HumanMessageWithMeta
-      | undefined;
+      HumanMessageWithMeta | undefined;
 
     const humanInput = buildHumanMessageInputPayload({
       content:
@@ -2637,6 +2779,7 @@ export function Chat({
     });
 
     if (humanInput) {
+      const retryTarget = messages[messageIndex];
       const retryInput = {
         ...humanInput,
         ...(lastHumanMessage?.runtimeCapabilities
@@ -2644,7 +2787,22 @@ export function Chat({
           : {}),
       };
       stream.submit(
-        { input: retryInput },
+        retryTarget?.executionId
+          ? {
+              input: retryInput,
+              retry: true,
+              id: retryTarget.id,
+              executionId: retryTarget.executionId,
+              conversationId: stream.conversationId ?? undefined,
+            }
+          : {
+              input: {
+                ...retryInput,
+                ...(lastHumanMessage?.model
+                  ? { model: lastHumanMessage.model }
+                  : {}),
+              },
+            },
         {
           optimisticValues: (prev) => {
             // Remove the AI message that we're retrying
@@ -2833,16 +2991,16 @@ export function Chat({
       className="relative flex h-full w-full min-w-0 bg-background"
       data-task-summary-layout={taskSummaryDocked ? 'docked' : 'popover'}
     >
-    <UploadDroppedFiles
-      ref={viewportRef}
-      data-chatkit-root=""
-      enabled={canUploadDroppedFiles}
-      dropTitle={t('chat.dropFilesTitle')}
-      dropHint={t('chat.dropFilesHint')}
-      activeClassName="ring-2 ring-primary/40 ring-inset"
-      onFiles={handleDroppedFiles}
-      className={cn(
-        'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
+      <UploadDroppedFiles
+        ref={viewportRef}
+        data-chatkit-root=""
+        enabled={canUploadDroppedFiles}
+        dropTitle={t('chat.dropFilesTitle')}
+        dropHint={t('chat.dropFilesHint')}
+        activeClassName="ring-2 ring-primary/40 ring-inset"
+        onFiles={handleDroppedFiles}
+        className={cn(
+          'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
           className,
         )}
       >
@@ -2850,82 +3008,82 @@ export function Chat({
           <div
             ref={chatColumnRef}
             data-slot="chatkit-chat-header"
-        className="mx-auto flex w-full items-center justify-between border-b border-secondary px-2 py-1 sticky top-0 z-10 bg-background"
-        style={chatColumnStyle}
-      >
-        <div className="flex min-w-0 items-center gap-3 overflow-hidden">
-          <div className="relative shrink-0">
-            <ChatkitAvatar
-              avatar={assistantAvatar}
-              className="h-9 w-9 border border-border/60"
-              label={assistantTitle}
-            />
-            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
-          </div>
-          <div className="min-w-0">
-            <h2
-              className="text-lg font-semibold truncate"
-              title={assistantTitle}
-            >
-              {assistantTitle}
-            </h2>
-            <p
-              className="truncate text-xs text-muted-foreground"
-              title={assistantStatusText}
-            >
-              {assistantStatusText}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          {taskSummaryAvailable && (
-            <TaskSummaryTrigger
-              {...taskSummaryProps}
-              displayMode={taskSummaryDocked ? 'docked' : 'popover'}
-              open={taskSummaryOpen}
-              onOpenChange={handleTaskSummaryOpenChange}
-            />
-          )}
-          <WorkbenchToggleButton />
-
-          {canMinimizeToPet && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex h-8 w-8">
-                  <button
-                    type="button"
-                    onClick={handleMinimizeToPet}
-                    className={cn(
-                      'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                      'text-muted-foreground hover:text-foreground hover:bg-muted',
-                      'transition-colors duration-150',
-                    )}
-                    aria-label={t('chat.minimizeToPet')}
-                  >
-                    <Minus size={16} />
-                  </button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t('chat.minimizeToPet')}
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-flex h-8 w-8">
-                <button
-                  type="button"
-                  onClick={() => setPetSettingsOpen(true)}
-                  className={cn(
-                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                    'text-muted-foreground hover:text-foreground hover:bg-muted',
-                    'transition-colors duration-150',
-                  )}
-                  aria-label={t('settings.open')}
+            className="mx-auto flex w-full items-center justify-between border-b border-secondary px-2 py-1 sticky top-0 z-10 bg-background"
+            style={chatColumnStyle}
+          >
+            <div className="flex min-w-0 items-center gap-3 overflow-hidden">
+              <div className="relative shrink-0">
+                <ChatkitAvatar
+                  avatar={assistantAvatar}
+                  className="h-9 w-9 border border-border/60"
+                  label={assistantTitle}
+                />
+                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
+              </div>
+              <div className="min-w-0">
+                <h2
+                  className="text-lg font-semibold truncate"
+                  title={assistantTitle}
                 >
-                  <Settings size={16} />
+                  {assistantTitle}
+                </h2>
+                <p
+                  className="truncate text-xs text-muted-foreground"
+                  title={assistantStatusText}
+                >
+                  {assistantStatusText}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1">
+              {taskSummaryAvailable && (
+                <TaskSummaryTrigger
+                  {...taskSummaryProps}
+                  displayMode={taskSummaryDocked ? 'docked' : 'popover'}
+                  open={taskSummaryOpen}
+                  onOpenChange={handleTaskSummaryOpenChange}
+                />
+              )}
+              <WorkbenchToggleButton />
+
+              {canMinimizeToPet && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex h-8 w-8">
+                      <button
+                        type="button"
+                        onClick={handleMinimizeToPet}
+                        className={cn(
+                          'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                          'text-muted-foreground hover:text-foreground hover:bg-muted',
+                          'transition-colors duration-150',
+                        )}
+                        aria-label={t('chat.minimizeToPet')}
+                      >
+                        <Minus size={16} />
+                      </button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t('chat.minimizeToPet')}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex h-8 w-8">
+                    <button
+                      type="button"
+                      onClick={() => setPetSettingsOpen(true)}
+                      className={cn(
+                        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                        'text-muted-foreground hover:text-foreground hover:bg-muted',
+                        'transition-colors duration-150',
+                      )}
+                      aria-label={t('settings.open')}
+                    >
+                      <Settings size={16} />
                     </button>
                   </span>
                 </TooltipTrigger>
@@ -2935,38 +3093,38 @@ export function Chat({
               </Tooltip>
 
               {/* History controls - only shown when history.enabled is true (default) */}
-          {history?.enabled !== false && (
-            <>
-              {/* New thread button */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex h-8 w-8">
-                    <button
-                      type="button"
-                      onClick={handleNewThread}
-                      disabled={missingConfig || isHistoryLoading}
-                      className={cn(
-                        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                        'text-muted-foreground hover:text-foreground hover:bg-muted',
-                        'transition-colors duration-150',
-                        'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
-                      )}
-                      aria-label={t('history.newThread')}
-                    >
-                      <Pencil size={16} />
-                    </button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {t('history.newThread')}
-                </TooltipContent>
-              </Tooltip>
-              <HistorySidebar
-                threads={threads}
-                currentThreadId={stream.threadId ?? undefined}
-                onNewThread={handleNewThread}
-                onRefresh={refreshThreads}
-                onSelectThread={handleSelectThread}
+              {history?.enabled !== false && (
+                <>
+                  {/* New thread button */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex h-8 w-8">
+                        <button
+                          type="button"
+                          onClick={handleNewThread}
+                          disabled={missingConfig || isHistoryLoading}
+                          className={cn(
+                            'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                            'text-muted-foreground hover:text-foreground hover:bg-muted',
+                            'transition-colors duration-150',
+                            'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
+                          )}
+                          aria-label={t('history.newThread')}
+                        >
+                          <Pencil size={16} />
+                        </button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {t('history.newThread')}
+                    </TooltipContent>
+                  </Tooltip>
+                  <HistorySidebar
+                    threads={threads}
+                    currentThreadId={stream.threadId ?? undefined}
+                    onNewThread={handleNewThread}
+                    onRefresh={refreshThreads}
+                    onSelectThread={handleSelectThread}
                     onDeleteThread={handleDeleteThread}
                     isRefreshing={isThreadsLoading}
                     showDelete={history?.showDelete !== false}
@@ -2982,126 +3140,126 @@ export function Chat({
 
         {showMessageNavigation && (
           <MessageNavigator
-          items={messageNavigationItems}
-          viewportRef={viewportRef}
-          getAnchor={getMessageNavigationAnchor}
-          onNavigate={handleMessageNavigationNavigate}
-          label={t('message.navigation.label')}
-          tagsOverflowLabel={(count) =>
-            t('message.navigation.moreTags', { count })
-          }
-        />
-      )}
-
-      <div
-        data-slot="chatkit-chat-content"
-        className="mx-auto w-full flex-1 p-4"
-        style={chatColumnStyle}
-      >
-        {errorMessage && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {errorMessage}
-          </div>
-        )}
-        {historyError && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {historyError}
-          </div>
-        )}
-        {showMissingConfig && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            {missingConfigDetailMessage}
-          </div>
-        )}
-        {isHistoryLoading && (
-          <div className="mb-4 rounded-lg border border-muted px-3 py-2 text-sm text-muted-foreground">
-            {t('chat.loadingThread')}
-          </div>
-        )}
-        {messages.length === 0 && !canLoadMoreMessages ? (
-          <StartScreen
-            startScreen={startScreen}
-            onPromptClick={handlePromptClick}
-            onPromptEdit={handlePromptEdit}
-            promptSendDisabled={isSubmissionBlocked}
-            promptEditDisabled={isPromptEditDisabled}
+            items={messageNavigationItems}
+            viewportRef={viewportRef}
+            getAnchor={getMessageNavigationAnchor}
+            onNavigate={handleMessageNavigationNavigate}
+            label={t('message.navigation.label')}
+            tagsOverflowLabel={(count) =>
+              t('message.navigation.moreTags', { count })
+            }
           />
-        ) : (
-          <div className="space-y-1">
-            {canLoadMoreMessages && (
-              <div className="flex items-center gap-3 py-1">
-                <div className="h-px min-w-8 flex-1 bg-border" />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLoadMoreMessages}
-                  disabled={isLoadingMoreMessages}
-                  className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-                >
-                  {isLoadingMoreMessages
-                    ? t('chat.loadingMoreMessages')
-                    : t('chat.loadMoreMessages')}
-                </Button>
-                <div className="h-px min-w-8 flex-1 bg-border" />
-              </div>
-            )}
-            {messages.map((message, index) => {
-              const messageType = String(message.type);
-              const isAssistantMessage =
-                messageType === 'assistant' || messageType === 'ai';
-              const isStreamingMessage =
-                stream.isLoading && index === messages.length - 1;
-              const streamingStatus = isAssistantMessage
-                ? getAssistantStreamingStatus(
-                    {
-                      ...(message as ChatkitMessage),
-                      lastStreamOutputAt: lastStreamOutputAtRef.current,
-                    },
-                    isStreamingMessage,
-                    { now: streamingNow },
-                  )
-                : null;
+        )}
 
-              if (
-                isAssistantMessage &&
-                !hasRenderableAssistantMessage(message as ChatkitMessage) &&
-                !streamingStatus
-              ) {
-                return null;
-              }
+        <div
+          data-slot="chatkit-chat-content"
+          className="mx-auto w-full flex-1 p-4"
+          style={chatColumnStyle}
+        >
+          {errorMessage && (
+            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {errorMessage}
+            </div>
+          )}
+          {historyError && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {historyError}
+            </div>
+          )}
+          {showMissingConfig && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {missingConfigDetailMessage}
+            </div>
+          )}
+          {isHistoryLoading && (
+            <div className="mb-4 rounded-lg border border-muted px-3 py-2 text-sm text-muted-foreground">
+              {t('chat.loadingThread')}
+            </div>
+          )}
+          {messages.length === 0 && !canLoadMoreMessages ? (
+            <StartScreen
+              startScreen={startScreen}
+              onPromptClick={handlePromptClick}
+              onPromptEdit={handlePromptEdit}
+              promptSendDisabled={isSubmissionBlocked}
+              promptEditDisabled={isPromptEditDisabled}
+            />
+          ) : (
+            <div className="space-y-1">
+              {canLoadMoreMessages && (
+                <div className="flex items-center gap-3 py-1">
+                  <div className="h-px min-w-8 flex-1 bg-border" />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLoadMoreMessages}
+                    disabled={isLoadingMoreMessages}
+                    className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {isLoadingMoreMessages
+                      ? t('chat.loadingMoreMessages')
+                      : t('chat.loadMoreMessages')}
+                  </Button>
+                  <div className="h-px min-w-8 flex-1 bg-border" />
+                </div>
+              )}
+              {messages.map((message, index) => {
+                const messageType = String(message.type);
+                const isAssistantMessage =
+                  messageType === 'assistant' || messageType === 'ai';
+                const isStreamingMessage =
+                  stream.isLoading && index === messages.length - 1;
+                const streamingStatus = isAssistantMessage
+                  ? getAssistantStreamingStatus(
+                      {
+                        ...(message as ChatkitMessage),
+                        lastStreamOutputAt: lastStreamOutputAtRef.current,
+                      },
+                      isStreamingMessage,
+                      { now: streamingNow },
+                    )
+                  : null;
 
-              const messageContent =
-                typeof message.content === 'string'
-                  ? message.content
-                  : Array.isArray(message.content)
+                if (
+                  isAssistantMessage &&
+                  !hasRenderableAssistantMessage(message as ChatkitMessage) &&
+                  !streamingStatus
+                ) {
+                  return null;
+                }
+
+                const messageContent =
+                  typeof message.content === 'string'
                     ? message.content
-                        .map((part) => formatMessageContent(part as any))
-                        .join('')
-                    : formatMessageContent(message.content);
-              const hasPlainRenderableContent =
-                messageContent.trim().length > 0;
-              const humanMessage = message as HumanMessageWithMeta;
-              const humanReferences = humanMessage.references ?? [];
-              const humanAttachments = getVisibleHumanAttachments(
-                [
-                  ...(humanMessage.fileAssets ?? []),
-                  ...(humanMessage.attachments ?? []),
-                ],
-                humanReferences,
-              );
-              const humanRuntimeCapabilityOptions =
-                message.type === 'human'
-                  ? (humanMessage.runtimeCapabilityOptions ??
-                    getRuntimeCapabilityOptionsForSelection(
-                      getRecommendedRuntimeCapabilitiesSelection(
-                        humanMessage.runtimeCapabilities,
-                      ),
-                      runtimeCapabilityOptions,
-                    ))
-                  : [];
-              const hasHumanAttachments =
-                message.type === 'human' && humanAttachments.length > 0;
+                    : Array.isArray(message.content)
+                      ? message.content
+                          .map((part) => formatMessageContent(part as any))
+                          .join('')
+                      : formatMessageContent(message.content);
+                const hasPlainRenderableContent =
+                  messageContent.trim().length > 0;
+                const humanMessage = message as HumanMessageWithMeta;
+                const humanReferences = humanMessage.references ?? [];
+                const humanAttachments = getVisibleHumanAttachments(
+                  [
+                    ...(humanMessage.fileAssets ?? []),
+                    ...(humanMessage.attachments ?? []),
+                  ],
+                  humanReferences,
+                );
+                const humanRuntimeCapabilityOptions =
+                  message.type === 'human'
+                    ? (humanMessage.runtimeCapabilityOptions ??
+                      getRuntimeCapabilityOptionsForSelection(
+                        getRecommendedRuntimeCapabilitiesSelection(
+                          humanMessage.runtimeCapabilities,
+                        ),
+                        runtimeCapabilityOptions,
+                      ))
+                    : [];
+                const hasHumanAttachments =
+                  message.type === 'human' && humanAttachments.length > 0;
                 const canQuoteMessage =
                   message.type === 'human' || isAssistantMessage;
                 const quoteSource =
@@ -3111,209 +3269,209 @@ export function Chat({
                 const messageNavigationId = getMessageNavigationItemId(
                   message as MessageNavigationSourceMessage,
                   index,
-              );
+                );
 
-              if (
-                !isAssistantMessage &&
-                !hasPlainRenderableContent &&
-                !hasHumanAttachments &&
-                humanRuntimeCapabilityOptions.length === 0 &&
-                humanReferences.length === 0
-              ) {
-                return null;
-              }
+                if (
+                  !isAssistantMessage &&
+                  !hasPlainRenderableContent &&
+                  !hasHumanAttachments &&
+                  humanRuntimeCapabilityOptions.length === 0 &&
+                  humanReferences.length === 0
+                ) {
+                  return null;
+                }
 
-              return (
-                <div
-                  key={message.id ?? `${message.type}-${index}`}
-                  ref={(node) =>
-                    setMessageNavigationAnchor(messageNavigationId, node)
-                  }
-                  data-message-navigation-id={messageNavigationId}
-                  className={cn(
-                    'group flex gap-3',
-                    message.type === 'human'
-                      ? 'justify-end'
-                      : 'justify-start -ml-1', // AI messages: slightly closer to left
-                  )}
-                >
+                return (
                   <div
+                    key={message.id ?? `${message.type}-${index}`}
+                    ref={(node) =>
+                      setMessageNavigationAnchor(messageNavigationId, node)
+                    }
+                    data-message-navigation-id={messageNavigationId}
                     className={cn(
-                      'flex flex-col px-3 overflow-hidden',
-                      isAssistantMessage && 'min-w-0 flex-1',
+                      'group flex gap-3',
+                      message.type === 'human'
+                        ? 'justify-end'
+                        : 'justify-start -ml-1', // AI messages: slightly closer to left
                     )}
                   >
                     <div
-                      {...(canQuoteMessage
-                        ? {
-                            'data-quote-message-id': message.id,
-                            'data-quote-source': quoteSource,
-                          }
-                        : {})}
                       className={cn(
-                        'max-w-full rounded-2xl',
-                        message.type === 'human'
-                          ? 'bg-primary text-primary-foreground px-4 py-2.5'
-                          : message.type === 'system'
-                            ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
-                            : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
+                        'flex flex-col px-3 overflow-hidden',
+                        isAssistantMessage && 'min-w-0 flex-1',
                       )}
                     >
-                      {isAssistantMessage ? (
-                        <AssistantMessage
-                          message={{
-                            ...(message as ChatkitMessage),
-                            type: 'assistant',
-                          }}
-                          messages={messages.slice(0, index + 1).map(
-                            (item) =>
-                              ({
-                                ...(item as ChatkitMessage),
-                                type:
-                                  String(item.type) === 'ai'
-                                    ? 'assistant'
-                                    : item.type,
-                              }) as ChatkitMessage,
-                          )}
-                          isStreaming={isStreamingMessage}
-                          streamingStatus={streamingStatus}
-                          isThreadRunning={currentThreadIsRunning}
-                          organizationId={stream.organizationId}
-                          apiUrl={stream.apiUrl}
-                          pet={effectivePet}
-                        />
-                      ) : (
-                        <>
-                          {message.type === 'human' &&
-                            humanRuntimeCapabilityOptions.length > 0 && (
-                              <HumanRuntimeCapabilityChips
-                                options={humanRuntimeCapabilityOptions}
-                              />
+                      <div
+                        {...(canQuoteMessage
+                          ? {
+                              'data-quote-message-id': message.id,
+                              'data-quote-source': quoteSource,
+                            }
+                          : {})}
+                        className={cn(
+                          'max-w-full rounded-2xl',
+                          message.type === 'human'
+                            ? 'bg-primary text-primary-foreground px-4 py-2.5'
+                            : message.type === 'system'
+                              ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
+                              : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
+                        )}
+                      >
+                        {isAssistantMessage ? (
+                          <AssistantMessage
+                            message={{
+                              ...(message as ChatkitMessage),
+                              type: 'assistant',
+                            }}
+                            messages={messages.slice(0, index + 1).map(
+                              (item) =>
+                                ({
+                                  ...(item as ChatkitMessage),
+                                  type:
+                                    String(item.type) === 'ai'
+                                      ? 'assistant'
+                                      : item.type,
+                                }) as ChatkitMessage,
                             )}
-                          {message.type === 'human' &&
-                            humanReferences.length > 0 && (
-                              <div className="mb-2 flex flex-wrap gap-1.5">
-                                {humanReferences.map((reference) => (
-                                  <ReferenceChip
-                                    key={getReferenceKey(reference)}
-                                    reference={reference}
-                                    variant="message"
-                                  />
-                                ))}
-                              </div>
+                            isStreaming={isStreamingMessage}
+                            streamingStatus={streamingStatus}
+                            isThreadRunning={currentThreadIsRunning}
+                            organizationId={stream.organizationId}
+                            apiUrl={stream.apiUrl}
+                            pet={effectivePet}
+                          />
+                        ) : (
+                          <>
+                            {message.type === 'human' &&
+                              humanRuntimeCapabilityOptions.length > 0 && (
+                                <HumanRuntimeCapabilityChips
+                                  options={humanRuntimeCapabilityOptions}
+                                />
+                              )}
+                            {message.type === 'human' &&
+                              humanReferences.length > 0 && (
+                                <div className="mb-2 flex flex-wrap gap-1.5">
+                                  {humanReferences.map((reference) => (
+                                    <ReferenceChip
+                                      key={getReferenceKey(reference)}
+                                      reference={reference}
+                                      variant="message"
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            {/* Show attachments for human messages */}
+                            {message.type === 'human' &&
+                              humanAttachments.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {humanAttachments.map((file, fileIndex) => (
+                                    <div
+                                      key={fileIndex}
+                                      className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
+                                    >
+                                      <FileText size={12} />
+                                      <span className="max-w-[100px] truncate">
+                                        {file.originalName ?? file.id}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            {Array.isArray(message.content) ? (
+                              message.content.map((part, partIndex) => (
+                                <p
+                                  key={`${part.type}-${partIndex}`}
+                                  className="wrap-break-word text-sm leading-relaxed"
+                                >
+                                  {formatMessageContent(part as any)}
+                                </p>
+                              ))
+                            ) : (
+                              <span className="wrap-break-word text-sm leading-relaxed">
+                                {formatMessageContent(message.content)}
+                              </span>
                             )}
-                          {/* Show attachments for human messages */}
-                          {message.type === 'human' &&
-                            humanAttachments.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mb-2">
-                                {humanAttachments.map((file, fileIndex) => (
-                                  <div
-                                    key={fileIndex}
-                                    className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
-                                  >
-                                    <FileText size={12} />
-                                    <span className="max-w-[100px] truncate">
-                                      {file.originalName ?? file.id}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          {Array.isArray(message.content) ? (
-                            message.content.map((part, partIndex) => (
-                              <p
-                                key={`${part.type}-${partIndex}`}
-                                className="wrap-break-word text-sm leading-relaxed"
-                              >
-                                {formatMessageContent(part as any)}
-                              </p>
-                            ))
-                          ) : (
-                            <span className="wrap-break-word text-sm leading-relaxed">
-                              {formatMessageContent(message.content)}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {/* Message actions - hidden during streaming, retry only for last AI message */}
-                    <MessageActions
-                      content={messageContent}
-                      isAssistant={isAssistantMessage}
-                      isStreaming={isStreamingMessage}
-                      onRetry={
-                        isAssistantMessage &&
-                        !stream.isLoading &&
-                        index === messages.length - 1
-                          ? () => handleRetry(index)
-                          : undefined
-                      }
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            {/* Show loading indicator with minimum display time */}
-            {showLoadingDots &&
-              (() => {
-                const lastMessage = messages[messages.length - 1];
-                const lastMessageType = lastMessage
-                  ? String(lastMessage.type)
-                  : '';
-                const isLastMessageFromAI =
-                  lastMessageType === 'ai' || lastMessageType === 'assistant';
-                const lastAssistantStatus = isLastMessageFromAI
-                  ? getAssistantStreamingStatus(
-                      {
-                        ...(lastMessage as ChatkitMessage),
-                        lastStreamOutputAt: lastStreamOutputAtRef.current,
-                      },
-                      stream.isLoading,
-                      { now: streamingNow },
-                    )
-                  : null;
-                if (lastAssistantStatus) return null;
-                const fallbackStreamingStatus = getAssistantStreamingStatus(
-                  {
-                    status: undefined,
-                    reasoning: undefined,
-                    lastStreamOutputAt: lastStreamOutputAtRef.current,
-                  },
-                  stream.isLoading,
-                  { now: streamingNow },
-                );
-                return (
-                  <div className="flex justify-start gap-3 -ml-2">
-                    <div className="max-w-full rounded-2xl py-2.5">
-                      <AssistantStreamingIndicator
-                        status={fallbackStreamingStatus ?? 'loading'}
+                          </>
+                        )}
+                      </div>
+                      {/* Message actions - hidden during streaming, retry only for last AI message */}
+                      <MessageActions
+                        content={messageContent}
+                        isAssistant={isAssistantMessage}
+                        isStreaming={isStreamingMessage}
+                        onRetry={
+                          isAssistantMessage &&
+                          !stream.isLoading &&
+                          index === messages.length - 1
+                            ? () => handleRetry(index)
+                            : undefined
+                        }
                       />
                     </div>
                   </div>
                 );
-              })()}
+              })}
+              {/* Show loading indicator with minimum display time */}
+              {showLoadingDots &&
+                (() => {
+                  const lastMessage = messages[messages.length - 1];
+                  const lastMessageType = lastMessage
+                    ? String(lastMessage.type)
+                    : '';
+                  const isLastMessageFromAI =
+                    lastMessageType === 'ai' || lastMessageType === 'assistant';
+                  const lastAssistantStatus = isLastMessageFromAI
+                    ? getAssistantStreamingStatus(
+                        {
+                          ...(lastMessage as ChatkitMessage),
+                          lastStreamOutputAt: lastStreamOutputAtRef.current,
+                        },
+                        stream.isLoading,
+                        { now: streamingNow },
+                      )
+                    : null;
+                  if (lastAssistantStatus) return null;
+                  const fallbackStreamingStatus = getAssistantStreamingStatus(
+                    {
+                      status: undefined,
+                      reasoning: undefined,
+                      lastStreamOutputAt: lastStreamOutputAtRef.current,
+                    },
+                    stream.isLoading,
+                    { now: streamingNow },
+                  );
+                  return (
+                    <div className="flex justify-start gap-3 -ml-2">
+                      <div className="max-w-full rounded-2xl py-2.5">
+                        <AssistantStreamingIndicator
+                          status={fallbackStreamingStatus ?? 'loading'}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+            </div>
+          )}
+        </div>
+
+        {!isAtBottom && messages.length > 0 && (
+          <div className="sticky bottom-20 z-20 flex justify-center px-4 pointer-events-none">
+            <Button
+              type="button"
+              size="icon-sm"
+              variant={hasUpdatesBelow ? 'default' : 'outline'}
+              className={cn(
+                'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
+                hasUpdatesBelow && 'animate-bounce',
+              )}
+              onClick={() => scrollToBottom(true, true)}
+              aria-label={t('chat.scrollToBottom')}
+              title={t('chat.scrollToBottom')}
+            >
+              <ArrowDown size={16} />
+            </Button>
           </div>
         )}
-      </div>
-
-      {!isAtBottom && messages.length > 0 && (
-        <div className="sticky bottom-20 z-20 flex justify-center px-4 pointer-events-none">
-          <Button
-            type="button"
-            size="icon-sm"
-            variant={hasUpdatesBelow ? 'default' : 'outline'}
-            className={cn(
-              'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
-              hasUpdatesBelow && 'animate-bounce',
-            )}
-            onClick={() => scrollToBottom(true, true)}
-            aria-label={t('chat.scrollToBottom')}
-            title={t('chat.scrollToBottom')}
-          >
-            <ArrowDown size={16} />
-          </Button>
-        </div>
-      )}
 
         {quoteSelection && (
           <div
@@ -3333,8 +3491,8 @@ export function Chat({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={handleQuoteSelection}
                 aria-label={t('composer.quoteSelection')}
-            title={t('composer.quoteSelection')}
-          >
+                title={t('composer.quoteSelection')}
+              >
                 <Quote size={14} />
                 {t('composer.quoteSelection')}
               </Button>
@@ -3369,81 +3527,81 @@ export function Chat({
           </div>
         )}
 
-      <div
-        data-slot="chatkit-chat-composer"
-        className="mx-auto w-full p-2 sticky bottom-0 z-10 bg-background"
-        style={chatColumnStyle}
-      >
-        {threadErrorMessage && (
-          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
-            {threadErrorMessage}
-          </div>
-        )}
-        <ChatAttachments
-          ref={attachmentsRef}
-          accept={acceptMimes}
-          maxCount={composer?.attachments?.maxCount ?? 10}
-          maxSize={composer?.attachments?.maxSize ?? 100 * 1024 * 1024}
-          retryUploadLabel={t('chat.retryUpload')}
-          uploadFile={uploadContextFile}
-          deleteFile={deleteContextFile}
-          getFileStatus={getContextFileStatus}
-          onStateChange={setAttachmentState}
-        />
+        <div
+          data-slot="chatkit-chat-composer"
+          className="mx-auto w-full p-2 sticky bottom-0 z-10 bg-background"
+          style={chatColumnStyle}
+        >
+          {threadErrorMessage && (
+            <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
+              {threadErrorMessage}
+            </div>
+          )}
+          <ChatAttachments
+            ref={attachmentsRef}
+            accept={acceptMimes}
+            maxCount={composer?.attachments?.maxCount ?? 10}
+            maxSize={composer?.attachments?.maxSize ?? 100 * 1024 * 1024}
+            retryUploadLabel={t('chat.retryUpload')}
+            uploadFile={uploadContextFile}
+            deleteFile={deleteContextFile}
+            getFileStatus={getContextFileStatus}
+            onStateChange={setAttachmentState}
+          />
 
-        {references.length > 0 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            {references.map((reference) => (
-              <ReferenceChip
-                key={getReferenceKey(reference)}
-                reference={reference}
-                variant="composer"
-                onRemove={() =>
-                  setReferences((previous) =>
-                    previous.filter(
-                      (item) =>
-                        getReferenceKey(item) !== getReferenceKey(reference),
-                    ),
-                  )
-                }
-                removeLabel={t('composer.removeReference')}
-              />
-            ))}
-          </div>
-        )}
+          {references.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {references.map((reference) => (
+                <ReferenceChip
+                  key={getReferenceKey(reference)}
+                  reference={reference}
+                  variant="composer"
+                  onRemove={() =>
+                    setReferences((previous) =>
+                      previous.filter(
+                        (item) =>
+                          getReferenceKey(item) !== getReferenceKey(reference),
+                      ),
+                    )
+                  }
+                  removeLabel={t('composer.removeReference')}
+                />
+              ))}
+            </div>
+          )}
 
-        <DetachedRunRuntimeCapabilities
-          options={detachedRunRuntimeCapabilityOptions}
-          runOnlyLabel={t('composer.capabilities.runOnly')}
-          removeLabel={t('composer.capabilities.removeRunCapability')}
-          onRemove={removeRunRuntimeCapability}
-        />
+          <DetachedRunRuntimeCapabilities
+            options={detachedRunRuntimeCapabilityOptions}
+            runOnlyLabel={t('composer.capabilities.runOnly')}
+            removeLabel={t('composer.capabilities.removeRunCapability')}
+            onRemove={removeRunRuntimeCapability}
+          />
 
-        {showGoalStatus && (
-          <div
-            className={cn(
-              'mb-2 flex min-h-10 gap-2 rounded-md border border-border bg-background px-2.5 py-2 text-xs text-foreground shadow-sm',
-              isGoalObjectiveExpanded ? 'items-start' : 'items-center',
-            )}
-          >
-            <Target
+          {showGoalStatus && (
+            <div
               className={cn(
-                'size-4 shrink-0 text-muted-foreground',
-                isGoalObjectiveExpanded && 'mt-1',
+                'mb-2 flex min-h-10 gap-2 rounded-md border border-border bg-background px-2.5 py-2 text-xs text-foreground shadow-sm',
+                isGoalObjectiveExpanded ? 'items-start' : 'items-center',
               )}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="font-medium">{t('chat.goal.label')}</span>
-                {threadGoal && (
-                  <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                    {t(`chat.goal.status.${threadGoal.status}`)}
-                  </span>
+            >
+              <Target
+                className={cn(
+                  'size-4 shrink-0 text-muted-foreground',
+                  isGoalObjectiveExpanded && 'mt-1',
                 )}
-                {isGoalLoading && (
-                  <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                )}
-              </div>
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="font-medium">{t('chat.goal.label')}</span>
+                  {threadGoal && (
+                    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                      {t(`chat.goal.status.${threadGoal.status}`)}
+                    </span>
+                  )}
+                  {isGoalLoading && (
+                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                  )}
+                </div>
                 <div
                   className={cn(
                     'mt-0.5 text-muted-foreground',
@@ -3453,45 +3611,45 @@ export function Chat({
                       ? 'whitespace-pre-wrap break-words'
                       : 'truncate',
                   )}
-              >
-                {goalError || threadGoal?.objective}
+                >
+                  {goalError || threadGoal?.objective}
+                </div>
+                {threadGoal && (
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <span>
+                      {t('chat.goal.elapsed', {
+                        elapsed: formatGoalElapsed(displayedGoalElapsedSeconds),
+                      })}
+                    </span>
+                  </div>
+                )}
               </div>
               {threadGoal && (
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                  <span>
-                    {t('chat.goal.elapsed', {
-                      elapsed: formatGoalElapsed(displayedGoalElapsedSeconds),
-                    })}
-                  </span>
-                </div>
-              )}
-            </div>
-            {threadGoal && (
-              <div className="flex shrink-0 items-center gap-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isGoalLoading}
-                      onClick={() => {
-                        const prefix = '/goal edit ';
-                        setComposerText(`${prefix}${threadGoal.objective}`);
-                      }}
-                    >
-                      <Pencil className="size-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('chat.goal.edit')}</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isGoalLoading}
+                <div className="flex shrink-0 items-center gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        disabled={isGoalLoading}
+                        onClick={() => {
+                          const prefix = '/goal edit ';
+                          setComposerText(`${prefix}${threadGoal.objective}`);
+                        }}
+                      >
+                        <Pencil className="size-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('chat.goal.edit')}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        disabled={isGoalLoading}
                         onClick={() =>
                           void handleGoalCommand({
                             args:
@@ -3501,315 +3659,341 @@ export function Chat({
                             commandSource: {
                               type: 'slash_command',
                               name: 'goal',
-                            source: 'runtime',
-                            executionType: 'insert_invocation',
-                          },
-                        })
-                      }
-                    >
-                      {threadGoal.status === 'paused' ? (
-                        <Play className="size-3" />
-                      ) : (
-                        <Pause className="size-3" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {threadGoal.status === 'paused'
-                      ? t('chat.goal.resume')
-                      : t('chat.goal.pause')}
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isGoalLoading}
-                      onClick={() =>
-                        void handleGoalCommand({
-                          args: 'clear',
-                          commandSource: {
-                            type: 'slash_command',
-                            name: 'goal',
-                            source: 'runtime',
-                            executionType: 'insert_invocation',
-                          },
-                        })
-                      }
-                    >
-                      <Trash2 className="size-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('chat.goal.clear')}</TooltipContent>
-                </Tooltip>
-                {threadGoal.objective && !goalError && (
+                              source: 'runtime',
+                              executionType: 'insert_invocation',
+                            },
+                          })
+                        }
+                      >
+                        {threadGoal.status === 'paused' ? (
+                          <Play className="size-3" />
+                        ) : (
+                          <Pause className="size-3" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {threadGoal.status === 'paused'
+                        ? t('chat.goal.resume')
+                        : t('chat.goal.pause')}
+                    </TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        aria-expanded={isGoalObjectiveExpanded}
-                        aria-label={
-                          isGoalObjectiveExpanded
-                            ? t('chat.goal.collapseObjective')
-                            : t('chat.goal.expandObjective')
-                        }
+                        disabled={isGoalLoading}
                         onClick={() =>
-                          setIsGoalObjectiveExpanded((expanded) => !expanded)
+                          void handleGoalCommand({
+                            args: 'clear',
+                            commandSource: {
+                              type: 'slash_command',
+                              name: 'goal',
+                              source: 'runtime',
+                              executionType: 'insert_invocation',
+                            },
+                          })
                         }
                       >
-                        <ChevronDown
-                          className={cn(
-                            'size-3 transition-transform',
-                            isGoalObjectiveExpanded && 'rotate-180',
-                          )}
-                        />
+                        <Trash2 className="size-3" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      {isGoalObjectiveExpanded
-                        ? t('chat.goal.collapseObjective')
-                        : t('chat.goal.expandObjective')}
-                    </TooltipContent>
+                    <TooltipContent>{t('chat.goal.clear')}</TooltipContent>
                   </Tooltip>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  {threadGoal.objective && !goalError && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-expanded={isGoalObjectiveExpanded}
+                          aria-label={
+                            isGoalObjectiveExpanded
+                              ? t('chat.goal.collapseObjective')
+                              : t('chat.goal.expandObjective')
+                          }
+                          onClick={() =>
+                            setIsGoalObjectiveExpanded((expanded) => !expanded)
+                          }
+                        >
+                          <ChevronDown
+                            className={cn(
+                              'size-3 transition-transform',
+                              isGoalObjectiveExpanded && 'rotate-180',
+                            )}
+                          />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isGoalObjectiveExpanded
+                          ? t('chat.goal.collapseObjective')
+                          : t('chat.goal.expandObjective')}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-        <PendingRuntimeServices
-          state={stream.runtimeActivities.sandboxServices}
-          onStopService={(serviceId) =>
-            stream.stopRuntimeActivityItem('sandbox-services', serviceId)
-          }
-          attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
-          className={
-            hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined
-          }
-        />
-
-        <PendingTodos
-          snapshot={stream.todos}
-          attachToComposer={!hasPendingFollowUps}
-          className={hasPendingFollowUps ? 'mb-2' : undefined}
-        />
-
-        <PendingFollowUps
-          items={pendingFollowUps}
-          isLoading={stream.isLoading}
-          onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
-          canSendNow={stream.canSendPendingFollowUpNow}
-          onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
-          onEdit={handleEditPendingFollowUp}
-          onRemove={stream.removePendingFollowUp}
-          attachToComposer
-        />
-
-        <RequestUserInputPanel
-          request={stream.pendingRequestUserInput}
-          onSubmit={stream.submitRequestUserInput}
-          onDismiss={stream.stop}
-          attachToComposer
-        />
-
-        <HITLApprovalPanel
-          request={stream.pendingHITLRequest}
-          onSubmit={stream.submitHITLDecision}
-          onDismiss={stream.stop}
-          attachToComposer
-        />
-
-        {runtimeCapabilityPalette && (
-          <SlashPalette
-            palette={runtimeCapabilityPalette}
-            options={slashPaletteOptions}
-            paletteRef={slashPaletteRef}
-            optionRefs={slashPaletteOptionRefs}
-            panelRoundedClass={getPanelRoundedClass(theme.radius)}
-            itemRoundedClass={getMenuItemRoundedClass(theme.radius)}
-            emptyLabel={slashPaletteEmptyLabel}
-            capabilityEmptyLabels={slashPaletteCapabilityEmptyLabels}
-            onSelect={selectSlashPaletteOption}
+          <PendingRuntimeServices
+            state={stream.runtimeActivities.sandboxServices}
+            onStopService={(serviceId) =>
+              stream.stopRuntimeActivityItem('sandbox-services', serviceId)
+            }
+            attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
+            className={
+              hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined
+            }
           />
-        )}
 
-        <form className="flex items-end" onSubmit={handleSubmit}>
-          <div
-            data-slot="composer-input-shell"
-            data-layout={isComposerStacked ? 'stacked' : 'inline'}
-            className={cn(
-              'relative flex flex-1 overflow-hidden',
-              'bg-background border border-border shadow-sm',
-              isComposerStacked
-                ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
-                : 'min-h-12 px-1.5 py-1',
-              'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-              'transition-[min-height,padding,border-radius,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-              composerInputRoundedClass,
-            )}
-          >
+          <PendingTodos
+            snapshot={stream.todos}
+            attachToComposer={!hasPendingFollowUps}
+            className={hasPendingFollowUps ? 'mb-2' : undefined}
+          />
+
+          <PendingFollowUps
+            items={pendingFollowUps}
+            isLoading={stream.isLoading}
+            onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
+            canSendNow={stream.canSendPendingFollowUpNow}
+            onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
+            onEdit={handleEditPendingFollowUp}
+            onRemove={stream.removePendingFollowUp}
+            attachToComposer
+          />
+
+          <RequestUserInputPanel
+            request={stream.pendingRequestUserInput}
+            onSubmit={stream.submitRequestUserInput}
+            onDismiss={stream.stop}
+            attachToComposer
+          />
+
+          <HITLApprovalPanel
+            request={stream.pendingHITLRequest}
+            onSubmit={stream.submitHITLDecision}
+            onDismiss={stream.stop}
+            attachToComposer
+          />
+
+          {runtimeCapabilityPalette && (
+            <SlashPalette
+              palette={runtimeCapabilityPalette}
+              options={slashPaletteOptions}
+              paletteRef={slashPaletteRef}
+              optionRefs={slashPaletteOptionRefs}
+              panelRoundedClass={getPanelRoundedClass(theme.radius)}
+              itemRoundedClass={getMenuItemRoundedClass(theme.radius)}
+              emptyLabel={slashPaletteEmptyLabel}
+              capabilityEmptyLabels={slashPaletteCapabilityEmptyLabels}
+              onSelect={selectSlashPaletteOption}
+            />
+          )}
+
+          <form className="flex items-end" onSubmit={handleSubmit}>
             <div
-              key={composerDomVersion}
-              ref={composerInputRef}
-              role="textbox"
-              aria-multiline="true"
-              aria-disabled={
-                missingConfig ||
-                isHistoryLoading ||
-                hasPendingInteractiveRequest
-              }
-              contentEditable={
-                !(
+              data-slot="composer-input-shell"
+              data-layout={isComposerStacked ? 'stacked' : 'inline'}
+              className={cn(
+                'relative flex flex-1 overflow-hidden',
+                'bg-background border border-border shadow-sm',
+                isComposerStacked
+                  ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
+                  : 'min-h-12 px-1.5 py-1',
+                'focus-within:border-muted-foreground/30 focus-within:shadow-md',
+                'transition-[min-height,padding,border-radius,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                composerInputRoundedClass,
+              )}
+            >
+              <div
+                key={composerDomVersion}
+                ref={composerInputRef}
+                role="textbox"
+                aria-multiline="true"
+                aria-disabled={
                   missingConfig ||
                   isHistoryLoading ||
                   hasPendingInteractiveRequest
-                )
-              }
-              suppressContentEditableWarning
-              onInput={handleComposerInput}
-              onCompositionStart={handleComposerCompositionStart}
-              onCompositionEnd={handleComposerCompositionEnd}
-              onSelect={handleComposerSelect}
-              onPaste={handleComposerPaste}
-              onKeyDown={handleComposerKeyDown}
-              data-placeholder={inputPlaceholder}
-              className={cn(
-                'min-h-8 max-h-32 w-full overflow-hidden whitespace-pre-wrap break-words bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-                isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11 mt-1',
-                'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
-                (missingConfig ||
-                  isHistoryLoading ||
-                  hasPendingInteractiveRequest) &&
-                  'cursor-not-allowed opacity-50',
-              )}
-            >
-              {renderedComposerParts.map((part, index) =>
-                part.type === 'text' ? (
-                  <React.Fragment key={`text-${index}`}>
-                    {part.text}
-                  </React.Fragment>
-                ) : (
-                  <ComposerCapabilityToken key={part.key} part={part} />
-                ),
-              )}
-            </div>
-            <div
-              data-slot="composer-action-bar"
-              className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"
-            >
-              <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
-                <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
-                  {/* Plus button inside input - left side */}
-                  <ComposerMenu
-                    composer={composer}
-                    onAttachmentClick={handleAttachmentClick}
-                    onToolSelect={handleToolSelect}
-                    selectedTool={selectedTool}
-                    planModeEnabled={planModeEnabled}
-                    onPlanModeChange={setPlanModeEnabled}
-                    goalCommandAvailable={goalCommandAvailable}
-                    goalPanelOpen={isGoalModeOpen}
-                    onGoalPanelOpenChange={handleGoalPanelOpenChange}
-                    runtimeCapabilities={
-                      runtimeCapabilitiesReady ? runtimeCapabilities : null
+                }
+                contentEditable={
+                  !(
+                    missingConfig ||
+                    isHistoryLoading ||
+                    hasPendingInteractiveRequest
+                  )
+                }
+                suppressContentEditableWarning
+                onInput={handleComposerInput}
+                onCompositionStart={handleComposerCompositionStart}
+                onCompositionEnd={handleComposerCompositionEnd}
+                onSelect={handleComposerSelect}
+                onPaste={handleComposerPaste}
+                onKeyDown={handleComposerKeyDown}
+                data-placeholder={inputPlaceholder}
+                className={cn(
+                  'min-h-8 max-h-32 w-full overflow-hidden whitespace-pre-wrap break-words bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                  isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11 mt-1',
+                  'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
+                  (missingConfig ||
+                    isHistoryLoading ||
+                    hasPendingInteractiveRequest) &&
+                    'cursor-not-allowed opacity-50',
+                )}
+              >
+                {renderedComposerParts.map((part, index) =>
+                  part.type === 'text' ? (
+                    <React.Fragment key={`text-${index}`}>
+                      {part.text}
+                    </React.Fragment>
+                  ) : (
+                    <ComposerCapabilityToken key={part.key} part={part} />
+                  ),
+                )}
+              </div>
+              <div
+                data-slot="composer-action-bar"
+                className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"
+              >
+                <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
+                  <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+                    {/* Plus button inside input - left side */}
+                    <ComposerMenu
+                      composer={composer}
+                      onAttachmentClick={handleAttachmentClick}
+                      onToolSelect={handleToolSelect}
+                      selectedTool={selectedTool}
+                      planModeEnabled={planModeEnabled}
+                      onPlanModeChange={setPlanModeEnabled}
+                      goalCommandAvailable={goalCommandAvailable}
+                      goalPanelOpen={isGoalModeOpen}
+                      onGoalPanelOpenChange={handleGoalPanelOpenChange}
+                      runtimeCapabilities={
+                        runtimeCapabilitiesReady ? runtimeCapabilities : null
+                      }
+                      selectedRuntimeCapabilities={
+                        effectiveSessionRuntimeCapabilities
+                      }
+                      onRuntimeCapabilityToggle={
+                        handleSessionRuntimeCapabilityToggle
+                      }
+                      disabled={
+                        missingConfig ||
+                        isHistoryLoading ||
+                        hasPendingInteractiveRequest
+                      }
+                    />
+                  </div>
+
+                  {selectedTool && (
+                    <span className="pointer-events-auto inline-flex h-8 min-w-0 max-w-[14rem] shrink items-center gap-1.5 rounded-full bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200">
+                      <span className="truncate">
+                        {selectedTool.shortLabel ?? selectedTool.label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTool(null)}
+                        className="shrink-0 rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+
+                <div className="pointer-events-auto shrink-0">
+                  <SendButton
+                    disabled={isSendDisabled}
+                    isLoading={stream.isLoading}
+                    showStop={
+                      stream.isLoading &&
+                      (!trimmedDraft || hasPendingInteractiveRequest)
                     }
-                    selectedRuntimeCapabilities={
-                      effectiveSessionRuntimeCapabilities
-                    }
-                    onRuntimeCapabilityToggle={
-                      handleSessionRuntimeCapabilityToggle
-                    }
-                    disabled={
-                      missingConfig ||
-                      isHistoryLoading ||
-                      hasPendingInteractiveRequest
+                    onStop={() => stream.stop()}
+                    stopLabel={t('chat.stop')}
+                    sendLabel={t('chat.send')}
+                    shortcuts={
+                      stream.isLoading && trimmedDraft
+                        ? [
+                            {
+                              label: t('chat.followUps.queue'),
+                              keys: 'Enter',
+                            },
+                          ]
+                        : undefined
                     }
                   />
                 </div>
-
-                {selectedTool && (
-                  <span className="pointer-events-auto inline-flex h-8 min-w-0 max-w-[14rem] shrink items-center gap-1.5 rounded-full bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200">
-                    <span className="truncate">
-                      {selectedTool.shortLabel ?? selectedTool.label}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTool(null)}
-                      className="shrink-0 rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                )}
-              </div>
-
-              <div className="pointer-events-auto shrink-0">
-                <SendButton
-                  disabled={isSendDisabled}
-                  isLoading={stream.isLoading}
-                  showStop={
-                    stream.isLoading &&
-                    (!trimmedDraft || hasPendingInteractiveRequest)
-                  }
-                  onStop={() => stream.stop()}
-                  stopLabel={t('chat.stop')}
-                  sendLabel={t('chat.send')}
-                  shortcuts={
-                    stream.isLoading && trimmedDraft
-                      ? [
-                          {
-                            label: t('chat.followUps.queue'),
-                            keys: 'Enter',
-                          },
-                        ]
-                      : undefined
-                  }
-                />
               </div>
             </div>
-          </div>
-        </form>
+          </form>
 
-        {/* Disclaimer */}
-        {disclaimer?.text && (
-          <p
-            className={cn(
-              'mt-2 text-center text-xs',
-              disclaimer.highContrast
-                ? 'text-foreground'
-                : 'text-muted-foreground',
-            )}
+          {/* Disclaimer */}
+          {disclaimer?.text && (
+            <p
+              className={cn(
+                'mt-2 text-center text-xs',
+                disclaimer.highContrast
+                  ? 'text-foreground'
+                  : 'text-muted-foreground',
+              )}
+            >
+              {disclaimer.text}
+            </p>
+          )}
+
+          <div
+            data-slot="chat-footer"
+            className="relative mt-2 flex min-h-6 items-center justify-center gap-2 text-xs text-muted-foreground"
           >
-            {disclaimer.text}
-          </p>
-        )}
-
-        <div className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-          <span>{t('chat.poweredBy')}</span>
-          <ContextUsageIndicator className="absolute right-4" />
+            <span>{t('chat.poweredBy')}</span>
+            <div className="absolute right-1 flex max-w-[48%] items-center gap-1">
+              <ModelPicker
+                models={availableModels}
+                selectedModelId={stream.selectedModelId}
+                onSelect={handleModelSelect}
+                disabled={
+                  Boolean(missingConfig) ||
+                  isHistoryLoading ||
+                  hasPendingInteractiveRequest
+                }
+                copy={{
+                  label: t('chat.modelPicker.label'),
+                  title: t('chat.modelPicker.title'),
+                  description: t('chat.modelPicker.description'),
+                  availableModels: t('chat.modelPicker.availableModels'),
+                  defaultBadge: t('chat.modelPicker.defaultBadge'),
+                  unavailableBadge: t('chat.modelPicker.unavailableBadge'),
+                  futureTitle: t('chat.modelPicker.futureTitle'),
+                  futureDescription: t('chat.modelPicker.futureDescription'),
+                  futureBadge: t('chat.modelPicker.futureBadge'),
+                }}
+              />
+              <ContextUsageIndicator />
+            </div>
+          </div>
         </div>
-      </div>
-      <SettingsSheet
-        open={petSettingsOpen}
-        settings={displayedPetSettings}
-        petRequired={petRequired}
-        onOpenChange={setPetSettingsOpen}
-        onSave={savePetLocalSettings}
-      />
-      <PetBridge pet={effectivePet} state={petAutoState} />
-    </UploadDroppedFiles>
-    {taskSummaryAvailable && taskSummaryDocked && taskSummaryOpen && (
-      <div className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80">
-        <TaskSummaryPanel
-          {...taskSummaryProps}
-          className="pointer-events-auto max-h-full"
+        <SettingsSheet
+          open={petSettingsOpen}
+          settings={displayedPetSettings}
+          petRequired={petRequired}
+          onOpenChange={setPetSettingsOpen}
+          onSave={savePetLocalSettings}
         />
-      </div>
-    )}
+        <PetBridge pet={effectivePet} state={petAutoState} />
+      </UploadDroppedFiles>
+      {taskSummaryAvailable && taskSummaryDocked && taskSummaryOpen && (
+        <div className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80">
+          <TaskSummaryPanel
+            {...taskSummaryProps}
+            className="pointer-events-auto max-h-full"
+          />
+        </div>
+      )}
     </div>
   );
 }

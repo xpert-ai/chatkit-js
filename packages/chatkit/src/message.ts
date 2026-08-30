@@ -550,6 +550,8 @@ export type ChatRequestFile =
  */
 export type TChatRequestHuman = {
   input?: string;
+  /** Opaque Assistant-scoped model id returned by the model catalog API. */
+  model?: string;
   /**
    * Uploaded file handles submitted with the message. ChatKit UI now sends
    * AgentFile/FileAsset-shaped objects here; raw browser File objects should be

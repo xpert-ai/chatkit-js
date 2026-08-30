@@ -38,7 +38,7 @@
     "@xpert-ai/a2ui-react": "workspace:~",
     "@xpert-ai/chatkit-types": "workspace:~",
     "@xpert-ai/chatkit-web-shared": "workspace:~",
-    "@xpert-ai/xpert-sdk": "^0.0.15",
+    "@xpert-ai/xpert-sdk": "^0.0.17",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.4.9",

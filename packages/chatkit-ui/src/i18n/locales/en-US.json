@@ -51,6 +51,17 @@
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",
+    "modelPicker": {
+      "label": "Model",
+      "title": "Choose a model",
+      "description": "The selection applies to your next message.",
+      "availableModels": "Available models",
+      "defaultBadge": "Default",
+      "unavailableBadge": "Unavailable",
+      "futureTitle": "Advanced model controls",
+      "futureDescription": "Modes and model parameters will appear here.",
+      "futureBadge": "Coming soon"
+    },
     "minimizeToPet": "Minimize to pet",
     "referencedContentOnly": "Referenced content",
     "youLabel": "You",

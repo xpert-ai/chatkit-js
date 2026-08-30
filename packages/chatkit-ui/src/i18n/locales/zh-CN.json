@@ -51,6 +51,17 @@
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
+    "modelPicker": {
+      "label": "模型",
+      "title": "选择模型",
+      "description": "所选模型将在下一条消息中生效。",
+      "availableModels": "可用模型",
+      "defaultBadge": "默认",
+      "unavailableBadge": "不可用",
+      "futureTitle": "高级模型控制",
+      "futureDescription": "模型模式与参数设置将在这里提供。",
+      "futureBadge": "即将推出"
+    },
     "minimizeToPet": "最小化到 Pet",
     "referencedContentOnly": "已引用内容",
     "youLabel": "你",
