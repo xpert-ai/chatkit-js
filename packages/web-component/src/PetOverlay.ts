@@ -442,6 +442,7 @@ export class PetOverlay {
   private lastDragPosition: PetPosition | null = null;
   private lastDragClientX: number | null = null;
   private dragAnimation: DragAnimationName | null = null;
+  private activePointerId: number | null = null;
   private isDragging = false;
   private isHovering = false;
   private movedDuringDrag = false;
@@ -689,6 +690,7 @@ export class PetOverlay {
     pet.addEventListener('pointerenter', this.handlePointerEnter);
     pet.addEventListener('pointerleave', this.handlePointerLeave);
     pet.addEventListener('pointerdown', this.handlePointerDown);
+    pet.addEventListener('lostpointercapture', this.handleLostPointerCapture);
     pet.addEventListener('contextmenu', this.handleContextMenu);
     pet.addEventListener('click', this.handleClick);
 
@@ -699,6 +701,7 @@ export class PetOverlay {
   }
 
   private removeOverlay(): void {
+    this.cancelActiveDrag();
     this.clearRestingDelayTimer();
     this.clearTimers();
     this.closeContextMenu();
@@ -714,6 +717,10 @@ export class PetOverlay {
       this.petElement.removeEventListener(
         'pointerdown',
         this.handlePointerDown,
+      );
+      this.petElement.removeEventListener(
+        'lostpointercapture',
+        this.handleLostPointerCapture,
       );
       this.petElement.removeEventListener(
         'contextmenu',
@@ -1701,7 +1708,7 @@ export class PetOverlay {
   }
 
   private handlePointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0 || event.ctrlKey) {
+    if (event.button !== 0 || event.ctrlKey || this.isDragging) {
       return;
     }
 
@@ -1731,11 +1738,52 @@ export class PetOverlay {
     this.movedDuringDrag = false;
     this.dragPosition = nextPosition;
     this.isDragging = true;
+    this.activePointerId = event.pointerId;
     this.clearRestingDelayTimer();
     this.isHovering = true;
+    this.captureActivePointer();
     this.installDragListeners();
     this.rescheduleAnimation();
   };
+
+  private captureActivePointer(): void {
+    const pointerId = this.activePointerId;
+    const pet = this.petElement;
+    if (pointerId === null || typeof pet?.setPointerCapture !== 'function') {
+      return;
+    }
+
+    try {
+      pet.setPointerCapture(pointerId);
+    } catch {
+      // Keep the window-listener fallback for older or restricted hosts.
+    }
+  }
+
+  private releaseActivePointer(): void {
+    const pointerId = this.activePointerId;
+    const pet = this.petElement;
+    this.activePointerId = null;
+    if (
+      pointerId === null ||
+      typeof pet?.hasPointerCapture !== 'function' ||
+      typeof pet.releasePointerCapture !== 'function'
+    ) {
+      return;
+    }
+
+    try {
+      if (pet.hasPointerCapture(pointerId)) {
+        pet.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // Capture may already have been released by pointerup/pointercancel.
+    }
+  }
+
+  private isActiveDragPointer(event: PointerEvent): boolean {
+    return this.isDragging && event.pointerId === this.activePointerId;
+  }
 
   private getNextDragPosition(event: PointerEvent): PetPosition {
     if (!this.options) {
@@ -1754,6 +1802,10 @@ export class PetOverlay {
   }
 
   private handlePointerMove = (event: PointerEvent): void => {
+    if (!this.isActiveDragPointer(event)) {
+      return;
+    }
+
     const nextPosition = this.getNextDragPosition(event);
     const last = this.lastDragPosition;
     if (
@@ -1780,13 +1832,32 @@ export class PetOverlay {
   };
 
   private handlePointerUp = (event: PointerEvent): void => {
+    if (!this.isActiveDragPointer(event)) {
+      return;
+    }
+
     const finalPosition =
       this.lastDragPosition ?? this.getNextDragPosition(event);
+    this.finishDrag(finalPosition, event);
+  };
+
+  private handleLostPointerCapture = (event: PointerEvent): void => {
+    if (!this.isActiveDragPointer(event)) {
+      return;
+    }
+
+    const finalPosition =
+      this.lastDragPosition ?? this.getNextDragPosition(event);
+    this.finishDrag(finalPosition, event);
+  };
+
+  private finishDrag(finalPosition: PetPosition, event: PointerEvent): void {
     this.isDragging = false;
     this.dragPosition = null;
     this.dragAnimation = null;
     this.lastDragClientX = null;
     this.removeDragListeners();
+    this.releaseActivePointer();
     this.persistPosition(finalPosition);
     if (event.pointerType === 'mouse' && this.isPointerOverPet(event)) {
       this.isHovering = true;
@@ -1795,7 +1866,17 @@ export class PetOverlay {
       this.enterRestingAfterDelay();
       this.rescheduleAnimation();
     }
-  };
+  }
+
+  private cancelActiveDrag(): void {
+    this.isDragging = false;
+    this.dragPosition = null;
+    this.dragAnimation = null;
+    this.lastDragPosition = null;
+    this.lastDragClientX = null;
+    this.removeDragListeners();
+    this.releaseActivePointer();
+  }
 
   private handleClick = (): void => {
     if (this.movedDuringDrag) {
@@ -1811,10 +1892,8 @@ export class PetOverlay {
 
   private installDragListeners(): void {
     window.addEventListener('pointermove', this.handlePointerMove);
-    window.addEventListener('pointerup', this.handlePointerUp, { once: true });
-    window.addEventListener('pointercancel', this.handlePointerUp, {
-      once: true,
-    });
+    window.addEventListener('pointerup', this.handlePointerUp);
+    window.addEventListener('pointercancel', this.handlePointerUp);
   }
 
   private removeDragListeners(): void {
