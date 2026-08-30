@@ -526,6 +526,22 @@ export type ChatKitWorkbenchOptions = {
   ) => unknown | Promise<unknown>;
 };
 
+export type ChatKitMcpAppsOptions = {
+  /**
+   * URL of the host-owned MCP Apps sandbox proxy page. Web hosts must serve
+   * this page from an origin different from the ChatKit frame.
+   */
+  sandboxProxyUrl?: string;
+
+  /**
+   * Host-approved dedicated domains. Exact hostnames and leading-wildcard
+   * entries such as `*.mcp-apps.example.com` are supported. A resource's
+   * `ui.domain` is never used unless it matches this list or the configured
+   * proxy URL hostname exactly.
+   */
+  allowedDomains?: string[];
+};
+
 export type ChatKitOptions = {
   /**
    * ChatKit iframe URL for web component integrations.
@@ -594,6 +610,12 @@ export type ChatKitOptions = {
    * @default disabled
    */
   workbench?: ChatKitWorkbenchOptions;
+
+  /**
+   * MCP Apps web-host isolation. When omitted or invalid, ChatKit retains the
+   * credential-isolated opaque-origin iframe fallback.
+   */
+  mcpApps?: ChatKitMcpAppsOptions;
 
   /**
    * Optional animated pet companion rendered by the ChatKit web component over

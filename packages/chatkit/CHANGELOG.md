@@ -1,5 +1,30 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.4
+
+### Patch Changes
+
+- a086772: side chat
+
+## 0.5.3
+
+### Patch Changes
+
+- 75c95ef: Render tagged MCP boolean Elicitation interrupts as required True or False fields instead of generic action-review arguments.
+
+## 0.5.2
+
+### Patch Changes
+
+- 2ca5cd6: Use the Xpert SDK for MCP App runtime requests and add isolated sandbox, approval, teardown, display mode, message, and download support.
+
+## 0.5.1
+
+### Patch Changes
+
+- d6a31c8: Add projectId
+- f92b405: tool icon
+
 ## 0.5.0
 
 ### Minor Changes

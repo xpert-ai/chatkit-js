@@ -197,7 +197,8 @@ export type ChatReferenceRequest = {
 };
 
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
-  string | undefined;
+  | string
+  | undefined;
 const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 const GOAL_RUN_INPUT = 'Continue working toward the active goal.';
@@ -1367,18 +1368,20 @@ export function Chat({
   const liveTaskSummary = React.useMemo(
     () =>
       collectLiveTaskSummary({
-        messages: messages.map((message): TaskSummaryMessage => ({
-          id: message.id,
-          content: message.content,
-          createdAt: message.createdAt,
-          updatedAt: message.updatedAt,
-          taskSummary: message.taskSummary,
-          references: message.references,
-          attachments: message.attachments,
-          fileAssets: message.fileAssets,
-          agentRuns: message.agentRuns,
-          runtimeCapabilities: message.runtimeCapabilities,
-        })),
+        messages: messages.map(
+          (message): TaskSummaryMessage => ({
+            id: message.id,
+            content: message.content,
+            createdAt: message.createdAt,
+            updatedAt: message.updatedAt,
+            taskSummary: message.taskSummary,
+            references: message.references,
+            attachments: message.attachments,
+            fileAssets: message.fileAssets,
+            agentRuns: message.agentRuns,
+            runtimeCapabilities: message.runtimeCapabilities,
+          }),
+        ),
         goal: threadGoal,
         todos: stream.todos,
         pending: liveTaskSummaryPending,
@@ -2766,7 +2769,8 @@ export function Chat({
     const lastHumanMessage = [...messagesUpToIndex]
       .reverse()
       .find((m) => String(m.type) === 'human') as
-      HumanMessageWithMeta | undefined;
+      | HumanMessageWithMeta
+      | undefined;
 
     const humanInput = buildHumanMessageInputPayload({
       content:
@@ -3339,6 +3343,7 @@ export function Chat({
                             organizationId={stream.organizationId}
                             apiUrl={stream.apiUrl}
                             pet={effectivePet}
+                            mcpApps={options?.mcpApps}
                           />
                         ) : (
                           <>
