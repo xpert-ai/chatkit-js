@@ -480,6 +480,7 @@ export type ChatKitGoalAdapter = {
   setGoal: (params: {
     threadId?: string | null;
     assistantId: string;
+    projectId?: string | null;
     objective: string;
     runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
     signal?: AbortSignal;
@@ -790,6 +791,32 @@ export type ChatKitOptions = {
     };
 
     /**
+     * Project selector backed by the Xpert hosted API.
+     * Disabled by default and ignored by custom APIs.
+     */
+    projects?: {
+      enabled?: boolean;
+
+      /**
+       * Show the configured Project as a fixed composer scope instead of a
+       * selector. Intended for Project-owned workbenches where the host pins
+       * every conversation to one Project.
+       */
+      locked?: boolean;
+
+      /** Human-readable label for a locked Project scope. */
+      label?: string;
+    };
+
+    /**
+     * Conversation-level Connector bindings for the current Xpert or Project.
+     * Disabled by default and ignored by custom APIs.
+     */
+    connectors?: {
+      enabled?: boolean;
+    };
+
+    /**
      * When provided a list of tool options, the user will be able to select a tool
      * from a menu in the composer.
      */
@@ -966,6 +993,8 @@ export interface ChatKitElementEventMap {
   'chatkit.response.start': CustomEvent<void>;
   'chatkit.response.end': CustomEvent<void>;
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
+  'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
+  'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
   'chatkit.log': CustomEvent<{
     name: string;
     data?: Record<string, unknown>;

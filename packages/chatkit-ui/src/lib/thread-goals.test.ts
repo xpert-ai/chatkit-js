@@ -60,6 +60,7 @@ function xpertGoalClientFixture(): XpertGoalClient {
   return {
     threads: {
       create: vi.fn(async () => sdkThreadFixture('thread-1')),
+      delete: vi.fn(async () => undefined),
     },
     conversations: {
       search: vi.fn(async () => ({
@@ -77,6 +78,7 @@ function xpertGoalClientFixture(): XpertGoalClient {
         xpertId: request.xpertId,
         options: request.options,
       })),
+      delete: vi.fn(async () => undefined),
       getGoal: vi.fn(async () => null),
       setGoal: vi.fn(async (_conversationId, request) => ({
         id: 'goal-1',
@@ -198,6 +200,7 @@ describe('thread goals', () => {
     expect(adapter.setGoal).toHaveBeenCalledWith({
       threadId: 'thread-1',
       assistantId: 'assistant-1',
+      projectId: undefined,
       objective: 'ship feature',
       runtimeCapabilities: undefined,
       signal: undefined,
@@ -225,11 +228,13 @@ describe('thread goals', () => {
       goal: adapter,
       threadId: null,
       assistantId: 'assistant-1',
+      projectId: 'project-1',
       command: { type: 'set', objective: 'ship feature' },
       runtimeCapabilities: {
         mode: 'allowlist',
         skills: { ids: [] },
         plugins: { nodeKeys: ['ralph-loop'] },
+        connectors: { bindingIds: ['connector-1'] },
       },
     });
 
@@ -237,11 +242,13 @@ describe('thread goals', () => {
     expect(adapter.setGoal).toHaveBeenCalledWith({
       threadId: null,
       assistantId: 'assistant-1',
+      projectId: 'project-1',
       objective: 'ship feature',
       runtimeCapabilities: {
         mode: 'allowlist',
         skills: { ids: [] },
         plugins: { nodeKeys: ['ralph-loop'] },
+        connectors: { bindingIds: ['connector-1'] },
       },
       signal: undefined,
     });
@@ -294,7 +301,10 @@ describe('xpert thread goal adapter', () => {
 
   it('maps adapter calls to SDK conversation goal methods', async () => {
     const client = xpertGoalClientFixture();
-    const adapter = createXpertThreadGoalAdapter(client);
+    const adapter = createXpertThreadGoalAdapter(client, {
+      xpertId: 'assistant-1',
+      projectId: null,
+    });
 
     await adapter.setGoal({
       threadId: 'thread-1',
@@ -407,10 +417,13 @@ describe('xpert thread goal adapter', () => {
         return sdkThreadFixture('thread-new');
       },
     };
-    const adapter = createXpertThreadGoalAdapter({
-      threads,
-      conversations,
-    });
+    const adapter = createXpertThreadGoalAdapter(
+      {
+        threads,
+        conversations,
+      },
+      { xpertId: 'assistant-1', projectId: null },
+    );
 
     await adapter.getGoal({ threadId: 'thread-1' });
     await adapter.setGoal({
@@ -438,40 +451,83 @@ describe('xpert thread goal adapter', () => {
       'create',
       'set:conversation-2',
     ]);
-    expect(threads.calls).toEqual([]);
+    expect(threads.calls).toEqual(['create-thread']);
   });
 
-  it('creates only one conversation before setting the first goal', async () => {
+  it('creates a Project-bound thread before the single conversation for the first goal', async () => {
     const client = xpertGoalClientFixture();
-    const adapter = createXpertThreadGoalAdapter(client);
+    const adapter = createXpertThreadGoalAdapter(client, {
+      xpertId: 'assistant-1',
+      projectId: 'project-1',
+    });
+    const createThread = client.threads?.create;
+    const createConversation = client.conversations.create;
+    if (!createThread || !createConversation) {
+      throw new Error('Goal client fixture is missing creation methods');
+    }
 
     const result = await adapter.setGoal({
       threadId: null,
       assistantId: 'assistant-1',
+      projectId: 'project-1',
       objective: 'ship feature',
       runtimeCapabilities: {
         mode: 'allowlist',
         skills: { ids: [] },
         plugins: { nodeKeys: ['ralph-loop'] },
+        connectors: { bindingIds: ['connector-1'] },
       },
     });
 
     expect(result.threadId).toBe('thread-1');
-    expect(client.threads?.create).not.toHaveBeenCalled();
+    expect(client.threads?.create).toHaveBeenCalledWith({
+      assistantId: 'assistant-1',
+    });
     expect(client.conversations.create).toHaveBeenCalledWith({
+      threadId: 'thread-1',
       xpertId: 'assistant-1',
+      projectId: 'project-1',
       options: {
         runtimeCapabilities: {
           mode: 'allowlist',
           skills: { ids: [] },
           plugins: { nodeKeys: ['ralph-loop'] },
+          connectors: { bindingIds: ['connector-1'] },
         },
       },
     });
+    expect(vi.mocked(createThread).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(createConversation).mock.invocationCallOrder[0],
+    );
     expect(client.conversations.setGoal).toHaveBeenCalledWith(
       'conversation-1',
       { objective: 'ship feature' },
       { signal: undefined },
     );
+  });
+
+  it('rolls back a first-goal conversation and thread when goal setup fails', async () => {
+    const client = xpertGoalClientFixture();
+    const setGoal = client.conversations.setGoal;
+    if (!setGoal) {
+      throw new Error('Goal client fixture is missing setGoal');
+    }
+    vi.mocked(setGoal).mockRejectedValue(new Error('Goal setup failed'));
+    const adapter = createXpertThreadGoalAdapter(client, {
+      xpertId: 'assistant-1',
+      projectId: 'project-1',
+    });
+
+    await expect(
+      adapter.setGoal({
+        threadId: null,
+        assistantId: 'assistant-1',
+        projectId: 'project-1',
+        objective: 'ship feature',
+      }),
+    ).rejects.toThrow('Goal setup failed');
+
+    expect(client.conversations.delete).toHaveBeenCalledWith('conversation-1');
+    expect(client.threads?.delete).toHaveBeenCalledWith('thread-1');
   });
 });

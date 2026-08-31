@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  act,
   createEvent,
   fireEvent,
   render,
@@ -318,6 +319,7 @@ describe('Chat start screen prompts', () => {
     mocks.stream.pendingHITLRequest = null;
     mocks.stream.isLoading = false;
     mocks.stream.submit.mockClear();
+    mocks.stream.submit.mockResolvedValue(undefined);
     taskSummaryGeometry.viewportRight = 0;
     taskSummaryGeometry.chatColumnRight = 0;
   });
@@ -345,6 +347,45 @@ describe('Chat start screen prompts', () => {
         expect(element).toHaveStyle({ maxWidth: '960px' });
         expect(element).toHaveClass('mx-auto', 'w-full');
       }
+    });
+  });
+
+  it('keeps horizontal overflow inside responsive composer panels', async () => {
+    const { container } = renderChat();
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-chatkit-root]')).toHaveClass(
+        'overflow-x-hidden',
+        'overflow-y-auto',
+      );
+    });
+  });
+
+  it('keeps the empty-state greeting directly above the vertically centered composer', async () => {
+    const { container } = renderChat({
+      ...baseOptions,
+      startScreen: {
+        greeting: 'What can I help with today?',
+      },
+    });
+
+    await waitFor(() => {
+      const content = container.querySelector<HTMLElement>(
+        '[data-slot="chatkit-chat-content"]',
+      );
+      const composer = container.querySelector<HTMLElement>(
+        '[data-slot="chatkit-chat-composer"]',
+      );
+
+      expect(content).toHaveClass('mt-auto', 'shrink-0', 'pb-0');
+      expect(composer).toHaveClass('mb-auto');
+      expect(composer).not.toHaveClass('my-auto');
+      expect(content?.nextElementSibling).toBe(composer);
+      expect(
+        screen.getByRole('heading', {
+          name: 'What can I help with today?',
+        }).parentElement,
+      ).not.toHaveClass('mb-10');
     });
   });
 
@@ -531,6 +572,47 @@ describe('Chat start screen prompts', () => {
         }),
       ],
     });
+  });
+
+  it('restores the draft, attachments, and references when first submission setup fails', async () => {
+    let rejectSubmission: ((reason: unknown) => void) | undefined;
+    mocks.stream.submit.mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSubmission = reject;
+        }),
+    );
+    const { container } = renderChat();
+    const fileInput = container.querySelector('input[type="file"]');
+    const file = new File(['content'], 'notice.pdf', {
+      type: 'application/pdf',
+    });
+
+    const textbox = screen.getByRole('textbox');
+    setComposerText(textbox, 'Review the notice');
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: { files: [file] },
+    });
+    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledWith(file));
+    await screen.findByText('notice.pdf');
+    pasteLongReference(textbox, 'quoted '.repeat(900));
+    expect(screen.getByText('Pasted text')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+
+    await act(async () => {
+      rejectSubmission?.(new Error('Thread creation failed'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox')).toHaveTextContent(
+        'Review the notice',
+      ),
+    );
+    expect(screen.getByText('notice.pdf')).toBeInTheDocument();
+    expect(screen.getByText('Pasted text')).toBeInTheDocument();
   });
 
   it('edits a start-screen prompt into the composer without sending or clearing context', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Client, RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
 
 import {
+  createConversationThreadSearchWhere,
   getRuntimeCapabilitiesSelectionAvailability,
   hasMissingRuntimeCapabilityReferences,
   persistConversationRuntimeCapabilities,
@@ -9,6 +10,30 @@ import {
 import type { RuntimeCapabilitiesSelection } from './runtime-capabilities';
 
 describe('conversation runtime capabilities', () => {
+  it('scopes direct thread lookup to the Xpert and explicit Project boundary', () => {
+    expect(
+      createConversationThreadSearchWhere(' thread-1 ', {
+        xpertId: ' xpert-1 ',
+        projectId: null,
+      }),
+    ).toEqual({
+      threadId: 'thread-1',
+      xpertId: 'xpert-1',
+      projectId: null,
+    });
+
+    expect(
+      createConversationThreadSearchWhere('thread-1', {
+        xpertId: 'xpert-1',
+        projectId: ' project-1 ',
+      }),
+    ).toEqual({
+      threadId: 'thread-1',
+      xpertId: 'xpert-1',
+      projectId: 'project-1',
+    });
+  });
+
   it('keeps available persisted selections and lists unavailable references', () => {
     const capabilities: RuntimeCapabilitiesResponse = {
       skills: [
@@ -35,6 +60,7 @@ describe('conversation runtime capabilities', () => {
     };
     const selection: RuntimeCapabilitiesSelection = {
       mode: 'allowlist',
+      inheritUnselected: true,
       skills: {
         workspaceId: 'workspace-1',
         ids: ['skill-1', 'missing-skill'],
@@ -54,6 +80,7 @@ describe('conversation runtime capabilities', () => {
 
     expect(availability.selection).toEqual({
       mode: 'allowlist',
+      inheritUnselected: true,
       skills: {
         workspaceId: 'workspace-1',
         ids: ['skill-1'],
@@ -100,6 +127,12 @@ describe('conversation runtime capabilities', () => {
           threadId: 'thread-1',
           options: {
             parameters: { input: 'seed' },
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { ids: [] },
+              plugins: { nodeKeys: [] },
+              connectors: { bindingIds: ['binding-1'] },
+            },
           },
         },
       ],
@@ -115,6 +148,8 @@ describe('conversation runtime capabilities', () => {
     await persistConversationRuntimeCapabilities({
       client,
       threadId: 'thread-1',
+      xpertId: 'xpert-1',
+      projectId: null,
       capabilities,
       selection: {
         mode: 'allowlist',
@@ -129,6 +164,15 @@ describe('conversation runtime capabilities', () => {
       },
     });
 
+    expect(search).toHaveBeenCalledWith({
+      where: {
+        threadId: 'thread-1',
+        xpertId: 'xpert-1',
+        projectId: null,
+      },
+      limit: 1,
+    });
+
     expect(update).toHaveBeenCalledWith('conversation-1', {
       options: {
         parameters: { input: 'seed' },
@@ -137,6 +181,7 @@ describe('conversation runtime capabilities', () => {
           skills: { workspaceId: 'workspace-1', ids: [] },
           plugins: { nodeKeys: ['plugin-1'] },
           subAgents: { nodeKeys: [] },
+          connectors: { bindingIds: ['binding-1'] },
         },
       },
     });

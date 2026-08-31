@@ -95,6 +95,12 @@ function isNodeKeySelection(value: unknown): value is { nodeKeys: string[] } {
   return isObjectRecord(value) && isStringArray(value.nodeKeys);
 }
 
+function isConnectorSelection(
+  value: unknown,
+): value is { bindingIds: string[] } {
+  return isObjectRecord(value) && isStringArray(value.bindingIds);
+}
+
 function isRuntimeCapabilitiesSelectionSet(
   value: unknown,
 ): value is RuntimeCapabilitiesSelectionSet {
@@ -102,7 +108,8 @@ function isRuntimeCapabilitiesSelectionSet(
     isObjectRecord(value) &&
     isSkillSelection(value.skills) &&
     isNodeKeySelection(value.plugins) &&
-    (value.subAgents === undefined || isNodeKeySelection(value.subAgents))
+    (value.subAgents === undefined || isNodeKeySelection(value.subAgents)) &&
+    (value.connectors === undefined || isConnectorSelection(value.connectors))
   );
 }
 
@@ -119,6 +126,8 @@ export function isRuntimeCapabilitiesSelection(
   return (
     selection.mode === 'allowlist' &&
     isRuntimeCapabilitiesSelectionSet(selection) &&
+    (selection.inheritUnselected === undefined ||
+      typeof selection.inheritUnselected === 'boolean') &&
     (selection.recommended === undefined ||
       isRuntimeCapabilitiesSelectionSet(selection.recommended))
   );

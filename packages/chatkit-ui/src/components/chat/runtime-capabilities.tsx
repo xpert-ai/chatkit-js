@@ -60,6 +60,7 @@ type CommitComposerParts = (
 type RuntimeCapabilitiesStateParams = {
   client: Client<unknown> | null | undefined;
   assistantId: string | null | undefined;
+  projectId?: string;
   threadId: string | null | undefined;
   disabled: boolean;
   composerParts: ComposerPart[];
@@ -190,6 +191,7 @@ export function getRemovedComposerCapabilityParts(
 export function useRuntimeCapabilitiesState({
   client,
   assistantId,
+  projectId,
   threadId,
   disabled,
   composerParts,
@@ -261,7 +263,7 @@ export function useRuntimeCapabilitiesState({
       nextThreadId: string,
       selection: RuntimeCapabilitiesSelection | null | undefined,
     ) => {
-      if (!runtimeCapabilities || !selection || !client) {
+      if (!runtimeCapabilities || !selection || !client || !assistantId) {
         return;
       }
 
@@ -269,6 +271,8 @@ export function useRuntimeCapabilitiesState({
         const result = await persistRuntimeCapabilitiesToConversation({
           client,
           threadId: nextThreadId,
+          xpertId: assistantId,
+          projectId,
           capabilities: runtimeCapabilities,
           selection,
         });
@@ -283,7 +287,7 @@ export function useRuntimeCapabilitiesState({
         );
       }
     },
-    [client, runtimeCapabilities],
+    [assistantId, client, projectId, runtimeCapabilities],
   );
 
   const applyExternalRuntimeCapabilities = React.useCallback(
@@ -433,6 +437,7 @@ export function useRuntimeCapabilitiesState({
 
     void client.assistants
       .getRuntimeCapabilities(assistantId, {
+        ...(projectId ? { projectId } : {}),
         signal: controller.signal,
       })
       .then((payload) => {
@@ -468,7 +473,7 @@ export function useRuntimeCapabilitiesState({
       });
 
     return () => controller.abort();
-  }, [assistantId, client, disabled]);
+  }, [assistantId, client, disabled, projectId]);
 
   React.useEffect(() => {
     const emptyRunSelection =
@@ -489,7 +494,12 @@ export function useRuntimeCapabilitiesState({
       setRunRuntimeCapabilities(pendingExternalSelection ?? emptyRunSelection);
     }
 
-    if (!runtimeCapabilitiesReady || !runtimeCapabilities || !client) {
+    if (
+      !runtimeCapabilitiesReady ||
+      !runtimeCapabilities ||
+      !client ||
+      !assistantId
+    ) {
       setSessionRuntimeCapabilities(
         createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities),
       );
@@ -512,6 +522,8 @@ export function useRuntimeCapabilitiesState({
     void loadConversationRuntimeCapabilities({
       client,
       threadId: normalizedThreadId,
+      xpertId: assistantId,
+      projectId,
       capabilities: runtimeCapabilities,
     })
       .then(({ selection, missing }) => {
@@ -543,7 +555,9 @@ export function useRuntimeCapabilitiesState({
       cancelled = true;
     };
   }, [
+    assistantId,
     client,
+    projectId,
     runtimeCapabilities,
     runtimeCapabilitiesReady,
     threadId,

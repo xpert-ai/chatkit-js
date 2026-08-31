@@ -23,7 +23,7 @@ export function App({
   options,
   isClientSecretInitializing = false,
 }: AppProps) {
-  const { isParentAvailable, sendCommand } = useParentMessenger();
+  const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
   const apiKey = clientSecret.trim() ? clientSecret : undefined;
   const xpertId = import.meta.env.VITE_XPERTAI_XPERT_ID as string | undefined;
   const apiUrl = import.meta.env.VITE_XPERTAI_API_URL as string | undefined;
@@ -35,6 +35,25 @@ export function App({
   const workbenchEnabled =
     options?.workbench?.enabled === true ||
     options?.workbench?.sideChat?.enabled === true;
+  const hostedApi =
+    options?.api && 'getClientSecret' in options.api ? options.api : null;
+  const configuredProjectId = hostedApi?.projectId ?? null;
+  const projectsEnabled =
+    Boolean(hostedApi) && options?.composer?.projects?.enabled === true;
+  const connectorsEnabled =
+    Boolean(hostedApi) && options?.composer?.connectors?.enabled === true;
+  const [activeProjectId, setActiveProjectId] = React.useState<string | null>(
+    configuredProjectId,
+  );
+  const [scopedInitialThread, setScopedInitialThread] = React.useState<
+    string | null
+  >(options?.initialThread ?? null);
+  const lastConfiguredProjectIdRef = React.useRef<string | null>(
+    configuredProjectId,
+  );
+  const lastConfiguredInitialThreadRef = React.useRef<string | null>(
+    options?.initialThread ?? null,
+  );
   const [workbenchRequestContext, setWorkbenchRequestContext] = React.useState<
     Record<string, unknown>
   >({});
@@ -50,12 +69,61 @@ export function App({
     setLanguage(locale);
   }, [locale]);
 
+  React.useEffect(() => {
+    if (configuredProjectId === lastConfiguredProjectIdRef.current) return;
+    lastConfiguredProjectIdRef.current = configuredProjectId;
+    setActiveProjectId(configuredProjectId);
+    setScopedInitialThread(options?.initialThread ?? null);
+  }, [configuredProjectId, options?.initialThread]);
+
+  React.useEffect(() => {
+    const nextInitialThread = options?.initialThread ?? null;
+    if (nextInitialThread === lastConfiguredInitialThreadRef.current) return;
+    lastConfiguredInitialThreadRef.current = nextInitialThread;
+    setScopedInitialThread(nextInitialThread);
+  }, [options?.initialThread]);
+
+  const handleProjectChange = React.useCallback(
+    (projectId: string | null) => {
+      const nextProjectId = projectId?.trim() || null;
+      if (nextProjectId === activeProjectId) return;
+      setActiveProjectId(nextProjectId);
+      setScopedInitialThread(null);
+      sendEvent('public_event', [
+        'project.change',
+        { projectId: nextProjectId },
+      ]);
+    },
+    [activeProjectId, sendEvent],
+  );
+  const handleProjectCreate = React.useCallback(
+    (name: string) => {
+      sendEvent('public_event', [
+        'effect',
+        { name: 'project.create', data: { name } },
+      ]);
+    },
+    [sendEvent],
+  );
+  const handleConnectorsChange = React.useCallback(
+    (connectorBindingIds: string[]) => {
+      sendEvent('public_event', ['connectors.change', { connectorBindingIds }]);
+    },
+    [sendEvent],
+  );
+
   const chat = (
     <Chat
       className="flex-1"
       clientSecret={apiKey}
       options={options}
       isClientSecretInitializing={isClientSecretInitializing}
+      activeProjectId={activeProjectId ?? undefined}
+      projectsEnabled={projectsEnabled}
+      connectorsEnabled={connectorsEnabled}
+      onProjectChange={handleProjectChange}
+      onProjectCreate={handleProjectCreate}
+      onConnectorsChange={handleConnectorsChange}
     />
   );
 
@@ -76,12 +144,8 @@ export function App({
             organizationId={organizationId}
             apiUrl={options?.api.apiUrl || apiUrl}
             xpertId={options?.api.xpertId || resolvedXpertId || xpertId}
-            projectId={
-              options?.api && 'projectId' in options.api
-                ? options.api.projectId
-                : undefined
-            }
-            initialThread={options?.initialThread ?? null}
+            projectId={activeProjectId ?? undefined}
+            initialThread={scopedInitialThread}
             locale={requestLocale}
             additionalContext={
               workbenchEnabled ? workbenchRequestContext : undefined

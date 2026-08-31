@@ -1,158 +1,180 @@
 import type {
-    ChatKitReference,
-    ChatKitReferenceCompositionMode,
-    RuntimeCapabilitiesSelection as ChatKitRuntimeCapabilitiesSelection,
-} from "@xpert-ai/chatkit-types"
+  ChatKitReference,
+  ChatKitReferenceCompositionMode,
+  RuntimeCapabilitiesSelection as ChatKitRuntimeCapabilitiesSelection,
+} from '@xpert-ai/chatkit-types';
 
 export type {
-    ChatKitCodeReference,
-    ChatKitElementAttribute,
-    ChatKitElementReference,
-    ChatKitFileElementReference,
-    ChatKitImageReference,
-    ChatKitQuoteReference,
-    ChatKitReference,
-    ChatKitReferenceBase,
-    ChatKitReferenceCompositionMode,
-} from "@xpert-ai/chatkit-types"
+  ChatKitCodeReference,
+  ChatKitElementAttribute,
+  ChatKitElementReference,
+  ChatKitFileElementReference,
+  ChatKitImageReference,
+  ChatKitQuoteReference,
+  ChatKitReference,
+  ChatKitReferenceBase,
+  ChatKitReferenceCompositionMode,
+} from '@xpert-ai/chatkit-types';
 
-export type ChatKitReq = any
+export type ChatKitReq = any;
 
-type JsonRecord = Record<string, unknown>
+type JsonRecord = Record<string, unknown>;
 
-export type SerializedChatKitOptions = JsonRecord
-export type ChatKitCommandUserMessageContent = unknown
-export type ChatKitCommandToolChoice = unknown
+export type SerializedChatKitOptions = JsonRecord;
+export type ChatKitCommandUserMessageContent = unknown;
+export type ChatKitCommandToolChoice = unknown;
 
 export type RuntimeCapabilitiesSelectionSet = Omit<
-    ChatKitRuntimeCapabilitiesSelection,
-    "mode" | "recommended"
->
+  ChatKitRuntimeCapabilitiesSelection,
+  'mode' | 'recommended'
+>;
 
-export type RuntimeCapabilitiesSelection = ChatKitRuntimeCapabilitiesSelection & {
-    recommended?: RuntimeCapabilitiesSelectionSet
-}
+export type RuntimeCapabilitiesSelection =
+  ChatKitRuntimeCapabilitiesSelection & {
+    recommended?: RuntimeCapabilitiesSelectionSet;
+  };
 
 export type ChatKitMessageAttachment =
-    | {
-        type: "file"
-        id: string
-        name: string
-        mime_type: string
+  | {
+      type: 'file';
+      id: string;
+      name: string;
+      mime_type: string;
     }
-    | {
-        type: "image"
-        id: string
-        preview_url: string
-        name: string
-        mime_type: string
-    }
+  | {
+      type: 'image';
+      id: string;
+      preview_url: string;
+      name: string;
+      mime_type: string;
+    };
 
-export type WorkflowTriggerParams = JsonRecord
-export type FollowUpMode = "default" | "queue" | "steer"
+export type WorkflowTriggerParams = JsonRecord;
+export type FollowUpMode = 'default' | 'queue' | 'steer';
 
 export type SendUserMessageCommandPayload = {
-    text?: string
-    content?: ChatKitCommandUserMessageContent[]
-    state?: JsonRecord
-    reply?: string
-    attachments?: ChatKitMessageAttachment[]
-    newThread?: boolean
-    references?: ChatKitReference[]
-    referenceComposition?: ChatKitReferenceCompositionMode
-    toolChoice?: ChatKitCommandToolChoice
-    model?: string
-    planMode?: boolean
-    runtimeCapabilities?: RuntimeCapabilitiesSelection
-    trigger?: WorkflowTriggerParams
-    followUpMode?: FollowUpMode
-}
+  text?: string;
+  content?: ChatKitCommandUserMessageContent[];
+  state?: JsonRecord;
+  reply?: string;
+  attachments?: ChatKitMessageAttachment[];
+  newThread?: boolean;
+  references?: ChatKitReference[];
+  referenceComposition?: ChatKitReferenceCompositionMode;
+  toolChoice?: ChatKitCommandToolChoice;
+  model?: string;
+  planMode?: boolean;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection;
+  trigger?: WorkflowTriggerParams;
+  followUpMode?: FollowUpMode;
+};
 
 export type SetComposerValueCommandPayload = {
-    text?: string
-    content?: ChatKitCommandUserMessageContent[]
-    reply?: string
-    attachments?: ChatKitMessageAttachment[]
-    references?: ChatKitReference[]
-    appendReferences?: boolean
-    files?: File[]
-    selectedToolId?: string | null
-    selectedModelId?: string | null
-    runtimeCapabilities?: RuntimeCapabilitiesSelection | null
-    insertRuntimeCapabilities?: boolean
-}
+  text?: string;
+  content?: ChatKitCommandUserMessageContent[];
+  reply?: string;
+  attachments?: ChatKitMessageAttachment[];
+  references?: ChatKitReference[];
+  appendReferences?: boolean;
+  files?: File[];
+  selectedToolId?: string | null;
+  selectedModelId?: string | null;
+  runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+  insertRuntimeCapabilities?: boolean;
+};
 
 export type CustomActionCommandPayload = {
-    action: {
-        type: string
-        payload?: JsonRecord
-    }
-    itemId?: string
-}
+  action: {
+    type: string;
+    payload?: JsonRecord;
+  };
+  itemId?: string;
+};
 
 export type PublicLogEventPayload = {
-    name: string
-    data?: JsonRecord
-    [key: string]: unknown
-}
+  name: string;
+  data?: JsonRecord;
+  [key: string]: unknown;
+};
 
 export type PublicNamedEventPayload = {
-    name: string
-    data?: JsonRecord
-}
+  name: string;
+  data?: JsonRecord;
+};
 
 export type OuterCommands = {
-    setOptions: (options: SerializedChatKitOptions) => void
-    sendUserMessage: (params: SendUserMessageCommandPayload) => void
-    setPetEnabled: (params: { enabled: boolean }) => void
-    setComposerValue: (params: SetComposerValueCommandPayload) => void
-    setRuntimeCapabilities: (selection: RuntimeCapabilitiesSelection | null) => void
-    setThreadId: (params: { threadId: string | null }) => void
-    focusComposer: () => void
-    fetchUpdates: () => void
-    sendCustomAction: (params: CustomActionCommandPayload) => void
-    showHistory: () => void
-    hideHistory: () => void
-    shareThread: () => void
-    setTrainingOptOut: (params: { value: boolean }) => void
-}
+  setOptions: (options: SerializedChatKitOptions) => void;
+  sendUserMessage: (params: SendUserMessageCommandPayload) => void;
+  setPetEnabled: (params: { enabled: boolean }) => void;
+  setComposerValue: (params: SetComposerValueCommandPayload) => void;
+  setRuntimeCapabilities: (
+    selection: RuntimeCapabilitiesSelection | null,
+  ) => void;
+  setThreadId: (params: { threadId: string | null }) => void;
+  focusComposer: () => void;
+  fetchUpdates: () => void;
+  sendCustomAction: (params: CustomActionCommandPayload) => void;
+  showHistory: () => void;
+  hideHistory: () => void;
+  shareThread: () => void;
+  setTrainingOptOut: (params: { value: boolean }) => void;
+};
 export type PublicEvents = {
-    ready: void
-    error: { error: Error }
-    log: PublicLogEventPayload
-    "response.start": void
-    "response.end": void
-    "response.stop": any
-    "thread.change": { threadId: string | null }
-    "tool.change": any
-    "thread.load.start": { threadId: string }
-    "thread.load.end": { threadId: string }
-    deeplink: PublicNamedEventPayload
-    effect: PublicNamedEventPayload
-    'thread.restore': any
-    "message.share": any
-    "image.download": any
-    "history.open": any
-    "history.close": any
-    "log.chatgpt": any
-}
-export type PublicError = 'StreamError' | 'StreamEventParsingError' | 'WidgetItemError' | 'InitialThreadLoadError' | 'FileAttachmentError' | 'HistoryViewError' | 'FatalAppError' | 'IntegrationError' | 'EntitySearchError' | 'DomainVerificationRequestError' | 'HttpError' | 'NetworkError' | 'UnhandledError' | 'UnhandledPromiseRejectionError' | 'StreamEventHandlingError' | 'StreamStopError' | 'ThreadRenderingError' | 'IntlError' | 'AppError'
-export type ThreadItem = { type: string }
-export type WidgetRoot = { type: string }
-export type WidgetComponent = { type: string }
-
-
+  ready: void;
+  error: { error: Error };
+  log: PublicLogEventPayload;
+  'response.start': void;
+  'response.end': void;
+  'response.stop': any;
+  'thread.change': { threadId: string | null };
+  'project.change': { projectId: string | null };
+  'connectors.change': { connectorBindingIds: string[] };
+  'tool.change': any;
+  'thread.load.start': { threadId: string };
+  'thread.load.end': { threadId: string };
+  deeplink: PublicNamedEventPayload;
+  effect: PublicNamedEventPayload;
+  'thread.restore': any;
+  'message.share': any;
+  'image.download': any;
+  'history.open': any;
+  'history.close': any;
+  'log.chatgpt': any;
+};
+export type PublicError =
+  | 'StreamError'
+  | 'StreamEventParsingError'
+  | 'WidgetItemError'
+  | 'InitialThreadLoadError'
+  | 'FileAttachmentError'
+  | 'HistoryViewError'
+  | 'FatalAppError'
+  | 'IntegrationError'
+  | 'EntitySearchError'
+  | 'DomainVerificationRequestError'
+  | 'HttpError'
+  | 'NetworkError'
+  | 'UnhandledError'
+  | 'UnhandledPromiseRejectionError'
+  | 'StreamEventHandlingError'
+  | 'StreamStopError'
+  | 'ThreadRenderingError'
+  | 'IntlError'
+  | 'AppError';
+export type ThreadItem = { type: string };
+export type WidgetRoot = { type: string };
+export type WidgetComponent = { type: string };
 
 // This is a type-only namespace and will disappear after compile.
 // eslint-disable-next-line @typescript-eslint/no-namespace
 export namespace Capability {
-  export type Command = keyof OuterCommands
-  export type Event = keyof PublicEvents
-  export type Error = PublicError
+  export type Command = keyof OuterCommands;
+  export type Event = keyof PublicEvents;
+  export type Error = PublicError;
 
-  export type BackendOperation = ChatKitReq["type"]
-  export type ThreadItemType = ThreadItem["type"]
-  export type WidgetType = WidgetRoot["type"] | WidgetComponent["type"]
+  export type BackendOperation = ChatKitReq['type'];
+  export type ThreadItemType = ThreadItem['type'];
+  export type WidgetType = WidgetRoot['type'] | WidgetComponent['type'];
 
   export type Key =
     | `command.${Command}`
@@ -160,155 +182,157 @@ export namespace Capability {
     | `thread.item.${ThreadItemType}`
     | `backend.${BackendOperation}`
     | `error.${Error}`
-    | `widget.${WidgetType}`
+    | `widget.${WidgetType}`;
 
   export type Rules = {
-    allow?: readonly Key[] // allow-list
-    deny?: readonly Key[] // optional additional denies
-  }
+    allow?: readonly Key[]; // allow-list
+    deny?: readonly Key[]; // optional additional denies
+  };
 }
 
 // Publicly exported capabili
 export type Capabilities = {
-  commands: Set<Capability.Command>
-  events: Set<Capability.Event>
-  errors: Set<Capability.Error>
-  backend: Set<Capability.BackendOperation>
-  threadItems: Set<Capability.ThreadItemType>
-  widgets: Set<Capability.WidgetType>
-}
+  commands: Set<Capability.Command>;
+  events: Set<Capability.Event>;
+  errors: Set<Capability.Error>;
+  backend: Set<Capability.BackendOperation>;
+  threadItems: Set<Capability.ThreadItemType>;
+  widgets: Set<Capability.WidgetType>;
+};
 
 // Default capabilities. We intersect this with allow/deny lists on profiles
 // to compute effective capabilities.
 export const BASE_CAPABILITY_ALLOWLIST = [
   // commands
-  "command.setOptions",
-  "command.sendUserMessage",
-  "command.setComposerValue",
-  "command.setRuntimeCapabilities",
-  "command.setThreadId",
-  "command.focusComposer",
-  "command.fetchUpdates",
-  "command.sendCustomAction",
-  "command.showHistory",
-  "command.hideHistory",
+  'command.setOptions',
+  'command.sendUserMessage',
+  'command.setComposerValue',
+  'command.setRuntimeCapabilities',
+  'command.setThreadId',
+  'command.focusComposer',
+  'command.fetchUpdates',
+  'command.sendCustomAction',
+  'command.showHistory',
+  'command.hideHistory',
   // events
-  "event.ready",
-  "event.error",
-  "event.log",
-  "event.response.start",
-  "event.response.end",
-  "event.response.stop",
-  "event.thread.change",
-  "event.tool.change",
-  "event.thread.load.start",
-  "event.thread.load.end",
-  "event.deeplink",
-  "event.effect",
+  'event.ready',
+  'event.error',
+  'event.log',
+  'event.response.start',
+  'event.response.end',
+  'event.response.stop',
+  'event.thread.change',
+  'event.project.change',
+  'event.connectors.change',
+  'event.tool.change',
+  'event.thread.load.start',
+  'event.thread.load.end',
+  'event.deeplink',
+  'event.effect',
   // errors
-  "error.StreamError",
-  "error.StreamEventParsingError",
-  "error.WidgetItemError",
-  "error.InitialThreadLoadError",
-  "error.FileAttachmentError",
-  "error.HistoryViewError",
-  "error.FatalAppError",
-  "error.IntegrationError",
-  "error.EntitySearchError",
-  "error.DomainVerificationRequestError",
+  'error.StreamError',
+  'error.StreamEventParsingError',
+  'error.WidgetItemError',
+  'error.InitialThreadLoadError',
+  'error.FileAttachmentError',
+  'error.HistoryViewError',
+  'error.FatalAppError',
+  'error.IntegrationError',
+  'error.EntitySearchError',
+  'error.DomainVerificationRequestError',
   // backend
-  "backend.threads.get_by_id",
-  "backend.threads.list",
-  "backend.threads.update",
-  "backend.threads.delete",
-  "backend.threads.create",
-  "backend.threads.add_user_message",
-  "backend.threads.add_client_tool_output",
-  "backend.threads.retry_after_item",
-  "backend.threads.custom_action",
-  "backend.attachments.create",
-  "backend.attachments.get_preview",
-  "backend.attachments.delete",
-  "backend.items.list",
-  "backend.items.feedback",
+  'backend.threads.get_by_id',
+  'backend.threads.list',
+  'backend.threads.update',
+  'backend.threads.delete',
+  'backend.threads.create',
+  'backend.threads.add_user_message',
+  'backend.threads.add_client_tool_output',
+  'backend.threads.retry_after_item',
+  'backend.threads.custom_action',
+  'backend.attachments.create',
+  'backend.attachments.get_preview',
+  'backend.attachments.delete',
+  'backend.items.list',
+  'backend.items.feedback',
   // thread item types
-  "thread.item.generated_image",
-  "thread.item.user_message",
-  "thread.item.assistant_message",
-  "thread.item.client_tool_call",
-  "thread.item.widget",
-  "thread.item.task",
-  "thread.item.workflow",
-  "thread.item.end_of_turn",
-  "thread.item.image_generation",
+  'thread.item.generated_image',
+  'thread.item.user_message',
+  'thread.item.assistant_message',
+  'thread.item.client_tool_call',
+  'thread.item.widget',
+  'thread.item.task',
+  'thread.item.workflow',
+  'thread.item.end_of_turn',
+  'thread.item.image_generation',
   // widgets
-  "widget.Basic",
-  "widget.Card",
-  "widget.ListView",
-  "widget.ListViewItem",
-  "widget.Badge",
-  "widget.Box",
-  "widget.Row",
-  "widget.Col",
-  "widget.Button",
-  "widget.Caption",
-  "widget.Chart",
-  "widget.Checkbox",
-  "widget.DatePicker",
-  "widget.Divider",
-  "widget.Form",
-  "widget.Icon",
-  "widget.Image",
-  "widget.Input",
-  "widget.Label",
-  "widget.Markdown",
-  "widget.RadioGroup",
-  "widget.Select",
-  "widget.Spacer",
-  "widget.Text",
-  "widget.Textarea",
-  "widget.Title",
-  "widget.Transition",
-] as const satisfies readonly Capability.Key[]
+  'widget.Basic',
+  'widget.Card',
+  'widget.ListView',
+  'widget.ListViewItem',
+  'widget.Badge',
+  'widget.Box',
+  'widget.Row',
+  'widget.Col',
+  'widget.Button',
+  'widget.Caption',
+  'widget.Chart',
+  'widget.Checkbox',
+  'widget.DatePicker',
+  'widget.Divider',
+  'widget.Form',
+  'widget.Icon',
+  'widget.Image',
+  'widget.Input',
+  'widget.Label',
+  'widget.Markdown',
+  'widget.RadioGroup',
+  'widget.Select',
+  'widget.Spacer',
+  'widget.Text',
+  'widget.Textarea',
+  'widget.Title',
+  'widget.Transition',
+] as const satisfies readonly Capability.Key[];
 
 export const BASE_CAPABILITY_DENYLIST = [
   // --- commands
-  "command.shareThread",
-  "command.setTrainingOptOut",
+  'command.shareThread',
+  'command.setTrainingOptOut',
   // --- events
-  "event.thread.restore",
-  "event.message.share",
-  "event.image.download",
-  "event.history.open",
-  "event.history.close",
-  "event.log.chatgpt",
+  'event.thread.restore',
+  'event.message.share',
+  'event.image.download',
+  'event.history.open',
+  'event.history.close',
+  'event.log.chatgpt',
   // --- errors
   // These errors considered internal and are not exposed to the user by default.
-  "error.HttpError",
-  "error.NetworkError",
-  "error.UnhandledError",
-  "error.UnhandledPromiseRejectionError",
-  "error.StreamEventHandlingError",
-  "error.StreamStopError",
-  "error.ThreadRenderingError",
-  "error.IntlError",
-  "error.AppError",
+  'error.HttpError',
+  'error.NetworkError',
+  'error.UnhandledError',
+  'error.UnhandledPromiseRejectionError',
+  'error.StreamEventHandlingError',
+  'error.StreamStopError',
+  'error.ThreadRenderingError',
+  'error.IntlError',
+  'error.AppError',
   // --- backend
-  "backend.threads.stop",
-  "backend.threads.share",
-  "backend.threads.create_from_shared",
-  "backend.threads.init",
-  "backend.attachments.process",
+  'backend.threads.stop',
+  'backend.threads.share',
+  'backend.threads.create_from_shared',
+  'backend.threads.init',
+  'backend.attachments.process',
   // widgets
-  "widget.CardCarousel",
-  "widget.Favicon",
-  "widget.CardLinkItem",
-  "widget.Map",
-] as const satisfies readonly Capability.Key[]
+  'widget.CardCarousel',
+  'widget.Favicon',
+  'widget.CardLinkItem',
+  'widget.Map',
+] as const satisfies readonly Capability.Key[];
 
 export const PROFILE_TO_RULES = {
-  "chatkit": {
-    allow: [...BASE_CAPABILITY_ALLOWLIST, "thread.item.image_generation"],
+  chatkit: {
+    allow: [...BASE_CAPABILITY_ALLOWLIST, 'thread.item.image_generation'],
     deny: BASE_CAPABILITY_DENYLIST,
   },
-}
+};

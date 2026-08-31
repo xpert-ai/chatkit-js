@@ -17,7 +17,11 @@ import {
   X,
 } from 'lucide-react';
 
-import type { AssistantModelsResponse, Message } from '@xpert-ai/xpert-sdk';
+import type {
+  AssistantModelsResponse,
+  Message,
+  XpertWorkspaceFile,
+} from '@xpert-ai/xpert-sdk';
 import type {
   ChatkitMessage,
   ChatKitImageReference,
@@ -37,7 +41,6 @@ import { CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT } from '@xpert-ai/chatkit-typ
 import {
   cn,
   createMessageId,
-  getComposerInputRoundedClass,
   getMenuItemRoundedClass,
   getPanelRoundedClass,
 } from '../lib/utils';
@@ -50,6 +53,12 @@ import { type AgentFile, type StorageFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
 import { ModelPicker } from './composer/ModelPicker';
+import {
+  WorkspaceFileMentionPalette,
+  getWorkspaceFilePath,
+  type WorkspaceFileMentionPaletteHandle,
+} from './composer/WorkspaceFileMentionPalette';
+import { ProjectSelector } from './composer/ProjectSelector';
 import { SendButton } from './composer/SendButton';
 import { SlashPalette } from './composer/SlashPalette';
 import { HistorySidebar } from './history/HistorySidebar';
@@ -132,6 +141,7 @@ import {
   createXpertThreadGoalAdapter,
   supportsXpertThreadGoalAdapter,
 } from '../lib/xpert-thread-goal-adapter';
+import { withConnectorBindingIds } from '../lib/conversation-connectors';
 import {
   createComposerTextParts,
   findAdjacentComposerCapability,
@@ -189,6 +199,12 @@ export type ChatProps = {
   isClientSecretInitializing?: boolean;
   surface?: 'main' | 'side';
   referenceRequest?: ChatReferenceRequest | null;
+  activeProjectId?: string;
+  projectsEnabled?: boolean;
+  connectorsEnabled?: boolean;
+  onProjectChange?: (projectId: string | null) => void;
+  onProjectCreate?: (name: string) => void;
+  onConnectorsChange?: (connectorBindingIds: string[]) => void;
 };
 
 export type ChatReferenceRequest = {
@@ -249,6 +265,12 @@ type QuoteSelectionState = {
   left: number;
 };
 
+type WorkspaceFileMentionState = {
+  start: number;
+  end: number;
+  query: string;
+};
+
 type SubmitDraftOptions = {
   inputText?: string;
   displayText?: string;
@@ -256,6 +278,54 @@ type SubmitDraftOptions = {
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   planMode?: boolean;
 };
+
+function getWorkspaceFileMention(
+  text: string,
+  caretOffset: number,
+): WorkspaceFileMentionState | null {
+  const beforeCaret = text.slice(0, caretOffset);
+  const mentionStart = beforeCaret.lastIndexOf('@');
+  if (mentionStart < 0) return null;
+
+  const precedingCharacter = beforeCaret[mentionStart - 1];
+  if (precedingCharacter && !/\s/.test(precedingCharacter)) return null;
+
+  const query = beforeCaret.slice(mentionStart + 1);
+  if (/[\n，,。！？!?]/.test(query)) return null;
+
+  return { start: mentionStart, end: caretOffset, query };
+}
+
+function toReferencedWorkspaceFile(
+  file: XpertWorkspaceFile,
+): ChatAttachmentFile {
+  const filePath = getWorkspaceFilePath(file);
+  return {
+    filePath,
+    workspacePath: filePath,
+    originalName: file.filePath,
+    mimeType: file.mimeType,
+    size: file.size,
+    purpose: 'workspace',
+  };
+}
+
+function mergeSubmittedFiles(
+  uploadedFiles: ChatAttachmentFile[],
+  referencedFiles: ChatAttachmentFile[],
+): ChatAttachmentFile[] {
+  const filesById = new Map<string, ChatAttachmentFile>();
+  [...uploadedFiles, ...referencedFiles].forEach((file) => {
+    const id =
+      file.fileAssetId ??
+      file.fileId ??
+      file.id ??
+      file.storageFileId ??
+      file.workspacePath;
+    if (id) filesById.set(id, file);
+  });
+  return Array.from(filesById.values());
+}
 
 async function readImageDimensions(file: File): Promise<{
   width?: number;
@@ -445,6 +515,49 @@ function ReferenceChip({
   );
 }
 
+function WorkspaceFileChip({
+  file,
+  onRemove,
+  removeLabel,
+}: {
+  file: ChatAttachmentFile;
+  onRemove: () => void;
+  removeLabel: string;
+}) {
+  const label =
+    file.originalName ??
+    file.workspacePath ??
+    file.id ??
+    file.fileAssetId ??
+    'File';
+  const meta = file.workspacePath ?? file.mimeType;
+
+  return (
+    <div
+      data-slot="workspace-file-reference"
+      className="flex min-w-0 items-start gap-2 rounded-md bg-muted px-2 py-1 text-foreground"
+      title={label}
+    >
+      <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm">{label}</div>
+        {meta ? (
+          <div className="truncate text-xs text-muted-foreground">{meta}</div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="ml-1 rounded-full p-0.5 hover:bg-muted-foreground/20"
+        title={removeLabel}
+        aria-label={removeLabel}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
 export function Chat({
   className,
   options,
@@ -454,6 +567,12 @@ export function Chat({
   isClientSecretInitializing = false,
   surface = 'main',
   referenceRequest,
+  activeProjectId,
+  projectsEnabled = false,
+  connectorsEnabled = false,
+  onProjectChange,
+  onProjectCreate,
+  onConnectorsChange,
 }: ChatProps) {
   const { t, i18n } = useChatkitTranslation();
   const composer = options?.composer;
@@ -466,6 +585,7 @@ export function Chat({
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
   const workbench = useWorkbench();
+  const xpertPlatformClient = stream.client;
   const { theme } = useTheme();
   const effectiveClientSecret = stream.apiKey?.trim()
     ? stream.apiKey
@@ -623,6 +743,8 @@ export function Chat({
   const modelAssistantIdRef = React.useRef(modelAssistantId);
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
   const [petSettingsOpen, setPetSettingsOpen] = React.useState(false);
+  const [hasSelectableProjects, setHasSelectableProjects] =
+    React.useState(false);
   const [petLocalSettings, setPetLocalSettings] =
     React.useState<PetLocalSettings | null>(() => readPetLocalSettings());
   const [attachmentState, setAttachmentState] =
@@ -632,6 +754,10 @@ export function Chat({
       hasParsingFiles: false,
     });
   const [references, setReferences] = React.useState<ChatKitReference[]>([]);
+  const [referencedWorkspaceFiles, setReferencedWorkspaceFiles] =
+    React.useState<ChatAttachmentFile[]>([]);
+  const [workspaceFileMention, setWorkspaceFileMention] =
+    React.useState<WorkspaceFileMentionState | null>(null);
   const [isUploadingReferenceImages, setIsUploadingReferenceImages] =
     React.useState(false);
   const [quoteSelection, setQuoteSelection] =
@@ -654,11 +780,17 @@ export function Chat({
   const attachmentsRef = React.useRef<ChatAttachmentsHandle>(null);
   const composerInputRef = React.useRef<HTMLDivElement>(null);
   const appliedReferenceRequestRef = React.useRef<string | null>(null);
+  const goalRequestIdRef = React.useRef(0);
+  const goalAbortControllerRef = React.useRef<AbortController | null>(null);
+  const activeProjectIdRef = React.useRef(activeProjectId);
+  activeProjectIdRef.current = activeProjectId;
   const isComposerComposingRef = React.useRef(false);
   const slashPaletteRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
     [],
   );
+  const workspaceFileMentionPaletteRef =
+    React.useRef<WorkspaceFileMentionPaletteHandle>(null);
   const composerPartsRef = React.useRef<ComposerPart[]>([]);
   const pendingComposerCaretOffsetRef = React.useRef<number | null>(null);
   const shouldAutoScrollRef = React.useRef(true);
@@ -689,6 +821,7 @@ export function Chat({
   } = useRuntimeCapabilitiesState({
     client: stream.client,
     assistantId: stream.assistantId,
+    projectId: activeProjectId,
     threadId: stream.threadId,
     disabled: missingConfig || !stream.client || !stream.assistantId,
     composerParts,
@@ -807,21 +940,27 @@ export function Chat({
     historyMessagePagination?.isLoadingMore,
   );
   const canLoadMoreMessages = Boolean(historyMessagePagination?.hasMore);
+  const isInitialComposer =
+    messages.length === 0 && !canLoadMoreMessages && !stream.isLoading;
   const draft = React.useMemo(
     () => getComposerPlainText(composerParts),
     [composerParts],
   );
   const trimmedDraft = draft.trim();
-  const hasReferences = references.length > 0;
+  const hasReferences =
+    references.length > 0 || referencedWorkspaceFiles.length > 0;
+  const referencedWorkspaceFilePaths = React.useMemo(
+    () =>
+      new Set(
+        referencedWorkspaceFiles.flatMap((file) => {
+          const filePath = file.workspacePath ?? file.filePath;
+          return filePath ? [filePath] : [];
+        }),
+      ),
+    [referencedWorkspaceFiles],
+  );
   const hasCompletedGoal = threadGoal?.status === 'complete';
   const isGoalModeOpen = isGoalPanelOpen;
-  const isComposerStacked =
-    planModeEnabled || isGoalModeOpen || Boolean(selectedTool);
-  const isComposerInputEmpty = getComposerEditingLength(composerParts) === 0;
-  const composerInputRoundedClass = getComposerInputRoundedClass(theme.radius, {
-    isEmpty: isComposerInputEmpty,
-    isStacked: isComposerStacked,
-  });
   const pendingFollowUps = React.useMemo(
     () => sortVisiblePendingFollowUps(stream.pendingFollowUps ?? []),
     [stream.pendingFollowUps],
@@ -831,6 +970,16 @@ export function Chat({
   const hasPendingHITLRequest = Boolean(stream.pendingHITLRequest);
   const hasPendingInteractiveRequest =
     hasPendingRequestUserInput || hasPendingHITLRequest;
+  const isProjectSelectionLocked =
+    Boolean(stream.threadId || stream.conversationId) ||
+    messages.length > 0 ||
+    canLoadMoreMessages;
+  const isConfiguredProjectLocked =
+    options?.composer?.projects?.locked === true && Boolean(activeProjectId);
+  const isProjectSelectorVisible =
+    projectsEnabled &&
+    (isConfiguredProjectLocked ||
+      (!isProjectSelectionLocked && hasSelectableProjects));
   const hasPendingTodos = Boolean(stream.todos?.items.length);
   const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(() => {
     if (surface !== 'main') return null;
@@ -838,9 +987,18 @@ export function Chat({
       return options.goal;
     }
     return supportsXpertThreadGoalAdapter(stream.client)
-      ? createXpertThreadGoalAdapter(stream.client)
+      ? createXpertThreadGoalAdapter(stream.client, {
+          xpertId: stream.assistantId,
+          projectId: activeProjectId,
+        })
       : null;
-  }, [options?.goal, stream.client, surface]);
+  }, [
+    activeProjectId,
+    options?.goal,
+    stream.assistantId,
+    stream.client,
+    surface,
+  ]);
   const displayedGoalElapsedSeconds = threadGoal
     ? (threadGoal.elapsedSeconds ?? 0) +
       (goalElapsedStartedAt
@@ -902,6 +1060,39 @@ export function Chat({
       }
     },
     [setRunRuntimeCapabilities],
+  );
+
+  const handleProjectSelectionChange = React.useCallback(
+    (projectId: string | null) => {
+      const textParts = composerPartsRef.current.filter(
+        (part) => part.type === 'text',
+      );
+      commitComposerParts(textParts, {
+        resetDom: true,
+        syncRemovedCapabilityTokens: false,
+      });
+      attachmentsRef.current?.clear();
+      setReferences([]);
+      setReferencedWorkspaceFiles([]);
+      setWorkspaceFileMention(null);
+      setSelectedTool(null);
+      resetRunRuntimeCapabilities();
+      void stream.setConnectorBindingIds([]).catch((persistError) => {
+        console.warn(
+          '[Chat] Failed to clear connector selection before changing project:',
+          persistError,
+        );
+      });
+      onConnectorsChange?.([]);
+      onProjectChange?.(projectId);
+    },
+    [
+      commitComposerParts,
+      onProjectChange,
+      onConnectorsChange,
+      resetRunRuntimeCapabilities,
+      stream,
+    ],
   );
 
   const setComposerText = React.useCallback(
@@ -1085,6 +1276,13 @@ export function Chat({
       })
       .catch((error) => {
         if (abortController.signal.aborted) return;
+        if (
+          error !== null &&
+          typeof error === 'object' &&
+          Reflect.get(error, 'status') === 404
+        ) {
+          return;
+        }
         sendParentEvent?.('public_event', ['error', { error: toError(error) }]);
       });
 
@@ -1763,9 +1961,22 @@ export function Chat({
         caretOffset: selectionOffset,
         resetDom: false,
       });
-      updateRuntimeCapabilityPalette(nextParts, selectionOffset);
+      const nextMention = getWorkspaceFileMention(
+        getComposerPlainText(nextParts),
+        selectionOffset,
+      );
+      setWorkspaceFileMention(nextMention);
+      if (nextMention) {
+        setRuntimeCapabilityPalette(null);
+      } else {
+        updateRuntimeCapabilityPalette(nextParts, selectionOffset);
+      }
     },
-    [commitComposerParts, updateRuntimeCapabilityPalette],
+    [
+      commitComposerParts,
+      setRuntimeCapabilityPalette,
+      updateRuntimeCapabilityPalette,
+    ],
   );
 
   const handleComposerInput = React.useCallback(
@@ -1790,29 +2001,42 @@ export function Chat({
   );
 
   const handleComposerSelect = React.useCallback(() => {
-    updateRuntimeCapabilityPalette(
-      composerPartsRef.current,
-      composerInputRef.current
-        ? getComposerSelectionOffset(composerInputRef.current)
-        : undefined,
-    );
-  }, [updateRuntimeCapabilityPalette]);
+    const selectionOffset = composerInputRef.current
+      ? getComposerSelectionOffset(composerInputRef.current)
+      : undefined;
+    if (typeof selectionOffset === 'number') {
+      const mention = getWorkspaceFileMention(
+        getComposerPlainText(composerPartsRef.current),
+        selectionOffset,
+      );
+      setWorkspaceFileMention(mention);
+      if (mention) {
+        setRuntimeCapabilityPalette(null);
+        return;
+      }
+    }
+    updateRuntimeCapabilityPalette(composerPartsRef.current, selectionOffset);
+  }, [setRuntimeCapabilityPalette, updateRuntimeCapabilityPalette]);
 
   const submitDraft = React.useCallback(
     (submitOptions: SubmitDraftOptions = {}) => {
       if (isSubmissionBlocked) return;
 
       const contentToSubmit = (submitOptions.inputText ?? trimmedDraft).trim();
-      const filesToSend =
-        uploadedFiles.length > 0 ? [...uploadedFiles] : undefined;
+      const mergedFiles = mergeSubmittedFiles(
+        uploadedFiles,
+        referencedWorkspaceFiles,
+      );
+      const filesToSend = mergedFiles.length > 0 ? mergedFiles : undefined;
       const referencesToSend =
         references.length > 0 ? [...references] : undefined;
       const nextFollowUpMode = stream.isLoading ? 'queue' : undefined;
       const effectivePlanMode = submitOptions.planMode ?? planModeEnabled;
-      const humanInput = buildHumanMessageInputPayload({
-        content: contentToSubmit,
-        references: referencesToSend,
-      });
+      const humanInput =
+        buildHumanMessageInputPayload({
+          content: contentToSubmit,
+          references: referencesToSend,
+        }) ?? (filesToSend ? { input: '' } : null);
 
       if (!humanInput) {
         return;
@@ -1826,7 +2050,9 @@ export function Chat({
       const displayContent =
         submitOptions.displayText ||
         contentToSubmit ||
-        (referencesToSend ? t('chat.referencedContentOnly') : '');
+        (referencesToSend || filesToSend
+          ? t('chat.referencedContentOnly')
+          : '');
       const newMessage: HumanMessageWithMeta = {
         id: createMessageId(),
         type: 'human',
@@ -1845,12 +2071,6 @@ export function Chat({
         ...(referencesToSend ? { references: referencesToSend } : {}),
         ...(stream.selectedModelId ? { model: stream.selectedModelId } : {}),
       };
-
-      commitComposerParts([], {
-        caretOffset: 0,
-        resetDom: true,
-        syncRemovedCapabilityTokens: false,
-      });
 
       const inputPayload: {
         input: string;
@@ -1889,7 +2109,59 @@ export function Chat({
         !stream.threadId &&
         !nextFollowUpMode;
 
-      stream.submit(
+      const submittedComposerParts = composerPartsRef.current;
+      const submittedReferences = references;
+      const submittedWorkspaceFiles = referencedWorkspaceFiles;
+      const submittedRunRuntimeCapabilities = runRuntimeCapabilities;
+      const submittedTool =
+        selectedTool && !selectedTool.pinned ? selectedTool : null;
+
+      commitComposerParts([], {
+        caretOffset: 0,
+        resetDom: true,
+        syncRemovedCapabilityTokens: false,
+      });
+      const rollbackAttachments =
+        attachmentsRef.current?.clearWithRollback() ?? (() => undefined);
+      setReferences([]);
+      setReferencedWorkspaceFiles([]);
+      setWorkspaceFileMention(null);
+      if (submittedTool) {
+        setSelectedTool(null);
+      }
+      resetRunRuntimeCapabilities();
+
+      const restoreSubmittedDraft = () => {
+        const currentParts = composerPartsRef.current;
+        const currentCapabilities = getComposerCapabilityPartMap(currentParts);
+        const submittedPartsToRestore = submittedComposerParts.filter(
+          (part) => part.type === 'text' || !currentCapabilities.has(part.key),
+        );
+        const separator =
+          submittedPartsToRestore.length > 0 && currentParts.length > 0
+            ? createComposerTextParts('\n')
+            : [];
+        commitComposerParts(
+          [...submittedPartsToRestore, ...separator, ...currentParts],
+          {
+            resetDom: true,
+            syncRemovedCapabilityTokens: false,
+          },
+        );
+        rollbackAttachments();
+        setReferences((current) =>
+          mergeReferences(submittedReferences, current),
+        );
+        setReferencedWorkspaceFiles((current) =>
+          mergeSubmittedFiles(submittedWorkspaceFiles, current),
+        );
+        if (submittedTool) {
+          setSelectedTool((current) => current ?? submittedTool);
+        }
+        addRunRuntimeCapabilities(submittedRunRuntimeCapabilities);
+      };
+
+      const submission = stream.submit(
         {
           input: inputPayload,
           ...(requestOptions.state ? { state: requestOptions.state } : {}),
@@ -1919,28 +2191,27 @@ export function Chat({
             : {}),
         },
       );
+      void submission.catch(() => {
+        restoreSubmittedDraft();
+      });
 
       scrollToBottom(true, true);
-
-      if (selectedTool && !selectedTool.pinned) {
-        setSelectedTool(null);
-      }
-      attachmentsRef.current?.clear();
-      setReferences([]);
-      resetRunRuntimeCapabilities();
     },
     [
+      addRunRuntimeCapabilities,
       effectiveSessionRuntimeCapabilities,
       getRuntimeCapabilitiesForSubmit,
       isSubmissionBlocked,
       options?.request,
       persistSessionRuntimeCapabilities,
       references,
+      referencedWorkspaceFiles,
       resetRunRuntimeCapabilities,
       scrollToBottom,
       selectedTool,
       commitComposerParts,
       planModeEnabled,
+      runRuntimeCapabilities,
       stream,
       trimmedDraft,
       uploadedFiles,
@@ -1980,15 +2251,38 @@ export function Chat({
         return;
       }
 
+      goalAbortControllerRef.current?.abort();
+      const goalAbortController = new AbortController();
+      goalAbortControllerRef.current = goalAbortController;
+      const goalRequestId = ++goalRequestIdRef.current;
+      const goalProjectId = activeProjectId;
       setIsGoalLoading(true);
       try {
+        const runtimeCapabilitiesForGoalSetup =
+          commandRuntimeCapabilities || stream.connectorBindingIds.length
+            ? withConnectorBindingIds(
+                commandRuntimeCapabilities
+                  ? { runtimeCapabilities: commandRuntimeCapabilities }
+                  : undefined,
+                stream.connectorBindingIds,
+              ).runtimeCapabilities
+            : undefined;
         const result = await executeThreadGoalCommand({
           goal: goalAdapter,
           threadId,
           assistantId: stream.assistantId,
+          projectId: goalProjectId,
           command,
-          runtimeCapabilities: commandRuntimeCapabilities,
+          runtimeCapabilities: runtimeCapabilitiesForGoalSetup,
+          signal: goalAbortController.signal,
         });
+        if (
+          goalAbortController.signal.aborted ||
+          goalRequestIdRef.current !== goalRequestId ||
+          activeProjectIdRef.current !== goalProjectId
+        ) {
+          return;
+        }
         if (!threadId && result.threadId) {
           stream.reset(result.threadId, []);
           void refreshThreads();
@@ -2082,12 +2376,25 @@ export function Chat({
             });
         }
       } catch (error) {
+        if (
+          goalAbortController.signal.aborted ||
+          goalRequestIdRef.current !== goalRequestId ||
+          activeProjectIdRef.current !== goalProjectId
+        ) {
+          return;
+        }
         setGoalError(error instanceof Error ? error.message : String(error));
       } finally {
-        setIsGoalLoading(false);
+        if (goalRequestIdRef.current === goalRequestId) {
+          if (goalAbortControllerRef.current === goalAbortController) {
+            goalAbortControllerRef.current = null;
+          }
+          setIsGoalLoading(false);
+        }
       }
     },
     [
+      activeProjectId,
       getRuntimeCapabilitiesForCommand,
       goalAdapter,
       options?.request,
@@ -2170,7 +2477,11 @@ export function Chat({
           : previous,
       );
     }
-  }, [slashPaletteOptions.length, runtimeCapabilityPalette]);
+  }, [
+    runtimeCapabilityPalette,
+    setRuntimeCapabilityPalette,
+    slashPaletteOptions.length,
+  ]);
 
   React.useLayoutEffect(() => {
     if (!runtimeCapabilityPalette) {
@@ -2221,6 +2532,7 @@ export function Chat({
     isGoalModeOpen,
     runRuntimeCapabilities,
     setComposerText,
+    setRuntimeCapabilityPalette,
   ]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -2360,9 +2672,85 @@ export function Chat({
     [stream.client],
   );
 
+  const selectWorkspaceFileMention = React.useCallback(
+    (file: XpertWorkspaceFile) => {
+      const mention = workspaceFileMention;
+      if (!mention) return;
+
+      const filePath = getWorkspaceFilePath(file);
+
+      setReferencedWorkspaceFiles((current) =>
+        current.some(
+          (item) => (item.workspacePath ?? item.filePath) === filePath,
+        )
+          ? current
+          : [...current, toReferencedWorkspaceFile(file)],
+      );
+      const nextParts = replaceComposerRange(
+        composerPartsRef.current,
+        mention.start,
+        mention.end,
+        [],
+      );
+      commitComposerParts(nextParts, {
+        caretOffset: mention.start,
+        resetDom: true,
+      });
+      setWorkspaceFileMention(null);
+      setRuntimeCapabilityPalette(null);
+      focusComposerAt(mention.start);
+    },
+    [
+      commitComposerParts,
+      workspaceFileMention,
+      focusComposerAt,
+      setRuntimeCapabilityPalette,
+    ],
+  );
+
+  React.useEffect(() => {
+    setReferencedWorkspaceFiles([]);
+    setWorkspaceFileMention(null);
+  }, [activeProjectId, stream.assistantId]);
+
+  React.useEffect(() => {
+    setIsGoalLoading(false);
+    return () => {
+      goalRequestIdRef.current += 1;
+      goalAbortControllerRef.current?.abort();
+      goalAbortControllerRef.current = null;
+    };
+  }, [activeProjectId, stream.assistantId]);
+
   const handleComposerKeyDown = (
     event: React.KeyboardEvent<HTMLDivElement>,
   ) => {
+    if (workspaceFileMention) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setWorkspaceFileMention(null);
+        return;
+      }
+
+      if (
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'Tab'
+      ) {
+        event.preventDefault();
+        workspaceFileMentionPaletteRef.current?.moveActive(
+          event.key === 'ArrowUp' ? -1 : 1,
+        );
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        workspaceFileMentionPaletteRef.current?.selectActive();
+        return;
+      }
+    }
+
     if (runtimeCapabilityPalette) {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -2639,7 +3027,12 @@ export function Chat({
       setRuntimeCapabilityPalette(null);
       focusComposerAt(prompt.length);
     },
-    [focusComposerAt, isPromptEditDisabled, setComposerText],
+    [
+      focusComposerAt,
+      isPromptEditDisabled,
+      setComposerText,
+      setRuntimeCapabilityPalette,
+    ],
   );
 
   const loadConversationMessages = React.useCallback(
@@ -2713,7 +3106,9 @@ export function Chat({
     try {
       // const created = await createThread({ title: t('history.newThreadTitle') });
       // setActiveThreadId(created.id);
+      const hadSelectedConnectors = stream.connectorBindingIds.length > 0;
       stream.reset(null, []);
+      if (hadSelectedConnectors) onConnectorsChange?.([]);
       // await refreshThreads();
     } catch (err) {
       console.warn('Failed to create thread', err);
@@ -3004,7 +3399,7 @@ export function Chat({
         activeClassName="ring-2 ring-primary/40 ring-inset"
         onFiles={handleDroppedFiles}
         className={cn(
-          'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
+          'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-x-hidden overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
           className,
         )}
       >
@@ -3012,7 +3407,7 @@ export function Chat({
           <div
             ref={chatColumnRef}
             data-slot="chatkit-chat-header"
-            className="mx-auto flex w-full items-center justify-between border-b border-secondary px-2 py-1 sticky top-0 z-10 bg-background"
+            className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
             style={chatColumnStyle}
           >
             <div className="flex min-w-0 items-center gap-3 overflow-hidden">
@@ -3157,7 +3552,10 @@ export function Chat({
 
         <div
           data-slot="chatkit-chat-content"
-          className="mx-auto w-full flex-1 p-4"
+          className={cn(
+            'mx-auto w-full p-4',
+            isInitialComposer ? 'mt-auto shrink-0 pb-0' : 'flex-1',
+          )}
           style={chatColumnStyle}
         >
           {errorMessage && (
@@ -3187,9 +3585,10 @@ export function Chat({
               onPromptEdit={handlePromptEdit}
               promptSendDisabled={isSubmissionBlocked}
               promptEditDisabled={isPromptEditDisabled}
+              className="px-4 pb-4 pt-2"
             />
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-4">
               {canLoadMoreMessages && (
                 <div className="flex items-center gap-3 py-1">
                   <div className="h-px min-w-8 flex-1 bg-border" />
@@ -3534,7 +3933,11 @@ export function Chat({
 
         <div
           data-slot="chatkit-chat-composer"
-          className="mx-auto w-full p-2 sticky bottom-0 z-10 bg-background"
+          data-position={isInitialComposer ? 'centered' : 'bottom'}
+          className={cn(
+            'mx-auto w-full p-2 z-10 bg-background',
+            isInitialComposer ? 'mb-auto' : 'sticky bottom-0',
+          )}
           style={chatColumnStyle}
         >
           {threadErrorMessage && (
@@ -3575,6 +3978,37 @@ export function Chat({
             </div>
           )}
 
+          {referencedWorkspaceFiles.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {referencedWorkspaceFiles.map((file) => {
+                const id =
+                  file.workspacePath ??
+                  file.filePath ??
+                  file.fileAssetId ??
+                  file.fileId ??
+                  file.id;
+                return (
+                  <WorkspaceFileChip
+                    key={id}
+                    file={file}
+                    onRemove={() =>
+                      setReferencedWorkspaceFiles((current) =>
+                        current.filter(
+                          (item) =>
+                            (item.workspacePath ??
+                              item.filePath ??
+                              item.fileAssetId ??
+                              item.fileId ??
+                              item.id) !== id,
+                        ),
+                      )
+                    }
+                    removeLabel={t('composer.fileMentions.remove')}
+                  />
+                );
+              })}
+            </div>
+          )}
           <DetachedRunRuntimeCapabilities
             options={detachedRunRuntimeCapabilityOptions}
             runOnlyLabel={t('composer.capabilities.runOnly')}
@@ -3786,7 +4220,19 @@ export function Chat({
             attachToComposer
           />
 
-          {runtimeCapabilityPalette && (
+          {workspaceFileMention && (
+            <WorkspaceFileMentionPalette
+              ref={workspaceFileMentionPaletteRef}
+              client={xpertPlatformClient}
+              assistantId={stream.assistantId ?? null}
+              projectId={activeProjectId ?? null}
+              query={workspaceFileMention.query}
+              selectedFilePaths={referencedWorkspaceFilePaths}
+              onSelect={selectWorkspaceFileMention}
+            />
+          )}
+
+          {runtimeCapabilityPalette && !workspaceFileMention && (
             <SlashPalette
               palette={runtimeCapabilityPalette}
               options={slashPaletteOptions}
@@ -3803,137 +4249,217 @@ export function Chat({
           <form className="flex items-end" onSubmit={handleSubmit}>
             <div
               data-slot="composer-input-shell"
-              data-layout={isComposerStacked ? 'stacked' : 'inline'}
+              data-layout="stacked"
               className={cn(
-                'relative flex flex-1 overflow-hidden',
-                'bg-background border border-border shadow-sm',
-                isComposerStacked
-                  ? 'min-h-[5.5rem] px-1.5 pt-1.5 pb-12'
-                  : 'min-h-12 px-1.5 py-1',
-                'focus-within:border-muted-foreground/30 focus-within:shadow-md',
-                'transition-[min-height,padding,border-radius,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-                composerInputRoundedClass,
+                'relative flex min-w-0 flex-1 flex-col overflow-visible',
+                'bg-composer-shell px-composer-inset pt-composer-inset',
+                !isProjectSelectorVisible && 'pb-composer-inset',
+                'transition-[border-radius] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+                'rounded-composer-shell shadow-composer-shell',
               )}
             >
               <div
-                key={composerDomVersion}
-                ref={composerInputRef}
-                role="textbox"
-                aria-multiline="true"
-                aria-disabled={
-                  missingConfig ||
-                  isHistoryLoading ||
-                  hasPendingInteractiveRequest
-                }
-                contentEditable={
-                  !(
+                data-slot="composer-editor-surface"
+                className={cn(
+                  'relative flex min-h-[10rem] min-w-0 bg-background px-2 pt-2 pb-14',
+                  'rounded-composer-editor',
+                )}
+              >
+                <div
+                  key={composerDomVersion}
+                  ref={composerInputRef}
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-disabled={
                     missingConfig ||
                     isHistoryLoading ||
                     hasPendingInteractiveRequest
-                  )
-                }
-                suppressContentEditableWarning
-                onInput={handleComposerInput}
-                onCompositionStart={handleComposerCompositionStart}
-                onCompositionEnd={handleComposerCompositionEnd}
-                onSelect={handleComposerSelect}
-                onPaste={handleComposerPaste}
-                onKeyDown={handleComposerKeyDown}
-                data-placeholder={inputPlaceholder}
-                className={cn(
-                  'min-h-8 max-h-32 w-full overflow-hidden whitespace-pre-wrap break-words bg-transparent text-sm leading-5 text-foreground outline-none transition-[padding,min-height] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
-                  isComposerStacked ? 'px-2 py-1.5' : 'py-1 pr-11 pl-11 mt-1',
-                  'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
-                  (missingConfig ||
-                    isHistoryLoading ||
-                    hasPendingInteractiveRequest) &&
-                    'cursor-not-allowed opacity-50',
-                )}
-              >
-                {renderedComposerParts.map((part, index) =>
-                  part.type === 'text' ? (
-                    <React.Fragment key={`text-${index}`}>
-                      {part.text}
-                    </React.Fragment>
-                  ) : (
-                    <ComposerCapabilityToken key={part.key} part={part} />
-                  ),
-                )}
-              </div>
-              <div
-                data-slot="composer-action-bar"
-                className="pointer-events-none absolute inset-x-1.5 bottom-1 flex min-h-10 items-center justify-between gap-2"
-              >
-                <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
-                  <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
-                    {/* Plus button inside input - left side */}
-                    <ComposerMenu
-                      composer={composer}
-                      onAttachmentClick={handleAttachmentClick}
-                      onToolSelect={handleToolSelect}
-                      selectedTool={selectedTool}
-                      planModeEnabled={planModeEnabled}
-                      onPlanModeChange={setPlanModeEnabled}
-                      goalCommandAvailable={goalCommandAvailable}
-                      goalPanelOpen={isGoalModeOpen}
-                      onGoalPanelOpenChange={handleGoalPanelOpenChange}
-                      runtimeCapabilities={
-                        runtimeCapabilitiesReady ? runtimeCapabilities : null
-                      }
-                      selectedRuntimeCapabilities={
-                        effectiveSessionRuntimeCapabilities
-                      }
-                      onRuntimeCapabilityToggle={
-                        handleSessionRuntimeCapabilityToggle
-                      }
+                  }
+                  contentEditable={
+                    !(
+                      missingConfig ||
+                      isHistoryLoading ||
+                      hasPendingInteractiveRequest
+                    )
+                  }
+                  suppressContentEditableWarning
+                  onInput={handleComposerInput}
+                  onCompositionStart={handleComposerCompositionStart}
+                  onCompositionEnd={handleComposerCompositionEnd}
+                  onSelect={handleComposerSelect}
+                  onPaste={handleComposerPaste}
+                  onKeyDown={handleComposerKeyDown}
+                  data-placeholder={inputPlaceholder}
+                  className={cn(
+                    'min-h-20 max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none',
+                    'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
+                    (missingConfig ||
+                      isHistoryLoading ||
+                      hasPendingInteractiveRequest) &&
+                      'cursor-not-allowed opacity-50',
+                  )}
+                >
+                  {renderedComposerParts.map((part, index) =>
+                    part.type === 'text' ? (
+                      <React.Fragment key={`text-${index}`}>
+                        {part.text}
+                      </React.Fragment>
+                    ) : (
+                      <ComposerCapabilityToken key={part.key} part={part} />
+                    ),
+                  )}
+                </div>
+                <div
+                  data-slot="composer-action-bar"
+                  className="pointer-events-none absolute inset-x-3 bottom-2 flex min-h-10 items-center justify-between gap-2"
+                >
+                  <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
+                    <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+                      <ComposerMenu
+                        composer={composer}
+                        onAttachmentClick={handleAttachmentClick}
+                        onToolSelect={handleToolSelect}
+                        selectedTool={selectedTool}
+                        planModeEnabled={planModeEnabled}
+                        onPlanModeChange={setPlanModeEnabled}
+                        goalCommandAvailable={goalCommandAvailable}
+                        goalPanelOpen={isGoalModeOpen}
+                        onGoalPanelOpenChange={handleGoalPanelOpenChange}
+                        runtimeCapabilities={
+                          runtimeCapabilitiesReady ? runtimeCapabilities : null
+                        }
+                        selectedRuntimeCapabilities={
+                          effectiveSessionRuntimeCapabilities
+                        }
+                        onRuntimeCapabilityToggle={
+                          handleSessionRuntimeCapabilityToggle
+                        }
+                        connectorClient={xpertPlatformClient}
+                        connectorXpertId={stream.assistantId}
+                        connectorProjectId={activeProjectId}
+                        selectedConnectorBindingIds={stream.connectorBindingIds}
+                        onConnectorSelectionChange={(bindingIds) => {
+                          void stream
+                            .setConnectorBindingIds(bindingIds)
+                            .then(() => onConnectorsChange?.(bindingIds))
+                            .catch((persistError) => {
+                              console.warn(
+                                '[Chat] Failed to persist connector selection:',
+                                persistError,
+                              );
+                            });
+                        }}
+                        connectorsEnabled={connectorsEnabled}
+                        apiUrl={apiUrl}
+                        disabled={
+                          missingConfig ||
+                          isHistoryLoading ||
+                          hasPendingInteractiveRequest
+                        }
+                      />
+                    </div>
+
+                    {selectedTool && (
+                      <span
+                        data-slot="composer-selected-tool"
+                        className="group/tool pointer-events-auto inline-flex h-8 min-w-0 max-w-[14rem] shrink items-center rounded-full bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200"
+                      >
+                        <span className="truncate">
+                          {selectedTool.shortLabel ?? selectedTool.label}
+                        </span>
+                        <button
+                          data-slot="composer-selected-tool-remove"
+                          type="button"
+                          onClick={() => setSelectedTool(null)}
+                          aria-label={t('composer.removeTool', {
+                            label:
+                              selectedTool.shortLabel ?? selectedTool.label,
+                          })}
+                          className={cn(
+                            'pointer-events-none ml-0 flex w-0 shrink-0 items-center justify-center overflow-hidden rounded-full p-0 text-primary/70 opacity-0 outline-none',
+                            'transition-[width,margin,opacity,background-color,color] duration-200',
+                            'group-hover/tool:pointer-events-auto group-hover/tool:ml-1 group-hover/tool:w-4 group-hover/tool:opacity-100',
+                            'focus-visible:pointer-events-auto focus-visible:ml-1 focus-visible:w-4 focus-visible:opacity-100',
+                            'hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary',
+                          )}
+                        >
+                          <X className="size-3 shrink-0" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="pointer-events-auto flex shrink-0 items-center gap-1">
+                    <ContextUsageIndicator className="size-8" />
+                    <ModelPicker
+                      models={availableModels}
+                      selectedModelId={stream.selectedModelId}
+                      onSelect={handleModelSelect}
                       disabled={
-                        missingConfig ||
+                        Boolean(missingConfig) ||
                         isHistoryLoading ||
                         hasPendingInteractiveRequest
                       }
+                      copy={{
+                        label: t('chat.modelPicker.label'),
+                        title: t('chat.modelPicker.title'),
+                        description: t('chat.modelPicker.description'),
+                        availableModels: t('chat.modelPicker.availableModels'),
+                        defaultBadge: t('chat.modelPicker.defaultBadge'),
+                        unavailableBadge: t(
+                          'chat.modelPicker.unavailableBadge',
+                        ),
+                        futureTitle: t('chat.modelPicker.futureTitle'),
+                        futureDescription: t(
+                          'chat.modelPicker.futureDescription',
+                        ),
+                        futureBadge: t('chat.modelPicker.futureBadge'),
+                      }}
+                    />
+                    <SendButton
+                      disabled={isSendDisabled}
+                      isLoading={stream.isLoading}
+                      showStop={
+                        stream.isLoading &&
+                        (!trimmedDraft || hasPendingInteractiveRequest)
+                      }
+                      onStop={() => stream.stop()}
+                      stopLabel={t('chat.stop')}
+                      sendLabel={t('chat.send')}
+                      shortcuts={
+                        stream.isLoading && trimmedDraft
+                          ? [
+                              {
+                                label: t('chat.followUps.queue'),
+                                keys: 'Enter',
+                              },
+                            ]
+                          : undefined
+                      }
                     />
                   </div>
-
-                  {selectedTool && (
-                    <span className="pointer-events-auto inline-flex h-8 min-w-0 max-w-[14rem] shrink items-center gap-1.5 rounded-full bg-primary/10 px-2 text-xs font-medium text-primary transition-all duration-200">
-                      <span className="truncate">
-                        {selectedTool.shortLabel ?? selectedTool.label}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTool(null)}
-                        className="shrink-0 rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  )}
-                </div>
-
-                <div className="pointer-events-auto shrink-0">
-                  <SendButton
-                    disabled={isSendDisabled}
-                    isLoading={stream.isLoading}
-                    showStop={
-                      stream.isLoading &&
-                      (!trimmedDraft || hasPendingInteractiveRequest)
-                    }
-                    onStop={() => stream.stop()}
-                    stopLabel={t('chat.stop')}
-                    sendLabel={t('chat.send')}
-                    shortcuts={
-                      stream.isLoading && trimmedDraft
-                        ? [
-                            {
-                              label: t('chat.followUps.queue'),
-                              keys: 'Enter',
-                            },
-                          ]
-                        : undefined
-                    }
-                  />
                 </div>
               </div>
+
+              {projectsEnabled &&
+              (isConfiguredProjectLocked || !isProjectSelectionLocked) ? (
+                <ProjectSelector
+                  client={xpertPlatformClient}
+                  xpertId={stream.assistantId}
+                  activeProjectId={activeProjectId}
+                  locked={isConfiguredProjectLocked}
+                  label={options?.composer?.projects?.label}
+                  disabled={
+                    missingConfig ||
+                    isHistoryLoading ||
+                    isGoalLoading ||
+                    hasPendingInteractiveRequest
+                  }
+                  onAvailabilityChange={setHasSelectableProjects}
+                  onProjectChange={handleProjectSelectionChange}
+                  onProjectCreate={onProjectCreate}
+                />
+              ) : null}
             </div>
           </form>
 
@@ -3956,30 +4482,6 @@ export function Chat({
             className="relative mt-2 flex min-h-6 items-center justify-center gap-2 text-xs text-muted-foreground"
           >
             <span>{t('chat.poweredBy')}</span>
-            <div className="absolute right-1 flex max-w-[48%] items-center gap-1">
-              <ModelPicker
-                models={availableModels}
-                selectedModelId={stream.selectedModelId}
-                onSelect={handleModelSelect}
-                disabled={
-                  Boolean(missingConfig) ||
-                  isHistoryLoading ||
-                  hasPendingInteractiveRequest
-                }
-                copy={{
-                  label: t('chat.modelPicker.label'),
-                  title: t('chat.modelPicker.title'),
-                  description: t('chat.modelPicker.description'),
-                  availableModels: t('chat.modelPicker.availableModels'),
-                  defaultBadge: t('chat.modelPicker.defaultBadge'),
-                  unavailableBadge: t('chat.modelPicker.unavailableBadge'),
-                  futureTitle: t('chat.modelPicker.futureTitle'),
-                  futureDescription: t('chat.modelPicker.futureDescription'),
-                  futureBadge: t('chat.modelPicker.futureBadge'),
-                }}
-              />
-              <ContextUsageIndicator />
-            </div>
           </div>
         </div>
         <SettingsSheet

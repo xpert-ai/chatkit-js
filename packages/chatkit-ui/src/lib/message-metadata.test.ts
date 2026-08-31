@@ -71,8 +71,18 @@ describe('message metadata extraction', () => {
         mode: 'allowlist',
         skills: { ids: ['skill-1'], workspaceId: 'workspace-1' },
         plugins: { nodeKeys: ['middleware-1'] },
+        inheritUnselected: true,
       }),
     ).toBe(true);
+
+    expect(
+      isRuntimeCapabilitiesSelection({
+        mode: 'allowlist',
+        skills: { ids: [] },
+        plugins: { nodeKeys: [] },
+        inheritUnselected: 'yes',
+      }),
+    ).toBe(false);
   });
 
   it('accepts runtime capability selections with recommended metadata', () => {

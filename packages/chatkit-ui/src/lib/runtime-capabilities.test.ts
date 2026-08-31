@@ -5,12 +5,46 @@ import {
   createRuntimeCapabilitiesForSubmit,
   createDefaultRuntimeCapabilitiesSelection,
   createEmptyRuntimeCapabilitiesSelection,
+  getAvailableRuntimeCapabilitiesSelection,
   getRecommendedRuntimeCapabilitiesSelection,
+  getRuntimeSkillSource,
   mergeRuntimeCapabilitiesSelections,
   toggleRuntimeCapabilitySelection,
+  type RuntimeCapabilitiesSelection,
 } from './runtime-capabilities';
 
 describe('runtime capabilities helpers', () => {
+  it('reads only structurally valid skill source metadata', () => {
+    expect(
+      getRuntimeSkillSource({
+        id: 'runtime-skill/v1/project/project-1/xlsx',
+        workspaceId: 'project:project-1',
+        label: 'xlsx',
+        meta: {
+          skillSource: {
+            type: 'project',
+            ownerId: 'project-1',
+            label: 'Workbench 1',
+            skillId: 'xlsx',
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'project',
+      ownerId: 'project-1',
+      label: 'Workbench 1',
+      skillId: 'xlsx',
+    });
+    expect(
+      getRuntimeSkillSource({
+        id: 'invalid',
+        workspaceId: 'workspace-1',
+        label: 'invalid',
+        meta: { skillSource: { type: 'project', label: 'Missing fields' } },
+      }),
+    ).toBeNull();
+  });
+
   it('uses default skills as the initial allow-list', () => {
     const capabilities: RuntimeCapabilitiesResponse = {
       skills: [
@@ -94,6 +128,35 @@ describe('runtime capabilities helpers', () => {
         createEmptyRuntimeCapabilitiesSelection(capabilities),
       ).subAgents?.nodeKeys,
     ).toEqual(['researcher']);
+  });
+
+  it('preserves inherited capabilities through normalization and submit merging', () => {
+    const capabilities: RuntimeCapabilitiesResponse = {
+      skills: [],
+      plugins: [],
+      subAgents: [],
+    };
+    const inherited: RuntimeCapabilitiesSelection = {
+      mode: 'allowlist',
+      inheritUnselected: true,
+      skills: { ids: [] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: [] },
+      connectors: { bindingIds: ['binding-1'] },
+    };
+
+    expect(getAvailableRuntimeCapabilitiesSelection(inherited)).toEqual(
+      inherited,
+    );
+    expect(mergeRuntimeCapabilitiesSelections(capabilities, inherited)).toEqual(
+      inherited,
+    );
+    expect(
+      createRuntimeCapabilitiesForSubmit({
+        capabilities,
+        available: inherited,
+      }),
+    ).toEqual(inherited);
   });
 
   it('submits available capabilities with slash selections marked as recommended', () => {

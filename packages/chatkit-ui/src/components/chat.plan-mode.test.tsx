@@ -27,12 +27,19 @@ const mocks = vi.hoisted(() => {
           search: vi.fn().mockResolvedValue({ items: [] }),
           update: vi.fn(),
         },
+        projects: {
+          listFiles: vi.fn().mockResolvedValue([]),
+        },
+        xperts: {
+          listWorkspaceFiles: vi.fn().mockResolvedValue([]),
+        },
       },
       apiUrl: 'https://api.example.com',
       assistantId: 'assistant-1',
       apiKey: 'secret',
       organizationId: undefined,
       threadId: null as string | null,
+      conversationId: null as string | null,
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [] as Array<{
@@ -81,10 +88,14 @@ const mocks = vi.hoisted(() => {
       submitHITLDecision: vi.fn(),
       stopRuntimeActivityItem: vi.fn(),
       setThreadId: vi.fn(),
+      connectorBindingIds: [] as string[],
+      setConnectorBindingIds: vi.fn().mockResolvedValue(undefined),
     },
     parentMessengerOptions: null as null | {
       onSetComposerValue?: (payload: unknown) => void;
     },
+    parentSendCommand: vi.fn().mockResolvedValue(undefined),
+    parentSendEvent: vi.fn(),
   };
 });
 
@@ -147,7 +158,11 @@ vi.mock('../hooks/useParentMessenger', () => ({
     if (options?.onSetComposerValue) {
       mocks.parentMessengerOptions = options;
     }
-    return undefined;
+    return {
+      isParentAvailable: false,
+      sendCommand: mocks.parentSendCommand,
+      sendEvent: mocks.parentSendEvent,
+    };
   },
 }));
 
@@ -244,6 +259,40 @@ vi.mock('./composer/SendButton', () => ({
   ),
 }));
 
+vi.mock('./composer/ProjectSelector', () => ({
+  ProjectSelector: ({
+    activeProjectId,
+    disabled,
+    onAvailabilityChange,
+    onProjectChange,
+  }: {
+    activeProjectId?: string;
+    disabled?: boolean;
+    onAvailabilityChange?: (available: boolean) => void;
+    onProjectChange?: (projectId: string | null) => void;
+  }) => {
+    React.useEffect(() => {
+      onAvailabilityChange?.(true);
+    }, [onAvailabilityChange]);
+
+    return (
+      <div
+        data-slot="composer-project-rail"
+        className="flex h-10 min-w-0 items-center px-1"
+      >
+        <button
+          type="button"
+          data-testid="project-selector"
+          disabled={disabled}
+          onClick={() => onProjectChange?.('project-2')}
+        >
+          {activeProjectId ?? 'select project'}
+        </button>
+      </div>
+    );
+  },
+}));
+
 vi.mock('./history/HistorySidebar', () => ({
   HistorySidebar: () => null,
 }));
@@ -286,7 +335,7 @@ vi.mock('./ui/chatkit-avatar', () => ({
 }));
 
 vi.mock('./thread/context-usage-indicator', () => ({
-  ContextUsageIndicator: () => null,
+  ContextUsageIndicator: () => <span data-testid="context-usage" />,
 }));
 
 vi.mock('./ui/button', () => ({
@@ -492,6 +541,13 @@ describe('Chat plan mode payload', () => {
     mocks.stream.client.conversations.search.mockClear();
     mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
     mocks.stream.client.conversations.update.mockClear();
+    mocks.stream.client.projects.listFiles.mockClear();
+    mocks.stream.client.projects.listFiles.mockResolvedValue([]);
+    mocks.stream.client.xperts.listWorkspaceFiles.mockClear();
+    mocks.stream.client.xperts.listWorkspaceFiles.mockResolvedValue([]);
+    mocks.stream.setConnectorBindingIds.mockClear();
+    mocks.stream.setConnectorBindingIds.mockResolvedValue(undefined);
+    mocks.stream.connectorBindingIds = [];
     mocks.stream.submit.mockClear();
     mocks.stream.loadMoreConversationMessages.mockClear();
     mocks.stream.loadMoreConversationMessages.mockResolvedValue([]);
@@ -500,6 +556,7 @@ describe('Chat plan mode payload', () => {
       mocks.stream.threadId = threadId ?? null;
     });
     mocks.stream.threadId = null;
+    mocks.stream.conversationId = null;
     mocks.stream.messages = [];
     mocks.stream.historyMessagePagination = {
       conversationId: null,
@@ -515,10 +572,345 @@ describe('Chat plan mode payload', () => {
     mocks.stream.submit.mockResolvedValue(undefined);
     (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal = null;
     mocks.parentMessengerOptions = null;
+    mocks.parentSendCommand.mockClear();
+    mocks.parentSendEvent.mockClear();
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+  });
+
+  it('renders the stacked WorkBuddy composer with project rail and context before send', async () => {
+    const onProjectChange = vi.fn();
+    render(
+      <Chat
+        clientSecret="secret"
+        options={baseChatOptions}
+        activeProjectId="project-1"
+        projectsEnabled
+        connectorsEnabled
+        onProjectChange={onProjectChange}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
+    expect(composerShell).toHaveClass(
+      'bg-composer-shell',
+      'px-composer-inset',
+      'pt-composer-inset',
+      'rounded-composer-shell',
+      'shadow-composer-shell',
+    );
+    expect(composerShell).not.toHaveClass(
+      'p-3',
+      'px-0.5',
+      'pt-0.5',
+      'pb-composer-inset',
+    );
+    expect(composerShell).not.toHaveClass(
+      'border',
+      'border-border',
+      'focus-within:border-muted-foreground/30',
+    );
+    expect(composerShell).not.toHaveClass('shadow-sm', 'shadow-md');
+    const chatComposer = document.querySelector(
+      '[data-slot="chatkit-chat-composer"]',
+    );
+    expect(chatComposer).toHaveAttribute('data-position', 'centered');
+    expect(chatComposer).toHaveClass('mb-auto');
+    expect(chatComposer).not.toHaveClass('my-auto');
+    expect(chatComposer).not.toHaveClass('absolute', 'top-1/2');
+    const editorSurface = document.querySelector(
+      '[data-slot="composer-editor-surface"]',
+    );
+    expect(editorSurface).toBeInTheDocument();
+    expect(editorSurface).toHaveClass(
+      'bg-background',
+      'rounded-composer-editor',
+    );
+    expect(editorSurface).not.toHaveClass('border', 'border-border');
+    expect(editorSurface).not.toHaveClass('shadow-sm', 'shadow-md');
+    const projectRail = document.querySelector(
+      '[data-slot="composer-project-rail"]',
+    );
+    expect(projectRail).toBeInTheDocument();
+    expect(projectRail).toHaveClass('h-10', 'items-center');
+    expect(projectRail).not.toHaveClass('mt-1');
+
+    const contextUsage = screen.getByTestId('context-usage');
+    const send = screen.getByRole('button', { name: 'send' });
+    expect(
+      contextUsage.compareDocumentPosition(send) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('project-selector'));
+    expect(onProjectChange).toHaveBeenCalledOnce();
+    expect(onProjectChange).toHaveBeenCalledWith('project-2');
+  });
+
+  it('hides the project selector as soon as the conversation has started', async () => {
+    mocks.stream.threadId = 'thread-1';
+    render(
+      <Chat
+        clientSecret="secret"
+        options={baseChatOptions}
+        activeProjectId="project-1"
+        projectsEnabled
+        onProjectChange={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="composer-project-rail"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="composer-input-shell"]'),
+    ).toHaveClass('pb-composer-inset');
+  });
+
+  it('preserves plain text and clears conversation-scoped Connectors when the Project changes', async () => {
+    const onProjectChange = vi.fn();
+    const onConnectorsChange = vi.fn();
+    mocks.stream.connectorBindingIds = ['binding-1'];
+    render(
+      <Chat
+        clientSecret="secret"
+        options={baseChatOptions}
+        activeProjectId="project-1"
+        projectsEnabled
+        connectorsEnabled
+        onProjectChange={onProjectChange}
+        onConnectorsChange={onConnectorsChange}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const textbox = setComposerText(screen.getByRole('textbox'), 'Keep me');
+    fireEvent.click(screen.getByTestId('project-selector'));
+
+    expect(textbox.textContent).toBe('Keep me');
+    expect(mocks.stream.setConnectorBindingIds).toHaveBeenCalledWith([]);
+    expect(onConnectorsChange).toHaveBeenCalledWith([]);
+    expect(onProjectChange).toHaveBeenCalledWith('project-2');
+  });
+
+  it('hides the project selector on the optimistic message before the thread id resolves', async () => {
+    mocks.stream.messages = [
+      {
+        id: 'human-1',
+        type: 'human',
+        content: 'Hello',
+      },
+    ];
+    render(
+      <Chat
+        clientSecret="secret"
+        options={baseChatOptions}
+        activeProjectId="project-1"
+        projectsEnabled
+        onProjectChange={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
+  });
+
+  it('keeps equal shell insets when the project rail is disabled', async () => {
+    renderChat();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const composerShell = document.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    expect(composerShell).toHaveClass(
+      'px-composer-inset',
+      'pt-composer-inset',
+      'pb-composer-inset',
+      'rounded-composer-shell',
+    );
+    expect(
+      document.querySelector('[data-slot="composer-project-rail"]'),
+    ).not.toBeInTheDocument();
+
+    expect(
+      document.querySelector('[data-slot="composer-editor-surface"]'),
+    ).toHaveClass('rounded-composer-editor');
+  });
+
+  it.each([
+    { id: 'plan', label: 'Plan' },
+    { id: 'goal', label: 'Goal' },
+  ])(
+    'reveals the $label tool remove action without reserving idle space',
+    async ({ id, label }) => {
+      renderChat({
+        composer: {
+          tools: [
+            {
+              id,
+              label,
+              icon: 'write',
+              pinned: true,
+            },
+          ],
+        },
+      });
+
+      await act(async () => {
+        mocks.parentMessengerOptions?.onSetComposerValue?.({
+          selectedToolId: id,
+        });
+      });
+
+      const tool = document.querySelector(
+        '[data-slot="composer-selected-tool"]',
+      );
+      const remove = document.querySelector(
+        '[data-slot="composer-selected-tool-remove"]',
+      );
+
+      expect(tool).toHaveTextContent(label);
+      expect(tool).not.toHaveClass('gap-1.5');
+      expect(remove).toHaveClass(
+        'w-0',
+        'opacity-0',
+        'group-hover/tool:w-4',
+        'group-hover/tool:opacity-100',
+        'focus-visible:w-4',
+        'focus-visible:opacity-100',
+      );
+    },
+  );
+
+  it('references an assistant workspace file from the @ palette before a conversation exists', async () => {
+    mocks.stream.client.xperts.listWorkspaceFiles.mockResolvedValue([
+      {
+        filePath: 'Product brief.pdf',
+        fullPath: 'briefs/Product brief.pdf',
+        fileType: 'pdf',
+        hasChildren: false,
+        mimeType: 'application/pdf',
+        size: 2048,
+      },
+    ]);
+    renderChat();
+
+    const composer = screen.getByRole('textbox');
+    setComposerText(composer, '@prod');
+    fireEvent.mouseDown(
+      await screen.findByRole('button', { name: /Product brief.pdf/ }),
+    );
+
+    expect(screen.getByText('Product brief.pdf')).toBeInTheDocument();
+    const nextComposer = screen.getByRole('textbox');
+    expect(nextComposer).toBeEmptyDOMElement();
+    setComposerText(nextComposer, 'Summarize it');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+    expect(mocks.stream.client.xperts.listWorkspaceFiles).toHaveBeenCalledWith(
+      'assistant-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mocks.stream.submit.mock.calls[0][0]).toMatchObject({
+      input: {
+        input: 'Summarize it',
+        files: [
+          expect.objectContaining({
+            filePath: 'briefs/Product brief.pdf',
+            workspacePath: 'briefs/Product brief.pdf',
+            originalName: 'Product brief.pdf',
+            purpose: 'workspace',
+          }),
+        ],
+      },
+    });
+  });
+
+  it('restores a workspace file reference when first submission setup fails', async () => {
+    let rejectSubmission: ((reason: unknown) => void) | undefined;
+    mocks.stream.submit.mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSubmission = reject;
+        }),
+    );
+    mocks.stream.client.xperts.listWorkspaceFiles.mockResolvedValue([
+      {
+        filePath: 'Product brief.pdf',
+        fullPath: 'briefs/Product brief.pdf',
+        fileType: 'pdf',
+        hasChildren: false,
+        mimeType: 'application/pdf',
+        size: 2048,
+      },
+    ]);
+    renderChat();
+
+    const composer = screen.getByRole('textbox');
+    setComposerText(composer, '@prod');
+    fireEvent.mouseDown(
+      await screen.findByRole('button', { name: /Product brief.pdf/ }),
+    );
+    setComposerText(screen.getByRole('textbox'), 'Summarize it');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+
+    await act(async () => {
+      rejectSubmission?.(new Error('Thread creation failed'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox')).toHaveTextContent('Summarize it'),
+    );
+    expect(screen.getByText('Product brief.pdf')).toBeInTheDocument();
+  });
+
+  it('returns the composer to the bottom after the conversation has messages', async () => {
+    mocks.stream.messages = [
+      {
+        id: 'message-1',
+        type: 'human',
+        content: 'Hello',
+      },
+    ];
+
+    renderChat();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const chatComposer = document.querySelector(
+      '[data-slot="chatkit-chat-composer"]',
+    );
+    expect(chatComposer).toHaveAttribute('data-position', 'bottom');
+    expect(chatComposer).toHaveClass('sticky', 'bottom-0');
+    expect(chatComposer).not.toHaveClass('absolute', 'top-1/2');
   });
 
   it('omits planMode from regular sends by default', async () => {
@@ -527,11 +919,11 @@ describe('Chat plan mode payload', () => {
     const composerShell = document.querySelector(
       '[data-slot="composer-input-shell"]',
     );
-    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
 
     const textarea = screen.getByRole('textbox');
     setComposerText(textarea, 'hello');
-    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
 
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
@@ -579,8 +971,23 @@ describe('Chat plan mode payload', () => {
     const picker = await screen.findByRole('button', {
       name: 'chat.modelPicker.label: Primary',
     });
-    expect(picker.closest('[data-slot="chat-footer"]')).not.toBeNull();
-    expect(picker.closest('[data-slot="composer-action-bar"]')).toBeNull();
+    const actionBar = picker.closest('[data-slot="composer-action-bar"]');
+    expect(actionBar).not.toBeNull();
+    expect(picker.closest('[data-slot="chat-footer"]')).toBeNull();
+    const contextUsage = within(actionBar as HTMLElement).getByTestId(
+      'context-usage',
+    );
+    const sendButton = within(actionBar as HTMLElement).getByRole('button', {
+      name: 'send',
+    });
+    expect(
+      contextUsage.compareDocumentPosition(picker) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      picker.compareDocumentPosition(sendButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     picker.focus();
     fireEvent.keyDown(picker, { key: 'Enter', code: 'Enter' });
     expect(
@@ -625,6 +1032,46 @@ describe('Chat plan mode payload', () => {
     expect(mocks.stream.submit.mock.calls[0]?.[0]).toMatchObject({
       input: { input: 'use fast', model: 'mdl_fast' },
     });
+  });
+
+  it('treats a missing hosted model endpoint as an unsupported optional capability', async () => {
+    let rejectCatalog!: (reason?: unknown) => void;
+    mocks.stream.client.assistants.getModels.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectCatalog = reject;
+      }),
+    );
+
+    renderChat();
+    await waitFor(() =>
+      expect(mocks.stream.client.assistants.getModels).toHaveBeenCalledWith(
+        'assistant-1',
+        { signal: expect.any(AbortSignal) },
+      ),
+    );
+
+    await act(async () => {
+      rejectCatalog({ status: 404 });
+      await Promise.resolve();
+    });
+
+    expect(mocks.parentSendEvent).not.toHaveBeenCalledWith('public_event', [
+      'error',
+      expect.any(Object),
+    ]);
+  });
+
+  it('still reports hosted model catalog failures other than not found', async () => {
+    mocks.stream.client.assistants.getModels.mockRejectedValue({ status: 500 });
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(mocks.parentSendEvent).toHaveBeenCalledWith('public_event', [
+        'error',
+        { error: expect.any(Error) },
+      ]),
+    );
   });
 
   it('keeps a programmatic model selection made before the hosted catalog loads', async () => {
@@ -1075,6 +1522,191 @@ describe('Chat plan mode payload', () => {
     expect(screen.queryByText('ship feature')).toBeNull();
   });
 
+  it('passes the selected Project into first-goal conversation setup', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter();
+    mocks.stream.connectorBindingIds = ['binding-1'];
+
+    render(
+      <Chat
+        clientSecret="secret"
+        options={{ ...baseChatOptions, goal: adapter }}
+        activeProjectId="project-1"
+        projectsEnabled
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    setComposerText(screen.getByRole('textbox'), '/goal ship feature');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: null,
+          assistantId: mocks.stream.assistantId,
+          projectId: 'project-1',
+          objective: 'ship feature',
+          runtimeCapabilities: expect.objectContaining({
+            connectors: { bindingIds: ['binding-1'] },
+          }),
+        }),
+      ),
+    );
+  });
+
+  it('uses the latest selected Project when a stable Goal adapter is reused', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter();
+    const options = { ...baseChatOptions, goal: adapter };
+    const { rerender } = render(
+      <Chat
+        clientSecret="secret"
+        options={options}
+        activeProjectId="project-1"
+        projectsEnabled
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    rerender(
+      <Chat
+        clientSecret="secret"
+        options={options}
+        activeProjectId="project-2"
+        projectsEnabled
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    setComposerText(screen.getByRole('textbox'), '/goal ship feature');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() =>
+      expect(adapter.setGoal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: null,
+          projectId: 'project-2',
+          objective: 'ship feature',
+        }),
+      ),
+    );
+  });
+
+  it('locks Project selection and ignores a stale first-goal result after the Project changes', async () => {
+    enableGoalRuntimeCommand();
+    let resolveGoal:
+      | ((value: { threadId: string; goal: ThreadGoal }) => void)
+      | null = null;
+    const adapter = createGoalAdapter({
+      setGoal: vi.fn(
+        () =>
+          new Promise<{ threadId: string; goal: ThreadGoal }>((resolve) => {
+            resolveGoal = resolve;
+          }),
+      ),
+    });
+    const options = { ...baseChatOptions, goal: adapter };
+    const onProjectChange = vi.fn();
+    const { rerender } = render(
+      <Chat
+        clientSecret="secret"
+        options={options}
+        activeProjectId="project-1"
+        projectsEnabled
+        onProjectChange={onProjectChange}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    setComposerText(screen.getByRole('textbox'), '/goal ship feature');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    await waitFor(() => expect(adapter.setGoal).toHaveBeenCalledTimes(1));
+    const goalSignal = vi.mocked(adapter.setGoal).mock.calls[0]?.[0].signal;
+    expect(goalSignal).toBeDefined();
+    expect(screen.getByTestId('project-selector')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('project-selector'));
+    expect(onProjectChange).not.toHaveBeenCalled();
+
+    rerender(
+      <Chat
+        clientSecret="secret"
+        options={options}
+        activeProjectId="project-2"
+        projectsEnabled
+        onProjectChange={onProjectChange}
+      />,
+    );
+    expect(goalSignal?.aborted).toBe(true);
+    await act(async () => {
+      resolveGoal?.({
+        threadId: 'thread-project-1',
+        goal: {
+          id: 'goal-project-1',
+          threadId: 'thread-project-1',
+          objective: 'ship feature',
+          status: 'active',
+          tokensUsed: 0,
+          elapsedSeconds: 0,
+          continuationCount: 0,
+        },
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('project-selector')).not.toBeDisabled(),
+    );
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(screen.queryByText('ship feature')).toBeNull();
+  });
+
+  it('keeps the draft thread state clean when first-goal setup fails', async () => {
+    enableGoalRuntimeCommand();
+    const adapter = createGoalAdapter({
+      setGoal: vi.fn(async () => {
+        throw new Error('Goal setup failed');
+      }),
+    });
+
+    renderChat({ goal: adapter });
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('runtime-capabilities-ready'),
+      ).toHaveTextContent('ready'),
+    );
+
+    setComposerText(screen.getByRole('textbox'), '/goal ship feature');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+
+    expect(await screen.findByText('Goal setup failed')).toBeInTheDocument();
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(mocks.stream.threadId).toBeNull();
+  });
+
   it('toggles the goal switch without showing an empty card when no goal exists', async () => {
     enableGoalRuntimeCommand();
 
@@ -1088,7 +1720,7 @@ describe('Chat plan mode payload', () => {
     const composerShell = document.querySelector(
       '[data-slot="composer-input-shell"]',
     );
-    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
 
     fireEvent.click(screen.getByTestId('goal-command'));
 
@@ -1100,7 +1732,7 @@ describe('Chat plan mode payload', () => {
     fireEvent.click(screen.getByTestId('goal-command'));
 
     expect(screen.getByTestId('goal-command')).toHaveTextContent('goal-off');
-    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
   });
 
   it('shows the goal switch only when the runtime goal plugin is selected', async () => {
@@ -1875,7 +2507,11 @@ describe('Chat plan mode payload', () => {
       'researcher',
     );
     expect(mocks.stream.client.conversations.search).toHaveBeenCalledWith({
-      where: { threadId: 'thread-1' },
+      where: {
+        threadId: 'thread-1',
+        xpertId: 'assistant-1',
+        projectId: null,
+      },
       limit: 1,
     });
   });
@@ -2508,7 +3144,7 @@ describe('Chat plan mode payload', () => {
     const composerShell = document.querySelector(
       '[data-slot="composer-input-shell"]',
     );
-    expect(composerShell).toHaveAttribute('data-layout', 'inline');
+    expect(composerShell).toHaveAttribute('data-layout', 'stacked');
 
     fireEvent.click(screen.getByTestId('plan-mode-toggle'));
     expect(composerShell).toHaveAttribute('data-layout', 'stacked');

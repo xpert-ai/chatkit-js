@@ -5,6 +5,7 @@ import type {
 } from '@xpert-ai/xpert-sdk';
 import { useStreamContext } from '../providers/Stream';
 import { i18n, initI18n } from '../i18n';
+import { createConversationThreadSearchWhere } from '../lib/conversation-runtime-capabilities';
 
 type CreateThreadInput = {
   recordId?: string;
@@ -127,7 +128,7 @@ export function useThreads(
     setError(null);
     try {
       const { items } = await client.conversations.search({
-        where: { xpertId: assistantId, ...(projectId ? { projectId } : {}) },
+        where: { xpertId: assistantId, projectId: projectId ?? null },
         limit,
         order: { updatedAt: 'DESC' },
       });
@@ -240,7 +241,13 @@ export function useThreads(
     let cancelled = false;
 
     void client.conversations
-      .search({ where: { threadId }, limit: 1 })
+      .search({
+        where: createConversationThreadSearchWhere(threadId, {
+          xpertId: assistantId,
+          projectId,
+        }),
+        limit: 1,
+      })
       .then((result) => {
         if (cancelled) return;
         const found = result.items?.[0];
@@ -253,7 +260,15 @@ export function useThreads(
     return () => {
       cancelled = true;
     };
-  }, [client, threadId, upsertThreadRecord, isReady, isStreamLoading]);
+  }, [
+    assistantId,
+    client,
+    isReady,
+    isStreamLoading,
+    projectId,
+    threadId,
+    upsertThreadRecord,
+  ]);
 
   const threads = React.useMemo(
     () => threadRecords.map((threadRecord) => toThreadItem(threadRecord)),

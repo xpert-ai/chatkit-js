@@ -77,6 +77,7 @@ export async function executeThreadGoalCommand({
   goal,
   threadId,
   assistantId,
+  projectId,
   command,
   runtimeCapabilities,
   signal,
@@ -84,6 +85,7 @@ export async function executeThreadGoalCommand({
   goal: ChatKitGoalAdapter;
   threadId?: string | null;
   assistantId: string;
+  projectId?: string | null;
   command: GoalCommand;
   runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
   signal?: AbortSignal;
@@ -134,6 +136,7 @@ export async function executeThreadGoalCommand({
       const result = await goal.setGoal({
         threadId: null,
         assistantId,
+        projectId,
         objective,
         runtimeCapabilities,
         signal,
@@ -154,6 +157,7 @@ export async function executeThreadGoalCommand({
   const result = await goal.setGoal({
     threadId: normalizedThreadId,
     assistantId,
+    projectId,
     objective,
     runtimeCapabilities,
     signal,
@@ -330,7 +334,9 @@ export function parseThreadGoalUpdatedPatchEvent(
     ...(goal.statusUpdatedAt !== undefined
       ? { statusUpdatedAt: goal.statusUpdatedAt }
       : {}),
-    ...(goal.completedAt !== undefined ? { completedAt: goal.completedAt } : {}),
+    ...(goal.completedAt !== undefined
+      ? { completedAt: goal.completedAt }
+      : {}),
     ...(goal.blockedAt !== undefined ? { blockedAt: goal.blockedAt } : {}),
   };
   const threadId =
@@ -361,10 +367,7 @@ export function parseThreadGoalClearedEvent(
     return null;
   }
   const raw = value as Partial<TThreadGoalClearedEvent>;
-  if (
-    raw.type !== 'thread_goal_cleared' ||
-    typeof raw.threadId !== 'string'
-  ) {
+  if (raw.type !== 'thread_goal_cleared' || typeof raw.threadId !== 'string') {
     return null;
   }
   return {

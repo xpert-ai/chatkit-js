@@ -38,7 +38,7 @@
   },
   "chat": {
     "title": "Chat",
-    "placeholder": "Type a message...",
+    "placeholder": "What can I help you with today? @ reference workspace files, / use skills and commands",
     "statusOnline": "Online",
     "missingConfigShort": "Missing ChatKit configuration.",
     "missingConfigDetail": "Missing ChatKit configuration. Check `VITE_XPERTAI_API_URL`, and the `clientSecret` prop.",
@@ -154,8 +154,53 @@
   },
   "composer": {
     "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "addAttachment": "Add attachment",
     "planMode": "Plan mode",
+    "removeTool": "Remove {{label}}",
+    "workbuddy": {
+      "targets": "Modes",
+      "experts": "Experts",
+      "connectors": "Connectors",
+      "searchSkills": "Search skills",
+      "searchExperts": "Search experts",
+      "emptySkills": "No matching skills",
+      "emptyExperts": "No matching experts",
+      "expertSkills": "Expert skills",
+      "projectSkills": "{{project}} project skills"
+    },
+    "projects": {
+      "select": "Select project",
+      "none": "No project",
+      "search": "Search projects",
+      "new": "New project",
+      "create": "Create",
+      "cancel": "Cancel",
+      "namePlaceholder": "Project name",
+      "loading": "Loading projects...",
+      "empty": "No projects available",
+      "loadError": "Failed to load projects. Try again later."
+    },
+    "connectors": {
+      "search": "Search connectors",
+      "loading": "Loading connectors...",
+      "empty": "No matching connectors",
+      "scopeUnavailable": "Connector scope is not available.",
+      "accessDenied": "You do not have permission to access connectors in this context.",
+      "personal": "Personal authorization",
+      "workspaceShared": "Workspace authorization",
+      "shared": "Team authorization",
+      "select": "Select",
+      "selected": "Selected",
+      "unavailable": "Unavailable",
+      "connect": "Connect",
+      "connecting": "Connecting",
+      "connected": "Connected",
+      "manage": "Manage connectors",
+      "loadError": "Failed to load connectors. Try again later.",
+      "connectError": "Connection failed. Try again or configure it on the connector management page.",
+      "popupBlocked": "The authorization popup was blocked. Allow popups and try again."
+    },
     "capabilities": {
       "title": "Skills & Plugins",
       "skills": "Skills",
@@ -214,6 +259,14 @@
     "removeReference": "Remove reference",
     "quoteSelection": "Quote selection",
     "askInSideChat": "Ask in side chat",
+    "fileMentions": {
+      "title": "Reference workspace files",
+      "loading": "Loading workspace files...",
+      "empty": "No matching workspace files",
+      "unavailable": "No workspace files are available to reference",
+      "loadError": "Failed to load workspace files",
+      "remove": "Remove file reference"
+    },
     "requestUserInput": {
       "title": "Input requested",
       "recommended": "Recommended",

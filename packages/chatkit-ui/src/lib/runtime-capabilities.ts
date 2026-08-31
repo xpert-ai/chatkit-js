@@ -6,6 +6,46 @@ import type {
   RuntimeCapabilitySubAgent,
 } from '@xpert-ai/xpert-sdk';
 
+export type RuntimeSkillSource =
+  | {
+      type: 'xpert';
+      ownerId: string;
+      label: string;
+      skillId: string;
+    }
+  | {
+      type: 'project';
+      ownerId: string;
+      label: string;
+      skillId: string;
+    };
+
+function isRuntimeSkillSource(value: unknown): value is RuntimeSkillSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  if (
+    !('type' in value) ||
+    (value.type !== 'xpert' && value.type !== 'project') ||
+    !('ownerId' in value) ||
+    typeof value.ownerId !== 'string' ||
+    !('label' in value) ||
+    typeof value.label !== 'string' ||
+    !('skillId' in value) ||
+    typeof value.skillId !== 'string'
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function getRuntimeSkillSource(
+  skill: RuntimeCapabilitySkill,
+): RuntimeSkillSource | null {
+  const source = skill.meta?.skillSource;
+  return isRuntimeSkillSource(source) ? source : null;
+}
+
 export type RuntimeCapabilitiesSelectionSet = {
   skills: {
     workspaceId?: string;
@@ -17,9 +57,13 @@ export type RuntimeCapabilitiesSelectionSet = {
   subAgents?: {
     nodeKeys: string[];
   };
+  connectors?: {
+    bindingIds: string[];
+  };
 };
 
 export type RuntimeCapabilitiesSelection = XpertRuntimeCapabilitiesSelection & {
+  inheritUnselected?: boolean;
   recommended?: RuntimeCapabilitiesSelectionSet;
 };
 
@@ -58,6 +102,9 @@ function uniqueStrings(values: readonly string[]): string[] {
 function getRuntimeCapabilitiesSelectionSet(
   selection?: RuntimeCapabilitiesSelectionSet | null,
 ): RuntimeCapabilitiesSelectionSet {
+  const connectorBindingIds = uniqueStrings(
+    selection?.connectors?.bindingIds ?? [],
+  );
   return {
     skills: {
       ...(selection?.skills.workspaceId
@@ -71,6 +118,9 @@ function getRuntimeCapabilitiesSelectionSet(
     subAgents: {
       nodeKeys: uniqueStrings(selection?.subAgents?.nodeKeys ?? []),
     },
+    ...(connectorBindingIds.length
+      ? { connectors: { bindingIds: connectorBindingIds } }
+      : {}),
   };
 }
 
@@ -82,6 +132,9 @@ function mergeRuntimeCapabilitiesSelectionSets(
     sets.find((set) => set?.skills.workspaceId)?.skills.workspaceId ??
     capabilities.skills[0]?.workspaceId;
 
+  const connectorBindingIds = uniqueStrings(
+    sets.flatMap((set) => set?.connectors?.bindingIds ?? []),
+  );
   return {
     skills: {
       ...(workspaceId ? { workspaceId } : {}),
@@ -97,7 +150,16 @@ function mergeRuntimeCapabilitiesSelectionSets(
         sets.flatMap((set) => set?.subAgents?.nodeKeys ?? []),
       ),
     },
+    ...(connectorBindingIds.length
+      ? { connectors: { bindingIds: connectorBindingIds } }
+      : {}),
   };
+}
+
+function shouldInheritUnselectedCapabilities(
+  ...selections: Array<RuntimeCapabilitiesSelection | null | undefined>
+) {
+  return selections.some((selection) => selection?.inheritUnselected === true);
 }
 
 export function createEmptyRuntimeCapabilitiesSelection(
@@ -159,6 +221,9 @@ export function mergeRuntimeCapabilitiesSelections(
 
   return {
     mode: 'allowlist',
+    ...(shouldInheritUnselectedCapabilities(...selections)
+      ? { inheritUnselected: true }
+      : {}),
     ...merged,
     ...(hasRuntimeCapabilitySelectionSet(recommended) ? { recommended } : {}),
   };
@@ -186,6 +251,9 @@ export function createRuntimeCapabilitiesForSubmit({
 
   return {
     mode: 'allowlist',
+    ...(shouldInheritUnselectedCapabilities(available, recommended)
+      ? { inheritUnselected: true }
+      : {}),
     ...merged,
     ...(hasRuntimeCapabilitySelectionSet(recommendedSet)
       ? { recommended: recommendedSet }
@@ -211,6 +279,7 @@ export function getAvailableRuntimeCapabilitiesSelection(
 ): RuntimeCapabilitiesSelection {
   return {
     mode: 'allowlist',
+    ...(selection.inheritUnselected ? { inheritUnselected: true } : {}),
     ...getRuntimeCapabilitiesSelectionSet(selection),
   };
 }
@@ -329,7 +398,8 @@ export function hasRuntimeCapabilitySelection(
   return (
     selection.skills.ids.length > 0 ||
     selection.plugins.nodeKeys.length > 0 ||
-    (selection.subAgents?.nodeKeys.length ?? 0) > 0
+    (selection.subAgents?.nodeKeys.length ?? 0) > 0 ||
+    (selection.connectors?.bindingIds.length ?? 0) > 0
   );
 }
 
@@ -343,7 +413,8 @@ export function hasRuntimeCapabilitySelectionSet(
   return (
     selection.skills.ids.length > 0 ||
     selection.plugins.nodeKeys.length > 0 ||
-    (selection.subAgents?.nodeKeys.length ?? 0) > 0
+    (selection.subAgents?.nodeKeys.length ?? 0) > 0 ||
+    (selection.connectors?.bindingIds.length ?? 0) > 0
   );
 }
 
