@@ -421,10 +421,15 @@ export type RuntimeCapabilitiesSelectionSet = {
   subAgents?: {
     nodeKeys: string[];
   };
+  connectors?: {
+    bindingIds: string[];
+  };
 };
 
 export type RuntimeCapabilitiesSelection = RuntimeCapabilitiesSelectionSet & {
   mode: 'allowlist';
+  /** Keep the Xpert's normal capabilities while applying an independent selection such as Connectors. */
+  inheritUnselected?: boolean;
   recommended?: RuntimeCapabilitiesSelectionSet;
 };
 

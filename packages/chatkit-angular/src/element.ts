@@ -1,5 +1,9 @@
 import { Directive, ElementRef, OnDestroy, inject } from '@angular/core';
-import type { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitEvents,
+  ChatKitOptions,
+  XpertAIChatKit,
+} from '@xpert-ai/chatkit-types';
 import type { ChatKitControl, ToEventHandlerKey } from './control';
 
 type ListenerCleanup = (() => void) | undefined;
@@ -18,6 +22,8 @@ const EVENT_HANDLER_MAP: {
   'chatkit.response.start': 'onResponseStart',
   'chatkit.log': 'onLog',
   'chatkit.thread.change': 'onThreadChange',
+  'chatkit.project.change': 'onProjectChange',
+  'chatkit.connectors.change': 'onConnectorsChange',
   'chatkit.thread.load.start': 'onThreadLoadStart',
   'chatkit.thread.load.end': 'onThreadLoadEnd',
   'chatkit.ready': 'onReady',

@@ -38,7 +38,7 @@
   },
   "chat": {
     "title": "聊天",
-    "placeholder": "输入消息...",
+    "placeholder": "今天帮你做些什么？ @ 引用工作区文件，/ 调用技能与指令",
     "statusOnline": "在线",
     "missingConfigShort": "缺少 ChatKit 配置。",
     "missingConfigDetail": "缺少 ChatKit 配置。请检查 `VITE_XPERTAI_API_URL` 和 `clientSecret` 参数。",
@@ -154,8 +154,53 @@
   },
   "composer": {
     "openMenu": "打开菜单",
+    "closeMenu": "关闭菜单",
     "addAttachment": "添加附件",
     "planMode": "计划模式",
+    "removeTool": "移除{{label}}",
+    "workbuddy": {
+      "targets": "模式",
+      "experts": "专家",
+      "connectors": "连接器",
+      "searchSkills": "搜索技能",
+      "searchExperts": "搜索专家",
+      "emptySkills": "没有匹配的技能",
+      "emptyExperts": "没有匹配的专家",
+      "expertSkills": "数字专家自带技能",
+      "projectSkills": "{{project}}项目技能"
+    },
+    "projects": {
+      "select": "选择项目",
+      "none": "不选择项目",
+      "search": "搜索项目",
+      "new": "新建项目",
+      "create": "创建",
+      "cancel": "取消",
+      "namePlaceholder": "项目名称",
+      "loading": "正在加载项目...",
+      "empty": "没有可选项目",
+      "loadError": "项目加载失败，请稍后重试"
+    },
+    "connectors": {
+      "search": "搜索连接器",
+      "loading": "正在加载连接器...",
+      "empty": "没有匹配的连接器",
+      "scopeUnavailable": "当前没有可用的连接器范围",
+      "accessDenied": "你没有权限访问当前上下文中的连接器",
+      "personal": "个人授权",
+      "workspaceShared": "工作区授权",
+      "shared": "团队授权",
+      "select": "选择",
+      "selected": "已选择",
+      "unavailable": "不可用",
+      "connect": "连接",
+      "connecting": "连接中",
+      "connected": "已连接",
+      "manage": "管理连接器",
+      "loadError": "连接器加载失败，请稍后重试",
+      "connectError": "连接失败，请重试或前往连接器管理页配置",
+      "popupBlocked": "授权窗口被浏览器拦截，请允许弹窗后重试"
+    },
     "capabilities": {
       "title": "技能和插件",
       "skills": "技能",
@@ -214,6 +259,14 @@
     "removeReference": "移除引用",
     "quoteSelection": "引用选中内容",
     "askInSideChat": "在侧边聊天中提问",
+    "fileMentions": {
+      "title": "引用工作区文件",
+      "loading": "正在加载工作区文件...",
+      "empty": "没有匹配的工作区文件",
+      "unavailable": "当前没有可引用的工作区文件",
+      "loadError": "加载工作区文件失败",
+      "remove": "移除文件引用"
+    },
     "requestUserInput": {
       "title": "需要你的输入",
       "recommended": "推荐",

@@ -29,14 +29,14 @@ export type StartScreenProps = {
 function getIconComponent(icon?: IconName): React.ReactNode {
   const iconMap: Record<string, React.ReactNode> = {
     'circle-question': <HelpCircle size={20} />,
-    'lightbulb': <Lightbulb size={20} />,
-    'sparkle': <Sparkles size={20} />,
-    'write': <Pencil size={20} />,
-    'search': <Search size={20} />,
-    'globe': <Globe size={20} />,
+    lightbulb: <Lightbulb size={20} />,
+    sparkle: <Sparkles size={20} />,
+    write: <Pencil size={20} />,
+    search: <Search size={20} />,
+    globe: <Globe size={20} />,
     'book-open': <BookOpen size={20} />,
-    'compass': <Compass size={20} />,
-    'bolt': <Zap size={20} />,
+    compass: <Compass size={20} />,
+    bolt: <Zap size={20} />,
   };
 
   return icon ? iconMap[icon] || iconMap['sparkle'] : iconMap['sparkle'];
@@ -53,6 +53,7 @@ export function StartScreen({
   const { t } = useChatkitTranslation();
   const greeting = startScreen?.greeting ?? t('startScreen.greeting');
   const prompts = startScreen?.prompts ?? [];
+  const hasPrompts = prompts.length > 0;
   const editPromptLabel = t('startScreen.editPrompt');
 
   return (
@@ -63,14 +64,14 @@ export function StartScreen({
       )}
     >
       {/* Greeting */}
-      <div className="mb-8 text-center">
-        <h2 className="text-2xl font-semibold text-foreground mb-2">
+      <div className={cn('mb-4 text-center', hasPrompts && 'mb-10')}>
+        <h2 className="mb-4 text-4xl font-semibold text-foreground">
           {greeting}
         </h2>
       </div>
 
       {/* Prompt suggestions */}
-      {prompts.length > 0 && (
+      {hasPrompts && (
         <div className="w-full max-w-2xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {prompts.map((item, index) => (
@@ -94,7 +95,10 @@ export function StartScreen({
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     {getIconComponent(item.icon)}
                   </span>
-                  <div className="text-sm font-medium text-foreground line-clamp-3 overflow-hidden" title={item.label}>
+                  <div
+                    className="text-sm font-medium text-foreground line-clamp-3 overflow-hidden"
+                    title={item.label}
+                  >
                     {item.label}
                   </div>
                 </button>

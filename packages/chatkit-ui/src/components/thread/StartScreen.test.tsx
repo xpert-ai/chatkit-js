@@ -25,6 +25,29 @@ const startScreen = {
 };
 
 describe('StartScreen', () => {
+  it('does not reserve prompt spacing when prompts are absent', () => {
+    render(<StartScreen startScreen={{ greeting: 'Hello' }} />);
+
+    const heading = screen.getByRole('heading', { name: 'Hello' });
+
+    expect(heading).toHaveClass('text-4xl', 'mb-4');
+    expect(heading.parentElement).toHaveClass('mb-4');
+    expect(heading.parentElement).not.toHaveClass('mb-10');
+    expect(screen.queryByText('Analyze notice')).not.toBeInTheDocument();
+  });
+
+  it('keeps greeting spacing when prompt cards are present', () => {
+    render(<StartScreen startScreen={startScreen} />);
+
+    const heading = screen.getByRole('heading', {
+      name: 'What can I help with today?',
+    });
+
+    expect(heading).toHaveClass('text-4xl', 'mb-4');
+    expect(heading.parentElement).toHaveClass('mb-10');
+    expect(screen.getByText('Analyze notice')).toBeInTheDocument();
+  });
+
   it('keeps prompt send and edit actions separate', () => {
     const onPromptClick = vi.fn();
     const onPromptEdit = vi.fn();

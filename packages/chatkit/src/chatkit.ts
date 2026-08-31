@@ -235,6 +235,12 @@ export type ChatKitEvents = {
   /** Emitted when the active thread changes. Use this along with `initialThread` to persist the current thread across page loads or sessions. */
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
 
+  /** Emitted when the user changes the active Xpert project in the composer. */
+  'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
+
+  /** Emitted when the user changes the Connector bindings selected for the conversation. */
+  'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
+
   /** Emitted when ChatKit starts loading a thread (initial load or selected from history). */
   'chatkit.thread.load.start': CustomEvent<{ threadId: string }>;
 

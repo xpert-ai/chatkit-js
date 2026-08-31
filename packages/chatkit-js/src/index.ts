@@ -1,4 +1,8 @@
-import type { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitEvents,
+  ChatKitOptions,
+  XpertAIChatKit,
+} from '@xpert-ai/chatkit-types';
 import '@xpert-ai/chatkit-web-component';
 
 type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
@@ -52,6 +56,8 @@ const EVENT_HANDLER_MAP: {
   'chatkit.response.start': 'onResponseStart',
   'chatkit.log': 'onLog',
   'chatkit.thread.change': 'onThreadChange',
+  'chatkit.project.change': 'onProjectChange',
+  'chatkit.connectors.change': 'onConnectorsChange',
   'chatkit.thread.load.start': 'onThreadLoadStart',
   'chatkit.thread.load.end': 'onThreadLoadEnd',
   'chatkit.ready': 'onReady',
@@ -87,7 +93,9 @@ function splitOptions(value: CreateChatKitOptions | undefined): {
   return { options, handlers };
 }
 
-function resolveElement(element?: XpertAIChatKit | string | null): XpertAIChatKit {
+function resolveElement(
+  element?: XpertAIChatKit | string | null,
+): XpertAIChatKit {
   if (element) {
     if (typeof element === 'string') {
       if (typeof document !== 'undefined') {
@@ -171,7 +179,10 @@ export function createChatKit(
     methods[key] = (...args: any[]) => {
       const method = element[key];
       if (typeof method !== 'function') {
-        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        if (
+          typeof console !== 'undefined' &&
+          typeof console.warn === 'function'
+        ) {
           console.warn('ChatKit element is not mounted');
         }
         return;

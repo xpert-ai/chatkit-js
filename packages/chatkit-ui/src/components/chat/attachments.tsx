@@ -22,6 +22,8 @@ const TERMINAL_PARSE_STATUSES = new Set<AgentFileStatus>([
 const INITIAL_STATUS_POLL_DELAY_MS = 500;
 
 export type ChatAttachmentFile = Partial<AgentFile> & {
+  fileAssetId?: string;
+  filePath?: string;
   originalName?: string;
   mimetype?: string;
 };
@@ -36,6 +38,7 @@ export type ChatAttachmentsState = {
 
 export type ChatAttachmentsHandle = {
   clear: () => void;
+  clearWithRollback: () => () => void;
   openFilePicker: () => void;
   queueFiles: (files: ArrayLike<File>) => boolean;
 };
@@ -294,6 +297,27 @@ export const ChatAttachments = React.forwardRef<
     ref,
     () => ({
       clear: () => setAttachments([]),
+      clearWithRollback: () => {
+        const clearedAttachments = [...attachmentsRef.current];
+        let restored = false;
+        setAttachments([]);
+
+        return () => {
+          if (restored) return;
+          restored = true;
+          setAttachments((current) => {
+            const currentIds = new Set(
+              current.map((attachment) => attachment.localId),
+            );
+            return [
+              ...clearedAttachments.filter(
+                (attachment) => !currentIds.has(attachment.localId),
+              ),
+              ...current,
+            ];
+          });
+        };
+      },
       openFilePicker: () => inputRef.current?.click(),
       queueFiles,
     }),

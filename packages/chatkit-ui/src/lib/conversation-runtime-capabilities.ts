@@ -45,6 +45,22 @@ export type ConversationRuntimeCapabilitiesPersistResult = {
   updated: boolean;
 };
 
+export type ConversationThreadScope = {
+  xpertId: string;
+  projectId?: string | null;
+};
+
+export function createConversationThreadSearchWhere(
+  threadId: string,
+  scope: ConversationThreadScope,
+) {
+  return {
+    threadId: threadId.trim(),
+    xpertId: scope.xpertId.trim(),
+    projectId: scope.projectId?.trim() || null,
+  };
+}
+
 const emptyMissingRuntimeCapabilityReferences: MissingRuntimeCapabilityReferences =
   {
     skillIds: [],
@@ -122,6 +138,13 @@ function getAvailableSelectionSet(
       subAgents: {
         nodeKeys: subAgentNodeKeys.found,
       },
+      ...(selection.connectors?.bindingIds.length
+        ? {
+            connectors: {
+              bindingIds: uniqueStrings(selection.connectors.bindingIds),
+            },
+          }
+        : {}),
     },
     missing: {
       skillIds: skillIds.missing,
@@ -153,6 +176,7 @@ export function getRuntimeCapabilitiesSelectionAvailability(
   return {
     selection: {
       mode: 'allowlist',
+      ...(selection.inheritUnselected ? { inheritUnselected: true } : {}),
       skills: available.selection.skills,
       plugins: available.selection.plugins,
       subAgents: available.selection.subAgents,
@@ -186,6 +210,7 @@ export function getRuntimeCapabilitiesSelectionAvailability(
 export async function findConversationByThreadId(
   client: Client<unknown>,
   threadId: string,
+  scope: ConversationThreadScope,
 ): Promise<ChatConversation | null> {
   const normalizedThreadId = threadId.trim();
   if (!normalizedThreadId) {
@@ -193,7 +218,7 @@ export async function findConversationByThreadId(
   }
 
   const result = await client.conversations.search({
-    where: { threadId: normalizedThreadId },
+    where: createConversationThreadSearchWhere(normalizedThreadId, scope),
     limit: 1,
   });
   return result.items?.[0] ?? null;
@@ -202,9 +227,14 @@ export async function findConversationByThreadId(
 export async function findConversationByThreadIdWithRetry(
   client: Client<unknown>,
   threadId: string,
+  scope: ConversationThreadScope,
 ): Promise<ChatConversation | null> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const conversation = await findConversationByThreadId(client, threadId);
+    const conversation = await findConversationByThreadId(
+      client,
+      threadId,
+      scope,
+    );
     if (conversation?.id) {
       return conversation;
     }
@@ -218,13 +248,20 @@ export async function findConversationByThreadIdWithRetry(
 export async function loadConversationRuntimeCapabilities({
   client,
   threadId,
+  xpertId,
+  projectId,
   capabilities,
 }: {
   client: Client<unknown>;
   threadId: string;
+  xpertId: string;
+  projectId?: string | null;
   capabilities: RuntimeCapabilitiesResponse;
 }): Promise<ConversationRuntimeCapabilitiesLoadResult> {
-  const conversation = await findConversationByThreadId(client, threadId);
+  const conversation = await findConversationByThreadId(client, threadId, {
+    xpertId,
+    projectId,
+  });
   const persistedSelection =
     getConversationOptions(conversation)?.runtimeCapabilities ?? null;
 
@@ -250,11 +287,15 @@ export async function loadConversationRuntimeCapabilities({
 export async function persistConversationRuntimeCapabilities({
   client,
   threadId,
+  xpertId,
+  projectId,
   capabilities,
   selection,
 }: {
   client: Client<unknown>;
   threadId: string;
+  xpertId: string;
+  projectId?: string | null;
   capabilities: RuntimeCapabilitiesResponse;
   selection: RuntimeCapabilitiesSelection;
 }): Promise<ConversationRuntimeCapabilitiesPersistResult> {
@@ -265,6 +306,7 @@ export async function persistConversationRuntimeCapabilities({
   const conversation = await findConversationByThreadIdWithRetry(
     client,
     threadId,
+    { xpertId, projectId },
   );
 
   if (!conversation?.id) {
@@ -275,18 +317,29 @@ export async function persistConversationRuntimeCapabilities({
     };
   }
 
+  const persistedConnectorBindingIds = uniqueStrings(
+    getConversationOptions(conversation)?.runtimeCapabilities?.connectors
+      ?.bindingIds ?? [],
+  );
+  const persistedSelection: RuntimeCapabilitiesSelection = {
+    ...availability.selection,
+    ...(persistedConnectorBindingIds.length
+      ? { connectors: { bindingIds: persistedConnectorBindingIds } }
+      : {}),
+  };
+
   await client.conversations.update(conversation.id, {
     options: {
       ...(conversation.options ?? {}),
-      runtimeCapabilities: getAvailableRuntimeCapabilitiesSelection(
-        availability.selection,
-      ),
+      runtimeCapabilities:
+        getAvailableRuntimeCapabilitiesSelection(persistedSelection),
     },
   });
 
   return {
     conversation,
-    ...availability,
+    selection: persistedSelection,
+    missing: availability.missing,
     updated: true,
   };
 }

@@ -1,12 +1,15 @@
 import type { Client, ChatConversation } from '@xpert-ai/xpert-sdk';
 import type { ChatKitGoalAdapter } from '@xpert-ai/chatkit-types';
 import { findConversationByThreadIdWithRetry } from './conversation-runtime-capabilities';
+import type { ConversationThreadScope } from './conversation-runtime-capabilities';
+import { createXpertThreadConversation } from './xpert-conversation-bootstrap';
 
 type XpertGoalConversationClient = Partial<
   Pick<
     Client<unknown>['conversations'],
     | 'search'
     | 'create'
+    | 'delete'
     | 'getGoal'
     | 'setGoal'
     | 'updateGoal'
@@ -15,7 +18,7 @@ type XpertGoalConversationClient = Partial<
 >;
 
 export type XpertGoalClient = {
-  threads?: Partial<Pick<Client<unknown>['threads'], 'create'>>;
+  threads?: Partial<Pick<Client<unknown>['threads'], 'create' | 'delete'>>;
   conversations: XpertGoalConversationClient;
 };
 
@@ -38,29 +41,33 @@ export function supportsXpertThreadGoalAdapter(
   const conversations = client.conversations;
   return Boolean(
     conversations?.search &&
-      conversations.create &&
-      conversations.getGoal &&
-      conversations.setGoal &&
-      conversations.updateGoal &&
-      conversations.clearGoal,
+    conversations.create &&
+    client.threads?.create &&
+    conversations.getGoal &&
+    conversations.setGoal &&
+    conversations.updateGoal &&
+    conversations.clearGoal,
   );
 }
 
 async function findConversation(
   client: XpertGoalClient,
   threadId: string,
+  scope: ConversationThreadScope,
 ): Promise<ChatConversation | null> {
   return findConversationByThreadIdWithRetry(
     client as Client<unknown>,
     threadId,
+    scope,
   );
 }
 
 async function requireConversation(
   client: XpertGoalClient,
   threadId: string,
+  scope: ConversationThreadScope,
 ): Promise<ChatConversation> {
-  const conversation = await findConversation(client, threadId);
+  const conversation = await findConversation(client, threadId, scope);
   if (!conversation?.id) {
     throw new Error('Conversation not found for this thread.');
   }
@@ -69,10 +76,11 @@ async function requireConversation(
 
 export function createXpertThreadGoalAdapter(
   client: XpertGoalClient,
+  scope: ConversationThreadScope,
 ): ChatKitGoalAdapter {
   return {
     async getGoal({ threadId, signal }) {
-      const conversation = await findConversation(client, threadId);
+      const conversation = await findConversation(client, threadId, scope);
       if (!conversation?.id) {
         return null;
       }
@@ -86,6 +94,7 @@ export function createXpertThreadGoalAdapter(
     async setGoal({
       threadId,
       assistantId,
+      projectId,
       objective,
       runtimeCapabilities,
       signal,
@@ -104,6 +113,10 @@ export function createXpertThreadGoalAdapter(
         const conversation = await requireConversation(
           client,
           normalizedThreadId,
+          {
+            xpertId: scope.xpertId,
+            projectId: projectId ?? scope.projectId,
+          },
         );
         const goal = await setGoal(
           conversation.id,
@@ -117,34 +130,75 @@ export function createXpertThreadGoalAdapter(
         client.conversations,
         client.conversations?.create,
       );
-      const conversation = await createConversation({
-        xpertId: assistantId,
-        ...(runtimeCapabilities
-          ? {
-              options: {
-                runtimeCapabilities,
-              },
-            }
-          : {}),
-      });
-      const conversationId = conversation.id?.trim();
-      if (!conversationId) {
-        throw new Error('Created conversation is missing id.');
-      }
-      const createdThreadId = conversation.threadId?.trim();
-      if (!createdThreadId) {
-        throw new Error('Created conversation is missing threadId.');
-      }
-      const goal = await setGoal(
-        conversationId,
-        { objective: normalizedObjective },
-        { signal },
+      const createThread = requireBoundGoalMethod(
+        client.threads,
+        client.threads?.create,
       );
-      return { threadId: createdThreadId, goal };
+      const deleteThread = client.threads?.delete?.bind(client.threads);
+      let createdThreadId: string | null = null;
+      let created: Awaited<ReturnType<typeof createXpertThreadConversation>>;
+      try {
+        created = await createXpertThreadConversation(
+          {
+            threads: {
+              create: createThread,
+              ...(deleteThread ? { delete: deleteThread } : {}),
+            },
+            conversations: { create: createConversation },
+          },
+          {
+            assistantId,
+            projectId,
+            runtimeCapabilities,
+            onThreadCreated: (resolvedThreadId) => {
+              createdThreadId = resolvedThreadId;
+            },
+          },
+        );
+      } catch (error) {
+        if (createdThreadId) {
+          try {
+            await client.threads?.delete?.call(client.threads, createdThreadId);
+          } catch {
+            // Preserve the creation error; incomplete thread cleanup is best effort.
+          }
+        }
+        throw error;
+      }
+      const conversation = created.conversation;
+      const conversationId = conversation.id?.trim();
+      try {
+        if (!conversationId) {
+          throw new Error('Created conversation is missing id.');
+        }
+        const goal = await setGoal(
+          conversationId,
+          { objective: normalizedObjective },
+          { signal },
+        );
+        return { threadId: created.threadId, goal };
+      } catch (error) {
+        if (conversationId) {
+          try {
+            await client.conversations.delete?.call(
+              client.conversations,
+              conversationId,
+            );
+          } catch {
+            // Preserve the goal error; incomplete conversation cleanup is best effort.
+          }
+        }
+        try {
+          await client.threads?.delete?.call(client.threads, created.threadId);
+        } catch {
+          // Preserve the goal error; incomplete thread cleanup is best effort.
+        }
+        throw error;
+      }
     },
 
     async updateGoal({ threadId, objective, status, signal }) {
-      const conversation = await requireConversation(client, threadId);
+      const conversation = await requireConversation(client, threadId, scope);
       const updateGoal = requireBoundGoalMethod(
         client.conversations,
         client.conversations.updateGoal,
@@ -160,7 +214,7 @@ export function createXpertThreadGoalAdapter(
     },
 
     async clearGoal({ threadId, signal }) {
-      const conversation = await requireConversation(client, threadId);
+      const conversation = await requireConversation(client, threadId, scope);
       const clearGoal = requireBoundGoalMethod(
         client.conversations,
         client.conversations.clearGoal,

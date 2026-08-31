@@ -1,4 +1,8 @@
-import type { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitEvents,
+  ChatKitOptions,
+  XpertAIChatKit,
+} from '@xpert-ai/chatkit-types';
 import '@xpert-ai/chatkit-web-component';
 
 declare const sap: any;
@@ -54,6 +58,8 @@ const EVENT_HANDLER_MAP: {
   'chatkit.response.start': 'onResponseStart',
   'chatkit.log': 'onLog',
   'chatkit.thread.change': 'onThreadChange',
+  'chatkit.project.change': 'onProjectChange',
+  'chatkit.connectors.change': 'onConnectorsChange',
   'chatkit.thread.load.start': 'onThreadLoadStart',
   'chatkit.thread.load.end': 'onThreadLoadEnd',
   'chatkit.ready': 'onReady',
@@ -66,6 +72,8 @@ const UI5_EVENT_NAME_MAP: Record<keyof ChatKitEvents, string> = {
   'chatkit.response.start': 'responseStart',
   'chatkit.log': 'log',
   'chatkit.thread.change': 'threadChange',
+  'chatkit.project.change': 'projectChange',
+  'chatkit.connectors.change': 'connectorsChange',
   'chatkit.thread.load.start': 'threadLoadStart',
   'chatkit.thread.load.end': 'threadLoadEnd',
   'chatkit.ready': 'ready',
@@ -179,7 +187,8 @@ export const ChatKit = ControlBase.extend('xpertai.chatkit.ui5.ChatKit', {
     this._optionsCleanup = undefined;
     this._eventsAbortController = null;
 
-    const config = typeof this.getProperty === 'function' ? this.getProperty('config') : {};
+    const config =
+      typeof this.getProperty === 'function' ? this.getProperty('config') : {};
     this._setConfig(config ?? {});
   },
   setConfig(this: ChatKitInstance, value: ChatKitUI5Config) {
@@ -190,7 +199,8 @@ export const ChatKit = ControlBase.extend('xpertai.chatkit.ui5.ChatKit', {
     return this;
   },
   onAfterRendering(this: ChatKitInstance) {
-    this._chatkitEl = typeof this.getDomRef === 'function' ? this.getDomRef() : null;
+    this._chatkitEl =
+      typeof this.getDomRef === 'function' ? this.getDomRef() : null;
     this._applyOptions();
     this._bindHandlers();
   },
@@ -262,11 +272,18 @@ export const ChatKit = ControlBase.extend('xpertai.chatkit.ui5.ChatKit', {
 
     this._eventsAbortController = controller;
   },
-  _callMethod(this: ChatKitInstance, method: ChatKitMethod, ...args: unknown[]) {
+  _callMethod(
+    this: ChatKitInstance,
+    method: ChatKitMethod,
+    ...args: unknown[]
+  ) {
     const el = this._chatkitEl;
     const methodRef = el?.[method as keyof XpertAIChatKit];
     if (!el || typeof methodRef !== 'function') {
-      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+      if (
+        typeof console !== 'undefined' &&
+        typeof console.warn === 'function'
+      ) {
         console.warn('ChatKit element is not mounted');
       }
       return;
@@ -274,25 +291,46 @@ export const ChatKit = ControlBase.extend('xpertai.chatkit.ui5.ChatKit', {
 
     return (methodRef as (...args: unknown[]) => unknown).apply(el, args);
   },
-  focusComposer(this: ChatKitInstance, ...args: ChatKitMethodParams<'focusComposer'>) {
+  focusComposer(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'focusComposer'>
+  ) {
     return this._callMethod('focusComposer', ...args);
   },
-  setThreadId(this: ChatKitInstance, ...args: ChatKitMethodParams<'setThreadId'>) {
+  setThreadId(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'setThreadId'>
+  ) {
     return this._callMethod('setThreadId', ...args);
   },
-  sendUserMessage(this: ChatKitInstance, ...args: ChatKitMethodParams<'sendUserMessage'>) {
+  sendUserMessage(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'sendUserMessage'>
+  ) {
     return this._callMethod('sendUserMessage', ...args);
   },
-  setComposerValue(this: ChatKitInstance, ...args: ChatKitMethodParams<'setComposerValue'>) {
+  setComposerValue(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'setComposerValue'>
+  ) {
     return this._callMethod('setComposerValue', ...args);
   },
-  setRuntimeCapabilities(this: ChatKitInstance, ...args: ChatKitMethodParams<'setRuntimeCapabilities'>) {
+  setRuntimeCapabilities(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'setRuntimeCapabilities'>
+  ) {
     return this._callMethod('setRuntimeCapabilities', ...args);
   },
-  fetchUpdates(this: ChatKitInstance, ...args: ChatKitMethodParams<'fetchUpdates'>) {
+  fetchUpdates(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'fetchUpdates'>
+  ) {
     return this._callMethod('fetchUpdates', ...args);
   },
-  sendCustomAction(this: ChatKitInstance, ...args: ChatKitMethodParams<'sendCustomAction'>) {
+  sendCustomAction(
+    this: ChatKitInstance,
+    ...args: ChatKitMethodParams<'sendCustomAction'>
+  ) {
     return this._callMethod('sendCustomAction', ...args);
   },
 });

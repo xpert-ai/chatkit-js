@@ -17,6 +17,7 @@ import {
   applyStreamEvent,
   buildSteerFollowUpRunInput,
   createAssistantThreadPayload,
+  createConversationPayload,
   createConversationMessagesPageQuery,
   createLanguageHeaders,
   createFetchWithClientSecretRefresh,
@@ -36,6 +37,8 @@ import {
   retainResumeStreamOptions,
   resolveClientToolCallResponse,
   shouldBroadcastThreadChange,
+  shouldIgnoreStreamError,
+  withConversationScope,
 } from './Stream';
 
 describe('assistant thread creation', () => {
@@ -50,6 +53,90 @@ describe('assistant thread creation', () => {
       assistantId: 'assistant-1',
       threadId: 'thread-1',
       ifExists: 'raise',
+    });
+  });
+});
+
+describe('conversation scope', () => {
+  it('does not synthesize an allowlist when no runtime capability is selected', () => {
+    expect(
+      withConversationScope({ input: { input: 'Hello' } }, undefined, []),
+    ).toEqual({
+      input: { input: 'Hello', runtimeCapabilities: undefined },
+      projectId: undefined,
+    });
+  });
+
+  it('injects the selected Project and Connector binding ids into sends', () => {
+    expect(
+      withConversationScope(
+        {
+          input: {
+            input: 'Hello',
+            runtimeCapabilities: {
+              mode: 'allowlist',
+              skills: { ids: ['skill-1'] },
+              plugins: { nodeKeys: [] },
+              connectors: { bindingIds: ['untrusted-binding'] },
+            },
+          },
+          projectId: 'untrusted-project',
+        },
+        'project-1',
+        ['binding-1', 'binding-1', 'binding-2'],
+      ),
+    ).toEqual({
+      input: {
+        input: 'Hello',
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: { ids: ['skill-1'] },
+          plugins: { nodeKeys: [] },
+          connectors: { bindingIds: ['binding-1', 'binding-2'] },
+        },
+      },
+      projectId: 'project-1',
+    });
+  });
+
+  it('inherits normal capabilities when Connectors are the only selection', () => {
+    expect(
+      withConversationScope({ input: { input: 'Hello' } }, 'project-1', [
+        'binding-1',
+      ]),
+    ).toEqual({
+      input: {
+        input: 'Hello',
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          inheritUnselected: true,
+          skills: { ids: [] },
+          plugins: { nodeKeys: [] },
+          connectors: { bindingIds: ['binding-1'] },
+        },
+      },
+      projectId: 'project-1',
+    });
+  });
+
+  it('creates the conversation payload after a thread id is known', () => {
+    expect(
+      createConversationPayload('thread-1', 'xpert-1', 'project-1', [
+        'binding-1',
+      ]),
+    ).toEqual({
+      threadId: 'thread-1',
+      xpertId: 'xpert-1',
+      projectId: 'project-1',
+      options: {
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          inheritUnselected: true,
+          skills: { ids: [] },
+          plugins: { nodeKeys: [] },
+          connectors: { bindingIds: ['binding-1'] },
+        },
+      },
     });
   });
 });
@@ -218,6 +305,24 @@ describe('request language headers', () => {
       'Accept-Language': 'zh-Hans',
     });
     expect(createLanguageHeaders(null)).toBeUndefined();
+  });
+});
+
+describe('stream cancellation errors', () => {
+  it('ignores decoder teardown errors after the user aborts the stream', () => {
+    expect(
+      shouldIgnoreStreamError(new SyntaxError('Unexpected token T'), {
+        aborted: true,
+      } as AbortSignal),
+    ).toBe(true);
+  });
+
+  it('keeps the same decoder error when the stream was not aborted', () => {
+    expect(
+      shouldIgnoreStreamError(new SyntaxError('Unexpected token T'), {
+        aborted: false,
+      } as AbortSignal),
+    ).toBe(false);
   });
 });
 
@@ -1141,6 +1246,29 @@ describe('applyStreamEvent', () => {
 
     expect(setError).toHaveBeenCalledWith(expect.any(Error));
     expect((setError.mock.calls[0]?.[0] as Error).message).toBe('Run failed');
+  });
+
+  it('surfaces plain-text SSE error events without JSON parsing', () => {
+    const setValues = vi.fn();
+    const setError = vi.fn();
+    const sendEvent = vi.fn();
+
+    applyStreamEvent(
+      {
+        event: 'error',
+        data: 'The request failed.',
+      },
+      setValues,
+      setError,
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(setError).toHaveBeenCalledWith(expect.any(Error));
+    expect((setError.mock.calls[0]?.[0] as Error).message).toBe(
+      'The request failed.',
+    );
   });
 
   it('normalizes replayed conversation messages with references and submitted input', () => {

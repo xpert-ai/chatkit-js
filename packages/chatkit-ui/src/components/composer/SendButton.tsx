@@ -1,6 +1,5 @@
 import { ArrowUp, Square } from 'lucide-react';
-import { cn, getRoundedClass } from '../../lib/utils';
-import { useTheme } from '../../providers/Theme';
+import { cn } from '../../lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 export type SendButtonShortcut = {
@@ -27,25 +26,25 @@ export function SendButton({
   sendLabel = 'Send',
   shortcuts,
 }: SendButtonProps) {
-  const { theme } = useTheme();
-
-  const roundedClass = getRoundedClass(theme.radius);
-
   if (showStop) {
     return (
       <button
         type="button"
         onClick={onStop}
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center cursor-pointer',
-          roundedClass,
-          'bg-primary text-background',
+          'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full',
+          'bg-foreground text-background',
           'transition-transform duration-150 ease-out',
-          'hover:scale-105 active:scale-95'
+          'hover:scale-105 active:scale-95',
         )}
         aria-label={stopLabel}
       >
-        <Square size={14} fill="currentColor" stroke="currentColor" strokeWidth={0} />
+        <Square
+          size={14}
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth={0}
+        />
       </button>
     );
   }
@@ -55,16 +54,15 @@ export function SendButton({
       type="submit"
       disabled={disabled}
       className={cn(
-        'flex h-9 w-9 shrink-0 items-center justify-center cursor-pointer',
-        roundedClass,
-        'bg-primary text-background',
+        'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full',
+        'bg-foreground text-background',
         'transition-all duration-150 ease-out',
         'hover:scale-105 active:scale-95',
-        'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100'
+        'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100',
       )}
       aria-label={sendLabel}
     >
-      <ArrowUp size={18} strokeWidth={2.5} />
+      <ArrowUp size={17} strokeWidth={2.5} />
     </button>
   );
 
@@ -81,7 +79,7 @@ export function SendButton({
         hideArrow
         className={cn(
           'min-w-36 border border-border/70 bg-background px-3 py-2 text-foreground shadow-lg',
-          roundedClass,
+          'rounded-lg',
         )}
       >
         <div className="space-y-1">

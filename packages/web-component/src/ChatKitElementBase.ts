@@ -75,6 +75,8 @@ interface ChatKitBaseElementEventMap {
   'chatkit.response.start': CustomEvent<void>;
   'chatkit.response.end': CustomEvent<void>;
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
+  'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
+  'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
   'chatkit.log': CustomEvent<{ name: string; data?: Record<string, unknown> }>;
   'chatkit.deeplink': CustomEvent<{
     name: string;

@@ -1,6 +1,10 @@
 import type { PropType } from 'vue';
 import { defineComponent, h, onBeforeUnmount, shallowRef, watch } from 'vue';
-import type { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitEvents,
+  ChatKitOptions,
+  XpertAIChatKit,
+} from '@xpert-ai/chatkit-types';
 import '@xpert-ai/chatkit-web-component';
 import type { ChatKitControl, ToEventHandlerKey } from './useChatKit.js';
 
@@ -14,6 +18,8 @@ const EVENT_HANDLER_MAP: {
   'chatkit.response.start': 'onResponseStart',
   'chatkit.log': 'onLog',
   'chatkit.thread.change': 'onThreadChange',
+  'chatkit.project.change': 'onProjectChange',
+  'chatkit.connectors.change': 'onConnectorsChange',
   'chatkit.thread.load.start': 'onThreadLoadStart',
   'chatkit.thread.load.end': 'onThreadLoadEnd',
   'chatkit.ready': 'onReady',
