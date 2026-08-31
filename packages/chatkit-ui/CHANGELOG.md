@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.7
+
+### Patch Changes
+
+- 3a7225d: Add opt-in Xpert Project selection and conversation-level Connector binding selection. Project scope is locked after the first send, scoped resources reset when the Project changes, and public Project and Connector change events are available in every framework wrapper.
+- Updated dependencies [3a7225d]
+  - @xpert-ai/chatkit-types@0.5.6
+  - @xpert-ai/chatkit-web-shared@0.4.4
+
 ## 0.5.6
 
 ### Patch Changes
