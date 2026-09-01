@@ -40,6 +40,8 @@ export function App({
   const configuredProjectId = hostedApi?.projectId ?? null;
   const projectsEnabled =
     Boolean(hostedApi) && options?.composer?.projects?.enabled === true;
+  const projectCreationEnabled =
+    projectsEnabled && options?.composer?.projects?.createEnabled !== false;
   const connectorsEnabled =
     Boolean(hostedApi) && options?.composer?.connectors?.enabled === true;
   const [activeProjectId, setActiveProjectId] = React.useState<string | null>(
@@ -122,7 +124,7 @@ export function App({
       projectsEnabled={projectsEnabled}
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
-      onProjectCreate={handleProjectCreate}
+      onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
       onConnectorsChange={handleConnectorsChange}
     />
   );

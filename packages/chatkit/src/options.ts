@@ -798,6 +798,13 @@ export type ChatKitOptions = {
       enabled?: boolean;
 
       /**
+       * Allow the user to request Project creation from the selector.
+       * Defaults to true when Project selection is enabled. Set this to false
+       * when the host only supports selecting existing Projects.
+       */
+      createEnabled?: boolean;
+
+      /**
        * Show the configured Project as a fixed composer scope instead of a
        * selector. Intended for Project-owned workbenches where the host pins
        * every conversation to one Project.
