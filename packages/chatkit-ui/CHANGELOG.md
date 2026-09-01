@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.8
+
+### Patch Changes
+
+- 0e9ad06: Allow hosts to disable Project creation independently from Project selection.
+- Updated dependencies [0e9ad06]
+  - @xpert-ai/chatkit-types@0.5.7
+
 ## 0.5.7
 
 ### Patch Changes
