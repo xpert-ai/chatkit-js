@@ -322,7 +322,29 @@ describe('App', () => {
     );
   });
 
-  it('requests Project creation through the existing host effect channel', () => {
+  it('does not expose Project creation when the host disables it', () => {
+    render(
+      <App
+        clientSecret="secret"
+        options={{
+          ...options,
+          composer: {
+            ...options.composer,
+            projects: {
+              ...options.composer.projects,
+              createEnabled: false,
+            },
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(parentMessengerMocks.sendEvent).not.toHaveBeenCalled();
+  });
+
+  it('preserves Project creation for hosts that have not disabled it', () => {
     render(<App clientSecret="secret" options={options} />);
 
     fireEvent.click(screen.getByTestId('create-project'));
