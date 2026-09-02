@@ -79,7 +79,6 @@
       "partial": "Partially ready",
       "failed": "Failed"
     },
-    "poweredBy": "Powered by Xpert AI",
     "followUps": {
       "pending": "Pending follow-ups",
       "queue": "Queue",

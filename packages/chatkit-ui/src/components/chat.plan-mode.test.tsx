@@ -629,9 +629,10 @@ describe('Chat plan mode payload', () => {
       'w-full',
       'max-w-2xl',
       'px-4',
-      'py-2',
+      'pt-2',
+      'pb-4',
     );
-    expect(chatComposer).not.toHaveClass('p-2');
+    expect(chatComposer).not.toHaveClass('p-2', 'py-2');
     expect(chatComposer).toHaveClass('mb-auto');
     expect(chatComposer).not.toHaveClass('my-auto');
     expect(chatComposer).not.toHaveClass('absolute', 'top-1/2');

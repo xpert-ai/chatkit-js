@@ -79,7 +79,6 @@
       "partial": "部分就绪",
       "failed": "解析失败"
     },
-    "poweredBy": "由 Xpert AI 驱动",
     "followUps": {
       "pending": "待处理 Follow-up",
       "queue": "排队",
