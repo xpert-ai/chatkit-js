@@ -32,6 +32,14 @@ export type TaskSummaryPending =
   TaskSummarySnapshot['pending']['items'][number];
 
 const PLAN_PATTERN = /<proposed_plan>\s*([\s\S]*?)\s*<\/proposed_plan>/i;
+const WEB_SEARCH_RESULT_PATTERN =
+  /^Title:\s*(.+?)\r?\nURL:\s*(https?:\/\/\S+)\s*$/gim;
+const SANDBOX_FILE_OUTPUT_TOOLS = new Set([
+  'sandbox_write_file',
+  'sandbox_append_file',
+  'sandbox_edit_file',
+  'sandbox_multi_edit_file',
+]);
 
 export type TaskSummaryMessage = {
   id?: string;
@@ -87,6 +95,10 @@ type ComponentDataCandidate = {
   artifact?: unknown;
   artifactLink?: unknown;
   file?: unknown;
+  input?: unknown;
+  tool?: unknown;
+  output?: unknown;
+  status?: unknown;
   url?: unknown;
 };
 
@@ -100,6 +112,7 @@ type ArtifactCandidate = {
   kind?: unknown;
   title?: unknown;
   description?: unknown;
+  status?: unknown;
   workspacePath?: unknown;
   fileAssetId?: unknown;
   storageFileId?: unknown;
@@ -135,12 +148,23 @@ type SummaryResourceCandidate = {
   url?: unknown;
 };
 
+type SandboxFileInputCandidate = {
+  file_path?: unknown;
+};
+
 function isObject(value: unknown): value is object {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function compactText(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function timestamp(value?: string) {
@@ -250,24 +274,45 @@ function normalizeOutput(value: unknown): ChatTaskSummaryOutput | null {
   const id = stringValue(candidate.id);
   const title = stringValue(candidate.title);
   const kind = artifactKind(candidate.kind);
-  if (!id || !title || !kind) return null;
-  const status = candidate.status;
+  const status = stringValue(candidate.status)?.toLowerCase();
+  const normalizedStatus = status === 'success' ? status : undefined;
+  const resource = normalizeResource(candidate.resource);
+  if (
+    !id ||
+    !title ||
+    !kind ||
+    (status !== undefined && status !== 'success') ||
+    !isOpenableOutputResource(resource)
+  ) {
+    return null;
+  }
   return {
     id,
     kind,
     title,
     description: stringValue(candidate.description),
-    status:
-      status === 'pending' ||
-      status === 'running' ||
-      status === 'success' ||
-      status === 'error'
-        ? status
-        : undefined,
-    resource: normalizeResource(candidate.resource),
+    status: normalizedStatus,
+    resource,
     messageId: stringValue(candidate.messageId),
     updatedAt: stringValue(candidate.updatedAt),
   };
+}
+
+function isCompletedOpenableOutput(output: ChatTaskSummaryOutput) {
+  return (
+    (output.status === undefined || output.status === 'success') &&
+    isOpenableOutputResource(output.resource)
+  );
+}
+
+function isOpenableOutputResource(
+  resource: ChatTaskSummaryOutput['resource'],
+): resource is NonNullable<ChatTaskSummaryOutput['resource']> {
+  return (
+    resource?.type === 'workspace_file' ||
+    resource?.type === 'artifact' ||
+    resource?.type === 'url'
+  );
 }
 
 function normalizeSource(value: unknown): ChatTaskSummarySource | null {
@@ -342,11 +387,12 @@ function contributionFromPart(part: ComponentPartCandidate) {
   if (part.type !== 'component' || !isObject(part.data)) return null;
   const data = part.data as ComponentDataCandidate;
   const direct = normalizeTaskSummaryContribution(data.taskSummary);
-  if (direct) return direct;
-  if (!isObject(data._meta)) return null;
-  return normalizeTaskSummaryContribution(
-    (data._meta as SummaryMetaCandidate)['xpertai/taskSummary'],
-  );
+  const metadataContribution = isObject(data._meta)
+    ? normalizeTaskSummaryContribution(
+        (data._meta as SummaryMetaCandidate)['xpertai/taskSummary'],
+      )
+    : null;
+  return direct ?? metadataContribution;
 }
 
 function extractPlan(
@@ -438,19 +484,12 @@ function knownPartOutputs(
   if (part.type !== 'component' || !isObject(part.data)) return [];
   const data = part.data as ComponentDataCandidate;
   const outputs = [...(contributionFromPart(part)?.outputs ?? [])];
-  if (data.type === 'McpApp') {
-    outputs.push({
-      id: `mcp-app:${stringValue(part.id) ?? message.id ?? 'message'}`,
-      kind: 'mcp_app',
-      title: stringValue(data.title) ?? 'MCP App',
-      resource: message.id
-        ? { type: 'message', messageId: message.id }
-        : undefined,
-      messageId: message.id,
-      updatedAt,
-    });
-  }
-  if (isObject(data.artifact)) {
+  const sandboxOutput = sandboxFileOutput(data, message);
+  if (sandboxOutput) outputs.push(sandboxOutput);
+  if (
+    isObject(data.artifact) &&
+    isCompletedOutputStatus((data.artifact as ArtifactCandidate).status)
+  ) {
     const artifact = data.artifact as ArtifactCandidate;
     const artifactId =
       stringValue(artifact.artifactId) ?? stringValue(artifact.id);
@@ -479,6 +518,7 @@ function knownPartOutputs(
   for (const value of [data.artifactLink, data.file]) {
     if (!isObject(value)) continue;
     const artifact = value as ArtifactCandidate;
+    if (!isCompletedOutputStatus(artifact.status)) continue;
     const artifactId =
       stringValue(artifact.artifactId) ?? stringValue(artifact.id);
     const workspacePath = stringValue(artifact.workspacePath);
@@ -502,6 +542,74 @@ function knownPartOutputs(
     });
   }
   return outputs;
+}
+
+function sandboxFileOutput(
+  data: ComponentDataCandidate,
+  message: TaskSummaryMessage,
+): ChatTaskSummaryOutput | undefined {
+  const tool = stringValue(data.tool);
+  const status = stringValue(data.status)?.toLowerCase();
+  if (
+    !tool ||
+    !SANDBOX_FILE_OUTPUT_TOOLS.has(tool) ||
+    status !== 'success' ||
+    !isObject(data.input)
+  ) {
+    return undefined;
+  }
+  const workspacePath = portableWorkspacePath(
+    (data.input as SandboxFileInputCandidate).file_path,
+  );
+  if (!workspacePath) return undefined;
+  return {
+    id: `workspace-file:${workspacePath}`,
+    kind: outputKindFromPath(workspacePath),
+    title: workspacePath.split('/').at(-1) ?? workspacePath,
+    status: 'success',
+    resource: { type: 'workspace_file', workspacePath },
+    messageId: message.id,
+    updatedAt: message.updatedAt ?? message.createdAt,
+  };
+}
+
+function portableWorkspacePath(value: unknown) {
+  const path = stringValue(value)
+    ?.replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
+    .replace(/\/{2,}/g, '/');
+  if (
+    !path ||
+    path.startsWith('/') ||
+    /^[a-z]:\//i.test(path) ||
+    path.split('/').some((segment) => segment === '..')
+  ) {
+    return undefined;
+  }
+  return path;
+}
+
+function outputKindFromPath(path: string): ChatTaskSummaryOutputKind {
+  const extension = path.match(/\.([^./]+)$/)?.[1]?.toLowerCase();
+  if (extension === 'html' || extension === 'htm') return 'site';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(extension ?? ''))
+    return 'image';
+  if (['csv', 'xls', 'xlsx', 'ods'].includes(extension ?? ''))
+    return 'spreadsheet';
+  if (['ppt', 'pptx', 'odp'].includes(extension ?? ''))
+    return 'presentation';
+  if (
+    ['pdf', 'doc', 'docx', 'md', 'markdown', 'txt', 'rtf', 'odt'].includes(
+      extension ?? '',
+    )
+  )
+    return 'document';
+  return 'file';
+}
+
+function isCompletedOutputStatus(value: unknown) {
+  const status = stringValue(value)?.toLowerCase();
+  return status === undefined || status === 'success';
 }
 
 function sourceFromReference(
@@ -597,27 +705,54 @@ function fileSources(
   });
 }
 
-function capabilitySources(
+function webSearchSources(
+  part: ComponentPartCandidate,
   message: TaskSummaryMessage,
 ): ChatTaskSummarySource[] {
-  const selection = message.runtimeCapabilities;
-  if (!selection) return [];
+  if (part.type !== 'component' || !isObject(part.data)) return [];
+  const data = part.data as ComponentDataCandidate;
+  if (
+    data.tool !== 'web_search' ||
+    stringValue(data.status)?.toLowerCase() !== 'success'
+  ) {
+    return [];
+  }
+  const output = stringValue(data.output);
+  if (!output) return [];
   const updatedAt = message.updatedAt ?? message.createdAt;
-  const common = { messageId: message.id, updatedAt };
-  return [
-    ...selection.skills.ids.map((id) => ({
-      ...common,
-      id: `skill:${id}`,
-      kind: 'skill' as const,
-      title: id,
-    })),
-    ...selection.plugins.nodeKeys.map((id) => ({
-      ...common,
-      id: `plugin:${id}`,
-      kind: 'plugin' as const,
-      title: id,
-    })),
-  ];
+  const sources: ChatTaskSummarySource[] = [];
+  for (const match of output.matchAll(WEB_SEARCH_RESULT_PATTERN)) {
+    const rawTitle = stringValue(match[1]);
+    const url = httpUrl(match[2]);
+    if (!url) continue;
+    const title =
+      rawTitle && rawTitle.toLowerCase() !== 'n/a'
+        ? rawTitle
+        : new URL(url).hostname;
+    sources.push({
+      id: `web:${url}`,
+      kind: 'web_page',
+      title: compactText(title, 160),
+      description: url,
+      resource: { type: 'url', url },
+      messageId: message.id,
+      updatedAt,
+    });
+  }
+  return sources;
+}
+
+function httpUrl(value: unknown) {
+  const url = stringValue(value);
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? url
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function collectLiveTaskSummary({
@@ -646,7 +781,11 @@ export function collectLiveTaskSummary({
   );
   const agentRuns = messages.flatMap((message) =>
     (message.agentRuns ?? [])
-      .filter((run) => Boolean(run.parentId))
+      .filter(
+        (run) =>
+          run.category?.trim().toLowerCase() === 'agent' &&
+          Boolean(run.parentId),
+      )
       .map((run) => ({
         id: run.id,
         parentId: run.parentId,
@@ -660,7 +799,8 @@ export function collectLiveTaskSummary({
           'Agent',
         status: taskSummaryAgentStatus(run.status),
         elapsedTime: run.elapsedTime,
-        error: typeof run.error === 'string' ? run.error : undefined,
+        error:
+          typeof run.error === 'string' ? compactText(run.error, 160) : undefined,
         messageId: message.id,
         updatedAt:
           run.updatedAt ?? run.endedAt ?? run.startedAt ?? message.updatedAt,
@@ -687,7 +827,7 @@ export function collectLiveTaskSummary({
           knownPartOutputs(part, message),
         ),
       ),
-    ]),
+    ]).filter(isCompletedOpenableOutput),
     sources: mergeLatest([
       ...contributions
         .flatMap((item) => item.sources ?? [])
@@ -698,7 +838,9 @@ export function collectLiveTaskSummary({
         ),
         ...fileSources(message.fileAssets, message),
         ...fileSources(message.attachments, message),
-        ...capabilitySources(message),
+        ...contentParts(message.content).flatMap((part) =>
+          webSearchSources(part, message),
+        ),
       ]),
     ]),
     agents: mergeAgents(agentRuns),
@@ -720,17 +862,22 @@ export function mergeTaskSummary(
   const outputs = mergeLatest([
     ...(historySections?.outputs ?? history?.outputs.items ?? []),
     ...live.outputs,
-  ]);
+  ]).filter(isCompletedOpenableOutput);
   const sources = mergeLatest([
     ...(historySections?.sources ?? history?.sources.items ?? []),
     ...live.sources,
   ]);
-  const agents = mergeAgents([
-    ...(historySections?.agents ?? history?.agents.items ?? []).filter((agent) =>
-      Boolean(agent.parentId),
-    ),
-    ...live.agents,
-  ]);
+  const historyAgents = historySections?.agents ?? history?.agents.items ?? [];
+  const eligibleHistoryAgents = historyAgents.filter((agent) =>
+    Boolean(agent.parentId),
+  );
+  const excludedHistoryAgentCount =
+    historyAgents.length - eligibleHistoryAgents.length;
+  const historyAgentTotal = Math.max(
+    0,
+    (history?.agents.total ?? 0) - excludedHistoryAgentCount,
+  );
+  const agents = mergeAgents([...eligibleHistoryAgents, ...live.agents]);
   const pending = mergePending([
     ...(historySections?.pending ?? history?.pending.items ?? []),
     ...live.pending,
@@ -755,15 +902,13 @@ export function mergeTaskSummary(
     totals: {
       outputs: Math.max(history?.outputs.total ?? 0, outputs.length),
       sources: Math.max(history?.sources.total ?? 0, sources.length),
-      agents: agents.length,
+      agents: Math.max(historyAgentTotal, agents.length),
       pending: Math.max(history?.pending.total ?? 0, pending.length),
     },
   };
 }
 
-function mergeLatest<T extends { id: string; updatedAt?: string }>(
-  items: T[],
-) {
+function mergeLatest<T extends { id: string; updatedAt?: string }>(items: T[]) {
   const byId = new Map<string, T>();
   items.forEach((item) => {
     const current = byId.get(item.id);

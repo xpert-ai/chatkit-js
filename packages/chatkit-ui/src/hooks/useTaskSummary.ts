@@ -30,11 +30,13 @@ export function useTaskSummary({
   conversationId,
   client,
   live,
+  refreshVersion = 0,
 }: {
   enabled: boolean;
   conversationId: string | null;
   client: Client;
   live: TaskSummaryLiveData;
+  refreshVersion?: number;
 }) {
   const [loaded, setLoaded] = React.useState<LoadedSnapshot | null>(null);
   const [historySections, setHistorySections] =
@@ -92,7 +94,14 @@ export function useTaskSummary({
       abortSectionRequests();
       requestVersionRef.current += 1;
     };
-  }, [abortSectionRequests, client, conversationId, enabled, retryVersion]);
+  }, [
+    abortSectionRequests,
+    client,
+    conversationId,
+    enabled,
+    refreshVersion,
+    retryVersion,
+  ]);
 
   const snapshot =
     loaded?.conversationId === conversationId ? loaded.snapshot : null;
@@ -139,13 +148,7 @@ export function useTaskSummary({
         }
       }
     },
-    [
-      activeHistorySections,
-      client,
-      conversationId,
-      enabled,
-      loadingSections,
-    ],
+    [activeHistorySections, client, conversationId, enabled, loadingSections],
   );
 
   return {

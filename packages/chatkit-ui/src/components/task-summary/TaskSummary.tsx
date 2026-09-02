@@ -140,6 +140,9 @@ function TaskSummaryContent({
   const [expanded, setExpanded] = React.useState<
     Partial<Record<TaskSummarySection, boolean>>
   >({});
+  const [expandedLocal, setExpandedLocal] = React.useState<
+    Partial<Record<'todos' | 'running', boolean>>
+  >({});
   const hasTask = Boolean(
     summary.goal || summary.plan || summary.todos?.items.length,
   );
@@ -157,6 +160,18 @@ function TaskSummaryContent({
 
   const sectionItems = <T,>(section: TaskSummarySection, items: T[]) =>
     expanded[section] ? items : items.slice(0, PREVIEW_SIZE);
+
+  const localSectionItems = <T,>(section: 'todos' | 'running', items: T[]) =>
+    expandedLocal[section] ? items : items.slice(0, PREVIEW_SIZE);
+
+  const localizedStatus = (status?: string) => {
+    if (!status) return undefined;
+    const key = status
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+    return t(`taskSummary.status.${key}`, { defaultValue: status });
+  };
 
   const openSummaryItem = (
     resource: ChatTaskSummaryResourceReference | undefined,
@@ -201,6 +216,28 @@ function TaskSummaryContent({
     );
   };
 
+  const localSectionAction = (section: 'todos' | 'running', total: number) => {
+    if (total <= PREVIEW_SIZE) return null;
+    const isExpanded = Boolean(expandedLocal[section]);
+    return (
+      <button
+        type="button"
+        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        onClick={() =>
+          setExpandedLocal((state) => ({
+            ...state,
+            [section]: !isExpanded,
+          }))
+        }
+      >
+        <ListChecks className="size-3.5" />
+        {isExpanded
+          ? t('taskSummary.collapse')
+          : t('taskSummary.viewAll', { count: total })}
+      </button>
+    );
+  };
+
   return (
     <div className="divide-y divide-border/70">
       {Boolean(historyError) && (
@@ -217,9 +254,7 @@ function TaskSummaryContent({
         </div>
       )}
 
-      <SummarySection
-        title={t('taskSummary.sections.outputs')}
-      >
+      <SummarySection title={t('taskSummary.sections.outputs')}>
         {summary.outputs.length === 0 ? (
           <SummaryPrompt onClick={onFocusComposer}>
             {t('taskSummary.createOutput')}
@@ -229,7 +264,8 @@ function TaskSummaryContent({
             <SummaryButton
               key={item.id}
               title={item.title}
-              description={item.description ?? item.status}
+              metadata={localizedStatus(item.status)}
+              description={item.description}
               leading={<FileOutput className="size-4" />}
               trailing={
                 item.resource && item.resource.type !== 'message' ? (
@@ -245,9 +281,7 @@ function TaskSummaryContent({
         {sectionAction('outputs', summary.totals.outputs)}
       </SummarySection>
 
-      <SummarySection
-        title={t('taskSummary.sections.sources')}
-      >
+      <SummarySection title={t('taskSummary.sections.sources')}>
         {sectionItems('sources', summary.sources).map((item) => (
           <SummaryButton
             key={item.id}
@@ -272,7 +306,7 @@ function TaskSummaryContent({
           {summary.goal && (
             <SummaryButton
               title={summary.goal.objective}
-              description={summary.goal.status}
+              metadata={localizedStatus(summary.goal.status)}
               leading={<Target className="size-4" />}
               onClick={onFocusComposer}
             />
@@ -289,35 +323,39 @@ function TaskSummaryContent({
               }
             />
           )}
-          {(summary.todos?.items ?? []).slice(0, PREVIEW_SIZE).map((todo) => (
-            <SummaryButton
-              key={todo.id}
-              title={todo.content}
-              description={t(`taskSummary.status.${todo.status}`)}
-              leading={
-                todo.status === 'completed' ? (
-                  <CheckCircle2 className="size-4 text-muted-foreground" />
-                ) : (
-                  <CircleEllipsis className="size-4 text-muted-foreground" />
-                )
-              }
-              onClick={() =>
-                summary.todos?.messageId
-                  ? onNavigateMessage(summary.todos.messageId)
-                  : onFocusComposer()
-              }
-            />
-          ))}
+          {localSectionItems('todos', summary.todos?.items ?? []).map(
+            (todo) => (
+              <SummaryButton
+                key={todo.id}
+                title={todo.content}
+                metadata={localizedStatus(todo.status)}
+                leading={
+                  todo.status === 'completed' ? (
+                    <CheckCircle2 className="size-4 text-muted-foreground" />
+                  ) : (
+                    <CircleEllipsis className="size-4 text-muted-foreground" />
+                  )
+                }
+                onClick={() =>
+                  summary.todos?.messageId
+                    ? onNavigateMessage(summary.todos.messageId)
+                    : onFocusComposer()
+                }
+              />
+            ),
+          )}
+          {localSectionAction('todos', summary.todos?.items.length ?? 0)}
         </SummarySection>
       )}
 
       {summary.running.length > 0 && (
         <SummarySection title={t('taskSummary.sections.running')}>
-          {summary.running.slice(0, PREVIEW_SIZE).map((item) => (
+          {localSectionItems('running', summary.running).map((item) => (
             <SummaryButton
               key={item.id}
               title={item.title}
-              description={item.description ?? item.status}
+              metadata={localizedStatus(item.status)}
+              description={item.description}
               leading={<PlayCircle className="size-4" />}
               trailing={
                 item.resource ? (
@@ -330,6 +368,7 @@ function TaskSummaryContent({
               }
             />
           ))}
+          {localSectionAction('running', summary.running.length)}
         </SummarySection>
       )}
 
@@ -339,9 +378,13 @@ function TaskSummaryContent({
             <SummaryButton
               key={item.id}
               title={item.title}
-              description={[item.status, formatElapsed(item.elapsedTime)]
+              metadata={[
+                localizedStatus(item.status),
+                formatElapsed(item.elapsedTime),
+              ]
                 .filter(Boolean)
                 .join(' · ')}
+              description={item.error}
               leading={<Bot className="size-4" />}
               onClick={() =>
                 item.messageId
@@ -413,21 +456,26 @@ function SummaryPrompt({
 
 function SummaryButton({
   title,
+  metadata,
   description,
   leading,
   trailing,
   onClick,
 }: {
   title: string;
+  metadata?: string;
   description?: string;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
   onClick?: () => void;
 }) {
+  const tooltipText = [title, metadata, description].filter(Boolean);
   return (
     <button
       type="button"
-      disabled={!onClick}
+      title={tooltipText.join('\n')}
+      aria-disabled={!onClick}
+      tabIndex={onClick ? 0 : -1}
       onClick={onClick}
       className={cn(
         'flex w-full min-w-0 items-start gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors',
@@ -443,6 +491,11 @@ function SummaryButton({
         <span className="block truncate text-sm font-medium leading-5 text-foreground">
           {title}
         </span>
+        {metadata && (
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+            {metadata}
+          </span>
+        )}
         {description && (
           <span className="mt-0.5 block line-clamp-2 text-xs text-muted-foreground">
             {description}

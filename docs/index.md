@@ -18,6 +18,7 @@ Welcome to the ChatKit SDK documentation.
 - [Tool Integration](./concepts/tools.md)
 - [Slash Commands](./guides/slash-commands.md)
 - [Conversation Goals](./guides/goals.md)
+- [Task Summary Panel Audit](./task-summary-panel-audit.md)
 - [Runtime Skills and Plugins Selection](./guides/runtime-capabilities.md)
 - [Remote Views Workbench](./guides/remote-views-workbench.md)
 - [Upgrade Plan: Native Side Chat and Thread Branching](./upgrade-plan.md)

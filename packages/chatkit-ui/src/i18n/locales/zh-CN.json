@@ -389,7 +389,20 @@
     "status": {
       "pending": "待处理",
       "in_progress": "进行中",
-      "completed": "已完成"
+      "completed": "已完成",
+      "active": "进行中",
+      "paused": "已暂停",
+      "blocked": "已阻塞",
+      "usage_limited": "用量受限",
+      "budget_limited": "预算受限",
+      "complete": "已完成",
+      "success": "已完成",
+      "error": "失败",
+      "running": "运行中",
+      "starting": "启动中",
+      "stopping": "停止中",
+      "timeout": "已超时",
+      "interrupted": "已中断"
     },
     "pending": {
       "approval": "需要审批",

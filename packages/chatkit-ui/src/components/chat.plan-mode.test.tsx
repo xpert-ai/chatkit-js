@@ -624,6 +624,14 @@ describe('Chat plan mode payload', () => {
       '[data-slot="chatkit-chat-composer"]',
     );
     expect(chatComposer).toHaveAttribute('data-position', 'centered');
+    expect(chatComposer).toHaveClass(
+      'mx-auto',
+      'w-full',
+      'max-w-2xl',
+      'px-4',
+      'py-2',
+    );
+    expect(chatComposer).not.toHaveClass('p-2');
     expect(chatComposer).toHaveClass('mb-auto');
     expect(chatComposer).not.toHaveClass('my-auto');
     expect(chatComposer).not.toHaveClass('absolute', 'top-1/2');
@@ -633,10 +641,15 @@ describe('Chat plan mode payload', () => {
     expect(editorSurface).toBeInTheDocument();
     expect(editorSurface).toHaveClass(
       'bg-background',
+      'min-h-[6.5rem]',
       'rounded-composer-editor',
     );
+    expect(editorSurface).not.toHaveClass('min-h-[10rem]');
     expect(editorSurface).not.toHaveClass('border', 'border-border');
     expect(editorSurface).not.toHaveClass('shadow-sm', 'shadow-md');
+    const composerEditor = screen.getByRole('textbox');
+    expect(composerEditor).toHaveClass('min-h-10', 'max-h-36');
+    expect(composerEditor).not.toHaveClass('min-h-20');
     const projectRail = document.querySelector(
       '[data-slot="composer-project-rail"]',
     );

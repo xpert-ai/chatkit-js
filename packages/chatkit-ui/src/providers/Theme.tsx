@@ -283,6 +283,8 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
   React.useEffect(() => {
     if (!themeRef.current) return;
     const el = themeRef.current;
+    const root = document.documentElement;
+    const rootWasDark = root.classList.contains('dark');
 
     // Handle full theme object (always an object after normalization)
     const { colorScheme, radius, density, typography, color } = theme;
@@ -291,8 +293,10 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
     // Color scheme (light/dark)
     if (isDarkMode) {
       el.classList.add('dark');
+      root.classList.add('dark');
     } else {
       el.classList.remove('dark');
+      root.classList.remove('dark');
     }
 
     // Radius
@@ -348,8 +352,6 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
 
     // Colors - set on both element and documentElement for Tailwind compatibility
     if (color) {
-      const root = document.documentElement;
-
       // Grayscale colors (affects muted, border, card, etc.)
       if (color.grayscale) {
         const grayscaleColors = generateGrayscaleColors(color.grayscale, isDarkMode);
@@ -422,8 +424,8 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
 
     // Cleanup function
     return () => {
-      const root = document.documentElement;
       el.classList.remove('dark');
+      root.classList.toggle('dark', rootWasDark);
       el.removeAttribute('data-radius');
       el.removeAttribute('data-density');
       el.style.removeProperty('--density-spacing');

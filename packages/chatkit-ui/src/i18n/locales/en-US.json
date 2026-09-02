@@ -389,7 +389,20 @@
     "status": {
       "pending": "Pending",
       "in_progress": "In progress",
-      "completed": "Completed"
+      "completed": "Completed",
+      "active": "Active",
+      "paused": "Paused",
+      "blocked": "Blocked",
+      "usage_limited": "Usage limited",
+      "budget_limited": "Budget limited",
+      "complete": "Completed",
+      "success": "Completed",
+      "error": "Failed",
+      "running": "Running",
+      "starting": "Starting",
+      "stopping": "Stopping",
+      "timeout": "Timed out",
+      "interrupted": "Interrupted"
     },
     "pending": {
       "approval": "Approval required",
