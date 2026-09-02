@@ -3936,7 +3936,7 @@ export function Chat({
           data-slot="chatkit-chat-composer"
           data-position={isInitialComposer ? 'centered' : 'bottom'}
           className={cn(
-            'mx-auto w-full max-w-2xl px-4 py-2 z-10 bg-background',
+            'mx-auto w-full max-w-2xl px-4 pb-4 pt-2 z-10 bg-background',
             isInitialComposer ? 'mb-auto' : 'sticky bottom-0',
           )}
           style={chatColumnStyle}
@@ -4477,13 +4477,6 @@ export function Chat({
               {disclaimer.text}
             </p>
           )}
-
-          <div
-            data-slot="chat-footer"
-            className="relative mt-2 flex min-h-6 items-center justify-center gap-2 text-xs text-muted-foreground"
-          >
-            <span>{t('chat.poweredBy')}</span>
-          </div>
         </div>
         <SettingsSheet
           open={petSettingsOpen}

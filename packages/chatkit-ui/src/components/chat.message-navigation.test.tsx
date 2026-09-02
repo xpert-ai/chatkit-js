@@ -117,7 +117,6 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
         'chat.title': 'Chat',
         'chat.statusOnline': 'Online',
         'chat.youLabel': 'You',
-        'chat.poweredBy': 'Powered by Xpert AI',
         'chat.placeholder': 'Type a message...',
         'message.reasoning': 'Reasoning',
         'message.navigation.label': 'Message navigation',

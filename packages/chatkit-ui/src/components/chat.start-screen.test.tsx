@@ -129,7 +129,6 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
     t: (key: string, options?: { defaultValue?: string }) => {
       const labels: Record<string, string> = {
         'chat.attachmentStatus.ready': 'Ready',
-        'chat.poweredBy': 'Powered by Xpert AI',
         'chat.referencedContentOnly': 'Referenced content',
         'composer.removeReference': 'Remove reference',
         'startScreen.editPrompt': 'Edit prompt',
@@ -322,6 +321,17 @@ describe('Chat start screen prompts', () => {
     mocks.stream.submit.mockResolvedValue(undefined);
     taskSummaryGeometry.viewportRight = 0;
     taskSummaryGeometry.chatColumnRight = 0;
+  });
+
+  it('does not render the powered-by footer', async () => {
+    const view = renderChat();
+
+    await waitFor(() => {
+      expect(
+        view.container.querySelector('[data-slot="chat-footer"]'),
+      ).toBeNull();
+      expect(screen.queryByText('Powered by Xpert AI')).not.toBeInTheDocument();
+    });
   });
 
   it('limits the chat column width when layout maxWidth is configured', async () => {
