@@ -376,6 +376,29 @@ const defaultApiUrl =
   'https://api.xpertai.cn/api/ai';
 
 const DEFAULT_HISTORY_PAGE_SIZE = 50;
+const STREAM_RECONCILIATION_INTERVAL_MS = 2_000;
+const STREAM_RECONCILIATION_MAX_ATTEMPTS = 300;
+const STREAM_RECONCILIATION_MAX_CONSECUTIVE_FAILURES = 3;
+
+function waitForAbortableDelay(signal: AbortSignal, delay: number) {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    timeout = setTimeout(finish, delay);
+    signal.addEventListener('abort', finish, { once: true });
+  });
+}
 
 function createEmptyHistoryMessagePagination(): HistoryMessagePaginationState {
   return {
@@ -2816,6 +2839,76 @@ const StreamSession = ({
     updateHistoryMessagePagination,
   ]);
 
+  const reconcileLatestAssistantMessage = useCallback(
+    async (
+      recordId: string,
+      requestedThreadId: string,
+      signal: AbortSignal,
+    ) => {
+      let consecutiveFailures = 0;
+      for (
+        let attempt = 0;
+        attempt < STREAM_RECONCILIATION_MAX_ATTEMPTS && !signal.aborted;
+        attempt += 1
+      ) {
+        try {
+          const [conversation, response] = await Promise.all([
+            client.conversations.get(recordId),
+            client.conversations.searchMessages(recordId, {
+              where: { role: 'ai', threadId: requestedThreadId },
+              order: { createdAt: 'DESC' },
+              limit: 1,
+              offset: 0,
+            }),
+          ]);
+          if (
+            signal.aborted ||
+            conversationIdRef.current !== recordId ||
+            activeThreadIdRef.current !== requestedThreadId
+          ) {
+            return false;
+          }
+
+          consecutiveFailures = 0;
+          const page = normalizeConversationMessagesPage(response);
+          if (page.messages.length > 0) {
+            setValues((previous) => ({
+              ...previous,
+              messages: upsertMessages(
+                previous.messages ?? [],
+                page.messages as ChatKitAIMessage[],
+              ),
+            }));
+          }
+
+          const status = String(conversation.status ?? '').toLowerCase();
+          if (status !== 'busy' && status !== 'running') {
+            setHistoryMessageLoadVersion((version) => version + 1);
+            return true;
+          }
+        } catch (reconciliationError) {
+          consecutiveFailures += 1;
+          if (
+            (consecutiveFailures >=
+              STREAM_RECONCILIATION_MAX_CONSECUTIVE_FAILURES ||
+              attempt === STREAM_RECONCILIATION_MAX_ATTEMPTS - 1) &&
+            !signal.aborted
+          ) {
+            console.warn(
+              '[chatkit-ui] Failed to reconcile the completed assistant message',
+              reconciliationError,
+            );
+            return false;
+          }
+        }
+
+        await waitForAbortableDelay(signal, STREAM_RECONCILIATION_INTERVAL_MS);
+      }
+      return false;
+    },
+    [client],
+  );
+
   const reset = useCallback(
     (
       newThreadId?: string | null,
@@ -3182,6 +3275,7 @@ const StreamSession = ({
       abortRef.current = abortController;
       setIsLoading(true);
       isLoadingRef.current = true;
+      let transportError: unknown = null;
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
           context: mergeStreamRequestContext(
@@ -3305,9 +3399,21 @@ const StreamSession = ({
         }
       } catch (streamError) {
         if (!shouldIgnoreStreamError(streamError, abortController.signal)) {
+          transportError = streamError;
           setError(streamError);
         }
       } finally {
+        const activeConversationId = conversationIdRef.current?.trim();
+        if (activeConversationId) {
+          const reconciled = await reconcileLatestAssistantMessage(
+            activeConversationId,
+            nextThreadId,
+            abortController.signal,
+          );
+          if (reconciled && transportError) {
+            setError(null);
+          }
+        }
         if (abortRef.current === abortController) {
           abortRef.current = null;
         }
@@ -3339,6 +3445,7 @@ const StreamSession = ({
       updateTodos,
       handleRuntimeActivityTrigger,
       updateConversationId,
+      reconcileLatestAssistantMessage,
     ],
   );
 

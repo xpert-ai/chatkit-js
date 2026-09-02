@@ -6,6 +6,8 @@ const sdkMocks = vi.hoisted(() => ({
   threadsCreate: vi.fn(),
   threadsDelete: vi.fn(),
   conversationsCreate: vi.fn(),
+  conversationsGet: vi.fn(),
+  conversationsSearchMessages: vi.fn(),
   runsStream: vi.fn(),
 }));
 const queryState = vi.hoisted(() => ({ value: null as string | null }));
@@ -21,6 +23,8 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
 
     conversations = {
       create: sdkMocks.conversationsCreate,
+      get: sdkMocks.conversationsGet,
+      searchMessages: sdkMocks.conversationsSearchMessages,
     };
 
     runs = {
@@ -121,8 +125,19 @@ describe('first submission setup', () => {
     sdkMocks.threadsCreate.mockReset();
     sdkMocks.threadsDelete.mockReset();
     sdkMocks.conversationsCreate.mockReset();
+    sdkMocks.conversationsGet.mockReset();
+    sdkMocks.conversationsSearchMessages.mockReset();
     sdkMocks.runsStream.mockReset();
     sdkMocks.threadsDelete.mockResolvedValue(undefined);
+    sdkMocks.conversationsGet.mockResolvedValue({
+      id: 'conversation-1',
+      threadId: 'thread-1',
+      status: 'idle',
+    });
+    sdkMocks.conversationsSearchMessages.mockResolvedValue({
+      items: [],
+      total: 0,
+    });
     sdkMocks.runsStream.mockImplementation(async function* () {
       yield* [];
     });
@@ -243,6 +258,103 @@ describe('first submission setup', () => {
     expect(getStream().threadId).toBe('thread-1');
     expect(getStream().conversationId).toBe('conversation-1');
     expect(getStream().isLoading).toBe(false);
+    expect(getStream().error).toBeNull();
+  });
+
+  it('recovers the persisted assistant message when the transport stream ends without final content', async () => {
+    sdkMocks.threadsCreate.mockResolvedValue({
+      thread_id: 'thread-1',
+      metadata: { id: 'conversation-1' },
+    });
+    sdkMocks.conversationsCreate.mockResolvedValue({
+      id: 'conversation-1',
+      threadId: 'thread-1',
+    });
+    sdkMocks.conversationsSearchMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'assistant-1',
+          role: 'ai',
+          status: 'success',
+          executionId: 'execution-1',
+          content: [
+            { type: 'text', text: 'Plan' },
+            { type: 'text', text: 'All five steps completed' },
+          ],
+          createdAt: '2026-09-02T06:01:19.781Z',
+          updatedAt: '2026-09-02T06:05:07.677Z',
+        },
+      ],
+      total: 1,
+    });
+    renderStream();
+
+    await act(async () => {
+      await getStream().submit(
+        { input: { input: 'Run the plan' } },
+        optimisticFirstMessage(),
+      );
+    });
+
+    expect(sdkMocks.conversationsSearchMessages).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({
+        where: { role: 'ai', threadId: 'thread-1' },
+        limit: 1,
+      }),
+    );
+    expect(getStream().messages).toContainEqual(
+      expect.objectContaining({
+        id: 'assistant-1',
+        status: 'success',
+        content: [
+          { type: 'text', text: 'Plan' },
+          { type: 'text', text: 'All five steps completed' },
+        ],
+      }),
+    );
+  });
+
+  it('recovers the persisted assistant message when the transport stream disconnects with an error', async () => {
+    sdkMocks.threadsCreate.mockResolvedValue({
+      thread_id: 'thread-1',
+      metadata: { id: 'conversation-1' },
+    });
+    sdkMocks.conversationsCreate.mockResolvedValue({
+      id: 'conversation-1',
+      threadId: 'thread-1',
+    });
+    sdkMocks.conversationsSearchMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'assistant-1',
+          role: 'ai',
+          status: 'success',
+          content: [{ type: 'text', text: 'Recovered after disconnect' }],
+          createdAt: '2026-09-02T06:01:19.781Z',
+          updatedAt: '2026-09-02T06:05:07.677Z',
+        },
+      ],
+      total: 1,
+    });
+    sdkMocks.runsStream.mockImplementation(async function* () {
+      throw new Error('transport disconnected');
+    });
+    renderStream();
+
+    await act(async () => {
+      await getStream().submit(
+        { input: { input: 'Run the plan' } },
+        optimisticFirstMessage(),
+      );
+    });
+
+    expect(getStream().messages).toContainEqual(
+      expect.objectContaining({
+        id: 'assistant-1',
+        content: [{ type: 'text', text: 'Recovered after disconnect' }],
+      }),
+    );
     expect(getStream().error).toBeNull();
   });
 

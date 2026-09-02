@@ -1600,6 +1600,7 @@ export function Chat({
     conversationId: taskSummaryConversationId,
     client: stream.client,
     live: liveTaskSummary,
+    refreshVersion: stream.historyMessageLoadVersion,
   });
 
   const navigateToTaskSummaryMessage = React.useCallback(
@@ -3935,7 +3936,7 @@ export function Chat({
           data-slot="chatkit-chat-composer"
           data-position={isInitialComposer ? 'centered' : 'bottom'}
           className={cn(
-            'mx-auto w-full p-2 z-10 bg-background',
+            'mx-auto w-full max-w-2xl px-4 py-2 z-10 bg-background',
             isInitialComposer ? 'mb-auto' : 'sticky bottom-0',
           )}
           style={chatColumnStyle}
@@ -4261,7 +4262,7 @@ export function Chat({
               <div
                 data-slot="composer-editor-surface"
                 className={cn(
-                  'relative flex min-h-[10rem] min-w-0 bg-background px-2 pt-2 pb-14',
+                  'relative flex min-h-[6.5rem] min-w-0 bg-background px-2 pt-2 pb-14',
                   'rounded-composer-editor',
                 )}
               >
@@ -4291,7 +4292,7 @@ export function Chat({
                   onKeyDown={handleComposerKeyDown}
                   data-placeholder={inputPlaceholder}
                   className={cn(
-                    'min-h-20 max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none',
+                    'min-h-10 max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none',
                     'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
                     (missingConfig ||
                       isHistoryLoading ||

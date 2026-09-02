@@ -57,7 +57,14 @@ describe('useTaskSummary', () => {
       },
     } as unknown as Client;
     const live = emptyLive({
-      outputs: [{ id: 'live', kind: 'document', title: 'Live output' }],
+      outputs: [
+        {
+          id: 'live',
+          kind: 'document',
+          title: 'Live output',
+          resource: { type: 'artifact', artifactId: 'artifact-live' },
+        },
+      ],
     });
     const { result } = renderHook(() =>
       useTaskSummary({
@@ -70,6 +77,48 @@ describe('useTaskSummary', () => {
 
     await waitFor(() => expect(result.current.historyError).toBeTruthy());
     expect(result.current.summary.outputs[0]?.title).toBe('Live output');
+  });
+
+  it('refreshes transient pending state when persisted messages are reconciled', async () => {
+    const stale = snapshot('conversation-1', 'Plan');
+    stale.pending = {
+      items: [
+        {
+          id: 'operation:request_user_input:0',
+          kind: 'user_input',
+          title: 'request_user_input',
+        },
+      ],
+      total: 1,
+    };
+    const current = snapshot('conversation-1', 'Plan');
+    const getTaskSummary = vi
+      .fn()
+      .mockResolvedValueOnce(stale)
+      .mockResolvedValueOnce(current);
+    const client = {
+      conversations: {
+        getTaskSummary,
+        listTaskSummaryItems: vi.fn(),
+      },
+    } as unknown as Client;
+    const { result, rerender } = renderHook(
+      ({ refreshVersion }) =>
+        useTaskSummary({
+          enabled: true,
+          conversationId: 'conversation-1',
+          client,
+          live: emptyLive(),
+          refreshVersion,
+        }),
+      { initialProps: { refreshVersion: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.summary.pending).toHaveLength(1));
+    rerender({ refreshVersion: 1 });
+
+    await waitFor(() => expect(result.current.summary.pending).toEqual([]));
+    expect(getTaskSummary).toHaveBeenCalledTimes(2);
   });
 
   it('aborts an in-flight section page when the conversation changes', async () => {
