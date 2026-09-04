@@ -1,5 +1,17 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.10
+
+### Patch Changes
+
+- 0115b5f: Refine ChatKit composer controls and menus for constrained layouts:
+  - Position the scroll-to-bottom control above the composer input.
+  - Keep secondary composer menus in place with consistent spacing and scrollable capability lists.
+  - Keep long project lists scrollable between fixed search and create controls.
+  - Restore runtime sub-agent detail previews.
+
+- d0b972b: Switch composer submenus in place on narrow ChatKit surfaces and expand them to the right when enough container space is available.
+
 ## 0.5.9
 
 ### Patch Changes
