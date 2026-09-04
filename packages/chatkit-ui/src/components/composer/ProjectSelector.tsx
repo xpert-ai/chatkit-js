@@ -19,7 +19,6 @@ import {
 import { useTheme } from '../../providers/Theme';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { ScrollArea } from '../ui/scroll-area';
 
 export type ProjectSelectorProps = {
   client: Client | null;
@@ -232,13 +231,13 @@ export function ProjectSelector({
           sideOffset={8}
           collisionPadding={8}
           className={cn(
-            'w-64 max-w-[calc(100vw-1rem)] overflow-hidden border-0 bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
+            'flex max-h-(--radix-popover-content-available-height) w-64 max-w-[calc(100vw-1rem)] overflow-hidden border-0 bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
             panelRoundedClass,
           )}
         >
           <div
             data-slot="composer-project-command"
-            className="flex size-full flex-col overflow-hidden"
+            className="flex min-h-0 w-full flex-col overflow-hidden"
           >
             {createMode ? (
               <form
@@ -288,7 +287,7 @@ export function ProjectSelector({
               <>
                 <div
                   data-slot="composer-project-search"
-                  className="relative mb-2"
+                  className="relative mb-2 shrink-0"
                 >
                   <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -302,7 +301,10 @@ export function ProjectSelector({
                     )}
                   />
                 </div>
-                <ScrollArea className="max-h-75">
+                <div
+                  data-slot="composer-project-scroll-region"
+                  className="min-h-0 flex-1 max-h-75 overflow-y-auto overscroll-contain"
+                >
                   <div
                     data-slot="composer-project-list"
                     className="flex flex-col"
@@ -371,12 +373,12 @@ export function ProjectSelector({
                       ))
                     )}
                   </div>
-                </ScrollArea>
+                </div>
                 {onProjectCreate ? (
                   <button
                     type="button"
                     data-slot="composer-project-create"
-                    className="mt-1 flex w-full items-center gap-3 border-t border-border px-1.5 py-1.5 text-left text-sm font-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
+                    className="mt-1 flex w-full shrink-0 items-center gap-3 border-t border-border px-1.5 py-1.5 text-left text-sm font-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
                     onClick={() => setCreateMode(true)}
                   >
                     <Plus className="size-4 shrink-0" />

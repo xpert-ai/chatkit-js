@@ -3859,25 +3859,6 @@ export function Chat({
           )}
         </div>
 
-        {!isAtBottom && messages.length > 0 && (
-          <div className="sticky bottom-20 z-20 flex justify-center px-4 pointer-events-none">
-            <Button
-              type="button"
-              size="icon-sm"
-              variant={hasUpdatesBelow ? 'default' : 'outline'}
-              className={cn(
-                'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
-                hasUpdatesBelow && 'animate-bounce',
-              )}
-              onClick={() => scrollToBottom(true, true)}
-              aria-label={t('chat.scrollToBottom')}
-              title={t('chat.scrollToBottom')}
-            >
-              <ArrowDown size={16} />
-            </Button>
-          </div>
-        )}
-
         {quoteSelection && (
           <div
             className="pointer-events-none fixed z-50 flex flex-col items-center gap-1"
@@ -3941,6 +3922,28 @@ export function Chat({
           )}
           style={chatColumnStyle}
         >
+          {!isAtBottom && messages.length > 0 && (
+            <div
+              data-slot="scroll-to-bottom"
+              className="pointer-events-none absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-full justify-center"
+            >
+              <Button
+                type="button"
+                size="icon-sm"
+                variant={hasUpdatesBelow ? 'default' : 'outline'}
+                className={cn(
+                  'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
+                  hasUpdatesBelow && 'animate-bounce',
+                )}
+                onClick={() => scrollToBottom(true, true)}
+                aria-label={t('chat.scrollToBottom')}
+                title={t('chat.scrollToBottom')}
+              >
+                <ArrowDown size={16} />
+              </Button>
+            </div>
+          )}
+
           {threadErrorMessage && (
             <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
               {threadErrorMessage}

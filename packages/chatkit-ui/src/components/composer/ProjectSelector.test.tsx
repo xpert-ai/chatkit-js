@@ -211,6 +211,54 @@ describe('ProjectSelector', () => {
     expect(onProjectChange).toHaveBeenCalledWith('project-101');
   });
 
+  it('keeps a long project list scrollable between fixed controls', async () => {
+    const client = createClient(
+      Array.from({ length: 20 }, (_, index) => ({
+        id: `project-${index + 1}`,
+        name: `Project ${index + 1}`,
+        status: 'active' as const,
+      })),
+    );
+
+    render(
+      <ProjectSelector
+        client={client}
+        xpertId="xpert-1"
+        onProjectCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Select project' }),
+    );
+
+    const scrollRegion = document.querySelector(
+      '[data-slot="composer-project-scroll-region"]',
+    );
+    expect(scrollRegion).not.toBeNull();
+    expect(scrollRegion).toHaveClass(
+      'min-h-0',
+      'flex-1',
+      'max-h-75',
+      'overflow-y-auto',
+    );
+    expect(
+      scrollRegion?.querySelectorAll('[data-slot="composer-project-item"]'),
+    ).toHaveLength(20);
+    expect(
+      scrollRegion?.querySelector('[data-slot="composer-project-search"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      scrollRegion?.querySelector('[data-slot="composer-project-create"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="composer-project-search"]'),
+    ).toHaveClass('shrink-0');
+    expect(
+      document.querySelector('[data-slot="composer-project-create"]'),
+    ).toHaveClass('shrink-0');
+  });
+
   it('stays hidden when the current Xpert has no available projects', async () => {
     const client = createClient([]);
     render(<ProjectSelector client={client} xpertId="xpert-1" />);
