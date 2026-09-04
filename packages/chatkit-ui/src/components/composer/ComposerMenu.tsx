@@ -63,6 +63,9 @@ import { ConnectorMenuPanel } from './ConnectorMenuPanel';
 
 type ComposerPanel = 'targets' | 'experts' | 'skills' | 'connectors';
 
+const COMPOSER_MENU_EXPANDED_WIDTH_REM = 33;
+const COMPOSER_MENU_COLLISION_PADDING = 12;
+
 export type ComposerMenuProps = {
   composer?: ChatKitOptions['composer'];
   onAttachmentClick?: () => void;
@@ -156,6 +159,8 @@ export function ComposerMenu({
   const [query, setQuery] = React.useState('');
   const [collisionBoundary, setCollisionBoundary] =
     React.useState<HTMLElement>();
+  const [canExpandSecondaryPanel, setCanExpandSecondaryPanel] =
+    React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
 
   const roundedClass = getRoundedClass(theme.radius);
@@ -188,6 +193,53 @@ export function ComposerMenu({
     setActivePanel(panel);
     setQuery('');
   };
+
+  React.useLayoutEffect(() => {
+    if (!open || !collisionBoundary) {
+      setCanExpandSecondaryPanel(false);
+      return;
+    }
+
+    const updateLayout = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) {
+        setCanExpandSecondaryPanel(false);
+        return;
+      }
+
+      const boundaryRect = collisionBoundary.getBoundingClientRect();
+      const triggerRect = trigger.getBoundingClientRect();
+      const rootFontSize = Number.parseFloat(
+        window.getComputedStyle(document.documentElement).fontSize,
+      );
+      const remInPixels = Number.isFinite(rootFontSize) ? rootFontSize : 16;
+      const menuLeft = Math.max(
+        triggerRect.left,
+        boundaryRect.left + COMPOSER_MENU_COLLISION_PADDING,
+      );
+      const availableWidth =
+        boundaryRect.right - COMPOSER_MENU_COLLISION_PADDING - menuLeft;
+      const requiredWidth = COMPOSER_MENU_EXPANDED_WIDTH_REM * remInPixels;
+
+      setCanExpandSecondaryPanel(availableWidth >= requiredWidth);
+    };
+
+    updateLayout();
+    window.addEventListener('resize', updateLayout);
+    const resizeObserver =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(updateLayout)
+        : null;
+    resizeObserver?.observe(collisionBoundary);
+    if (triggerRef.current) {
+      resizeObserver?.observe(triggerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateLayout);
+      resizeObserver?.disconnect();
+    };
+  }, [collisionBoundary, open]);
 
   const returnToPrimaryPanel = () => {
     setActivePanel(null);
@@ -538,6 +590,63 @@ export function ComposerMenu({
     );
   };
 
+  const primaryPanel = (
+    <div
+      data-slot="composer-primary-panel"
+      className={cn(
+        'w-64 max-w-full shrink-0 overflow-hidden bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
+        panelRoundedClass,
+      )}
+    >
+      <DropdownMenuItem
+        disabled={!attachmentsEnabled}
+        onSelect={onAttachmentClick}
+        className={cn('gap-3 p-1.5 font-normal', menuItemRoundedClass)}
+      >
+        <Paperclip className="size-5" />
+        <span className="flex-1 text-base">{t('composer.addAttachment')}</span>
+        <ChevronRight className="size-4" />
+      </DropdownMenuItem>
+      <DropdownMenuSeparator className="my-2" />
+      <PrimaryPanelItem
+        icon={<Target />}
+        label={t('composer.workbuddy.targets')}
+        active={activePanel === 'targets'}
+        onSelect={() => choosePanel('targets')}
+        className={menuItemRoundedClass}
+      />
+      <PrimaryPanelItem
+        icon={<Bot />}
+        label={t('composer.workbuddy.experts')}
+        count={selectedSubAgentCount}
+        active={activePanel === 'experts'}
+        onSelect={() => choosePanel('experts')}
+        className={menuItemRoundedClass}
+      />
+      <PrimaryPanelItem
+        icon={<WandSparkles />}
+        label={t('composer.capabilities.skills')}
+        count={selectedSkillCount}
+        active={activePanel === 'skills'}
+        onSelect={() => choosePanel('skills')}
+        className={menuItemRoundedClass}
+      />
+      <PrimaryPanelItem
+        icon={<Plug />}
+        label={t('composer.workbuddy.connectors')}
+        count={selectedConnectorBindingIds?.length ?? 0}
+        active={activePanel === 'connectors'}
+        disabled={!connectorsEnabled}
+        onSelect={() => choosePanel('connectors')}
+        className={menuItemRoundedClass}
+      />
+    </div>
+  );
+
+  const secondaryPanelExpandsRight = Boolean(
+    activePanel && activePanelLabel && canExpandSecondaryPanel,
+  );
+
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange} modal={false}>
       <DropdownMenuTrigger asChild>
@@ -567,125 +676,91 @@ export function ComposerMenu({
         side="top"
         sideOffset={8}
         collisionBoundary={collisionBoundary}
-        collisionPadding={12}
-        className="w-[16.5rem] max-w-(--radix-dropdown-menu-content-available-width) overflow-hidden bg-transparent p-1 shadow-none ring-0"
-      >
-        {activePanel && activePanelLabel ? (
-          <SecondaryPanel panelRoundedClass={panelRoundedClass}>
-            <PanelHeader
-              label={activePanelLabel}
-              onBack={returnToPrimaryPanel}
-              className={menuItemRoundedClass}
-            />
-            {activePanel === 'targets' ? (
-              <div className="space-y-1 p-1">
-                <DropdownMenuItem
-                  role="switch"
-                  aria-checked={goalPanelOpen}
-                  disabled={!goalCommandAvailable}
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    onGoalPanelOpenChange?.(!goalPanelOpen);
-                  }}
-                  className={cn(
-                    'gap-3 p-1.5',
-                    menuItemRoundedClass,
-                    goalPanelOpen && 'bg-muted',
-                  )}
-                >
-                  <Target className="size-5" />
-                  <span className="min-w-0 flex-1 text-base">
-                    {t('chat.goal.label')}
-                  </span>
-                  <Toggle checked={goalPanelOpen} />
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  role="switch"
-                  aria-checked={planModeEnabled}
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    onPlanModeChange?.(!planModeEnabled);
-                  }}
-                  className={cn(
-                    'gap-3 p-1.5',
-                    menuItemRoundedClass,
-                    planModeEnabled && 'bg-muted',
-                  )}
-                >
-                  <ListChecks className="size-5" />
-                  <span className="min-w-0 flex-1 text-base">
-                    {t('composer.planMode')}
-                  </span>
-                  <Toggle checked={planModeEnabled} />
-                </DropdownMenuItem>
-              </div>
-            ) : activePanel === 'experts' || activePanel === 'skills' ? (
-              renderCapabilityPanel(activePanel)
-            ) : (
-              <ConnectorMenuPanel
-                client={connectorClient ?? null}
-                xpertId={connectorXpertId}
-                projectId={connectorProjectId}
-                selectedBindingIds={selectedConnectorBindingIds}
-                onSelectionChange={onConnectorSelectionChange}
-                apiUrl={apiUrl}
-              />
-            )}
-          </SecondaryPanel>
-        ) : (
-          <div
-            data-slot="composer-primary-panel"
-            className={cn(
-              'w-64 max-w-full overflow-hidden bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
-              panelRoundedClass,
-            )}
-          >
-            <DropdownMenuItem
-              disabled={!attachmentsEnabled}
-              onSelect={onAttachmentClick}
-              className={cn('gap-3 p-1.5 font-normal', menuItemRoundedClass)}
-            >
-              <Paperclip className="size-5" />
-              <span className="flex-1 text-base">
-                {t('composer.addAttachment')}
-              </span>
-              <ChevronRight className="size-4" />
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="my-2" />
-            <PrimaryPanelItem
-              icon={<Target />}
-              label={t('composer.workbuddy.targets')}
-              active={activePanel === 'targets'}
-              onSelect={() => choosePanel('targets')}
-              className={menuItemRoundedClass}
-            />
-            <PrimaryPanelItem
-              icon={<Bot />}
-              label={t('composer.workbuddy.experts')}
-              count={selectedSubAgentCount}
-              active={activePanel === 'experts'}
-              onSelect={() => choosePanel('experts')}
-              className={menuItemRoundedClass}
-            />
-            <PrimaryPanelItem
-              icon={<WandSparkles />}
-              label={t('composer.capabilities.skills')}
-              count={selectedSkillCount}
-              active={activePanel === 'skills'}
-              onSelect={() => choosePanel('skills')}
-              className={menuItemRoundedClass}
-            />
-            <PrimaryPanelItem
-              icon={<Plug />}
-              label={t('composer.workbuddy.connectors')}
-              count={selectedConnectorBindingIds?.length ?? 0}
-              active={activePanel === 'connectors'}
-              disabled={!connectorsEnabled}
-              onSelect={() => choosePanel('connectors')}
-              className={menuItemRoundedClass}
-            />
-          </div>
+        collisionPadding={COMPOSER_MENU_COLLISION_PADDING}
+        data-layout={canExpandSecondaryPanel ? 'wide' : 'narrow'}
+        className={cn(
+          'max-w-(--radix-dropdown-menu-content-available-width) bg-transparent p-1 shadow-none ring-0',
+          secondaryPanelExpandsRight
+            ? 'w-[33rem] overflow-visible'
+            : 'w-[16.5rem] overflow-hidden',
         )}
+      >
+        <div
+          data-slot="composer-menu-layout"
+          className={cn(
+            'flex items-end',
+            secondaryPanelExpandsRight && 'w-full min-w-0 gap-2',
+          )}
+        >
+          {secondaryPanelExpandsRight ? primaryPanel : null}
+          {activePanel && activePanelLabel ? (
+            <SecondaryPanel panelRoundedClass={panelRoundedClass}>
+              {!secondaryPanelExpandsRight ? (
+                <PanelHeader
+                  label={activePanelLabel}
+                  onBack={returnToPrimaryPanel}
+                  className={menuItemRoundedClass}
+                />
+              ) : null}
+              {activePanel === 'targets' ? (
+                <div className="space-y-1 p-1">
+                  <DropdownMenuItem
+                    role="switch"
+                    aria-checked={goalPanelOpen}
+                    disabled={!goalCommandAvailable}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onGoalPanelOpenChange?.(!goalPanelOpen);
+                    }}
+                    className={cn(
+                      'gap-3 p-1.5',
+                      menuItemRoundedClass,
+                      goalPanelOpen && 'bg-muted',
+                    )}
+                  >
+                    <Target className="size-5" />
+                    <span className="min-w-0 flex-1 text-base">
+                      {t('chat.goal.label')}
+                    </span>
+                    <Toggle checked={goalPanelOpen} />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    role="switch"
+                    aria-checked={planModeEnabled}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      onPlanModeChange?.(!planModeEnabled);
+                    }}
+                    className={cn(
+                      'gap-3 p-1.5',
+                      menuItemRoundedClass,
+                      planModeEnabled && 'bg-muted',
+                    )}
+                  >
+                    <ListChecks className="size-5" />
+                    <span className="min-w-0 flex-1 text-base">
+                      {t('composer.planMode')}
+                    </span>
+                    <Toggle checked={planModeEnabled} />
+                  </DropdownMenuItem>
+                </div>
+              ) : activePanel === 'experts' || activePanel === 'skills' ? (
+                renderCapabilityPanel(activePanel)
+              ) : (
+                <ConnectorMenuPanel
+                  client={connectorClient ?? null}
+                  xpertId={connectorXpertId}
+                  projectId={connectorProjectId}
+                  selectedBindingIds={selectedConnectorBindingIds}
+                  onSelectionChange={onConnectorSelectionChange}
+                  apiUrl={apiUrl}
+                />
+              )}
+            </SecondaryPanel>
+          ) : (
+            primaryPanel
+          )}
+        </div>
       </DropdownMenuContent>
 
       {planModeEnabled ? (

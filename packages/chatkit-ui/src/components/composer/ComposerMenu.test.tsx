@@ -65,6 +65,37 @@ describe('ComposerMenu', () => {
     fireEvent.keyDown(trigger, { key: 'Enter', code: 'Enter' });
   }
 
+  function renderInChatkit(
+    ui: Parameters<typeof render>[0],
+    initialWidth: number,
+  ) {
+    let width = initialWidth;
+    const view = render(<div data-chatkit-root="">{ui}</div>);
+    const root = view.container.querySelector<HTMLElement>(
+      '[data-chatkit-root]',
+    );
+    const trigger = screen.getByRole('button', { name: 'Open menu' });
+
+    if (!root) {
+      throw new Error('Expected ChatKit root');
+    }
+
+    vi.spyOn(root, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 0, width, 640),
+    );
+    vi.spyOn(trigger, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(16, 560, 36, 36),
+    );
+
+    return {
+      ...view,
+      setWidth(nextWidth: number) {
+        width = nextWidth;
+        fireEvent(window, new Event('resize'));
+      },
+    };
+  }
+
   it('smoothly rotates the standalone plus into a circular close control', () => {
     render(<ComposerMenu />);
 
@@ -216,6 +247,50 @@ describe('ComposerMenu', () => {
     expect(
       document.querySelector('[data-slot="composer-secondary-panel"]'),
     ).not.toBeInTheDocument();
+  });
+
+  it('expands secondary panels to the right when ChatKit is wide and switches in place after it narrows', async () => {
+    const view = renderInChatkit(
+      <ComposerMenu goalCommandAvailable connectorsEnabled />,
+      800,
+    );
+    openMenu();
+
+    const menuContent = document.querySelector(
+      '[data-slot="dropdown-menu-content"]',
+    );
+    await waitFor(() =>
+      expect(menuContent).toHaveAttribute('data-layout', 'wide'),
+    );
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Goals' }));
+    expect(
+      document.querySelector('[data-slot="composer-primary-panel"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="composer-secondary-panel"]'),
+    ).toBeInTheDocument();
+    expect(menuContent).toHaveClass('w-[33rem]', 'overflow-visible');
+    expect(
+      document.querySelector(
+        '[data-slot="composer-secondary-panel"] .lucide-arrow-left',
+      ),
+    ).not.toBeInTheDocument();
+
+    view.setWidth(480);
+
+    await waitFor(() =>
+      expect(menuContent).toHaveAttribute('data-layout', 'narrow'),
+    );
+    expect(
+      document.querySelector('[data-slot="composer-primary-panel"]'),
+    ).not.toBeInTheDocument();
+    expect(menuContent).toHaveClass('w-[16.5rem]', 'overflow-hidden');
+    expect(
+      document.querySelector(
+        '[data-slot="composer-secondary-panel"] .lucide-arrow-left',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('searches and selects skills in the secondary panel', () => {
