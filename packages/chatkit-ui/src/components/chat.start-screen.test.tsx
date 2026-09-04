@@ -133,6 +133,7 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
         'composer.removeReference': 'Remove reference',
         'startScreen.editPrompt': 'Edit prompt',
         'startScreen.greeting': 'What can I help with today?',
+        'chat.scrollToBottom': 'Scroll to bottom',
         'taskSummary.open': 'Open task summary',
         'taskSummary.title': 'Task summary',
       };
@@ -369,6 +370,47 @@ describe('Chat start screen prompts', () => {
         'overflow-y-auto',
       );
     });
+  });
+
+  it('positions the scroll-to-bottom button above the composer input shell', async () => {
+    mocks.stream.messages = [
+      { id: 'message-1', type: 'human', content: 'Earlier message' },
+    ];
+    const { container } = renderChat();
+    const viewport = container.querySelector<HTMLElement>(
+      '[data-chatkit-root]',
+    );
+    expect(viewport).toBeInTheDocument();
+    if (!viewport) return;
+
+    Object.defineProperties(viewport, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, writable: true, value: 100 },
+    });
+    fireEvent.scroll(viewport);
+
+    const button = await screen.findByRole('button', {
+      name: 'Scroll to bottom',
+    });
+    const affordance = button.parentElement;
+    const composer = container.querySelector<HTMLElement>(
+      '[data-slot="chatkit-chat-composer"]',
+    );
+    const inputShell = container.querySelector<HTMLElement>(
+      '[data-slot="composer-input-shell"]',
+    );
+
+    expect(affordance).toHaveAttribute('data-slot', 'scroll-to-bottom');
+    expect(composer).toContainElement(affordance);
+    expect(inputShell).not.toContainElement(affordance);
+    expect(affordance).toHaveClass(
+      'absolute',
+      'top-0',
+      'left-1/2',
+      '-translate-x-1/2',
+      '-translate-y-full',
+    );
   });
 
   it('keeps the empty-state greeting directly above the vertically centered composer', async () => {

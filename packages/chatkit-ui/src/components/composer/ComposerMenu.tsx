@@ -1,10 +1,12 @@
 import * as React from 'react';
 import {
+  ArrowLeft,
   Bot,
   ChevronRight,
   FileText,
   Globe,
   Images,
+  Info,
   Lightbulb,
   ListChecks,
   Paperclip,
@@ -22,6 +24,7 @@ import type {
   Client,
   RuntimeCapabilitiesResponse,
   RuntimeCapabilitySkill,
+  RuntimeCapabilitySubAgent,
 } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitOptions,
@@ -45,6 +48,7 @@ import {
 import { useTheme } from '../../providers/Theme';
 import { RuntimeCapabilityIcon } from '../runtime-capability-icon';
 import { Button } from '../ui/button';
+import { ChatkitAvatar, normalizeChatkitAvatar } from '../ui/chatkit-avatar';
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -54,7 +58,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { Input } from '../ui/input';
-import { ScrollArea } from '../ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ConnectorMenuPanel } from './ConnectorMenuPanel';
 
 type ComposerPanel = 'targets' | 'experts' | 'skills' | 'connectors';
@@ -185,12 +189,151 @@ export function ComposerMenu({
     setQuery('');
   };
 
+  const returnToPrimaryPanel = () => {
+    setActivePanel(null);
+    setQuery('');
+  };
+
+  const activePanelLabel =
+    activePanel === 'targets'
+      ? t('composer.workbuddy.targets')
+      : activePanel === 'experts'
+        ? t('composer.workbuddy.experts')
+        : activePanel === 'skills'
+          ? t('composer.capabilities.skills')
+          : activePanel === 'connectors'
+            ? t('composer.workbuddy.connectors')
+            : null;
+
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchesQuery = (label: string, description?: string) =>
     !normalizedQuery ||
     `${label} ${description ?? ''}`
       .toLocaleLowerCase()
       .includes(normalizedQuery);
+
+  const renderDetailPills = (label: string, values?: string[]) => {
+    if (!values?.length) return null;
+
+    return (
+      <div className="space-y-1">
+        <div className="text-[11px] font-medium uppercase text-muted-foreground">
+          {label}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {values.slice(0, 6).map((value) => (
+            <span
+              key={value}
+              className="max-w-full truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
+            >
+              {value}
+            </span>
+          ))}
+          {values.length > 6 ? (
+            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              +{values.length - 6}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSubAgentDetailCard = (subAgent: RuntimeCapabilitySubAgent) => {
+    const agentKind =
+      subAgent.type === 'xpert'
+        ? t('composer.capabilities.xpertAgent')
+        : t('composer.capabilities.agent');
+
+    return (
+      <div
+        data-slot="runtime-sub-agent-detail-card"
+        className={cn(
+          'pointer-events-none w-80 space-y-3 border border-border bg-popover p-3 text-popover-foreground shadow-lg',
+          panelRoundedClass,
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <ChatkitAvatar
+            avatar={normalizeChatkitAvatar(subAgent.avatar)}
+            label={subAgent.label}
+            className="h-9 w-9 shrink-0"
+            fallbackClassName="text-xs"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{subAgent.label}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {subAgent.name ?? agentKind}
+            </div>
+          </div>
+        </div>
+
+        {subAgent.description ? (
+          <div className="line-clamp-4 text-xs leading-5 text-muted-foreground">
+            {subAgent.description}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-md bg-muted px-2 py-1">
+            <span className="block text-[11px] text-muted-foreground">
+              {t('composer.capabilities.type')}
+            </span>
+            <span className="font-medium">{agentKind}</span>
+          </div>
+          {subAgent.agentKey || subAgent.xpertId ? (
+            <div className="rounded-md bg-muted px-2 py-1">
+              <span className="block text-[11px] text-muted-foreground">
+                {t('composer.capabilities.identifier')}
+              </span>
+              <span className="block truncate font-mono text-[11px]">
+                {subAgent.agentKey ?? subAgent.xpertId}
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        {renderDetailPills(
+          t('composer.capabilities.tools'),
+          subAgent.toolNames,
+        )}
+        {renderDetailPills(
+          t('composer.capabilities.toolsets'),
+          subAgent.toolsetNames,
+        )}
+        {renderDetailPills(
+          t('composer.capabilities.knowledge'),
+          subAgent.knowledgebaseNames,
+        )}
+      </div>
+    );
+  };
+
+  const renderSubAgentInfoButton = (subAgent: RuntimeCapabilitySubAgent) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('composer.capabilities.agentDetails')}
+          data-slot="runtime-sub-agent-info-trigger"
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Info size={14} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="center"
+        sideOffset={8}
+        hideArrow
+        className="bg-transparent p-0 text-popover-foreground shadow-none"
+      >
+        {renderSubAgentDetailCard(subAgent)}
+      </TooltipContent>
+    </Tooltip>
+  );
 
   const renderCapabilityPanel = (
     panel: 'skills' | 'experts',
@@ -314,6 +457,7 @@ export function ComposerMenu({
                     </span>
                   )}
                 </span>
+                {renderSubAgentInfoButton(subAgent)}
               </DropdownMenuCheckboxItem>
             );
           });
@@ -343,7 +487,7 @@ export function ComposerMenu({
       : [];
 
     return (
-      <SecondaryPanel panelRoundedClass={panelRoundedClass}>
+      <>
         <PanelSearch
           value={query}
           onChange={setQuery}
@@ -353,7 +497,10 @@ export function ComposerMenu({
               : 'composer.workbuddy.searchExperts',
           )}
         />
-        <ScrollArea className="h-72 px-2 pb-2">
+        <div
+          data-slot="composer-capability-scroll"
+          className="max-h-72 overflow-y-auto overscroll-contain px-2 pb-2"
+        >
           <div data-slot="composer-capability-list" className="space-y-1">
             {isSkills && expertSkills.length > 0 ? (
               <SkillGroup label={t('composer.workbuddy.expertSkills')}>
@@ -386,8 +533,8 @@ export function ComposerMenu({
               </div>
             ) : null}
           </div>
-        </ScrollArea>
-      </SecondaryPanel>
+        </div>
+      </>
     );
   };
 
@@ -421,23 +568,75 @@ export function ComposerMenu({
         sideOffset={8}
         collisionBoundary={collisionBoundary}
         collisionPadding={12}
-        className={cn(
-          'bg-transparent shadow-none ring-0',
-          activePanel
-            ? 'w-[37rem] max-w-(--radix-dropdown-menu-content-available-width) overflow-visible p-1'
-            : 'w-[16.5rem] overflow-visible p-1',
-        )}
+        className="w-[16.5rem] max-w-(--radix-dropdown-menu-content-available-width) overflow-hidden bg-transparent p-1 shadow-none ring-0"
       >
-        <div
-          className={cn(
-            'items-end gap-2',
-            activePanel ? 'flex w-full min-w-0' : 'flex',
-          )}
-        >
+        {activePanel && activePanelLabel ? (
+          <SecondaryPanel panelRoundedClass={panelRoundedClass}>
+            <PanelHeader
+              label={activePanelLabel}
+              onBack={returnToPrimaryPanel}
+              className={menuItemRoundedClass}
+            />
+            {activePanel === 'targets' ? (
+              <div className="space-y-1 p-1">
+                <DropdownMenuItem
+                  role="switch"
+                  aria-checked={goalPanelOpen}
+                  disabled={!goalCommandAvailable}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    onGoalPanelOpenChange?.(!goalPanelOpen);
+                  }}
+                  className={cn(
+                    'gap-3 p-1.5',
+                    menuItemRoundedClass,
+                    goalPanelOpen && 'bg-muted',
+                  )}
+                >
+                  <Target className="size-5" />
+                  <span className="min-w-0 flex-1 text-base">
+                    {t('chat.goal.label')}
+                  </span>
+                  <Toggle checked={goalPanelOpen} />
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  role="switch"
+                  aria-checked={planModeEnabled}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    onPlanModeChange?.(!planModeEnabled);
+                  }}
+                  className={cn(
+                    'gap-3 p-1.5',
+                    menuItemRoundedClass,
+                    planModeEnabled && 'bg-muted',
+                  )}
+                >
+                  <ListChecks className="size-5" />
+                  <span className="min-w-0 flex-1 text-base">
+                    {t('composer.planMode')}
+                  </span>
+                  <Toggle checked={planModeEnabled} />
+                </DropdownMenuItem>
+              </div>
+            ) : activePanel === 'experts' || activePanel === 'skills' ? (
+              renderCapabilityPanel(activePanel)
+            ) : (
+              <ConnectorMenuPanel
+                client={connectorClient ?? null}
+                xpertId={connectorXpertId}
+                projectId={connectorProjectId}
+                selectedBindingIds={selectedConnectorBindingIds}
+                onSelectionChange={onConnectorSelectionChange}
+                apiUrl={apiUrl}
+              />
+            )}
+          </SecondaryPanel>
+        ) : (
           <div
             data-slot="composer-primary-panel"
             className={cn(
-              'w-64 max-w-full shrink-0 overflow-hidden bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
+              'w-64 max-w-full overflow-hidden bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
               panelRoundedClass,
             )}
           >
@@ -486,66 +685,7 @@ export function ComposerMenu({
               className={menuItemRoundedClass}
             />
           </div>
-
-          {activePanel === 'targets' ? (
-            <SecondaryPanel panelRoundedClass={panelRoundedClass}>
-              <div className="space-y-1 p-1">
-                <DropdownMenuItem
-                  role="switch"
-                  aria-checked={goalPanelOpen}
-                  disabled={!goalCommandAvailable}
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    onGoalPanelOpenChange?.(!goalPanelOpen);
-                  }}
-                  className={cn(
-                    'gap-3 p-1.5',
-                    menuItemRoundedClass,
-                    goalPanelOpen && 'bg-muted',
-                  )}
-                >
-                  <Target className="size-5" />
-                  <span className="min-w-0 flex-1 text-base">
-                    {t('chat.goal.label')}
-                  </span>
-                  <Toggle checked={goalPanelOpen} />
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  role="switch"
-                  aria-checked={planModeEnabled}
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    onPlanModeChange?.(!planModeEnabled);
-                  }}
-                  className={cn(
-                    'gap-3 p-1.5',
-                    menuItemRoundedClass,
-                    planModeEnabled && 'bg-muted',
-                  )}
-                >
-                  <ListChecks className="size-5" />
-                  <span className="min-w-0 flex-1 text-base">
-                    {t('composer.planMode')}
-                  </span>
-                  <Toggle checked={planModeEnabled} />
-                </DropdownMenuItem>
-              </div>
-            </SecondaryPanel>
-          ) : activePanel === 'experts' || activePanel === 'skills' ? (
-            renderCapabilityPanel(activePanel)
-          ) : activePanel === 'connectors' ? (
-            <SecondaryPanel panelRoundedClass={panelRoundedClass}>
-              <ConnectorMenuPanel
-                client={connectorClient ?? null}
-                xpertId={connectorXpertId}
-                projectId={connectorProjectId}
-                selectedBindingIds={selectedConnectorBindingIds}
-                onSelectionChange={onConnectorSelectionChange}
-                apiUrl={apiUrl}
-              />
-            </SecondaryPanel>
-          ) : null}
-        </div>
+        )}
       </DropdownMenuContent>
 
       {planModeEnabled ? (
@@ -569,6 +709,32 @@ export function ComposerMenu({
         />
       ) : null}
     </DropdownMenu>
+  );
+}
+
+function PanelHeader({
+  label,
+  onBack,
+  className,
+}: {
+  label: string;
+  onBack: () => void;
+  className: string;
+}) {
+  return (
+    <>
+      <DropdownMenuItem
+        onSelect={(event) => {
+          event.preventDefault();
+          onBack();
+        }}
+        className={cn('gap-3 p-1.5 font-normal', className)}
+      >
+        <ArrowLeft className="size-5" />
+        <span className="min-w-0 flex-1 text-base">{label}</span>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator className="my-0" />
+    </>
   );
 }
 
@@ -621,15 +787,15 @@ function SecondaryPanel({
     <div
       data-slot="composer-secondary-panel"
       className={cn(
-        'min-w-0 max-w-full flex-1 overflow-hidden bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10',
+        'w-64 min-w-0 max-w-full overflow-hidden bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10',
         panelRoundedClass,
       )}
     >
       <div
         data-slot="composer-secondary-scroll"
-        className="w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain"
+        className="w-full min-w-0 overflow-x-hidden"
       >
-        <div className="w-full min-w-80">{children}</div>
+        <div className="w-full min-w-0">{children}</div>
       </div>
     </div>
   );
@@ -645,15 +811,17 @@ function PanelSearch({
   placeholder: string;
 }) {
   return (
-    <div className="relative p-2">
-      <Search className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        autoFocus
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="h-8 border-0 bg-muted pl-10 text-base shadow-none focus-visible:ring-1"
-      />
+    <div data-slot="composer-panel-search" className="px-2 pt-1 pb-2">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          autoFocus
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className="h-8 border-0 bg-muted pl-10 text-base shadow-none focus-visible:ring-1"
+        />
+      </div>
     </div>
   );
 }

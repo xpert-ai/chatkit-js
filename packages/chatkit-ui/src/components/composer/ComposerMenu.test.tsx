@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ComposerMenu } from './ComposerMenu';
@@ -19,6 +25,14 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
         'composer.planModeActive': 'Plan',
         'composer.disablePlanMode': 'Turn off plan mode',
         'composer.capabilities.skills': 'Skills',
+        'composer.capabilities.agent': 'Agent',
+        'composer.capabilities.xpertAgent': 'Xpert',
+        'composer.capabilities.agentDetails': 'Agent details',
+        'composer.capabilities.type': 'Type',
+        'composer.capabilities.identifier': 'ID',
+        'composer.capabilities.tools': 'Tools',
+        'composer.capabilities.toolsets': 'Toolsets',
+        'composer.capabilities.knowledge': 'Knowledge',
         'composer.workbuddy.targets': 'Goals',
         'composer.workbuddy.experts': 'Experts',
         'composer.workbuddy.connectors': 'Connectors',
@@ -98,15 +112,22 @@ describe('ComposerMenu', () => {
     expect(screen.queryByText('Plugins')).not.toBeInTheDocument();
   });
 
-  it('uses compact padding for the composer menu and its items', () => {
+  it('uses the legacy panel border and gutter with compact item padding', () => {
     render(<ComposerMenu goalCommandAvailable />);
     openMenu();
 
+    const menuContent = document.querySelector(
+      '[data-slot="dropdown-menu-content"]',
+    );
     const primaryPanel = document.querySelector(
       '[data-slot="composer-primary-panel"]',
     );
-    expect(primaryPanel).toHaveClass('p-1');
-    expect(primaryPanel).not.toHaveClass('p-3');
+    expect(menuContent).toHaveClass('p-1');
+    expect(primaryPanel).toHaveClass('p-1', 'ring-1', 'ring-foreground/10');
+    expect(primaryPanel).not.toHaveClass('p-0', 'p-3', 'ring-0');
+    expect(
+      primaryPanel?.querySelector('[data-slot="dropdown-menu-separator"]'),
+    ).toHaveClass('my-2');
     for (const item of screen.getAllByRole('menuitem')) {
       expect(item).toHaveClass('p-1.5');
     }
@@ -132,7 +153,7 @@ describe('ComposerMenu', () => {
     );
   });
 
-  it('opens goals as a side-by-side secondary panel and preserves goal and plan controls', () => {
+  it('opens goals in place, returns to the primary menu, and preserves its controls', () => {
     const onGoalPanelOpenChange = vi.fn();
     const onPlanModeChange = vi.fn();
     render(
@@ -155,37 +176,28 @@ describe('ComposerMenu', () => {
       '[data-slot="composer-secondary-scroll"]',
     );
     expect(menuContent).toHaveClass(
-      'w-[37rem]',
+      'w-[16.5rem]',
       'max-w-(--radix-dropdown-menu-content-available-width)',
-      'overflow-visible',
+      'overflow-hidden',
       'p-1',
-    );
-    expect(menuContent).not.toHaveClass('w-[46.5rem]');
-    expect(menuContent).not.toHaveClass('overflow-x-auto');
-    expect(menuContent?.firstElementChild).toHaveClass(
-      'flex',
-      'w-full',
-      'min-w-0',
     );
     expect(
       document.querySelector('[data-slot="composer-primary-panel"]'),
-    ).toHaveClass('shrink-0', 'max-w-full', 'overflow-hidden');
-    expect(secondaryPanel).toHaveClass('min-w-0', 'flex-1', 'overflow-hidden');
+    ).not.toBeInTheDocument();
+    expect(secondaryPanel).toHaveClass(
+      'w-64',
+      'max-w-full',
+      'overflow-hidden',
+      'ring-1',
+      'ring-foreground/10',
+    );
+    expect(secondaryPanel).not.toHaveClass('ring-0');
     expect(secondaryScroll).toHaveClass(
       'w-full',
       'min-w-0',
-      'overflow-x-auto',
-      'overflow-y-hidden',
+      'overflow-x-hidden',
     );
-    expect(secondaryScroll?.firstElementChild).toHaveClass(
-      'w-full',
-      'min-w-80',
-    );
-    expect(secondaryScroll?.firstElementChild).not.toHaveClass('min-w-[30rem]');
-    expect(secondaryPanel).not.toHaveClass(
-      'absolute',
-      'left-[calc(100%+0.5rem)]',
-    );
+    expect(secondaryScroll?.firstElementChild).toHaveClass('w-full', 'min-w-0');
 
     const goal = screen.getByRole('switch', { name: 'Goal' });
     const plan = screen.getByRole('switch', { name: 'Plan mode' });
@@ -196,6 +208,14 @@ describe('ComposerMenu', () => {
     expect(
       screen.getByRole('button', { name: 'Close menu' }),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Goals' }));
+    expect(
+      document.querySelector('[data-slot="composer-primary-panel"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="composer-secondary-panel"]'),
+    ).not.toBeInTheDocument();
   });
 
   it('searches and selects skills in the secondary panel', () => {
@@ -238,6 +258,14 @@ describe('ComposerMenu', () => {
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Skills/ }));
 
+    expect(
+      screen
+        .getByRole('menuitem', { name: 'Skills' })
+        .querySelector('.lucide-arrow-left'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="composer-primary-panel"]'),
+    ).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Search skills')).toHaveClass('h-8');
     expect(
       document.querySelector('[data-slot="composer-capability-list"]'),
@@ -260,6 +288,30 @@ describe('ComposerMenu', () => {
       'research',
       true,
     );
+  });
+
+  it('keeps the gap above search smaller than its horizontal inset', () => {
+    render(
+      <ComposerMenu
+        runtimeCapabilities={{ skills: [], plugins: [], subAgents: [] }}
+      />,
+    );
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Skills/ }));
+
+    const secondaryPanel = document.querySelector(
+      '[data-slot="composer-secondary-panel"]',
+    );
+    expect(
+      secondaryPanel?.querySelector('[data-slot="dropdown-menu-separator"]'),
+    ).toHaveClass('my-0');
+
+    const panelSearch = document.querySelector(
+      '[data-slot="composer-panel-search"]',
+    );
+    expect(panelSearch).not.toBeNull();
+    expect(panelSearch).toHaveClass('px-2', 'pt-1', 'pb-2');
+    expect(panelSearch).not.toHaveClass('p-2', 'pt-2');
   });
 
   it('groups same-name Xpert and Project skills without overwriting either source', () => {
@@ -391,21 +443,21 @@ describe('ComposerMenu', () => {
     );
     expect(
       document.querySelector('[data-slot="composer-secondary-scroll"]'),
-    ).toHaveClass('w-full', 'overflow-x-auto');
+    ).toHaveClass('w-full', 'min-w-0', 'overflow-x-hidden');
     expect(
       document.querySelector('[data-slot="composer-secondary-panel"]'),
-    ).toHaveClass('min-w-0', 'flex-1', 'overflow-hidden');
+    ).toHaveClass('w-64', 'min-w-0', 'max-w-full', 'overflow-hidden');
     expect(
       document.querySelector('[data-slot="composer-secondary-scroll"]')
         ?.firstElementChild,
-    ).toHaveClass('w-full', 'min-w-80');
+    ).toHaveClass('w-full', 'min-w-0');
     expect(
       document.querySelector('[data-slot="composer-secondary-scroll"]')
         ?.firstElementChild,
-    ).not.toHaveClass('min-w-[30rem]');
+    ).not.toHaveClass('min-w-80', 'min-w-[30rem]');
   });
 
-  it('shows runtime sub-agents under Experts', () => {
+  it('shows runtime sub-agents and their hover details under Experts', async () => {
     const onRuntimeCapabilityToggle = vi.fn();
     render(
       <ComposerMenu
@@ -417,7 +469,13 @@ describe('ComposerMenu', () => {
               nodeKey: 'researcher',
               type: 'agent',
               label: 'Researcher',
+              name: 'researcher',
               description: 'Research helper',
+              avatar: { background: '#123456' },
+              agentKey: 'agent-researcher',
+              toolNames: ['search'],
+              toolsetNames: ['Search Tools'],
+              knowledgebaseNames: ['Docs'],
             },
           ],
         }}
@@ -432,6 +490,27 @@ describe('ComposerMenu', () => {
     );
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Experts' }));
+    const detailTrigger = screen.getByRole('button', {
+      name: 'Agent details',
+    });
+    expect(
+      document.querySelector('[data-slot="runtime-sub-agent-detail-card"]'),
+    ).not.toBeInTheDocument();
+
+    fireEvent.pointerMove(detailTrigger);
+    await waitFor(() => {
+      const detailCard = document.querySelector(
+        '[data-slot="runtime-sub-agent-detail-card"]',
+      );
+      expect(detailCard).toBeInTheDocument();
+      expect(
+        within(detailCard as HTMLElement).getByText('agent-researcher'),
+      ).toBeInTheDocument();
+      expect(
+        within(detailCard as HTMLElement).getByText('Search Tools'),
+      ).toBeInTheDocument();
+    });
+
     fireEvent.click(
       screen.getByRole('menuitemcheckbox', { name: /Researcher/ }),
     );
@@ -440,6 +519,34 @@ describe('ComposerMenu', () => {
       'researcher',
       true,
     );
+  });
+
+  it('lets short capability lists size to their content and scrolls long lists', () => {
+    render(
+      <ComposerMenu
+        runtimeCapabilities={{
+          skills: [],
+          plugins: [],
+          subAgents: [
+            {
+              nodeKey: 'researcher',
+              type: 'agent',
+              label: 'Researcher',
+              description: 'Research helper',
+            },
+          ],
+        }}
+      />,
+    );
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Experts' }));
+
+    const capabilityScroll = document.querySelector(
+      '[data-slot="composer-capability-scroll"]',
+    );
+    expect(capabilityScroll).not.toBeNull();
+    expect(capabilityScroll).toHaveClass('max-h-72', 'overflow-y-auto');
+    expect(capabilityScroll).not.toHaveClass('h-72');
   });
 
   it('renders active target controls outside the dropdown', () => {
