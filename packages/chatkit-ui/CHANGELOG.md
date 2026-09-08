@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.11
+
+### Patch Changes
+
+- 4276463: Deduplicate Task Summary sources with whitespace differences in their IDs, including pasted references and historical entries, while preserving pagination until all source rows are loaded.
+
 ## 0.5.10
 
 ### Patch Changes
