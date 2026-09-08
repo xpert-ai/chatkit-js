@@ -7,6 +7,70 @@ import {
 } from './task-summary';
 
 describe('task summary aggregation', () => {
+  it.each(['\n', '\r\n', ' \t'])(
+    'deduplicates pasted references and persisted contributions with trailing whitespace %j',
+    (suffix) => {
+      const text = `Batch 01\n  Keep the indented content.${suffix}`;
+      const source = {
+        id: `quote:${text}`,
+        kind: 'quote' as const,
+        title: 'Batch 01',
+        description: 'Pasted text',
+      };
+      const reference = { type: 'quote' as const, source: 'Pasted text', text };
+      const live = collectLiveTaskSummary({
+        messages: [
+          {
+            id: 'message-1',
+            references: [reference],
+            taskSummary: { version: 1, sources: [source] },
+            content: [
+              {
+                type: 'component',
+                data: { taskSummary: { version: 1, sources: [source] } },
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(live.sources).toHaveLength(1);
+      expect(live.sources[0]?.id).toBe(`quote:${text}`.trim());
+      expect(reference.text).toBe(text);
+      expect(source.id).toBe(`quote:${text}`);
+    },
+  );
+
+  it('merges legacy source aliases without shortening partially loaded pagination', () => {
+    const sources = Array.from({ length: 30 }, (_, index) => ({
+      id: `quote:Batch ${index + 1}`,
+      kind: 'quote' as const,
+      title: 'Pasted content',
+    }));
+    const legacySources = sources.flatMap((source) => [
+      { ...source, id: `${source.id}\n` },
+      source,
+    ]);
+    const history = snapshot({
+      sources: { items: legacySources.slice(0, 3), total: 60 },
+    });
+    const live = emptyLive({ sources: sources.slice(0, 1) });
+
+    const partial = mergeTaskSummary(history, live, {
+      sources: legacySources.slice(0, 50),
+    });
+    expect(partial.sources).toHaveLength(25);
+    expect(partial.totals.sources).toBe(60);
+
+    const complete = mergeTaskSummary(history, live, {
+      sources: legacySources,
+    });
+    expect(complete.sources).toHaveLength(30);
+    expect(complete.totals.sources).toBe(30);
+    expect(new Set(complete.sources.map((source) => source.id)).size).toBe(30);
+    expect(legacySources[0]?.id).toBe('quote:Batch 1\n');
+  });
+
   it('lets newer live items override the historical baseline by stable id', () => {
     const history = snapshot({
       outputs: {
