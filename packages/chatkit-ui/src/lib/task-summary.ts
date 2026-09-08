@@ -618,7 +618,8 @@ function sourceFromReference(
 ): ChatTaskSummarySource {
   const updatedAt = message.updatedAt ?? message.createdAt;
   const common = {
-    id: reference.id ?? `${reference.type}:${reference.text}`,
+    id:
+      stringValue(reference.id) ?? `${reference.type}:${reference.text}`.trim(),
     title: reference.label?.trim() || reference.text.trim().slice(0, 80),
     messageId: message.id,
     updatedAt,
@@ -828,7 +829,7 @@ export function collectLiveTaskSummary({
         ),
       ),
     ]).filter(isCompletedOpenableOutput),
-    sources: mergeLatest([
+    sources: mergeSources([
       ...contributions
         .flatMap((item) => item.sources ?? [])
         .filter((source) => source.kind !== 'sub_agent'),
@@ -863,10 +864,16 @@ export function mergeTaskSummary(
     ...(historySections?.outputs ?? history?.outputs.items ?? []),
     ...live.outputs,
   ]).filter(isCompletedOpenableOutput);
-  const sources = mergeLatest([
-    ...(historySections?.sources ?? history?.sources.items ?? []),
-    ...live.sources,
-  ]);
+  const historySources =
+    historySections?.sources ?? history?.sources.items ?? [];
+  const sources = mergeSources([...historySources, ...live.sources]);
+  const historySourceTotal = history?.sources.total ?? 0;
+  // Keep the server count until every raw row is loaded so legacy duplicates
+  // cannot make pagination stop before the remaining sources are fetched.
+  const sourceTotal =
+    historySources.length >= historySourceTotal
+      ? sources.length
+      : Math.max(historySourceTotal, sources.length);
   const historyAgents = historySections?.agents ?? history?.agents.items ?? [];
   const eligibleHistoryAgents = historyAgents.filter((agent) =>
     Boolean(agent.parentId),
@@ -901,11 +908,15 @@ export function mergeTaskSummary(
     running: live.running,
     totals: {
       outputs: Math.max(history?.outputs.total ?? 0, outputs.length),
-      sources: Math.max(history?.sources.total ?? 0, sources.length),
+      sources: sourceTotal,
       agents: Math.max(historyAgentTotal, agents.length),
       pending: Math.max(history?.pending.total ?? 0, pending.length),
     },
   };
+}
+
+function mergeSources(items: ChatTaskSummarySource[]) {
+  return mergeLatest(items.map((item) => ({ ...item, id: item.id.trim() })));
 }
 
 function mergeLatest<T extends { id: string; updatedAt?: string }>(items: T[]) {
