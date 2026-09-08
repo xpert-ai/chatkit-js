@@ -17,7 +17,16 @@ type ContextCompressionStatus = 'running' | 'success' | 'fail';
 type ContextCompressionReason =
   | 'no_messages'
   | 'no_unprotected_history'
-  | 'no_token_gain';
+  | 'no_token_gain'
+  | 'summary_invalid'
+  | 'summary_input_budget'
+  | 'summary_output_budget'
+  | 'summary_work_limit'
+  | 'summary_constraints_lost'
+  | 'summary_service_error'
+  | 'retry_deferred'
+  | 'context_budget_exceeded'
+  | 'context_validation_failed';
 
 export type ContextCompressionComponentData = {
   category: 'Tool';
@@ -44,11 +53,12 @@ export function isContextCompressionComponent(
   );
 }
 
-function isSkipped(reason: unknown) {
+function isSkipped(status: ContextCompressionStatus, reason: unknown) {
   return (
-    reason === 'no_messages' ||
-    reason === 'no_unprotected_history' ||
-    reason === 'no_token_gain'
+    status === 'success' &&
+    (reason === 'no_messages' ||
+      reason === 'no_unprotected_history' ||
+      reason === 'no_token_gain')
   );
 }
 
@@ -59,7 +69,7 @@ function ContextCompressionLabel({
 }) {
   const { t } = useChatkitTranslation();
   const status = data.status ?? 'running';
-  const skipped = isSkipped(data.reason);
+  const skipped = isSkipped(status, data.reason);
 
   if (skipped) {
     return t('message.contextCompression.skipped');
@@ -81,7 +91,7 @@ function ContextCompressionIcon({
   data: ContextCompressionComponentData;
 }) {
   const status = data.status ?? 'running';
-  const skipped = isSkipped(data.reason);
+  const skipped = isSkipped(status, data.reason);
 
   if (status === 'running') {
     return (
