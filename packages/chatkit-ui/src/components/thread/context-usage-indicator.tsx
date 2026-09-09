@@ -194,15 +194,17 @@ export function ContextUsageIndicator({
     stream.isLoading,
   ]);
 
+  const effectiveMaxContextSize =
+    realtimeUsage?.effectiveModel?.contextWindow ?? maxContextSize;
   if (
-    typeof maxContextSize !== 'number' ||
-    !Number.isFinite(maxContextSize) ||
-    maxContextSize <= 0
+    typeof effectiveMaxContextSize !== 'number' ||
+    !Number.isFinite(effectiveMaxContextSize) ||
+    effectiveMaxContextSize <= 0
   ) {
     return null;
   }
 
-  const max = Math.floor(maxContextSize);
+  const max = Math.floor(effectiveMaxContextSize);
   const used = clampUsage(usedContextSize, max);
   const percent = Math.max(0, Math.min(100, (used / max) * 100));
   const roundedPercent = Math.round(percent);
