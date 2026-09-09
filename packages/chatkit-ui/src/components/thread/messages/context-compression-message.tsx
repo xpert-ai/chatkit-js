@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import {
   resolveLocalizedText,
+  type ContextCompressionReason,
   type LocalizedText,
   type TMessageContentComponent,
 } from '@xpert-ai/chatkit-types';
@@ -14,10 +15,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 export const CONTEXT_COMPRESSION_COMPONENT_TYPE = 'context-compression';
 
 type ContextCompressionStatus = 'running' | 'success' | 'fail';
-type ContextCompressionReason =
-  | 'no_messages'
-  | 'no_unprotected_history'
-  | 'no_token_gain';
 
 export type ContextCompressionComponentData = {
   category: 'Tool';
@@ -44,11 +41,12 @@ export function isContextCompressionComponent(
   );
 }
 
-function isSkipped(reason: unknown) {
+function isSkipped(status: ContextCompressionStatus, reason: unknown) {
   return (
-    reason === 'no_messages' ||
-    reason === 'no_unprotected_history' ||
-    reason === 'no_token_gain'
+    status === 'success' &&
+    (reason === 'no_messages' ||
+      reason === 'no_unprotected_history' ||
+      reason === 'no_token_gain')
   );
 }
 
@@ -59,7 +57,7 @@ function ContextCompressionLabel({
 }) {
   const { t } = useChatkitTranslation();
   const status = data.status ?? 'running';
-  const skipped = isSkipped(data.reason);
+  const skipped = isSkipped(status, data.reason);
 
   if (skipped) {
     return t('message.contextCompression.skipped');
@@ -81,7 +79,7 @@ function ContextCompressionIcon({
   data: ContextCompressionComponentData;
 }) {
   const status = data.status ?? 'running';
-  const skipped = isSkipped(data.reason);
+  const skipped = isSkipped(status, data.reason);
 
   if (status === 'running') {
     return (

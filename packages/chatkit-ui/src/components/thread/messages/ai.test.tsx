@@ -334,6 +334,21 @@ describe('AssistantMessage tool components', () => {
     );
   });
 
+  it.each([
+    'no_token_gain',
+    'no_unprotected_history',
+    'summary_invalid',
+    'summary_constraints_lost',
+  ])('shows failed compression as failure for reason %s', (reason) => {
+    renderAssistant([
+      createContextCompressionComponent({ status: 'fail', reason }),
+    ]);
+    expect(screen.getByText('Context compression failed')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Context not compressed'),
+    ).not.toBeInTheDocument();
+  });
+
   it('shows an inline pet next to assistant state controls only while streaming', () => {
     const content: ChatkitMessage['content'] = [
       { id: 'answer', type: 'text', text: 'Drafting the page.' },

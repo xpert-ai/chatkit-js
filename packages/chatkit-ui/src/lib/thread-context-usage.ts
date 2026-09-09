@@ -73,7 +73,32 @@ export function parseThreadContextUsageEvent(
   const totalTokens = normalizeContextUsageNumber(usageRecord.totalTokens);
   if (totalTokens == null) return null;
 
+  let effectiveModel: TThreadContextUsageEvent['effectiveModel'];
+  const rawEffectiveModel = raw.effectiveModel;
+  if (rawEffectiveModel !== undefined) {
+    if (
+      !rawEffectiveModel ||
+      typeof rawEffectiveModel !== 'object' ||
+      !('contextWindow' in rawEffectiveModel) ||
+      typeof rawEffectiveModel.contextWindow !== 'number' ||
+      !Number.isFinite(rawEffectiveModel.contextWindow) ||
+      rawEffectiveModel.contextWindow <= 0 ||
+      ('model' in rawEffectiveModel &&
+        rawEffectiveModel.model !== undefined &&
+        typeof rawEffectiveModel.model !== 'string')
+    )
+      return null;
+    effectiveModel = {
+      contextWindow: rawEffectiveModel.contextWindow,
+      ...('model' in rawEffectiveModel &&
+      typeof rawEffectiveModel.model === 'string'
+        ? { model: rawEffectiveModel.model }
+        : {}),
+    };
+  }
+
   return {
+    ...(effectiveModel ? { effectiveModel } : {}),
     type: THREAD_CONTEXT_USAGE_EVENT_TYPE,
     threadId,
     agentKey,

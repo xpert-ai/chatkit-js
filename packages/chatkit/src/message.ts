@@ -664,6 +664,8 @@ export type TThreadContextUsageEvent = {
   agentKey: string;
   updatedAt: string;
   usage: TThreadContextUsageMetrics;
+  /** Window of the model used by this execution, including fallback models. */
+  effectiveModel?: { model?: string; contextWindow: number };
 };
 
 export type ThreadGoalStatus =

@@ -30,6 +30,29 @@ const usageEvent: TThreadContextUsageEvent = {
 };
 
 describe('thread context usage helpers', () => {
+  it('preserves the effective model window through event parsing', () => {
+    const event = {
+      ...usageEvent,
+      effectiveModel: { model: 'fallback', contextWindow: 32768 },
+    };
+    expect(parseThreadContextUsageEvent(event)).toEqual(event);
+    expect(extractThreadContextUsageEvent({ data: event })).toEqual(event);
+  });
+
+  it.each([
+    null,
+    {},
+    { contextWindow: 0 },
+    { contextWindow: -1 },
+    { contextWindow: Infinity },
+    { contextWindow: '32768' },
+    { contextWindow: 32768, model: 1 },
+  ])('rejects an invalid effective model window: %j', (effectiveModel) => {
+    expect(
+      parseThreadContextUsageEvent({ ...usageEvent, effectiveModel }),
+    ).toBeNull();
+  });
+
   it('parses a valid thread context usage event', () => {
     const parsed = parseThreadContextUsageEvent({
       ...usageEvent,
