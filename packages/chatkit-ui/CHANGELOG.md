@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.12
+
+### Patch Changes
+
+- 055a70d: Preserve the effective model window in context usage events and use it for the context occupancy indicator. Continue using the assistant window for older events without model information.
+- 914e916: Display failed context-compression attempts as failures instead of skipped work, and support detailed compression failure reasons from the server. Preserve the skipped label for successful no-op results.
+- 16c8e04: Export the shared ContextCompressionReason type and reuse it in the context-compression renderer without changing reason codes or display behavior.
+- Updated dependencies [055a70d]
+- Updated dependencies [16c8e04]
+  - @xpert-ai/chatkit-types@0.5.8
+
 ## 0.5.11
 
 ### Patch Changes
