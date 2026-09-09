@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.8
+
+### Patch Changes
+
+- 055a70d: Preserve the effective model window in context usage events and use it for the context occupancy indicator. Continue using the assistant window for older events without model information.
+- 16c8e04: Export the shared ContextCompressionReason type and reuse it in the context-compression renderer without changing reason codes or display behavior.
+
 ## 0.5.7
 
 ### Patch Changes
