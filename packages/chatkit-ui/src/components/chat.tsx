@@ -55,6 +55,7 @@ import { ComposerMenu } from './composer/ComposerMenu';
 import { PromptWorkflowShortcuts } from './composer/PromptWorkflowShortcuts';
 import { usePromptWorkflowDraft } from './chat/usePromptWorkflowDraft';
 import { ModelPicker } from './composer/ModelPicker';
+import { WorkspaceFileSelector } from './composer/WorkspaceFileSelector';
 import {
   WorkspaceFileMentionPalette,
   getWorkspaceFilePath,
@@ -979,6 +980,7 @@ export function Chat({
     canLoadMoreMessages;
   const isConfiguredProjectLocked =
     options?.composer?.projects?.locked === true && Boolean(activeProjectId);
+  const isFileSelectorVisible = Boolean(xpertPlatformClient && (activeProjectId || stream.assistantId));
   const isProjectSelectorVisible =
     projectsEnabled &&
     (isConfiguredProjectLocked ||
@@ -2713,20 +2715,20 @@ export function Chat({
     [stream.client],
   );
 
+  const addWorkspaceFileReference = React.useCallback((file: XpertWorkspaceFile) => {
+    const filePath = getWorkspaceFilePath(file);
+    setReferencedWorkspaceFiles((current) =>
+      current.some((item) => (item.workspacePath ?? item.filePath) === filePath)
+        ? current
+        : [...current, toReferencedWorkspaceFile(file)],
+    );
+  }, []);
+
   const selectWorkspaceFileMention = React.useCallback(
     (file: XpertWorkspaceFile) => {
       const mention = workspaceFileMention;
       if (!mention) return;
-
-      const filePath = getWorkspaceFilePath(file);
-
-      setReferencedWorkspaceFiles((current) =>
-        current.some(
-          (item) => (item.workspacePath ?? item.filePath) === filePath,
-        )
-          ? current
-          : [...current, toReferencedWorkspaceFile(file)],
-      );
+      addWorkspaceFileReference(file);
       const nextParts = replaceComposerRange(
         composerPartsRef.current,
         mention.start,
@@ -2742,6 +2744,7 @@ export function Chat({
       focusComposerAt(mention.start);
     },
     [
+      addWorkspaceFileReference,
       commitComposerParts,
       workspaceFileMention,
       focusComposerAt,
@@ -4285,7 +4288,7 @@ export function Chat({
               className={cn(
                 'relative flex min-w-0 flex-1 flex-col overflow-visible',
                 'bg-composer-shell px-composer-inset pt-composer-inset',
-                !isProjectSelectorVisible && 'pb-composer-inset',
+                !isProjectSelectorVisible && !isFileSelectorVisible && 'pb-composer-inset',
                 'transition-[border-radius] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
                 'rounded-composer-shell shadow-composer-shell',
               )}
@@ -4510,25 +4513,39 @@ export function Chat({
                 </div>
               </div>
 
-              {projectsEnabled &&
-              (isConfiguredProjectLocked || !isProjectSelectionLocked) ? (
-                <ProjectSelector
-                  client={xpertPlatformClient}
-                  xpertId={stream.assistantId}
-                  activeProjectId={activeProjectId}
-                  locked={isConfiguredProjectLocked}
-                  label={options?.composer?.projects?.label}
-                  disabled={
-                    missingConfig ||
-                    isHistoryLoading ||
-                    isGoalLoading ||
-                    hasPendingInteractiveRequest
-                  }
-                  onAvailabilityChange={setHasSelectableProjects}
-                  onProjectChange={handleProjectSelectionChange}
-                  onProjectCreate={onProjectCreate}
-                />
-              ) : null}
+              <div data-slot="composer-context-rail" className="flex min-w-0 flex-wrap items-center">
+                <div className="min-w-0 max-w-full">
+                  {projectsEnabled &&
+                  (isConfiguredProjectLocked || !isProjectSelectionLocked) ? (
+                    <ProjectSelector
+                      client={xpertPlatformClient}
+                      xpertId={stream.assistantId}
+                      activeProjectId={activeProjectId}
+                      locked={isConfiguredProjectLocked}
+                      label={options?.composer?.projects?.label}
+                      disabled={
+                        missingConfig ||
+                        isHistoryLoading ||
+                        isGoalLoading ||
+                        hasPendingInteractiveRequest
+                      }
+                      onAvailabilityChange={setHasSelectableProjects}
+                      onProjectChange={handleProjectSelectionChange}
+                      onProjectCreate={onProjectCreate}
+                    />
+                  ) : null}
+                </div>
+                {isFileSelectorVisible && (
+                  <WorkspaceFileSelector
+                    client={xpertPlatformClient}
+                    assistantId={stream.assistantId ?? null}
+                    projectId={activeProjectId ?? null}
+                    selectedFilePaths={referencedWorkspaceFilePaths}
+                    disabled={missingConfig || isHistoryLoading || isGoalLoading || hasPendingInteractiveRequest}
+                    onSelect={addWorkspaceFileReference}
+                  />
+                )}
+              </div>
             </div>
           </form>
 

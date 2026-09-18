@@ -268,6 +268,8 @@
     "quoteSelection": "引用选中内容",
     "askInSideChat": "在侧边聊天中提问",
     "fileMentions": {
+      "select": "选择文件",
+      "search": "搜索文件",
       "title": "引用工作区文件",
       "loading": "正在加载工作区文件...",
       "empty": "没有匹配的工作区文件",

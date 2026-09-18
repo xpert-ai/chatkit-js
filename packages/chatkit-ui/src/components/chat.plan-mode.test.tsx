@@ -618,7 +618,6 @@ describe('Chat plan mode payload', () => {
       'p-3',
       'px-0.5',
       'pt-0.5',
-      'pb-composer-inset',
     );
     expect(composerShell).not.toHaveClass(
       'border',
@@ -698,7 +697,7 @@ describe('Chat plan mode payload', () => {
     ).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-slot="composer-input-shell"]'),
-    ).toHaveClass('pb-composer-inset');
+    ).not.toHaveClass('pb-composer-inset');
   });
 
   it('preserves plain text and clears conversation-scoped Connectors when the Project changes', async () => {
@@ -755,7 +754,7 @@ describe('Chat plan mode payload', () => {
     expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
   });
 
-  it('keeps equal shell insets when the project rail is disabled', async () => {
+  it('keeps the file selector rail when the project selector is disabled', async () => {
     renderChat();
     await act(async () => {
       await Promise.resolve();
@@ -765,10 +764,11 @@ describe('Chat plan mode payload', () => {
     const composerShell = document.querySelector(
       '[data-slot="composer-input-shell"]',
     );
+    expect(document.querySelector('[data-slot="composer-file-selector"]')).toBeInTheDocument();
+    expect(composerShell).not.toHaveClass('pb-composer-inset');
     expect(composerShell).toHaveClass(
       'px-composer-inset',
       'pt-composer-inset',
-      'pb-composer-inset',
       'rounded-composer-shell',
     );
     expect(
@@ -824,6 +824,47 @@ describe('Chat plan mode payload', () => {
       );
     },
   );
+
+  it('selects a workspace file from the composer footer without replacing the draft', async () => {
+    mocks.stream.client.xperts.listWorkspaceFiles.mockResolvedValue([{
+      filePath: 'Product brief.pdf', fullPath: 'briefs/Product brief.pdf',
+      fileType: 'pdf', hasChildren: false, mimeType: 'application/pdf', size: 2048,
+    }]);
+    renderChat();
+    setComposerText(screen.getByRole('textbox'), 'Summarize this file');
+    fireEvent.click(screen.getByRole('button', { name: 'composer.fileMentions.select' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'composer.fileMentions.search' }), {
+      target: { value: 'brief' },
+    });
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'composer.fileMentions.search' }), { key: 'ArrowDown' });
+    await screen.findByRole('button', { name: 'Product brief.pdf' });
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'composer.fileMentions.search' }), { key: 'Enter' });
+    expect(screen.getByRole('textbox')).toHaveTextContent('Summarize this file');
+    expect(screen.getByText('Product brief.pdf')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+    expect(mocks.stream.submit.mock.calls[0][0]).toMatchObject({
+      input: { input: 'Summarize this file', files: [expect.objectContaining({
+        workspacePath: 'briefs/Product brief.pdf', purpose: 'workspace',
+      })] },
+    });
+  });
+
+  it('loads project files and closes the file selector when the project changes', async () => {
+    mocks.stream.client.projects.listFiles.mockResolvedValue([{
+      filePath: 'query.sql', fullPath: 'query.sql', fileType: 'sql', hasChildren: false,
+    }]);
+    const { rerender } = render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'composer.fileMentions.select' }));
+    await screen.findByRole('button', { name: 'query.sql' });
+    expect(mocks.stream.client.projects.listFiles).toHaveBeenCalledWith('project-1', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(mocks.stream.client.xperts.listWorkspaceFiles).not.toHaveBeenCalled();
+    rerender(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-2" />);
+    expect(screen.queryByRole('button', { name: 'query.sql' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'composer.fileMentions.select' }));
+    await screen.findByRole('button', { name: 'query.sql' });
+    expect(mocks.stream.client.projects.listFiles).toHaveBeenLastCalledWith('project-2', expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
 
   it('references an assistant workspace file from the @ palette before a conversation exists', async () => {
     mocks.stream.client.xperts.listWorkspaceFiles.mockResolvedValue([
