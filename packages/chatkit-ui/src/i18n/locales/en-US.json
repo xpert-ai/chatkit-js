@@ -48,6 +48,8 @@
     "missingClientSecretDetail": "Missing ChatKit client secret. Check the `clientSecret` prop or `api.getClientSecret` integration.",
     "missingApiUrlAndClientSecretShort": "Missing ChatKit API URL and client secret.",
     "missingApiUrlAndClientSecretDetail": "Missing ChatKit API URL and client secret. Check `VITE_XPERTAI_API_URL`, `options.api.apiUrl`, and your client secret integration.",
+    "emptyHistory": "No messages in this conversation yet.",
+    "retryHistory": "Retry loading",
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",

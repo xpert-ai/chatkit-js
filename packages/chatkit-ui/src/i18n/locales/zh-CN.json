@@ -48,6 +48,8 @@
     "missingClientSecretDetail": "缺少 ChatKit client secret。请检查 `clientSecret` 参数或 `api.getClientSecret` 集成。",
     "missingApiUrlAndClientSecretShort": "缺少 ChatKit API URL 和 client secret。",
     "missingApiUrlAndClientSecretDetail": "缺少 ChatKit API URL 和 client secret。请检查 `VITE_XPERTAI_API_URL`、`options.api.apiUrl` 以及 client secret 集成。",
+    "emptyHistory": "这条对话暂无消息。",
+    "retryHistory": "重新加载",
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",

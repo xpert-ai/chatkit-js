@@ -150,6 +150,11 @@ import {
 } from '../lib/conversation-connectors';
 import { createXpertThreadConversation } from '../lib/xpert-conversation-bootstrap';
 import { createConversationThreadSearchWhere } from '../lib/conversation-runtime-capabilities';
+import {
+  useThreadHistory,
+  type HistoryRequest,
+  type ThreadHistoryState,
+} from './useThreadHistory';
 
 export {
   createAssistantThreadPayload,
@@ -329,6 +334,7 @@ export type StreamContextType = {
   messages: ChatKitAIMessage[];
   historyMessageLoadVersion: number;
   historyMessagePagination: HistoryMessagePaginationState;
+  historyLoad: ThreadHistoryState;
   todos: TodoListSnapshot | null;
   runtimeActivities: RuntimeActivitiesState;
   pendingFollowUps: PendingFollowUp[];
@@ -1992,6 +1998,13 @@ const StreamSession = ({
   );
   const [values, setValues] = useState<StateType>({ messages: [] });
   const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
+  const {
+    state: historyLoad,
+    load: loadHistory,
+    reset: resetHistory,
+    markLoaded: markHistoryLoaded,
+    captureRequest: captureHistoryRequest,
+  } = useThreadHistory();
   const [historyMessagePagination, setHistoryMessagePagination] =
     useState<HistoryMessagePaginationState>(() =>
       createEmptyHistoryMessagePagination(),
@@ -2036,13 +2049,9 @@ const StreamSession = ({
   const refreshClientSecretPromiseRef =
     useRef<Promise<ResolvedClientSecret> | null>(null);
   const consumedInitialThreadRef = useRef<string | null>(null);
-  const initialThreadLoadRef = useRef<{
-    threadId: string | null;
-    promise: Promise<void> | null;
-  }>({
-    threadId: null,
-    promise: null,
-  });
+  const initialSelectedThreadRef = useRef(
+    resetThreadOnMount || initialThread != null ? null : threadId,
+  );
   const lastStreamOptionsRef = useRef<ResumeStreamOptions>({});
   const lastExecutionIdRef = useRef<string | null>(null);
   const lastEventIdRef = useRef<string | null>(null);
@@ -2273,6 +2282,7 @@ const StreamSession = ({
 
   useEffect(() => {
     return () => {
+      consumedInitialThreadRef.current = null;
       abortRef.current?.abort();
       abortRef.current = null;
       isLoadingRef.current = false;
@@ -2371,6 +2381,22 @@ const StreamSession = ({
         }
       }
     }, [isParentAvailable, sendCommand]);
+
+  const ensureHistoryCredentials = useCallback(async () => {
+    if (
+      apiUrl.trim() &&
+      !runtimeClientSecretRef.current.trim() &&
+      isParentAvailable
+    ) {
+      await refreshClientSecret();
+    }
+    // Host commands can retain a callback from before credentials were ready.
+    const configError = createMissingApiConfigurationError({
+      apiUrl,
+      clientSecret: runtimeClientSecretRef.current,
+    });
+    if (configError) throw configError;
+  }, [apiUrl, isParentAvailable, refreshClientSecret]);
 
   const fetchWithClientSecretRefresh = useMemo(
     () =>
@@ -2506,7 +2532,8 @@ const StreamSession = ({
       });
     }
     setIsLoading(false);
-    if (activeThreadId && activeRunId) {
+    isLoadingRef.current = false;
+    if (hasActiveRun && activeThreadId && activeRunId) {
       client.runs
         .cancel(activeThreadId, activeRunId, false)
         .catch(() => undefined);
@@ -2659,15 +2686,14 @@ const StreamSession = ({
     [insertPendingFollowUpsIntoTranscript, removePendingFollowUps],
   );
 
-  const loadConversationMessages = useCallback(
-    async (recordId: string, requestedThreadId?: string) => {
-      const configError = createMissingApiConfigurationError({
-        apiUrl,
-        clientSecret: runtimeClientSecret,
-      });
-      if (configError) {
-        throw configError;
-      }
+  const readConversationMessages = useCallback(
+    async (
+      recordId: string,
+      requestedThreadId: string | undefined,
+      request: HistoryRequest,
+    ) => {
+      await ensureHistoryCredentials();
+      if (!request.isCurrent()) return [];
       try {
         stop();
       } catch {
@@ -2697,7 +2723,7 @@ const StreamSession = ({
             : {}),
         }),
       ]);
-      if (conversationIdRef.current !== recordId) {
+      if (!request.isCurrent() || conversationIdRef.current !== recordId) {
         return [];
       }
       const page = normalizeConversationMessagesPage(response);
@@ -2724,7 +2750,8 @@ const StreamSession = ({
         hasMore: page.hasMore,
         isLoadingMore: false,
       });
-      setValues({ messages: page.messages ?? [] });
+      valuesRef.current = { messages: page.messages ?? [] };
+      setValues(valuesRef.current);
       setHistoryMessageLoadVersion((version) => version + 1);
       hydratePendingHITLRequestFromOperation(
         (conversationDetail as { operation?: unknown } | null)?.operation,
@@ -2733,11 +2760,10 @@ const StreamSession = ({
       return page.messages as ChatKitAIMessage[];
     },
     [
-      apiUrl,
       clearRuntimeActivities,
       client,
+      ensureHistoryCredentials,
       hydratePendingHITLRequestFromOperation,
-      runtimeClientSecret,
       setThreadId,
       stop,
       updateConversationId,
@@ -2746,19 +2772,33 @@ const StreamSession = ({
     ],
   );
 
+  const loadConversationMessages = useCallback(
+    async (recordId: string, requestedThreadId?: string) => {
+      let messages: ChatKitAIMessage[] | undefined;
+      await loadHistory(requestedThreadId ?? recordId, async (request) => {
+        messages = await readConversationMessages(
+          recordId,
+          requestedThreadId,
+          request,
+        );
+      });
+      return (
+        messages ??
+        (conversationIdRef.current === recordId &&
+        (!requestedThreadId || activeThreadIdRef.current === requestedThreadId)
+          ? (valuesRef.current.messages ?? [])
+          : [])
+      );
+    },
+    [loadHistory, readConversationMessages],
+  );
+
   const loadMoreConversationMessages = useCallback(async () => {
+    const request = captureHistoryRequest();
     const pagination = historyMessagePaginationRef.current;
     const recordId = pagination.conversationId;
     if (!recordId || !pagination.hasMore || pagination.isLoadingMore) {
       return [];
-    }
-
-    const configError = createMissingApiConfigurationError({
-      apiUrl,
-      clientSecret: runtimeClientSecret,
-    });
-    if (configError) {
-      throw configError;
     }
 
     updateHistoryMessagePagination((previous) =>
@@ -2768,6 +2808,8 @@ const StreamSession = ({
     );
 
     try {
+      await ensureHistoryCredentials();
+      if (!request.isCurrent()) return [];
       const response = await client.conversations.searchMessages(recordId, {
         ...createConversationMessagesPageQuery(pagination.loadedCount),
         ...(pagination.threadId
@@ -2779,6 +2821,7 @@ const StreamSession = ({
         pagination.loadedCount,
       );
 
+      if (!request.isCurrent()) return [];
       if (conversationIdRef.current !== recordId) {
         updateHistoryMessagePagination((previous) =>
           previous.conversationId === recordId
@@ -2824,6 +2867,7 @@ const StreamSession = ({
       setHistoryMessageLoadVersion((version) => version + 1);
       return page.messages as ChatKitAIMessage[];
     } catch (error) {
+      if (!request.isCurrent()) return [];
       updateHistoryMessagePagination((previous) =>
         previous.conversationId === recordId
           ? { ...previous, isLoadingMore: false }
@@ -2833,9 +2877,9 @@ const StreamSession = ({
     }
   }, [
     addAutoQueuedFollowUpIds,
-    apiUrl,
+    captureHistoryRequest,
     client,
-    runtimeClientSecret,
+    ensureHistoryCredentials,
     updateHistoryMessagePagination,
   ]);
 
@@ -2915,9 +2959,11 @@ const StreamSession = ({
       initialMessages?: ChatKitAIMessage[],
       options?: { suppressThreadChange?: boolean },
     ) => {
+      resetHistory();
       abortRef.current?.abort();
       abortRef.current = null;
       setIsLoading(false);
+      isLoadingRef.current = false;
       setError(null);
       clearPendingRequestUserInput(
         createAbortError('The user input request was cancelled.'),
@@ -2934,7 +2980,8 @@ const StreamSession = ({
       clearRuntimeActivities();
       setContextUsageByAgentKey({});
       setThreadGoal(null);
-      setValues({ messages: initialMessages ?? [] });
+      valuesRef.current = { messages: initialMessages ?? [] };
+      setValues(valuesRef.current);
       updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
       updateConversationId(null);
       updateConnectorBindingIdsState([]);
@@ -2959,6 +3006,7 @@ const StreamSession = ({
       updateConnectorBindingIdsState,
       updateHistoryMessagePagination,
       updateTodos,
+      resetHistory,
     ],
   );
 
@@ -2967,7 +3015,6 @@ const StreamSession = ({
     if (!shouldResetThreadOnMountRef.current) return;
     shouldResetThreadOnMountRef.current = false;
     consumedInitialThreadRef.current = null;
-    initialThreadLoadRef.current = { threadId: null, promise: null };
     reset(null, []);
   }, [reset]);
 
@@ -3291,7 +3338,9 @@ const StreamSession = ({
         );
         const stream =
           options?.joinExistingThread && runId
-            ? client.runs.joinStream(nextThreadId, runId)
+            ? client.runs.joinStream(nextThreadId, runId, {
+                signal: abortController.signal,
+              })
             : client.runs.stream(nextThreadId, assistantId, {
                 input: scopedInput ?? null,
                 context: normalizedRequest.context,
@@ -3311,6 +3360,11 @@ const StreamSession = ({
           input: scopedInput,
         };
         for await (const chunk of stream) {
+          if (
+            abortController.signal.aborted ||
+            abortRef.current !== abortController
+          )
+            break;
           if (chunk?.id) {
             lastEventIdRef.current = String(chunk.id);
           }
@@ -3394,6 +3448,11 @@ const StreamSession = ({
 
         if (interrupts.length > 0) {
           for await (const interruptData of interrupts) {
+            if (
+              abortController.signal.aborted ||
+              abortRef.current !== abortController
+            )
+              break;
             await handleInterrupt(interruptData);
           }
         }
@@ -3414,22 +3473,23 @@ const StreamSession = ({
             setError(null);
           }
         }
+        // A previous stream can finish after a thread switch starts another run.
         if (abortRef.current === abortController) {
           abortRef.current = null;
+          shouldStartFreshAssistantMessageAfterSteerRef.current = false;
+          const staleSteerIds = getPendingSteerFollowUpIds(
+            pendingFollowUpsRef.current,
+            steerPriorityFollowUpIdsRef.current,
+          );
+          if (staleSteerIds.length > 0) {
+            markPendingFollowUpsAsQueued(staleSteerIds, {
+              autoDrain: true,
+              queuedFromSteer: true,
+            });
+          }
+          setIsLoading(false);
+          isLoadingRef.current = false;
         }
-        shouldStartFreshAssistantMessageAfterSteerRef.current = false;
-        const staleSteerIds = getPendingSteerFollowUpIds(
-          pendingFollowUpsRef.current,
-          steerPriorityFollowUpIdsRef.current,
-        );
-        if (staleSteerIds.length > 0) {
-          markPendingFollowUpsAsQueued(staleSteerIds, {
-            autoDrain: true,
-            queuedFromSteer: true,
-          });
-        }
-        setIsLoading(false);
-        isLoadingRef.current = false;
       }
     },
     [
@@ -3459,148 +3519,167 @@ const StreamSession = ({
   const loadThread = useCallback(
     async (threadId: string) => {
       if (!threadId) return;
-      if (
-        threadId === (lastThreadIdRef.current ?? null) &&
-        isLoadingRef.current
-      ) {
+      if (threadId === activeThreadIdRef.current && isLoadingRef.current) {
         return;
       }
-      setError(null);
-      updateTodos(null);
-      clearRuntimeActivities();
-
-      try {
-        stop();
-      } catch {
-        // ignore stop errors from an already-idle stream
-      }
-
-      setThreadId(threadId);
-      activeThreadIdRef.current = threadId;
-      lastEventIdRef.current = null;
-
-      const protocolThread = await client.threads
-        .get(threadId)
-        .catch(() => null);
-      const protocolMetadata = isRecord(protocolThread?.metadata)
-        ? protocolThread.metadata
-        : null;
-      const protocolConversationId =
-        typeof protocolMetadata?.id === 'string'
-          ? protocolMetadata.id.trim()
-          : '';
-      const conversationResult = protocolConversationId
-        ? null
-        : await client.conversations.search({
-            where: createConversationThreadSearchWhere(threadId, {
-              xpertId: assistantId,
-              projectId,
-            }),
-            limit: 1,
-          });
-
-      const conversation = protocolConversationId
-        ? await client.conversations.get(protocolConversationId)
-        : conversationResult?.items?.[0];
-      if (!conversation?.id) {
-        updateConversationId(null);
-        updateConnectorBindingIdsState([]);
-        setPendingFollowUps([]);
-        updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
-        setValues({ messages: [] });
-        return;
-      }
-
-      let conversationDetail = conversation;
-      if (
-        String(conversation.status ?? '').toLowerCase() === 'interrupted' &&
-        (conversation as { operation?: unknown }).operation == null
-      ) {
-        try {
-          conversationDetail = await client.conversations.get(conversation.id);
-        } catch (detailError) {
-          console.warn(
-            '[chatkit-ui] Failed to load conversation detail for pending HITL',
-            detailError,
-          );
+      return loadHistory(threadId, async (request) => {
+        setError(null);
+        updateTodos(null);
+        clearRuntimeActivities();
+        if (activeThreadIdRef.current !== threadId) {
+          valuesRef.current = { messages: [] };
+          setValues(valuesRef.current);
         }
-      }
 
-      updateConversationId(conversation.id);
-      updateConnectorBindingIdsState(
-        getConversationConnectorBindingIds(conversationDetail),
-      );
-      const loadedMessages = await loadConversationMessages(
-        conversation.id,
-        threadId,
-      );
-      await refreshSandboxServices({
-        targetThreadId: threadId,
-        force: true,
-      });
-      const latestExecutionId = getLatestExecutionIdFromMessages(
-        loadedMessages as ChatKitAIMessage[],
-      );
-      if (latestExecutionId) {
-        lastExecutionIdRef.current = latestExecutionId;
-      }
-      const hasPendingHITL = hydratePendingHITLRequestFromOperation(
-        (conversationDetail as { operation?: unknown }).operation,
-        latestExecutionId,
-      );
-      if (hasPendingHITL) return;
+        try {
+          stop();
+        } catch {
+          // ignore stop errors from an already-idle stream
+        }
 
-      const status = String(
-        conversationDetail.status ?? conversation.status ?? '',
-      ).toLowerCase();
-      if (status === 'interrupted') return;
-      const conversationMayBeRunning =
-        !status || status === 'running' || status === 'busy';
+        setThreadId(threadId);
+        activeThreadIdRef.current = threadId;
+        lastEventIdRef.current = null;
 
-      let runId: string | null = null;
-      let runLookupFailed = false;
-      try {
-        runId = await waitForActiveThreadRunId(
-          () => client.runs.list(threadId, { limit: 100 }),
-          {
-            attempts: conversationMayBeRunning ? 20 : 1,
-            shouldContinue: () => activeThreadIdRef.current === threadId,
-          },
+        await ensureHistoryCredentials();
+        if (!request.isCurrent()) return;
+        const protocolThread = await client.threads
+          .get(threadId)
+          .catch(() => null);
+        if (!request.isCurrent()) return;
+        const protocolMetadata = isRecord(protocolThread?.metadata)
+          ? protocolThread.metadata
+          : null;
+        const protocolConversationId =
+          typeof protocolMetadata?.id === 'string'
+            ? protocolMetadata.id.trim()
+            : '';
+        const conversationResult = protocolConversationId
+          ? null
+          : await client.conversations.search({
+              where: createConversationThreadSearchWhere(threadId, {
+                xpertId: assistantId,
+                projectId,
+              }),
+              limit: 1,
+            });
+
+        if (!request.isCurrent()) return;
+        const conversation = protocolConversationId
+          ? await client.conversations.get(protocolConversationId)
+          : conversationResult?.items?.[0];
+        if (!request.isCurrent()) return;
+        if (!conversation?.id) {
+          updateConversationId(null);
+          updateConnectorBindingIdsState([]);
+          setPendingFollowUps([]);
+          updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
+          setValues({ messages: [] });
+          return;
+        }
+
+        let conversationDetail = conversation;
+        if (
+          String(conversation.status ?? '').toLowerCase() === 'interrupted' &&
+          (conversation as { operation?: unknown }).operation == null
+        ) {
+          try {
+            conversationDetail = await client.conversations.get(
+              conversation.id,
+            );
+          } catch (detailError) {
+            console.warn(
+              '[chatkit-ui] Failed to load conversation detail for pending HITL',
+              detailError,
+            );
+          }
+        }
+
+        if (!request.isCurrent()) return;
+        updateConversationId(conversation.id);
+        updateConnectorBindingIdsState(
+          getConversationConnectorBindingIds(conversationDetail),
         );
-      } catch (runsError) {
-        console.warn(
-          '[chatkit-ui] Failed to resolve the active execution from thread runs',
-          runsError,
-        );
-        runLookupFailed = true;
-      }
-
-      // Compatibility fallback for completed or legacy conversations whose
-      // execution can only be recovered from a persisted assistant message.
-      if (!runId && runLookupFailed && conversationMayBeRunning) {
-        const lastAiMessageResult = await client.conversations.searchMessages(
+        const loadedMessages = await readConversationMessages(
           conversation.id,
-          {
-            where: { role: 'ai', threadId },
-            order: { createdAt: 'DESC' },
-            limit: 1,
-          },
+          threadId,
+          request,
         );
-        runId = lastAiMessageResult.items?.[0]?.executionId ?? null;
-      }
-      if (!runId) return;
-      if (activeThreadIdRef.current !== threadId) return;
-      lastExecutionIdRef.current = runId;
+        if (!request.isCurrent()) return;
+        await refreshSandboxServices({
+          targetThreadId: threadId,
+          force: true,
+        });
+        if (!request.isCurrent()) return;
+        const latestExecutionId = getLatestExecutionIdFromMessages(
+          loadedMessages as ChatKitAIMessage[],
+        );
+        if (latestExecutionId) {
+          lastExecutionIdRef.current = latestExecutionId;
+        }
+        const hasPendingHITL = hydratePendingHITLRequestFromOperation(
+          (conversationDetail as { operation?: unknown }).operation,
+          latestExecutionId,
+        );
+        if (hasPendingHITL) return;
 
-      await runStream(threadId, null, { joinExistingThread: true }, runId);
+        const status = String(
+          conversationDetail.status ?? conversation.status ?? '',
+        ).toLowerCase();
+        if (status === 'interrupted') return;
+        const conversationMayBeRunning =
+          !status || status === 'running' || status === 'busy';
+
+        let runId: string | null = null;
+        let runLookupFailed = false;
+        try {
+          runId = await waitForActiveThreadRunId(
+            () => client.runs.list(threadId, { limit: 100 }),
+            {
+              attempts: conversationMayBeRunning ? 20 : 1,
+              shouldContinue: () =>
+                request.isCurrent() && activeThreadIdRef.current === threadId,
+            },
+          );
+        } catch (runsError) {
+          console.warn(
+            '[chatkit-ui] Failed to resolve the active execution from thread runs',
+            runsError,
+          );
+          runLookupFailed = true;
+        }
+
+        if (!request.isCurrent()) return;
+        // Compatibility fallback for completed or legacy conversations whose
+        // execution can only be recovered from a persisted assistant message.
+        if (!runId && runLookupFailed && conversationMayBeRunning) {
+          const lastAiMessageResult = await client.conversations.searchMessages(
+            conversation.id,
+            {
+              where: { role: 'ai', threadId },
+              order: { createdAt: 'DESC' },
+              limit: 1,
+            },
+          );
+          runId = lastAiMessageResult.items?.[0]?.executionId ?? null;
+        }
+        if (!request.isCurrent() || !runId) return;
+        if (activeThreadIdRef.current !== threadId) return;
+        lastExecutionIdRef.current = runId;
+
+        // History is ready; a resumed stream must not keep the load request pending.
+        void runStream(threadId, null, { joinExistingThread: true }, runId);
+      });
     },
     [
       assistantId,
       client,
+      ensureHistoryCredentials,
       projectId,
       runStream,
       stop,
-      loadConversationMessages,
+      readConversationMessages,
+      loadHistory,
       hydratePendingHITLRequestFromOperation,
       clearRuntimeActivities,
       refreshSandboxServices,
@@ -3613,64 +3692,32 @@ const StreamSession = ({
   );
 
   useEffect(() => {
-    const requestedInitialThread = normalizeThreadIdentifier(initialThread);
-    const activeThreadId = normalizeThreadIdentifier(threadId);
-
+    const requestedInitialThread = normalizeThreadIdentifier(
+      initialThread ?? initialSelectedThreadRef.current,
+    );
     if (!requestedInitialThread) {
       consumedInitialThreadRef.current = null;
       return;
     }
-
-    if (requestedInitialThread === activeThreadId) {
-      consumedInitialThreadRef.current = requestedInitialThread;
-      return;
-    }
-
-    if (consumedInitialThreadRef.current === requestedInitialThread) {
-      return;
-    }
-
-    const configError = createMissingApiConfigurationError({
-      apiUrl,
-      clientSecret: runtimeClientSecret,
-    });
-    if (configError) {
-      return;
-    }
-
-    const inFlightThread = initialThreadLoadRef.current.threadId;
+    if (consumedInitialThreadRef.current === requestedInitialThread) return;
     if (
-      inFlightThread === requestedInitialThread &&
-      initialThreadLoadRef.current.promise
-    ) {
+      !apiUrl.trim() ||
+      (!runtimeClientSecretRef.current.trim() && !isParentAvailable)
+    )
       return;
-    }
 
     consumedInitialThreadRef.current = requestedInitialThread;
-    const promise = loadThread(requestedInitialThread).catch((error) => {
-      setError(error);
-      console.warn('[chatkit-ui] Failed to load initial thread', error);
+    // A newly submitted live thread already owns its transcript. All other
+    // initial selections need a history load, even when their IDs match.
+    if (
+      requestedInitialThread === activeThreadIdRef.current &&
+      isLoadingRef.current
+    )
+      return;
+    void loadThread(requestedInitialThread).catch(() => {
+      // The history state exposes this failure and permits an explicit retry.
     });
-    initialThreadLoadRef.current = {
-      threadId: requestedInitialThread,
-      promise,
-    };
-    void promise.finally(() => {
-      if (initialThreadLoadRef.current.promise === promise) {
-        initialThreadLoadRef.current = {
-          threadId: null,
-          promise: null,
-        };
-      }
-    });
-  }, [
-    apiUrl,
-    initialThread,
-    loadThread,
-    runtimeClientSecret,
-    setError,
-    threadId,
-  ]);
+  }, [apiUrl, initialThread, isParentAvailable, loadThread, runtimeClientSecret]);
 
   const submit = useCallback(
     async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
@@ -3853,6 +3900,7 @@ const StreamSession = ({
           lastEventIdRef.current = null;
         }
         activeThreadIdRef.current = nextThreadId;
+        markHistoryLoaded(nextThreadId);
 
         await runStream(
           nextThreadId,
@@ -3892,6 +3940,7 @@ const StreamSession = ({
       addSteerPriorityFollowUpIds,
       markPendingFollowUpsAsQueued,
       runStream,
+      markHistoryLoaded,
       clearRuntimeActivities,
       sendSteerFollowUp,
       setThreadId,
@@ -3928,6 +3977,7 @@ const StreamSession = ({
     messages: values.messages ?? [],
     historyMessageLoadVersion,
     historyMessagePagination,
+    historyLoad,
     todos,
     runtimeActivities,
     pendingFollowUps,

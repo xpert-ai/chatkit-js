@@ -61,6 +61,7 @@ import {
 import { ProjectSelector } from './composer/ProjectSelector';
 import { SendButton } from './composer/SendButton';
 import { SlashPalette } from './composer/SlashPalette';
+import { ThreadHistoryStatus } from './history/ThreadHistoryStatus';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
@@ -620,7 +621,8 @@ export function Chat({
     }
   }, [missingConfigKind, t]);
 
-  const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
+  const isHistoryLoading = stream.historyLoad?.status === 'loading';
+  const isHistoryUnavailable = isHistoryLoading || stream.historyLoad?.status === 'error';
   const [historyError, setHistoryError] = React.useState<string | null>(null);
   const [assistantName, setAssistantName] = React.useState<string | null>(null);
   const [assistantAvatar, setAssistantAvatar] =
@@ -941,7 +943,7 @@ export function Chat({
   );
   const canLoadMoreMessages = Boolean(historyMessagePagination?.hasMore);
   const isInitialComposer =
-    messages.length === 0 && !canLoadMoreMessages && !stream.isLoading;
+    !stream.threadId && messages.length === 0 && !canLoadMoreMessages && !stream.isLoading;
   const draft = React.useMemo(
     () => getComposerPlainText(composerParts),
     [composerParts],
@@ -1787,7 +1789,7 @@ export function Chat({
   const isSubmissionBlocked =
     hasPendingInteractiveRequest ||
     missingConfig ||
-    isHistoryLoading ||
+    isHistoryUnavailable ||
     hasUploadingFiles ||
     isUploadingReferenceImages;
   const isSendDisabled =
@@ -3036,27 +3038,20 @@ export function Chat({
     ],
   );
 
-  const loadConversationMessages = React.useCallback(
-    async (recordId: string, threadId?: string) => {
+  const loadThreadHistory = React.useCallback(
+    async (threadId: string) => {
       if (missingConfig) {
         setHistoryError(missingConfigShortMessage);
         return;
       }
       setHistoryError(null);
-      setIsHistoryLoading(true);
       try {
-        await stream.loadConversationMessages(recordId, threadId);
-        // setActiveThreadId(threadId ?? null);
-      } catch (err) {
-        console.warn('Failed to load thread messages', err);
-        setHistoryError(
-          err instanceof Error ? err.message : t('chat.errors.loadMessages'),
-        );
-      } finally {
-        setIsHistoryLoading(false);
+        await stream.loadThread(threadId);
+      } catch {
+        // Stream history state supplies the error and retry action.
       }
     },
-    [missingConfig, missingConfigShortMessage, stream, t],
+    [missingConfig, missingConfigShortMessage, stream],
   );
 
   const handleLoadMoreMessages = React.useCallback(async () => {
@@ -3124,20 +3119,8 @@ export function Chat({
     setHistoryError(null);
     const thread = threads.find((item) => item.id === id);
     if (!thread) return;
-    if (id === stream.threadId) {
-      if (
-        thread.status === 'interrupted' &&
-        thread.recordId &&
-        !stream.pendingHITLRequest
-      ) {
-        void loadConversationMessages(thread.recordId, thread.id);
-      }
-      return;
-    }
-    stream.reset(id, []);
-    if (thread.recordId) {
-      void loadConversationMessages(thread.recordId, thread.id);
-    }
+    if (id !== stream.threadId) stream.reset(id, []);
+    void loadThreadHistory(id);
   };
 
   const handleDeleteThread = (id: string) => {
@@ -3574,12 +3557,14 @@ export function Chat({
               {missingConfigDetailMessage}
             </div>
           )}
-          {isHistoryLoading && (
-            <div className="mb-4 rounded-lg border border-muted px-3 py-2 text-sm text-muted-foreground">
-              {t('chat.loadingThread')}
-            </div>
-          )}
-          {messages.length === 0 && !canLoadMoreMessages ? (
+          <ThreadHistoryStatus
+            state={stream.historyLoad}
+            isEmpty={Boolean(stream.threadId) && messages.length === 0 && !stream.isLoading}
+            onRetry={() => {
+              if (stream.threadId) void loadThreadHistory(stream.threadId);
+            }}
+          />
+          {!stream.threadId && messages.length === 0 && !canLoadMoreMessages ? (
             <StartScreen
               startScreen={startScreen}
               onPromptClick={handlePromptClick}

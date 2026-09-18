@@ -521,21 +521,20 @@ export function ParentMessengerProvider({
           | undefined;
         const nextThreadId = data?.threadId ?? null;
         const stream = streamRef.current;
-        if (stream?.threadId === nextThreadId) {
-          if (payload.nonce) {
-            sendResponse(payload.nonce, { ok: true });
+        void (async () => {
+          if (!stream)
+            throw new Error('ChatKit is not ready to load a thread.');
+          if (stream.threadId !== nextThreadId) {
+            stream.reset(nextThreadId, undefined, {
+              suppressThreadChange: true,
+            });
           }
-          return;
-        }
-        stream?.reset(nextThreadId, undefined, { suppressThreadChange: true });
-        if (stream && nextThreadId) {
-          stream.loadThread(nextThreadId).catch((err) => {
-            console.warn('Failed to load thread messages', err);
-          });
-        }
-        if (payload.nonce) {
-          sendResponse(payload.nonce, { ok: true });
-        }
+          // Reopening the selected thread may need to refresh a partial or failed load.
+          if (nextThreadId) await stream.loadThread(nextThreadId);
+          if (payload.nonce) sendResponse(payload.nonce, { ok: true });
+        })().catch((error: unknown) => {
+          if (payload.nonce) sendResponse(payload.nonce, undefined, error);
+        });
         return;
       }
 

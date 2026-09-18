@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
     isLoading: false,
     selectedModelId: null as string | null,
     submit: vi.fn(),
+    threadId: 'thread-1' as string | null,
+    reset: vi.fn(),
+    loadThread: vi.fn(),
   },
 }));
 
@@ -66,6 +69,9 @@ describe('ParentMessengerProvider', () => {
   beforeEach(() => {
     mocks.stream.submit.mockClear();
     mocks.stream.isLoading = false;
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.reset.mockReset();
+    mocks.stream.loadThread.mockReset();
     mocks.stream.selectedModelId = null;
     parentWindow = {
       postMessage: vi.fn(),
@@ -81,6 +87,79 @@ describe('ParentMessengerProvider', () => {
     Object.defineProperty(window, 'parent', {
       configurable: true,
       value: originalParent,
+    });
+  });
+
+  function selectThread(nonce: string, threadId = 'thread-1') {
+    const event = new MessageEvent('message', {
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onSetThreadId',
+        nonce,
+        data: { threadId },
+      },
+      origin: 'https://example.com',
+    });
+    Object.defineProperty(event, 'source', { value: parentWindow });
+    window.dispatchEvent(event);
+  }
+
+  it('reloads the same thread and acknowledges only after its history is loaded', async () => {
+    let finish!: () => void;
+    mocks.stream.loadThread.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    render(
+      <ParentMessengerProvider>
+        <div />
+      </ParentMessengerProvider>,
+    );
+    selectThread('history-retry');
+    await waitFor(() =>
+      expect(mocks.stream.loadThread).toHaveBeenCalledWith('thread-1'),
+    );
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    expect(
+      parentWindow.postMessage.mock.calls.some(
+        ([value]) => value.nonce === 'history-retry',
+      ),
+    ).toBe(false);
+    finish();
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nonce: 'history-retry',
+          response: { ok: true },
+        }),
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('returns a failed history load to the host rather than reporting success', async () => {
+    const error = new Error('history unavailable');
+    mocks.stream.loadThread.mockRejectedValue(error);
+    render(
+      <ParentMessengerProvider>
+        <div />
+      </ParentMessengerProvider>,
+    );
+    selectThread('history-failed', 'thread-2');
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nonce: 'history-failed',
+          error,
+          response: undefined,
+        }),
+        expect.any(String),
+      ),
+    );
+    expect(mocks.stream.reset).toHaveBeenCalledWith('thread-2', undefined, {
+      suppressThreadChange: true,
     });
   });
 

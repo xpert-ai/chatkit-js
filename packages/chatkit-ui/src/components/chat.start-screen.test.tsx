@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type { ThreadHistoryState } from '../providers/useThreadHistory';
 
 const mocks = vi.hoisted(() => {
   const uploadFile = vi.fn();
@@ -69,6 +70,7 @@ const mocks = vi.hoisted(() => {
         hasMore: false,
         isLoadingMore: false,
       },
+      historyLoad: { threadId: null, status: 'idle' } as ThreadHistoryState,
       todos: null,
       runtimeActivities: {
         sandboxServices: {
@@ -314,6 +316,9 @@ describe('Chat start screen prompts', () => {
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
     mocks.stream.conversationId = null;
+    mocks.stream.historyLoad = { threadId: null, status: 'idle' };
+    mocks.stream.loadThread.mockReset();
+    mocks.stream.loadThread.mockResolvedValue(undefined);
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.pendingHITLRequest = null;
@@ -333,6 +338,46 @@ describe('Chat start screen prompts', () => {
       ).toBeNull();
       expect(screen.queryByText('Powered by Xpert AI')).not.toBeInTheDocument();
     });
+  });
+
+  it('shows loading history instead of the new-conversation greeting', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = { threadId: 'thread-1', status: 'loading' };
+    renderChat();
+    expect(await screen.findByText('chat.loadingThread')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'What can I help with today?' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a retry action after a history error without resending the user message', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = {
+      threadId: 'thread-1',
+      status: 'error',
+      error: new Error('unavailable'),
+    };
+    renderChat();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'chat.retryHistory' }),
+    );
+    await waitFor(() =>
+      expect(mocks.stream.loadThread).toHaveBeenCalledWith('thread-1'),
+    );
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('heading', { name: 'What can I help with today?' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows an existing empty conversation distinctly from a new one', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = { threadId: 'thread-1', status: 'loaded' };
+    renderChat();
+    expect(await screen.findByText('chat.emptyHistory')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'What can I help with today?' }),
+    ).not.toBeInTheDocument();
   });
 
   it('limits the chat column width when layout maxWidth is configured', async () => {
