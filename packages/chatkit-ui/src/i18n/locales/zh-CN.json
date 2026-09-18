@@ -108,7 +108,9 @@
     "contextUsage": {
       "label": "上下文窗口",
       "full": "已使用 {{usedPercent}}%（剩余 {{remainingPercent}}%）",
-      "tokensUsed": "已使用 {{used}} / {{max}} tokens"
+      "tokensUsed": "已使用 {{used}} / {{max}} tokens",
+      "stale": "上次有效用量（本次调用未更新）",
+      "unavailable": "暂无有效用量"
     },
     "goal": {
       "label": "目标",

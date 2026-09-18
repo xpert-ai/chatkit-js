@@ -1805,6 +1805,11 @@ export function Chat({
     (!trimmedDraft && !hasReferences) || isSubmissionBlocked;
   const isPromptEditDisabled =
     hasPendingInteractiveRequest || missingConfig || isHistoryLoading;
+  const canUploadAttachments =
+    composer?.attachments?.enabled === true && !isPromptEditDisabled;
+  const queueAttachmentFiles = React.useCallback((files: ArrayLike<File>) => {
+    return attachmentsRef.current?.queueFiles(files) ?? false;
+  }, []);
 
   React.useLayoutEffect(() => {
     composerPartsRef.current = composerParts;
@@ -2928,12 +2933,23 @@ export function Chat({
         return;
       }
 
-      const imageFiles = Array.from(clipboardData.items)
-        .filter(
-          (item) => item.kind === 'file' && item.type.startsWith('image/'),
-        )
-        .map((item) => item.getAsFile())
-        .filter((item): item is File => Boolean(item));
+      const clipboardFiles = Array.from(clipboardData.files ?? []);
+      const pastedFiles = clipboardFiles.length
+        ? clipboardFiles
+        : Array.from(clipboardData.items ?? [])
+            .filter((item) => item.kind === 'file')
+            .map((item) => item.getAsFile())
+            .filter((item): item is File => Boolean(item));
+      const attachmentFiles = pastedFiles.filter(
+        (file) => !file.type.startsWith('image/'),
+      );
+      if (attachmentFiles.length > 0) {
+        event.preventDefault();
+        if (canUploadAttachments) queueAttachmentFiles(attachmentFiles);
+      }
+      const imageFiles = pastedFiles.filter((file) =>
+        file.type.startsWith('image/'),
+      );
 
       if (imageFiles.length > 0) {
         event.preventDefault();
@@ -3002,6 +3018,8 @@ export function Chat({
         return;
       }
 
+      if (attachmentFiles.length > 0) return;
+
       const pastedText = clipboardData.getData('text/plain');
       if (pastedText.trim().length <= LONG_TEXT_REFERENCE_THRESHOLD) {
         if (!pastedText) {
@@ -3044,9 +3062,11 @@ export function Chat({
       composerInputRef.current?.focus();
     },
     [
+      canUploadAttachments,
       composer?.attachments?.maxCount,
       composer?.attachments?.maxSize,
       commitComposerParts,
+      queueAttachmentFiles,
       references,
       updateRuntimeCapabilityPalette,
       uploadContextFile,
@@ -3248,15 +3268,6 @@ export function Chat({
         .map(([mime, exts]) => [mime, ...exts.map((e) => `.${e}`)].join(','))
         .join(',')
     : undefined;
-  const canUploadDroppedFiles =
-    composer?.attachments?.enabled === true &&
-    !missingConfig &&
-    !isHistoryLoading &&
-    !hasPendingInteractiveRequest;
-  const handleDroppedFiles = React.useCallback((files: ArrayLike<File>) => {
-    return attachmentsRef.current?.queueFiles(files) ?? false;
-  }, []);
-
   const currentThread = React.useMemo(
     () => threads.find((item) => item.id === stream.threadId),
     [threads, stream.threadId],
@@ -3418,11 +3429,11 @@ export function Chat({
       <UploadDroppedFiles
         ref={viewportRef}
         data-chatkit-root=""
-        enabled={canUploadDroppedFiles}
+        enabled={canUploadAttachments}
         dropTitle={t('chat.dropFilesTitle')}
         dropHint={t('chat.dropFilesHint')}
         activeClassName="ring-2 ring-primary/40 ring-inset"
-        onFiles={handleDroppedFiles}
+        onFiles={queueAttachmentFiles}
         className={cn(
           'relative flex h-full w-full min-w-0 flex-col flex-1 overflow-x-hidden overflow-y-auto bg-background shadow-sm transition-[box-shadow] duration-150',
           className,
@@ -3975,71 +3986,6 @@ export function Chat({
               {threadErrorMessage}
             </div>
           )}
-          <ChatAttachments
-            ref={attachmentsRef}
-            accept={acceptMimes}
-            maxCount={composer?.attachments?.maxCount ?? 10}
-            maxSize={composer?.attachments?.maxSize ?? 100 * 1024 * 1024}
-            retryUploadLabel={t('chat.retryUpload')}
-            uploadFile={uploadContextFile}
-            deleteFile={deleteContextFile}
-            getFileStatus={getContextFileStatus}
-            onStateChange={setAttachmentState}
-          />
-
-          {references.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {references.map((reference) => (
-                <ReferenceChip
-                  key={getReferenceKey(reference)}
-                  reference={reference}
-                  variant="composer"
-                  onRemove={() =>
-                    setReferences((previous) =>
-                      previous.filter(
-                        (item) =>
-                          getReferenceKey(item) !== getReferenceKey(reference),
-                      ),
-                    )
-                  }
-                  removeLabel={t('composer.removeReference')}
-                />
-              ))}
-            </div>
-          )}
-
-          {referencedWorkspaceFiles.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {referencedWorkspaceFiles.map((file) => {
-                const id =
-                  file.workspacePath ??
-                  file.filePath ??
-                  file.fileAssetId ??
-                  file.fileId ??
-                  file.id;
-                return (
-                  <WorkspaceFileChip
-                    key={id}
-                    file={file}
-                    onRemove={() =>
-                      setReferencedWorkspaceFiles((current) =>
-                        current.filter(
-                          (item) =>
-                            (item.workspacePath ??
-                              item.filePath ??
-                              item.fileAssetId ??
-                              item.fileId ??
-                              item.id) !== id,
-                        ),
-                      )
-                    }
-                    removeLabel={t('composer.fileMentions.remove')}
-                  />
-                );
-              })}
-            </div>
-          )}
-
           {showGoalStatus && (
             <div
               className={cn(
@@ -4253,6 +4199,71 @@ export function Chat({
               onScenario={promptWorkflow.chooseScenario}
               onBack={promptWorkflow.showPrompts}
             />
+          )}
+
+          <ChatAttachments
+            ref={attachmentsRef}
+            accept={acceptMimes}
+            maxCount={composer?.attachments?.maxCount ?? 10}
+            maxSize={composer?.attachments?.maxSize ?? 100 * 1024 * 1024}
+            retryUploadLabel={t('chat.retryUpload')}
+            uploadFile={uploadContextFile}
+            deleteFile={deleteContextFile}
+            getFileStatus={getContextFileStatus}
+            onStateChange={setAttachmentState}
+          />
+
+          {references.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {references.map((reference) => (
+                <ReferenceChip
+                  key={getReferenceKey(reference)}
+                  reference={reference}
+                  variant="composer"
+                  onRemove={() =>
+                    setReferences((previous) =>
+                      previous.filter(
+                        (item) =>
+                          getReferenceKey(item) !== getReferenceKey(reference),
+                      ),
+                    )
+                  }
+                  removeLabel={t('composer.removeReference')}
+                />
+              ))}
+            </div>
+          )}
+
+          {referencedWorkspaceFiles.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {referencedWorkspaceFiles.map((file) => {
+                const id =
+                  file.workspacePath ??
+                  file.filePath ??
+                  file.fileAssetId ??
+                  file.fileId ??
+                  file.id;
+                return (
+                  <WorkspaceFileChip
+                    key={id}
+                    file={file}
+                    onRemove={() =>
+                      setReferencedWorkspaceFiles((current) =>
+                        current.filter(
+                          (item) =>
+                            (item.workspacePath ??
+                              item.filePath ??
+                              item.fileAssetId ??
+                              item.fileId ??
+                              item.id) !== id,
+                        ),
+                      )
+                    }
+                    removeLabel={t('composer.fileMentions.remove')}
+                  />
+                );
+              })}
+            </div>
           )}
 
           {workspaceFileMention && (

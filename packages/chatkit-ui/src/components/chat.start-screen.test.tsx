@@ -406,7 +406,7 @@ describe('Chat start screen prompts', () => {
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
   });
 
-  it('keeps the slash menu next to the input when starter questions and shortcuts are visible', async () => {
+  it('keeps attachment cards below shortcuts and the slash menu next to the input', async () => {
     const { container } = renderChat({
       ...baseOptions,
       composer: {
@@ -420,14 +420,31 @@ describe('Chat start screen prompts', () => {
       startScreen: { ...baseOptions.startScreen, promptsLayout: 'list' },
     });
     await screen.findByRole('button', { name: 'Analyze notice' });
+    const fileInput = container.querySelector('input[type="file"]');
+    if (!fileInput) throw new Error('Missing file picker');
+    fireEvent.change(fileInput, {
+      target: {
+        files: [new File(['content'], 'notice.pdf', { type: 'application/pdf' })],
+      },
+    });
+    const attachment = await screen.findByText('notice.pdf');
+    pasteLongReference(screen.getByRole('textbox'), 'quoted '.repeat(900));
+    const reference = screen.getByText('Pasted text');
     setComposerText(screen.getByRole('textbox'), '/');
     const palette = container.querySelector('[data-slot="slash-palette"]');
     const form = screen.getByRole('textbox').closest('form');
     expect(palette).toBeInTheDocument();
     expect(palette?.nextElementSibling).toBe(form);
-    expect(palette?.previousElementSibling).toHaveAttribute(
-      'data-slot', 'prompt-workflow-shortcuts',
-    );
+    const shortcut = container.querySelector('[data-slot="prompt-workflow-shortcuts"]');
+    if (!shortcut || !palette) throw new Error('Missing composer menus');
+    for (const card of [attachment, reference]) {
+      expect(
+        shortcut.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        card.compareDocumentPosition(palette) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
     expect(form?.nextElementSibling).toHaveAttribute(
       'data-slot', 'starter-prompt-suggestions',
     );

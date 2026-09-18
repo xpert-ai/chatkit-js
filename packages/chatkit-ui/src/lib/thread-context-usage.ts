@@ -1,4 +1,5 @@
 import type { TThreadContextUsageEvent } from '@xpert-ai/chatkit-types';
+import type { ThreadContextUsage } from '@xpert-ai/xpert-sdk';
 
 export const THREAD_CONTEXT_USAGE_EVENT_TYPE = 'thread_context_usage' as const;
 
@@ -6,6 +7,30 @@ export type ThreadContextUsageByAgentKey = Record<
   string,
   TThreadContextUsageEvent
 >;
+
+export type ContextUsageMeasurement = {
+  usedTokens: number | null;
+  status: 'current' | 'stale' | 'unavailable';
+};
+
+export function readStoredContextUsage(
+  result: ThreadContextUsage,
+): ContextUsageMeasurement {
+  const usedTokens = normalizeContextUsageNumber(result.usage.context_tokens);
+  // The additive status field can arrive through an older SDK during a rolling upgrade.
+  if (
+    ('status' in result && result.status === 'unavailable') ||
+    usedTokens == null ||
+    usedTokens === 0
+  ) {
+    return { usedTokens: null, status: 'unavailable' };
+  }
+  return {
+    usedTokens,
+    status:
+      'status' in result && result.status === 'stale' ? 'stale' : 'current',
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
