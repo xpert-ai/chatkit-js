@@ -1,3 +1,5 @@
+import { isHITLReviewDisplay, type HITLReviewDisplay } from './review-display.js';
+export * from './review-display.js';
 import { type ToolCall } from '@langchain/core/messages/tool';
 
 export const REQUEST_USER_INPUT_TOOL_NAME = 'request_user_input';
@@ -78,6 +80,7 @@ export interface HITLAction {
 
 export interface HITLActionRequest extends HITLAction {
   description?: string;
+  display?: HITLReviewDisplay;
 }
 
 export interface HITLReviewConfig {
@@ -307,6 +310,7 @@ function normalizeHITLActionRequest(
     name,
     args,
     ...(description !== undefined ? { description } : {}),
+    ...(isHITLReviewDisplay(value.display) ? { display: value.display } : {}),
   };
 }
 

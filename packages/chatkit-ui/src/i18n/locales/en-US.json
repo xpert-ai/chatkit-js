@@ -289,6 +289,7 @@
       "submit": "Continue"
     },
     "hitl": {
+      "technicalDetails": "Technical details",
       "title": "Action review",
       "mcpElicitationTitle": "MCP Elicitation",
       "fieldProgress": "Field {{current}}/{{total}}",

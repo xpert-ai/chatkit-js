@@ -1,3 +1,6 @@
+import { ActionReviewDisplay } from './action-review-display';
+import { resolveLocalizedText } from '../../i18n/localized-text';
+import { isHITLReviewDisplay } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import {
   AlertCircle,
@@ -528,7 +531,7 @@ function ActionReviewPanel({
   attachToComposer = true,
   className,
 }: HITLApprovalPanelProps) {
-  const { t } = useChatkitTranslation();
+  const { t, i18n } = useChatkitTranslation();
   const rounded = useRoundedClasses();
   const [drafts, setDrafts] = React.useState<Record<string, DecisionDraft>>(
     {},
@@ -658,6 +661,7 @@ function ActionReviewPanel({
 
   const argsText = currentDraft.argsText ?? formatArgs(currentAction.args);
   const argsJsonValue = toJsonValue(currentAction.args) ?? {};
+  const display = isHITLReviewDisplay(currentAction.display) ? currentAction.display : null;
   const messageText = currentDraft.message ?? '';
   const isCurrentInvalid =
     validation.error?.actionIndex === currentActionIndex;
@@ -692,7 +696,7 @@ function ActionReviewPanel({
             )}
             title={currentAction.name}
           >
-            {currentAction.name}
+            {display ? resolveLocalizedText(display.title, i18n?.language) : currentAction.name}
           </h3>
         </div>
 
@@ -738,7 +742,9 @@ function ActionReviewPanel({
       </div>
 
       <div className={rounded.density.body}>
-        {currentAction.description ? (
+        {display ? (
+          <p className="text-sm text-muted-foreground">{resolveLocalizedText(display.summary, i18n?.language)}</p>
+        ) : currentAction.description ? (
           <p className="overflow-hidden text-sm leading-5 text-muted-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
             {currentAction.description}
           </p>
@@ -813,6 +819,8 @@ function ActionReviewPanel({
               )}
             />
           </label>
+        ) : display ? (
+          <ActionReviewDisplay key={`${currentActionIndex}:${JSON.stringify(currentAction.args)}`} display={display} args={currentAction.args} />
         ) : (
           <div>
             <div className="mb-1 text-xs font-semibold text-muted-foreground">
