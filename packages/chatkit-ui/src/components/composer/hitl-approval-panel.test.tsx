@@ -364,3 +364,30 @@ describe('HITLApprovalPanel', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+it.each(['Approve', 'Reject'])(
+  'submits a single binary approval immediately on %s',
+  (label) => {
+    const onSubmit = vi.fn();
+    render(
+      <HITLApprovalPanel
+        request={createRequest({
+          reviewConfigs: [
+            {
+              actionName: 'send_email',
+              allowedDecisions: ['approve', 'reject'],
+            },
+          ],
+        })}
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith([
+      { type: label.toLowerCase() },
+    ]);
+    expect(
+      screen.queryByRole('button', { name: 'Confirm' }),
+    ).not.toBeInTheDocument();
+  },
+);

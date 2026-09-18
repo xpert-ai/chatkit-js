@@ -605,6 +605,10 @@ function ActionReviewPanel({
     ? getReviewConfig(currentAction, reviewConfigs)
     : undefined;
   const allowedDecisions = getAllowedDecisions(currentConfig);
+  const directDecision =
+    actions.length === 1 &&
+    allowedDecisions.length > 0 &&
+    allowedDecisions.every((type) => type === 'approve' || type === 'reject');
   const currentDraft =
     currentAction !== null
       ? getDraft(currentAction, currentActionIndex, currentConfig, drafts)
@@ -755,15 +759,19 @@ function ActionReviewPanel({
               <button
                 key={type}
                 type="button"
-                aria-pressed={selected}
-                onClick={() =>
+                aria-pressed={directDecision ? undefined : selected}
+                onClick={() => {
+                  if (directDecision && (type === 'approve' || type === 'reject')) {
+                    onSubmit([{ type }]);
+                    return;
+                  }
                   updateCurrentDraft({
                     ...currentDraft,
                     type,
                     argsText:
                       currentDraft.argsText ?? formatArgs(currentAction.args),
-                  })
-                }
+                  });
+                }}
                 className={cn(
                   'inline-flex items-center justify-center gap-1.5 border font-semibold transition-colors',
                   rounded.control,
@@ -822,7 +830,7 @@ function ActionReviewPanel({
           </div>
         )}
 
-        {currentDraft.type === 'reject' || currentDraft.type === 'respond' ? (
+        {!directDecision && (currentDraft.type === 'reject' || currentDraft.type === 'respond') ? (
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-muted-foreground">
               {currentDraft.type === 'reject'
@@ -878,7 +886,7 @@ function ActionReviewPanel({
             {t('composer.hitl.dismiss')}
           </button>
         ) : null}
-        <button
+        {!directDecision && <button
           type="button"
           onClick={handleSubmit}
           className={cn(
@@ -889,7 +897,7 @@ function ActionReviewPanel({
         >
           <CornerDownLeft className={rounded.density.continueIcon} />
           <span>{t('composer.hitl.submit')}</span>
-        </button>
+        </button>}
       </div>
     </section>
   );
