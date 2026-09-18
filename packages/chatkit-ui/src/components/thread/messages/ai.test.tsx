@@ -349,6 +349,231 @@ describe('AssistantMessage tool components', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('keeps the answer visible while reasoning is collapsed or expanded without tabs', () => {
+    renderAssistant('Final answer', {
+      reasoning: [{ type: 'reasoning', text: 'Plan the query' }],
+    });
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.getByText('Final answer')).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: 'message.reasoning' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Plan the query')).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Plan the query')).toBeInTheDocument();
+    expect(screen.getByText('Final answer')).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(screen.queryByText('Plan the query')).toBeNull();
+    expect(screen.getByText('Final answer')).toBeInTheDocument();
+  });
+
+  it('expands live reasoning and collapses it when the answer starts streaming', () => {
+    const reasoning = [{ type: 'reasoning' as const, text: 'Initial thought' }];
+    const { rerender } = renderAssistant(
+      '',
+      { reasoning, status: 'reasoning' },
+      { isStreaming: true },
+    );
+    const toggle = screen.getByRole('button', { name: 'message.reasoning' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Initial thought')).toBeInTheDocument();
+    rerender(
+      <AssistantMessage
+        message={{
+          id: 'assistant-1',
+          type: 'assistant',
+          content: 'Answer',
+          status: 'answering',
+          reasoning: [{ type: 'reasoning', text: 'Updated thought' }],
+        }}
+        isStreaming
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'message.reasoning' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Updated thought')).toBeNull();
+    expect(screen.getByText('Answer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'message.reasoning' }));
+    expect(screen.getByText('Updated thought')).toBeInTheDocument();
+  });
+
+  it('labels initial waiting as thinking instead of loading', () => {
+    renderAssistant('', {}, { isStreaming: true, streamingStatus: 'loading' });
+    expect(screen.getByText('message.thinking')).toBeInTheDocument();
+    expect(screen.queryByText('message.loading')).toBeNull();
+  });
+
+  it('automatically collapses reasoning when the stream stops without an answer', () => {
+    const message: AssistantChatkitMessage = {
+      id: 'assistant-1',
+      type: 'assistant',
+      content: '',
+      status: 'reasoning',
+      reasoning: [{ type: 'reasoning', text: 'Thinking content' }],
+    };
+    const { rerender } = render(
+      <AssistantMessage message={message} isStreaming />,
+    );
+    expect(screen.getByText('Thinking content')).toBeInTheDocument();
+    rerender(<AssistantMessage message={message} isStreaming={false} />);
+    expect(screen.queryByText('Thinking content')).toBeNull();
+  });
+
+  it('collapses inline reasoning blocks without hiding subsequent content', () => {
+    renderAssistant([
+      { type: 'reasoning', text: 'Inline thought' },
+      { type: 'text', text: 'Inline answer' },
+    ]);
+    expect(screen.queryByText('Inline thought')).toBeNull();
+    expect(screen.getByText('Inline answer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'message.reasoning' }));
+    expect(screen.getByText('Inline thought')).toBeInTheDocument();
+  });
+
+  it('groups adjacent reasoning into one disclosure while preserving answer and tool boundaries', () => {
+    renderAssistant([
+      { id: 'r1', type: 'reasoning', text: 'First thought' },
+      { id: 'r2', type: 'reasoning', text: 'Second thought' },
+      { type: 'text', text: 'Intermediate answer' },
+      { id: 'r3', type: 'reasoning', text: 'Third thought' },
+      createToolComponent('query'),
+      { id: 'r4', type: 'reasoning', text: 'Fourth thought' },
+      { id: 'r5', type: 'reasoning', text: 'Fifth thought' },
+    ]);
+    const toggles = screen.getAllByRole('button', {
+      name: 'message.reasoning',
+    });
+    expect(toggles).toHaveLength(3);
+    fireEvent.click(toggles[0]);
+    expect(screen.getByText('First thought')).toBeInTheDocument();
+    expect(screen.getByText('Second thought')).toBeInTheDocument();
+    expect(screen.queryByText('Third thought')).toBeNull();
+    expect(screen.queryByText('Fourth thought')).toBeNull();
+    fireEvent.click(toggles[2]);
+    expect(screen.getByText('Fourth thought')).toBeInTheDocument();
+    expect(screen.getByText('Fifth thought')).toBeInTheDocument();
+  });
+
+  it('keeps adjacent streamed reasoning in one open group and closes it when answering', () => {
+    const first = {
+      id: 'r1',
+      type: 'reasoning' as const,
+      text: 'First thought',
+    };
+    const second = {
+      id: 'r2',
+      type: 'reasoning' as const,
+      text: 'Second thought',
+    };
+    const message: AssistantChatkitMessage = {
+      id: 'assistant-1',
+      type: 'assistant',
+      content: '',
+      status: 'reasoning',
+      reasoning: [first],
+    };
+    const { rerender } = render(
+      <AssistantMessage message={message} isStreaming />,
+    );
+    rerender(
+      <AssistantMessage
+        message={{ ...message, reasoning: [first, second] }}
+        isStreaming
+      />,
+    );
+    expect(
+      screen.getAllByRole('button', { name: 'message.reasoning' }),
+    ).toHaveLength(1);
+    expect(screen.getByText('First thought')).toBeInTheDocument();
+    expect(screen.getByText('Second thought')).toBeInTheDocument();
+    rerender(
+      <AssistantMessage
+        message={{
+          ...message,
+          reasoning: [first, second],
+          content: 'Answer',
+          status: 'answering',
+        }}
+        isStreaming
+      />,
+    );
+    expect(
+      screen.getByRole('button', { name: 'message.reasoning' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Answer')).toBeInTheDocument();
+  });
+
+  it('starts a separate latest reasoning section after tool use without reopening the previous round', () => {
+    const first = {
+      id: 'thought-1',
+      type: 'reasoning' as const,
+      text: 'Before tool',
+      created_date: '2026-09-18T01:00:00Z',
+    };
+    const second = {
+      id: 'thought-2',
+      type: 'reasoning' as const,
+      text: 'After tool',
+      created_date: '2026-09-18T01:00:02Z',
+    };
+    const tool = {
+      ...createToolComponent('query'),
+      created_date: '2026-09-18T01:00:01Z',
+    };
+    const message: AssistantChatkitMessage = {
+      id: 'assistant-1',
+      type: 'assistant',
+      content: [],
+      status: 'reasoning',
+      reasoning: [first],
+    };
+    const { rerender } = render(
+      <AssistantMessage message={message} isStreaming />,
+    );
+    expect(screen.getByText('Before tool')).toBeInTheDocument();
+    rerender(
+      <AssistantMessage
+        message={{ ...message, content: [tool], status: 'answering' }}
+        isStreaming
+      />,
+    );
+    expect(screen.queryByText('Before tool')).toBeNull();
+    rerender(
+      <AssistantMessage
+        message={{ ...message, content: [tool], reasoning: [first, second] }}
+        isStreaming
+      />,
+    );
+    const toggles = screen.getAllByRole('button', {
+      name: 'message.reasoning',
+    });
+    expect(toggles).toHaveLength(2);
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
+    expect(toggles[1]).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByText('Before tool')).toBeNull();
+    expect(screen.getByText('After tool')).toBeInTheDocument();
+    const toolHeader = screen.getByRole('button', { name: /Processed/ });
+    expect(
+      toggles[0].compareDocumentPosition(toolHeader) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      toolHeader.compareDocumentPosition(toggles[1]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    rerender(
+      <AssistantMessage
+        message={{ ...message, content: [tool], reasoning: [first, second] }}
+      />,
+    );
+    expect(
+      screen
+        .getAllByRole('button', { name: 'message.reasoning' })
+        .every((button) => button.getAttribute('aria-expanded') === 'false'),
+    ).toBe(true);
+  });
+
   it('shows an inline pet next to assistant state controls only while streaming', () => {
     const content: ChatkitMessage['content'] = [
       { id: 'answer', type: 'text', text: 'Drafting the page.' },
@@ -1331,9 +1556,7 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     expect(
-      container.querySelector(
-        '[data-slot="tool-step-icon"] [data-icon="eye"]',
-      ),
+      container.querySelector('[data-slot="tool-step-icon"] [data-icon="eye"]'),
     ).toBeInTheDocument();
   });
 
