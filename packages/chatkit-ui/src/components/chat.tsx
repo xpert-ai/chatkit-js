@@ -89,6 +89,7 @@ import {
 import { MessageNavigator } from './thread/MessageNavigator';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
+import { StarterPromptSuggestions } from './composer/StarterPromptSuggestions';
 import {
   ChatkitAvatar,
   type ChatkitAvatarData,
@@ -4530,6 +4531,16 @@ export function Chat({
               ) : null}
             </div>
           </form>
+
+          {isInitialComposer && startScreen?.promptsLayout === 'list' && (
+            <StarterPromptSuggestions
+              prompts={startScreen.prompts ?? []}
+              onPromptClick={handlePromptClick}
+              onPromptEdit={handlePromptEdit}
+              promptSendDisabled={isSubmissionBlocked}
+              promptEditDisabled={isPromptEditDisabled}
+            />
+          )}
 
           {/* Disclaimer */}
           {disclaimer?.text && (

@@ -53,7 +53,7 @@ export function StartScreen({
   const { t } = useChatkitTranslation();
   const greeting = startScreen?.greeting ?? t('startScreen.greeting');
   const prompts = startScreen?.prompts ?? [];
-  const hasPrompts = prompts.length > 0;
+  const hasPrompts = startScreen?.promptsLayout !== 'list' && prompts.length > 0;
   const editPromptLabel = t('startScreen.editPrompt');
 
   return (

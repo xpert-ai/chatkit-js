@@ -151,7 +151,7 @@
   },
   "startScreen": {
     "greeting": "今天我能帮你什么？",
-    "editPrompt": "编辑常用问题"
+    "editPrompt": "编辑问题"
   },
   "composer": {
     "promptWorkflows": {

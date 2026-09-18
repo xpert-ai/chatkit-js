@@ -720,9 +720,16 @@ export type ChatKitOptions = {
     greeting?: string;
 
     /**
-     * A list of starter prompts to show above the composer input when in the new thread view.
+     * A list of starter prompts to show when in the new thread view.
      */
     prompts?: StartScreenPrompt[];
+
+    /**
+     * Show starter prompts as cards below the greeting or a compact text list
+     * directly below the composer.
+     * @default "cards"
+     */
+    promptsLayout?: 'cards' | 'list';
   };
 
   threadItemActions?: {
