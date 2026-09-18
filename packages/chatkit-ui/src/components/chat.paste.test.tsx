@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  act,
   createEvent,
   fireEvent,
   render,
@@ -200,7 +201,7 @@ vi.mock('./ui/button', () => ({
 
 import { Chat } from './chat';
 
-function createClipboardImageItem(file: File) {
+function createClipboardFileItem(file: File) {
   return {
     kind: 'file',
     type: file.type,
@@ -219,6 +220,25 @@ function createFileDataTransfer(files: File[]) {
     types: ['Files'],
     dropEffect: 'none',
   } as unknown as DataTransfer;
+}
+
+function renderAttachmentChat({
+  enabled = true,
+  maxCount = 10,
+  maxSize = 100 * 1024 * 1024,
+} = {}) {
+  return render(
+    <Chat
+      clientSecret="secret"
+      options={{
+        api: {
+          apiUrl: 'https://api.example.com',
+          getClientSecret: async () => 'secret',
+        },
+        composer: { attachments: { enabled, maxCount, maxSize } },
+      }}
+    />,
+  );
 }
 
 describe('Chat composer paste and drop behavior', () => {
@@ -353,7 +373,7 @@ describe('Chat composer paste and drop behavior', () => {
     });
     const pasteEvent = createEvent.paste(textarea, {
       clipboardData: {
-        items: [createClipboardImageItem(file)],
+        items: [createClipboardFileItem(file)],
         getData: () => 'https://example.com/image.png',
       },
     });
@@ -370,6 +390,146 @@ describe('Chat composer paste and drop behavior', () => {
       screen.getByText('image/png • 640x480 • 2.0 KB'),
     ).toBeInTheDocument();
     expect(textarea).toHaveTextContent('');
+  });
+
+  it.each(['items', 'files', 'both'])(
+    'uploads a pasted document once from clipboard %s without inserting its text representation',
+    async (source) => {
+      mocks.uploadFile.mockResolvedValue({
+        id: 'asset-pdf',
+        fileId: 'asset-pdf',
+        originalName: 'report.pdf',
+        mimeType: 'application/pdf',
+        status: 'ready',
+      });
+      renderAttachmentChat();
+      const textbox = screen.getByRole('textbox');
+      const file = new File(['content'], 'report.pdf', {
+        type: 'application/pdf',
+      });
+      const pasteEvent = createEvent.paste(textbox, {
+        clipboardData: {
+          items: source === 'files' ? [] : [createClipboardFileItem(file)],
+          files: source === 'items' ? [] : [file],
+          getData: () => 'file:///documents/report.pdf',
+        },
+      });
+
+      fireEvent(textbox, pasteEvent);
+
+      expect(pasteEvent.defaultPrevented).toBe(true);
+      await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledTimes(1));
+      expect(mocks.uploadFile).toHaveBeenCalledWith(file);
+      expect(await screen.findByText('Ready')).toBeInTheDocument();
+      expect(screen.getByText('report.pdf')).toBeInTheDocument();
+      expect(textbox).toHaveTextContent('');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uploads mixed images and ordinary files, including a file with no MIME type', async () => {
+    mocks.uploadFile.mockImplementation(async (file: File) => ({
+      id: file.name,
+      fileId: file.name,
+      originalName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      url: `https://example.com/${file.name}`,
+      status: 'ready',
+    }));
+    renderAttachmentChat();
+    const files = [
+      new File(['image'], 'diagram.png', { type: 'image/png' }),
+      new File(['document'], 'report.pdf', { type: 'application/pdf' }),
+      new File(['source'], 'source.ts'),
+    ];
+    fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: {
+        items: files.map(createClipboardFileItem),
+        files,
+        getData: () => '',
+      },
+    });
+
+    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledTimes(3));
+    for (const file of files) {
+      expect(mocks.uploadFile).toHaveBeenCalledWith(file);
+      expect(await screen.findByText(file.name)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/image\/png.*640x480/)).toBeInTheDocument();
+    expect(screen.getAllByText('Ready')).toHaveLength(2);
+  });
+
+  it('shares file count and size limits with attachments already selected through the picker', async () => {
+    mocks.uploadFile.mockImplementation(async (file: File) => ({
+      id: file.name,
+      fileId: file.name,
+      originalName: file.name,
+      status: 'ready',
+    }));
+    const { container } = renderAttachmentChat({ maxCount: 2, maxSize: 4 });
+    const input = container.querySelector('input[type="file"]');
+    if (!input) throw new Error('Missing file picker');
+    const selected = new File(['one'], 'selected.txt');
+    fireEvent.change(input, { target: { files: [selected] } });
+    await screen.findByText('Ready');
+    const oversized = new File(['oversized'], 'large.txt');
+    const accepted = new File(['two'], 'accepted.txt');
+    const extra = new File(['tri'], 'extra.txt');
+
+    fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: {
+        files: [oversized, accepted, extra],
+        items: [],
+        getData: () => '',
+      },
+    });
+
+    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledTimes(2));
+    expect(mocks.uploadFile).toHaveBeenNthCalledWith(2, accepted);
+    expect(screen.queryByText('large.txt')).not.toBeInTheDocument();
+    expect(screen.queryByText('extra.txt')).not.toBeInTheDocument();
+  });
+
+  it('does not upload pasted documents when attachments are disabled', async () => {
+    renderAttachmentChat({ enabled: false });
+    const file = new File(['document'], 'report.pdf', { type: 'application/pdf' });
+    await act(async () => {
+      fireEvent.paste(screen.getByRole('textbox'), {
+        clipboardData: {
+          items: [createClipboardFileItem(file)],
+          files: [file],
+          getData: () => '',
+        },
+      });
+    });
+
+    expect(mocks.uploadFile).not.toHaveBeenCalled();
+    expect(screen.queryByText('report.pdf')).not.toBeInTheDocument();
+  });
+
+  it('retries a failed pasted document through the attachment upload queue', async () => {
+    mocks.uploadFile
+      .mockRejectedValueOnce(new Error('Upload failed'))
+      .mockResolvedValueOnce({
+        id: 'asset-pdf',
+        fileId: 'asset-pdf',
+        originalName: 'report.pdf',
+        status: 'ready',
+      });
+    renderAttachmentChat();
+    const file = new File(['document'], 'report.pdf', { type: 'application/pdf' });
+    fireEvent.paste(screen.getByRole('textbox'), {
+      clipboardData: {
+        items: [createClipboardFileItem(file)],
+        getData: () => '',
+      },
+    });
+
+    fireEvent.click(await screen.findByTitle('chat.retryUpload'));
+    expect(await screen.findByText('Ready')).toBeInTheDocument();
+    expect(mocks.uploadFile).toHaveBeenCalledTimes(2);
+    expect(mocks.uploadFile).toHaveBeenLastCalledWith(file);
   });
 
   it('deletes uploaded attachments through the SDK client when removed', async () => {
@@ -513,8 +673,8 @@ describe('Chat composer paste and drop behavior', () => {
     fireEvent.paste(textarea, {
       clipboardData: {
         items: [
-          createClipboardImageItem(first),
-          createClipboardImageItem(second),
+          createClipboardFileItem(first),
+          createClipboardFileItem(second),
         ],
         getData: () => '',
       },

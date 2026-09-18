@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { CircleHelp } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
 import { useStreamContext } from '../../providers/Stream';
@@ -7,7 +8,8 @@ import {
   getThreadContextUsage,
   getThreadContextUsageTotalTokens,
   normalizeContextUsageNumber,
-  resolveUsedContextSize,
+  readStoredContextUsage,
+  type ContextUsageMeasurement,
 } from '../../lib/thread-context-usage';
 import { ProgressCircle } from '../ui/progress-circle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
@@ -67,40 +69,47 @@ export function ContextUsageIndicator({
 }: ContextUsageIndicatorProps) {
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
-  const [maxContextSize, setMaxContextSize] = React.useState<number | null>(
-    null,
-  );
-  const [usedContextSize, setUsedContextSize] = React.useState<number | null>(
-    null,
-  );
-  const [assistantAgentKey, setAssistantAgentKey] = React.useState<
-    string | null
-  >(null);
-  const latestRealtimeUsageRef = React.useRef<{
-    threadId: string | null;
+  const [assistantContext, setAssistantContext] = React.useState<{
+    assistantId: string;
+    maxContextSize: number | null;
     agentKey: string | null;
-    usedTokens: number | null;
-  }>({
-    threadId: null,
-    agentKey: null,
-    usedTokens: null,
-  });
-
-  const realtimeUsage = React.useMemo(
-    () =>
-      getThreadContextUsage(stream.contextUsageByAgentKey, assistantAgentKey),
-    [assistantAgentKey, stream.contextUsageByAgentKey],
+  } | null>(null);
+  const assistantReady = assistantContext?.assistantId === stream.assistantId;
+  const assistantAgentKey = assistantReady
+    ? (assistantContext?.agentKey ?? null)
+    : null;
+  const maxContextSize = assistantReady
+    ? (assistantContext?.maxContextSize ?? null)
+    : null;
+  const scope = React.useMemo(
+    () => ({
+      threadId: stream.threadId ?? null,
+      assistantId: stream.assistantId,
+      agentKey: assistantAgentKey,
+    }),
+    [stream.threadId, stream.assistantId, assistantAgentKey],
   );
+  const [measurement, setMeasurement] = React.useState<
+    (ContextUsageMeasurement & { scope: typeof scope }) | null
+  >(null);
+
+  const realtimeUsage = React.useMemo(() => {
+    const usage = getThreadContextUsage(
+      stream.contextUsageByAgentKey,
+      assistantAgentKey,
+    );
+    return usage?.threadId === scope.threadId ? usage : null;
+  }, [assistantAgentKey, scope.threadId, stream.contextUsageByAgentKey]);
   const realtimeUsedContextSize =
     getThreadContextUsageTotalTokens(realtimeUsage);
+  const latestRealtimeUsageRef = React.useRef(realtimeUsage);
   const hasApiConfiguration = Boolean(
     stream.apiUrl?.trim() && stream.apiKey?.trim(),
   );
 
   React.useEffect(() => {
     if (!hasApiConfiguration || !stream.client || !stream.assistantId) {
-      setMaxContextSize(null);
-      setAssistantAgentKey(null);
+      setAssistantContext(null);
       return;
     }
 
@@ -109,13 +118,16 @@ export function ContextUsageIndicator({
       .get(stream.assistantId)
       .then((assistant) => {
         if (cancelled || !assistant) return;
-        setMaxContextSize(resolveAssistantContextSize(assistant));
-        setAssistantAgentKey(resolveAssistantAgentKey(assistant));
+        setAssistantContext({
+          assistantId: stream.assistantId,
+          maxContextSize: resolveAssistantContextSize(assistant),
+          agentKey: resolveAssistantAgentKey(assistant),
+        });
       })
       .catch((err) => {
         if (cancelled) return;
         console.warn('[Chat] Failed to load assistant context size:', err);
-        setAssistantAgentKey(null);
+        setAssistantContext(null);
       });
 
     return () => {
@@ -124,73 +136,86 @@ export function ContextUsageIndicator({
   }, [hasApiConfiguration, stream.client, stream.assistantId]);
 
   React.useEffect(() => {
-    latestRealtimeUsageRef.current = {
-      threadId: stream.threadId ?? null,
-      agentKey: assistantAgentKey,
+    latestRealtimeUsageRef.current = realtimeUsage;
+    if (realtimeUsedContextSize == null || realtimeUsedContextSize === 0)
+      return;
+    setMeasurement({
+      scope,
       usedTokens: realtimeUsedContextSize,
-    };
-  }, [assistantAgentKey, realtimeUsedContextSize, stream.threadId]);
+      status: 'current',
+    });
+  }, [scope, realtimeUsage, realtimeUsedContextSize]);
 
   React.useEffect(() => {
-    if (realtimeUsedContextSize == null) return;
-    setUsedContextSize(realtimeUsedContextSize);
-  }, [realtimeUsedContextSize]);
-
-  React.useEffect(() => {
-    if (!hasApiConfiguration || !stream.client) {
-      setUsedContextSize(null);
+    if (!hasApiConfiguration || !stream.client || !assistantReady) {
       return;
     }
-    if (!stream.threadId) {
-      setUsedContextSize(0);
+    if (!scope.threadId) {
+      setMeasurement({ scope, usedTokens: 0, status: 'current' });
       return;
     }
-    if (realtimeUsedContextSize != null) return;
     if (stream.isLoading) return;
 
     let cancelled = false;
-    const requestThreadId = stream.threadId;
-    const requestAgentKey = assistantAgentKey;
+    const realtimeAtRequest = latestRealtimeUsageRef.current;
     stream.client.threads
       .getContextUsage(
-        requestThreadId,
-        requestAgentKey ? { agentKey: requestAgentKey } : undefined,
-      )
-      .then((result) =>
-        normalizeContextUsageNumber(result?.usage?.context_tokens),
+        scope.threadId,
+        scope.agentKey ? { agentKey: scope.agentKey } : undefined,
       )
       .then((result) => {
-        if (cancelled) return;
-        const latestRealtimeUsage = latestRealtimeUsageRef.current;
-        if (
-          latestRealtimeUsage.usedTokens != null &&
-          latestRealtimeUsage.threadId === requestThreadId &&
-          latestRealtimeUsage.agentKey === requestAgentKey
-        ) {
+        if (cancelled || latestRealtimeUsageRef.current !== realtimeAtRequest)
           return;
-        }
-        setUsedContextSize(
-          resolveUsedContextSize({
-            fallbackUsedTokens: result,
-          }),
-        );
+        const stored = readStoredContextUsage(result);
+        const realtimeTokens =
+          getThreadContextUsageTotalTokens(realtimeAtRequest);
+        const sameRun =
+          realtimeAtRequest &&
+          (!result.run_id || result.run_id === realtimeAtRequest.runId);
+        setMeasurement((previous) => {
+          const previousTokens =
+            previous?.scope === scope ? previous.usedTokens : null;
+          const usedTokens =
+            stored.usedTokens == null
+              ? previousTokens
+              : sameRun && realtimeTokens != null && realtimeTokens > 0
+                ? realtimeTokens
+                : stored.usedTokens;
+          return {
+            scope,
+            usedTokens,
+            status:
+              stored.status === 'unavailable' && usedTokens != null
+                ? 'stale'
+                : stored.status,
+          };
+        });
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (cancelled || latestRealtimeUsageRef.current !== realtimeAtRequest)
+          return;
         console.warn('[Chat] Failed to load thread context usage:', err);
+        setMeasurement((previous) => {
+          const usedTokens =
+            previous?.scope === scope ? previous.usedTokens : null;
+          return {
+            scope,
+            usedTokens,
+            status: usedTokens == null ? 'unavailable' : 'stale',
+          };
+        });
       });
 
     return () => {
       cancelled = true;
     };
   }, [
-    assistantAgentKey,
+    assistantReady,
     hasApiConfiguration,
-    realtimeUsedContextSize,
+    scope,
     stream.apiKey,
     stream.apiUrl,
     stream.client,
-    stream.threadId,
     stream.isLoading,
   ]);
 
@@ -205,6 +230,11 @@ export function ContextUsageIndicator({
   }
 
   const max = Math.floor(effectiveMaxContextSize);
+  const usedContextSize =
+    measurement?.scope === scope ? measurement.usedTokens : null;
+  const usageStatus =
+    measurement?.scope === scope ? measurement.status : 'unavailable';
+  const hasMeasurement = usedContextSize != null;
   const used = clampUsage(usedContextSize, max);
   const percent = Math.max(0, Math.min(100, (used / max) * 100));
   const roundedPercent = Math.round(percent);
@@ -223,6 +253,12 @@ export function ContextUsageIndicator({
   const usageLabelWithSuffix = usageLabel.endsWith(':')
     ? usageLabel
     : `${usageLabel}:`;
+  const statusLabel =
+    usageStatus === 'stale'
+      ? t('chat.contextUsage.stale')
+      : !hasMeasurement
+        ? t('chat.contextUsage.unavailable')
+        : null;
   const progressClassName =
     percent >= 90
       ? 'text-destructive'
@@ -239,12 +275,19 @@ export function ContextUsageIndicator({
             'inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background',
             className,
           )}
-          aria-label={`${usageLabelWithSuffix} ${usageFullLabel}. ${usageTokensLabel}`}
+          aria-label={`${usageLabelWithSuffix} ${hasMeasurement ? `${usageFullLabel}. ${usageTokensLabel}` : ''}${statusLabel ? ` ${statusLabel}` : ''}`}
         >
-          <ProgressCircle
-            value={percent}
-            className={cn('size-5', progressClassName)}
-          />
+          {hasMeasurement ? (
+            <ProgressCircle
+              value={percent}
+              className={cn('size-5', progressClassName)}
+            />
+          ) : (
+            <CircleHelp
+              className="size-5 text-muted-foreground"
+              aria-hidden="true"
+            />
+          )}
         </button>
       </TooltipTrigger>
       <TooltipContent
@@ -253,10 +296,17 @@ export function ContextUsageIndicator({
         className="space-y-0.5 px-3 py-2 text-center"
       >
         <div className="text-primary-foreground/70">{usageLabelWithSuffix}</div>
-        <div className="font-medium text-primary-foreground/80">
-          {usageFullLabel}
-        </div>
-        <div className="text-sm font-semibold">{usageTokensLabel}</div>
+        {hasMeasurement && (
+          <>
+            <div className="font-medium text-primary-foreground/80">
+              {usageFullLabel}
+            </div>
+            <div className="text-sm font-semibold">{usageTokensLabel}</div>
+          </>
+        )}
+        {!hasMeasurement && statusLabel && (
+          <div className="text-sm">{statusLabel}</div>
+        )}
       </TooltipContent>
     </Tooltip>
   );

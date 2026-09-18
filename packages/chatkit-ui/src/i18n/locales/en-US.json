@@ -108,7 +108,9 @@
     "contextUsage": {
       "label": "Context window",
       "full": "{{usedPercent}}% used ({{remainingPercent}}% left)",
-      "tokensUsed": "{{used}} / {{max}} tokens used"
+      "tokensUsed": "{{used}} / {{max}} tokens used",
+      "stale": "Last valid usage (not updated by the latest call)",
+      "unavailable": "No valid usage available"
     },
     "goal": {
       "label": "Goal",
