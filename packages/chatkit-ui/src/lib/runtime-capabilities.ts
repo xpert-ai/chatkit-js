@@ -297,6 +297,20 @@ export function toggleRuntimeCapabilitySelection(
         ? selection.plugins.nodeKeys
         : (selection.subAgents?.nodeKeys ?? []);
   const shouldSelect = selected ?? !ids.includes(id);
+  // Deselection also removes a recommendation so submission cannot re-add it.
+  if (!shouldSelect && selection.recommended) {
+    selection = {
+      ...selection,
+      recommended: getRuntimeCapabilitiesSelectionSet(
+        toggleRuntimeCapabilitySelection(
+          { mode: 'allowlist', ...selection.recommended },
+          type,
+          id,
+          false,
+        ),
+      ),
+    };
+  }
   const nextIds = shouldSelect
     ? uniqueStrings([...ids, id])
     : ids.filter((item) => item !== id);

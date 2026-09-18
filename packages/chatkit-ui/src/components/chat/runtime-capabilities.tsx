@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { X } from 'lucide-react';
 import type { Client } from '@xpert-ai/xpert-sdk';
 import { createMessageId } from '../../lib/utils';
 import { isRuntimeCapabilitiesSelection } from '../../lib/message-metadata';
@@ -33,6 +32,7 @@ import {
   getRuntimeCapabilityOptionKey,
   removeComposerCapabilityTokens,
   replaceComposerRange,
+  sliceComposerParts,
   type ComposerCapabilityPart,
   type ComposerPart,
 } from '../../lib/composer-parts';
@@ -42,6 +42,7 @@ import {
   type RuntimeCapabilityPaletteState,
 } from '../../lib/slash-commands';
 import { RuntimeCapabilityIcon } from '../runtime-capability-icon';
+import { ComposerCapabilityChip } from '../composer/ComposerCapabilityChip';
 
 export type RuntimeCapabilitiesForSubmit = {
   runtimeCapabilitiesForSubmit: RuntimeCapabilitiesSelection | null;
@@ -63,7 +64,6 @@ type RuntimeCapabilitiesStateParams = {
   projectId?: string;
   threadId: string | null | undefined;
   disabled: boolean;
-  composerParts: ComposerPart[];
 };
 
 type RuntimeCapabilitiesComposerActionsParams = {
@@ -88,10 +88,12 @@ type RuntimeCapabilitiesComposerActionsParams = {
 function createComposerCapabilityInsertionParts(
   options: RuntimeCapabilityOption[],
 ): ComposerPart[] {
-  return options.flatMap((option) => [
-    createComposerCapabilityPart(option, createMessageId()),
-    ...(option.type === 'skill' ? createComposerTextParts(' ') : []),
-  ]);
+  return options
+    .filter((option) => option.type !== 'subAgent')
+    .flatMap((option) => [
+      createComposerCapabilityPart(option, createMessageId()),
+      ...(option.type === 'skill' ? createComposerTextParts(' ') : []),
+    ]);
 }
 
 function getHttpStatus(error: unknown): number | null {
@@ -194,7 +196,6 @@ export function useRuntimeCapabilitiesState({
   projectId,
   threadId,
   disabled,
-  composerParts,
 }: RuntimeCapabilitiesStateParams) {
   const [runtimeCapabilities, setRuntimeCapabilities] =
     React.useState<RuntimeCapabilitiesWithCommands | null>(null);
@@ -228,34 +229,6 @@ export function useRuntimeCapabilitiesState({
           )
         : null,
     [runtimeCapabilities, runtimeCapabilitiesReady, sessionRuntimeCapabilities],
-  );
-
-  const runRuntimeCapabilityOptions = React.useMemo(
-    () =>
-      runtimeCapabilityOptions.filter((option) =>
-        isRuntimeCapabilitySelected(
-          runRuntimeCapabilities,
-          option.type,
-          option.id,
-        ),
-      ),
-    [runRuntimeCapabilities, runtimeCapabilityOptions],
-  );
-
-  const composerRuntimeCapabilitySelectionKeys = React.useMemo(
-    () => getComposerCapabilitySelectionKeys(composerParts),
-    [composerParts],
-  );
-
-  const detachedRunRuntimeCapabilityOptions = React.useMemo(
-    () =>
-      runRuntimeCapabilityOptions.filter(
-        (option) =>
-          !composerRuntimeCapabilitySelectionKeys.has(
-            getRuntimeCapabilityOptionKey(option),
-          ),
-      ),
-    [composerRuntimeCapabilitySelectionKeys, runRuntimeCapabilityOptions],
   );
 
   const persistSessionRuntimeCapabilities = React.useCallback(
@@ -569,8 +542,6 @@ export function useRuntimeCapabilitiesState({
     runtimeCapabilityOptions,
     effectiveSessionRuntimeCapabilities,
     runRuntimeCapabilities,
-    runRuntimeCapabilityOptions,
-    detachedRunRuntimeCapabilityOptions,
     runtimeCapabilityPalette,
     setRunRuntimeCapabilities,
     setRuntimeCapabilityPalette,
@@ -726,15 +697,39 @@ export function useRuntimeCapabilityComposerActions({
           false,
         ),
       );
-      commitComposerParts(
-        removeComposerCapabilityTokens(composerPartsRef.current, option),
-        {
-          resetDom: true,
-          syncRemovedCapabilityTokens: false,
-        },
+      const parts = composerPartsRef.current;
+      if (
+        !parts.some(
+          (part) =>
+            part.type === 'capability' &&
+            part.capability.type === option.type &&
+            part.capability.id === option.id,
+        )
+      ) {
+        return;
+      }
+      const caret =
+        (composerInputRef.current &&
+          getComposerSelectionOffset(composerInputRef.current)) ??
+        getComposerEditingLength(parts);
+      const nextCaret = getComposerEditingLength(
+        removeComposerCapabilityTokens(
+          sliceComposerParts(parts, 0, caret),
+          option,
+        ),
       );
+      commitComposerParts(removeComposerCapabilityTokens(parts, option), {
+        caretOffset: nextCaret,
+        resetDom: true,
+        syncRemovedCapabilityTokens: false,
+      });
     },
-    [commitComposerParts, composerPartsRef, setRunRuntimeCapabilities],
+    [
+      commitComposerParts,
+      composerInputRef,
+      composerPartsRef,
+      setRunRuntimeCapabilities,
+    ],
   );
 
   const insertComposerCapabilityToken = React.useCallback(
@@ -842,68 +837,29 @@ export function HumanRuntimeCapabilityChips({
   );
 }
 
-export function DetachedRunRuntimeCapabilities({
-  options,
-  runOnlyLabel,
-  removeLabel,
-  onRemove,
-}: {
-  options: RuntimeCapabilityOption[];
-  runOnlyLabel: string;
-  removeLabel: string;
-  onRemove: (option: RuntimeCapabilityOption) => void;
-}) {
-  if (options.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mb-2 flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">{runOnlyLabel}</span>
-      {options.map((option) => {
-        const color = getRuntimeCapabilityColor(option);
-        return (
-          <span
-            key={`${option.type}:${option.id}`}
-            className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
-            style={color ? { color } : undefined}
-          >
-            <RuntimeCapabilityIcon option={option} variant="chip" />
-            <span className="max-w-40 truncate">{option.label}</span>
-            <button
-              type="button"
-              onClick={() => onRemove(option)}
-              className="rounded-full p-0.5 hover:bg-primary/15"
-              title={removeLabel}
-              aria-label={removeLabel}
-            >
-              <X size={11} />
-            </button>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 export function ComposerCapabilityToken({
   part,
+  onRemove,
+  disabled,
 }: {
   part: ComposerCapabilityPart;
+  onRemove: (option: RuntimeCapabilityOption) => void;
+  disabled?: boolean;
 }) {
   const color = getRuntimeCapabilityColor(part.capability);
   return (
     <span
-      key={part.key}
       data-composer-capability-key={part.key}
       data-capability-type={part.capability.type}
       data-capability-id={part.capability.id}
       contentEditable={false}
-      className="mx-0.5 inline-flex max-w-[14rem] select-none items-center gap-1 text-sm font-semibold text-primary align-baseline"
       style={color ? { color } : undefined}
     >
-      <RuntimeCapabilityIcon option={part.capability} variant="chip" />
-      <span className="truncate">{part.capability.label}</span>
+      <ComposerCapabilityChip
+        option={part.capability}
+        onRemove={onRemove}
+        disabled={disabled}
+      />
     </span>
   );
 }

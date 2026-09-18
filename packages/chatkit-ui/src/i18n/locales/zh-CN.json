@@ -154,6 +154,12 @@
     "editPrompt": "编辑常用问题"
   },
   "composer": {
+    "promptWorkflows": {
+      "back": "返回提示词",
+      "scenarios": "预置场景",
+      "prompts": "提示词",
+      "edit": "可以直接编辑提示词并补充内容。"
+    },
     "openMenu": "打开菜单",
     "closeMenu": "关闭菜单",
     "addAttachment": "添加附件",
@@ -208,6 +214,7 @@
       "plugins": "插件",
       "subAgents": "子智能体",
       "runOnly": "本次运行",
+      "removeSelection": "取消选择：{{name}}",
       "removeRunCapability": "移除能力",
       "emptySearch": "没有匹配的技能、插件或子智能体",
       "agent": "智能体",

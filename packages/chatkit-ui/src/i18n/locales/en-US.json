@@ -154,6 +154,12 @@
     "editPrompt": "Edit prompt"
   },
   "composer": {
+    "promptWorkflows": {
+      "back": "Back to prompts",
+      "scenarios": "Preset scenarios",
+      "prompts": "Prompts",
+      "edit": "Edit the prompt and add your details."
+    },
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "addAttachment": "Add attachment",
@@ -208,6 +214,7 @@
       "plugins": "Plugins",
       "subAgents": "Sub-agents",
       "runOnly": "This run",
+      "removeSelection": "Remove selection: {{name}}",
       "removeRunCapability": "Remove capability",
       "emptySearch": "No matching skills, plugins, or sub-agents",
       "agent": "Agent",

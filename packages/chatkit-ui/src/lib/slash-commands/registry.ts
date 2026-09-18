@@ -44,6 +44,8 @@ function normalizeSlashCommandKind(
   category: string | undefined,
   actionType: ChatKitSlashCommandAction['type'],
 ): ChatKitSlashCommandKind {
+  if (value === 'prompt_workflow' && actionType === 'insert_text')
+    return 'prompt_workflow';
   if (actionType !== 'submit_prompt' && actionType !== 'insert_invocation') {
     return 'command';
   }

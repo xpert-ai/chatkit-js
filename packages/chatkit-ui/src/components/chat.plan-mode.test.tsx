@@ -122,7 +122,7 @@ vi.mock('../hooks/useThreads', () => ({
 
 vi.mock('../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => {
+    t: (key: string, options?: { defaultValue?: string; name?: string }) => {
       const labels: Record<string, string> = {
         'composer.slashCommands.commands.plan.label': 'Localized Plan',
         'composer.slashCommands.commands.plan.description':
@@ -134,6 +134,7 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
         'chat.loadMoreMessages': 'Load more',
         'chat.loadingMoreMessages': 'Loading...',
       };
+      if (key === 'composer.capabilities.removeSelection') return `Remove selection: ${options?.name}`;
       return labels[key] ?? options?.defaultValue ?? key;
     },
     i18n: {
@@ -184,6 +185,7 @@ vi.mock('./composer/ComposerMenu', () => ({
     onGoalPanelOpenChange?: (open: boolean) => void;
     runtimeCapabilities?: unknown;
     selectedRuntimeCapabilities?: {
+      skills: { ids: string[] };
       plugins: { nodeKeys: string[] };
       subAgents?: { nodeKeys: string[] };
     } | null;
@@ -201,6 +203,10 @@ vi.mock('./composer/ComposerMenu', () => ({
       >
         {planModeEnabled ? 'plan-on' : 'plan-off'}
       </button>
+      <span data-testid="selected-skills">
+        {selectedRuntimeCapabilities?.skills.ids.join(',') ?? ''}
+      </span>
+      <button type="button" data-testid="select-skill" onClick={() => onRuntimeCapabilityToggle?.('skill', 'skill-docs', true)}>select skill</button>
       <span data-testid="selected-plugins">
         {selectedRuntimeCapabilities?.plugins.nodeKeys.join(',') ?? ''}
       </span>
@@ -649,7 +655,7 @@ describe('Chat plan mode payload', () => {
     expect(editorSurface).not.toHaveClass('border', 'border-border');
     expect(editorSurface).not.toHaveClass('shadow-sm', 'shadow-md');
     const composerEditor = screen.getByRole('textbox');
-    expect(composerEditor).toHaveClass('min-h-10', 'max-h-36');
+    expect(document.querySelector('[data-slot="composer-body"]')).toHaveClass('min-h-10', 'max-h-32');
     expect(composerEditor).not.toHaveClass('min-h-20');
     const projectRail = document.querySelector(
       '[data-slot="composer-project-rail"]',
@@ -2257,6 +2263,185 @@ describe('Chat plan mode payload', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows prompt shortcuts only before a conversation exists', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [], plugins: [], subAgents: [], commands: [{
+        name: 'slides', label: 'Create slides', kind: 'prompt_workflow',
+        action: { type: 'insert_text', template: 'Create editable slides.' },
+      }],
+    });
+    const { rerender } = renderChat();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create slides' })).toBeEnabled());
+
+    mocks.stream.threadId = 'existing-thread';
+    rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+    expect(document.querySelector('[data-slot="prompt-workflow-shortcuts"]')).toBeNull();
+
+    // Messages can arrive before the new thread id is reflected by the host.
+    mocks.stream.threadId = null;
+    mocks.stream.messages = [{ id: 'human-1', type: 'human', content: 'Create slides' }];
+    rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+    expect(document.querySelector('[data-slot="prompt-workflow-shortcuts"]')).toBeNull();
+
+    mocks.stream.messages = [];
+    rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+    expect(screen.getByRole('button', { name: 'Create slides' })).toBeEnabled();
+  });
+
+  it.each(['shortcut', 'slash'])('fills editable workspace prompts through %s, replaces scenario args and submits the visible text once', async (entry) => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [], plugins: [], subAgents: [], commands: [{
+        name: 'slides', label: 'Create slides', kind: 'prompt_workflow',
+        workflow: { type: 'prompt_workflow', scenarios: [
+          { id: 'ai', label: 'AI trends PPT', args: 'Create an AI trends PPT' },
+          { id: 'annual', label: 'Annual PPT', args: 'Create an annual PPT' },
+        ] },
+        action: { type: 'insert_text', template: 'Create editable slides.\nUse my language.\n\n{{args}}' },
+      }],
+    });
+    renderChat();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create slides' })).toBeEnabled());
+    const textbox = screen.getByRole('textbox');
+    setComposerText(textbox, entry === 'shortcut' ? 'My existing draft' : '/slides My existing draft');
+    fireEvent.click(screen.getByRole('button', { name: entry === 'shortcut' ? 'Create slides' : 'send' }));
+    expect(screen.getByRole('textbox').textContent).toContain('Create editable slides.\nUse my language.\n\nMy existing draft');
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'AI trends PPT' }));
+    const edited = 'Create exactly 10 editable slides.\nUse my language.\n\nCreate an AI trends PPT';
+    setComposerText(screen.getByRole('textbox'), edited);
+    fireEvent.click(screen.getByRole('button', { name: 'Annual PPT' }));
+    const expected = 'Create exactly 10 editable slides.\nUse my language.\n\nCreate an annual PPT';
+    expect(screen.getByRole('textbox').textContent).toBe(expected);
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: expected,
+      commandSource: { name: 'slides', kind: 'prompt_workflow', executionType: 'insert_text' },
+    });
+    expect(screen.queryByRole('button', { name: 'Annual PPT' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: 'export', label: 'Export slides', template: 'Export slides.\n\n{{args}}', expected: 'Export slides.' },
+    { name: 'share', label: 'Share slides', template: 'Share slides.', expected: 'Share slides.' },
+  ])('preserves edits on reselection but clears the previous scenario when switching to $name', async (target) => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [], plugins: [], subAgents: [], commands: [
+        {
+          name: 'slides', label: 'Create slides', kind: 'prompt_workflow',
+          workflow: { type: 'prompt_workflow', scenarios: [
+            { id: 'annual', label: 'Annual PPT', args: 'Annual report' },
+          ] },
+          action: { type: 'insert_text', template: 'Create slides.\n\n{{args}}' },
+        },
+        {
+          name: target.name, label: target.label, kind: 'prompt_workflow',
+          action: { type: 'insert_text', template: target.template },
+        },
+      ],
+    });
+    renderChat();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create slides' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Create slides' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Annual PPT' }));
+    setComposerText(screen.getByRole('textbox'), 'Create editable slides.\n\nAnnual report');
+    setComposerText(screen.getByRole('textbox'), 'Create editable slides.\n\nAnnual report for my team');
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: 'composer.promptWorkflows.back' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Create slides' }));
+      expect(screen.getByRole('textbox').textContent).toBe('Create editable slides.\n\nAnnual report for my team');
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'composer.promptWorkflows.back' }));
+    fireEvent.click(screen.getByRole('button', { name: target.label }));
+    expect(screen.getByRole('textbox').textContent?.trim()).toBe(target.expected);
+    for (let i = 0; i < 3; i++) {
+      const back = screen.queryByRole('button', { name: 'composer.promptWorkflows.back' });
+      if (back) fireEvent.click(back);
+      fireEvent.click(screen.getByRole('button', { name: target.label }));
+      expect(screen.getByRole('textbox').textContent?.trim()).toBe(target.expected);
+    }
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: target.expected,
+      commandSource: { name: target.name, kind: 'prompt_workflow', executionType: 'insert_text' },
+    });
+  });
+
+  it.each(['prompt', 'parent', 'menu'])('places %s skills inside the composer and subagents beside the menu, keeping removal consistent', async (source) => {
+    const selection = {
+      mode: 'allowlist',
+      skills: { ids: ['skill-docs'] },
+      plugins: { nodeKeys: [] },
+      subAgents: { nodeKeys: ['researcher'] },
+      recommended: {
+        skills: { ids: ['skill-docs'] },
+        plugins: { nodeKeys: [] },
+        subAgents: { nodeKeys: ['researcher'] },
+      },
+    };
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [{ id: 'skill-docs', label: 'documents' }],
+      plugins: [],
+      subAgents: [{ nodeKey: 'researcher', label: 'Researcher' }],
+      commands: [{
+        name: 'slides', label: 'Create slides', kind: 'prompt_workflow',
+        workflow: { type: 'prompt_workflow', scenarios: [
+          { id: 'annual', label: 'Annual PPT', args: 'Annual report' },
+        ] },
+        action: { type: 'insert_text', template: 'Create slides.\n{{args}}', runtimeCapabilities: selection },
+      }],
+    });
+    renderChat();
+    await waitFor(() => expect(screen.getByTestId('runtime-capabilities-ready')).toHaveTextContent('ready'));
+    if (source === 'prompt') {
+      fireEvent.click(screen.getByRole('button', { name: 'Create slides' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Annual PPT' }));
+    } else if (source === 'parent') {
+      await act(async () => mocks.parentMessengerOptions?.onSetComposerValue?.({
+        text: 'Create slides.', runtimeCapabilities: selection, insertRuntimeCapabilities: true,
+      }));
+    } else {
+      fireEvent.click(screen.getByTestId('select-skill'));
+      fireEvent.click(screen.getByTestId('select-sub-agent'));
+      setComposerText(screen.getByRole('textbox'), 'Create slides.');
+    }
+    const editor = document.querySelector('[data-slot="composer-editor-surface"]');
+    const toolbar = document.querySelector('[data-slot="composer-action-bar"]');
+    const body = document.querySelector('[data-slot="composer-body"]');
+    expect(editor).not.toBeNull();
+    expect(toolbar).not.toBeNull();
+    expect(body).not.toBeNull();
+    expect(body).toHaveTextContent('documents');
+    expect(body).not.toHaveTextContent('Researcher');
+    expect(toolbar).toHaveTextContent('Researcher');
+    expect(screen.getByTestId('selected-sub-agents')).toHaveTextContent('researcher');
+    expect(screen.getByTestId('selected-skills')).toHaveTextContent('skill-docs');
+    if (!(editor instanceof HTMLElement)) throw new Error('Missing composer');
+    fireEvent.click(within(editor).getByRole('button', { name: 'Remove selection: documents' }));
+    const editableBeforeAgentRemoval = screen.getByRole('textbox');
+    fireEvent.click(within(editor).getByRole('button', { name: 'Remove selection: Researcher' }));
+    expect(screen.getByRole('textbox')).toBe(editableBeforeAgentRemoval);
+    expect(screen.getByTestId('selected-sub-agents')).toBeEmptyDOMElement();
+    expect(screen.getByTestId('selected-skills')).toBeEmptyDOMElement();
+    expect(body).not.toHaveTextContent('documents');
+    expect(toolbar).not.toHaveTextContent('Researcher');
+    if (source === 'prompt') {
+      fireEvent.click(screen.getByRole('button', { name: 'Annual PPT' }));
+      expect(body).not.toHaveTextContent('documents');
+      expect(toolbar).not.toHaveTextContent('Researcher');
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    const input = mocks.stream.submit.mock.calls[0][0].input;
+    expect(input.input).toBe(source === 'prompt' ? 'Create slides.\nAnnual report' : 'Create slides.');
+    expect(input.runtimeCapabilities.skills.ids).toEqual([]);
+    expect(input.runtimeCapabilities.subAgents.nodeKeys).toEqual([]);
+    expect(input.runtimeCapabilities.recommended).toBeUndefined();
+  });
+
   it('merges runtime command capability selections into submitted prompts', async () => {
     mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
       {
@@ -2690,7 +2875,9 @@ describe('Chat plan mode payload', () => {
     const textarea = screen.getByRole('textbox');
     setComposerText(textarea, '/sand');
 
-    expect(await screen.findByText('Sandbox')).toBeInTheDocument();
+    const palette = document.querySelector('[data-slot="slash-palette"]');
+    if (!(palette instanceof HTMLElement)) throw new Error('Missing slash palette');
+    expect(within(palette).getByText('Sandbox')).toBeInTheDocument();
   });
 
   it('submits run-only palette capabilities without persisting them to the conversation', async () => {
