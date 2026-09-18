@@ -48,6 +48,8 @@
     "missingClientSecretDetail": "缺少 ChatKit client secret。请检查 `clientSecret` 参数或 `api.getClientSecret` 集成。",
     "missingApiUrlAndClientSecretShort": "缺少 ChatKit API URL 和 client secret。",
     "missingApiUrlAndClientSecretDetail": "缺少 ChatKit API URL 和 client secret。请检查 `VITE_XPERTAI_API_URL`、`options.api.apiUrl` 以及 client secret 集成。",
+    "emptyHistory": "这条对话暂无消息。",
+    "retryHistory": "重新加载",
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
@@ -149,9 +151,15 @@
   },
   "startScreen": {
     "greeting": "今天我能帮你什么？",
-    "editPrompt": "编辑常用问题"
+    "editPrompt": "编辑问题"
   },
   "composer": {
+    "promptWorkflows": {
+      "back": "返回提示词",
+      "scenarios": "预置场景",
+      "prompts": "提示词",
+      "edit": "可以直接编辑提示词并补充内容。"
+    },
     "openMenu": "打开菜单",
     "closeMenu": "关闭菜单",
     "addAttachment": "添加附件",
@@ -206,6 +214,7 @@
       "plugins": "插件",
       "subAgents": "子智能体",
       "runOnly": "本次运行",
+      "removeSelection": "取消选择：{{name}}",
       "removeRunCapability": "移除能力",
       "emptySearch": "没有匹配的技能、插件或子智能体",
       "agent": "智能体",
@@ -259,6 +268,8 @@
     "quoteSelection": "引用选中内容",
     "askInSideChat": "在侧边聊天中提问",
     "fileMentions": {
+      "select": "选择文件",
+      "search": "搜索文件",
       "title": "引用工作区文件",
       "loading": "正在加载工作区文件...",
       "empty": "没有匹配的工作区文件",
@@ -280,6 +291,7 @@
       "submit": "继续"
     },
     "hitl": {
+      "technicalDetails": "技术详情",
       "title": "操作审核",
       "mcpElicitationTitle": "MCP Elicitation",
       "fieldProgress": "字段 {{current}}/{{total}}",
@@ -417,7 +429,7 @@
   },
   "message": {
     "answer": "回答",
-    "reasoning": "推理",
+    "reasoning": "思考",
     "loading": "正在加载",
     "thinking": "正在思考",
     "answering": "正在生成",

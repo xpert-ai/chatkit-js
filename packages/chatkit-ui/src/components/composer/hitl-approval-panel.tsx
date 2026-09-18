@@ -1,3 +1,6 @@
+import { ActionReviewDisplay } from './action-review-display';
+import { resolveLocalizedText } from '../../i18n/localized-text';
+import { isHITLReviewDisplay } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import {
   AlertCircle,
@@ -528,7 +531,7 @@ function ActionReviewPanel({
   attachToComposer = true,
   className,
 }: HITLApprovalPanelProps) {
-  const { t } = useChatkitTranslation();
+  const { t, i18n } = useChatkitTranslation();
   const rounded = useRoundedClasses();
   const [drafts, setDrafts] = React.useState<Record<string, DecisionDraft>>(
     {},
@@ -605,6 +608,10 @@ function ActionReviewPanel({
     ? getReviewConfig(currentAction, reviewConfigs)
     : undefined;
   const allowedDecisions = getAllowedDecisions(currentConfig);
+  const directDecision =
+    actions.length === 1 &&
+    allowedDecisions.length > 0 &&
+    allowedDecisions.every((type) => type === 'approve' || type === 'reject');
   const currentDraft =
     currentAction !== null
       ? getDraft(currentAction, currentActionIndex, currentConfig, drafts)
@@ -654,6 +661,7 @@ function ActionReviewPanel({
 
   const argsText = currentDraft.argsText ?? formatArgs(currentAction.args);
   const argsJsonValue = toJsonValue(currentAction.args) ?? {};
+  const display = isHITLReviewDisplay(currentAction.display) ? currentAction.display : null;
   const messageText = currentDraft.message ?? '';
   const isCurrentInvalid =
     validation.error?.actionIndex === currentActionIndex;
@@ -688,7 +696,7 @@ function ActionReviewPanel({
             )}
             title={currentAction.name}
           >
-            {currentAction.name}
+            {display ? resolveLocalizedText(display.title, i18n?.language) : currentAction.name}
           </h3>
         </div>
 
@@ -734,7 +742,9 @@ function ActionReviewPanel({
       </div>
 
       <div className={rounded.density.body}>
-        {currentAction.description ? (
+        {display ? (
+          <p className="text-sm text-muted-foreground">{resolveLocalizedText(display.summary, i18n?.language)}</p>
+        ) : currentAction.description ? (
           <p className="overflow-hidden text-sm leading-5 text-muted-foreground [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3]">
             {currentAction.description}
           </p>
@@ -755,15 +765,19 @@ function ActionReviewPanel({
               <button
                 key={type}
                 type="button"
-                aria-pressed={selected}
-                onClick={() =>
+                aria-pressed={directDecision ? undefined : selected}
+                onClick={() => {
+                  if (directDecision && (type === 'approve' || type === 'reject')) {
+                    onSubmit([{ type }]);
+                    return;
+                  }
                   updateCurrentDraft({
                     ...currentDraft,
                     type,
                     argsText:
                       currentDraft.argsText ?? formatArgs(currentAction.args),
-                  })
-                }
+                  });
+                }}
                 className={cn(
                   'inline-flex items-center justify-center gap-1.5 border font-semibold transition-colors',
                   rounded.control,
@@ -805,6 +819,8 @@ function ActionReviewPanel({
               )}
             />
           </label>
+        ) : display ? (
+          <ActionReviewDisplay key={`${currentActionIndex}:${JSON.stringify(currentAction.args)}`} display={display} args={currentAction.args} />
         ) : (
           <div>
             <div className="mb-1 text-xs font-semibold text-muted-foreground">
@@ -822,7 +838,7 @@ function ActionReviewPanel({
           </div>
         )}
 
-        {currentDraft.type === 'reject' || currentDraft.type === 'respond' ? (
+        {!directDecision && (currentDraft.type === 'reject' || currentDraft.type === 'respond') ? (
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-muted-foreground">
               {currentDraft.type === 'reject'
@@ -878,7 +894,7 @@ function ActionReviewPanel({
             {t('composer.hitl.dismiss')}
           </button>
         ) : null}
-        <button
+        {!directDecision && <button
           type="button"
           onClick={handleSubmit}
           className={cn(
@@ -889,7 +905,7 @@ function ActionReviewPanel({
         >
           <CornerDownLeft className={rounded.density.continueIcon} />
           <span>{t('composer.hitl.submit')}</span>
-        </button>
+        </button>}
       </div>
     </section>
   );

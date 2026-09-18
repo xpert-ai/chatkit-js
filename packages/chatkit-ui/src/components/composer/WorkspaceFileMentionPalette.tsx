@@ -18,6 +18,7 @@ export type WorkspaceFileMentionPaletteProps = {
   selectedFilePaths: ReadonlySet<string>;
   onSelect: (file: XpertWorkspaceFile) => void;
   className?: string;
+  showHeader?: boolean;
 };
 
 const WORKSPACE_FILE_LIST_DEPTH = 12;
@@ -48,6 +49,7 @@ export const WorkspaceFileMentionPalette = React.forwardRef<
     selectedFilePaths,
     onSelect,
     className,
+    showHeader = true,
   },
   ref,
 ) {
@@ -159,10 +161,14 @@ export const WorkspaceFileMentionPalette = React.forwardRef<
         className,
       )}
     >
-      <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
-        {t('composer.fileMentions.title')}
-        {query ? <span className="ml-1 text-foreground">@{query}</span> : null}
-      </div>
+      {showHeader && (
+        <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
+          {t('composer.fileMentions.title')}
+          {query ? (
+            <span className="ml-1 text-foreground">@{query}</span>
+          ) : null}
+        </div>
+      )}
       <div className="max-h-56 overflow-y-auto p-1">
         {unavailable ? (
           <PaletteMessage>
@@ -192,6 +198,9 @@ export const WorkspaceFileMentionPalette = React.forwardRef<
                 onMouseDown={(event) => {
                   event.preventDefault();
                   onSelect(file);
+                }}
+                onClick={(event) => {
+                  if (event.detail === 0) onSelect(file);
                 }}
                 onMouseEnter={() => {
                   activeIndexRef.current = index;

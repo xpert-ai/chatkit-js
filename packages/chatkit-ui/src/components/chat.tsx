@@ -52,7 +52,10 @@ import { isNearBottom } from '../lib/scroll';
 import { type AgentFile, type StorageFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
 import { ComposerMenu } from './composer/ComposerMenu';
+import { PromptWorkflowShortcuts } from './composer/PromptWorkflowShortcuts';
+import { usePromptWorkflowDraft } from './chat/usePromptWorkflowDraft';
 import { ModelPicker } from './composer/ModelPicker';
+import { WorkspaceFileSelector } from './composer/WorkspaceFileSelector';
 import {
   WorkspaceFileMentionPalette,
   getWorkspaceFilePath,
@@ -61,6 +64,7 @@ import {
 import { ProjectSelector } from './composer/ProjectSelector';
 import { SendButton } from './composer/SendButton';
 import { SlashPalette } from './composer/SlashPalette';
+import { ThreadHistoryStatus } from './history/ThreadHistoryStatus';
 import { HistorySidebar } from './history/HistorySidebar';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
@@ -86,6 +90,7 @@ import {
 import { MessageNavigator } from './thread/MessageNavigator';
 import { MessageActions } from './thread/MessageActions';
 import { StartScreen } from './thread/StartScreen';
+import { StarterPromptSuggestions } from './composer/StarterPromptSuggestions';
 import {
   ChatkitAvatar,
   type ChatkitAvatarData,
@@ -115,6 +120,8 @@ import {
   resolveSelectedModelId,
 } from '../lib/assistant-models';
 import { useTheme } from '../providers/Theme';
+import { ComposerCapabilityChip } from './composer/ComposerCapabilityChip';
+import { useComposerCapabilitySelection } from './chat/useComposerCapabilitySelection';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { PetBridge } from './pet/PetBridge';
 import { SettingsSheet } from './settings/SettingsSheet';
@@ -160,7 +167,6 @@ import { hasSelectedRuntimeSlashCommand } from '../lib/slash-commands';
 import { WorkbenchToggleButton, useWorkbench } from '../workbench/context';
 import {
   ComposerCapabilityToken,
-  DetachedRunRuntimeCapabilities,
   HumanRuntimeCapabilityChips,
   getRemovedComposerCapabilityParts,
   getRuntimeCapabilityOptionsForSelection,
@@ -215,7 +221,6 @@ export type ChatReferenceRequest = {
 const defaultApiUrl = import.meta.env.VITE_XPERTAI_API_URL as
   | string
   | undefined;
-const COMPOSER_INPUT_MAX_HEIGHT = 128;
 const LONG_TEXT_REFERENCE_THRESHOLD = 5000;
 const GOAL_RUN_INPUT = 'Continue working toward the active goal.';
 const TASK_SUMMARY_PANEL_WIDTH_REM = 20;
@@ -620,7 +625,8 @@ export function Chat({
     }
   }, [missingConfigKind, t]);
 
-  const [isHistoryLoading, setIsHistoryLoading] = React.useState(false);
+  const isHistoryLoading = stream.historyLoad?.status === 'loading';
+  const isHistoryUnavailable = isHistoryLoading || stream.historyLoad?.status === 'error';
   const [historyError, setHistoryError] = React.useState<string | null>(null);
   const [assistantName, setAssistantName] = React.useState<string | null>(null);
   const [assistantAvatar, setAssistantAvatar] =
@@ -807,7 +813,6 @@ export function Chat({
     runtimeCapabilityOptions,
     effectiveSessionRuntimeCapabilities,
     runRuntimeCapabilities,
-    detachedRunRuntimeCapabilityOptions,
     runtimeCapabilityPalette,
     setRunRuntimeCapabilities,
     setRuntimeCapabilityPalette,
@@ -824,7 +829,6 @@ export function Chat({
     projectId: activeProjectId,
     threadId: stream.threadId,
     disabled: missingConfig || !stream.client || !stream.assistantId,
-    composerParts,
   });
 
   const resolvedTitle = title ?? t('chat.title');
@@ -941,7 +945,7 @@ export function Chat({
   );
   const canLoadMoreMessages = Boolean(historyMessagePagination?.hasMore);
   const isInitialComposer =
-    messages.length === 0 && !canLoadMoreMessages && !stream.isLoading;
+    !stream.threadId && messages.length === 0 && !canLoadMoreMessages && !stream.isLoading;
   const draft = React.useMemo(
     () => getComposerPlainText(composerParts),
     [composerParts],
@@ -976,6 +980,7 @@ export function Chat({
     canLoadMoreMessages;
   const isConfiguredProjectLocked =
     options?.composer?.projects?.locked === true && Boolean(activeProjectId);
+  const isFileSelectorVisible = Boolean(xpertPlatformClient && (activeProjectId || stream.assistantId));
   const isProjectSelectorVisible =
     projectsEnabled &&
     (isConfiguredProjectLocked ||
@@ -1020,6 +1025,9 @@ export function Chat({
     setQuoteSelection(null);
   }, []);
 
+  const onComposerCapabilityRemovedRef = React.useRef<
+    (option: RuntimeCapabilityOption) => void
+  >(() => undefined);
   const commitComposerParts = React.useCallback(
     (
       nextParts: ComposerPart[],
@@ -1044,6 +1052,9 @@ export function Chat({
         );
 
         if (removedCapabilities.length > 0) {
+          removedCapabilities.forEach((part) =>
+            onComposerCapabilityRemovedRef.current(part.capability),
+          );
           setRunRuntimeCapabilities((selection) =>
             removeComposerCapabilityPartsFromSelection(
               selection,
@@ -1787,7 +1798,7 @@ export function Chat({
   const isSubmissionBlocked =
     hasPendingInteractiveRequest ||
     missingConfig ||
-    isHistoryLoading ||
+    isHistoryUnavailable ||
     hasUploadingFiles ||
     isUploadingReferenceImages;
   const isSendDisabled =
@@ -1795,19 +1806,8 @@ export function Chat({
   const isPromptEditDisabled =
     hasPendingInteractiveRequest || missingConfig || isHistoryLoading;
 
-  const resizeComposerInput = React.useCallback(() => {
-    const input = composerInputRef.current;
-    if (!input) {
-      return;
-    }
-    input.style.maxHeight = `${COMPOSER_INPUT_MAX_HEIGHT}px`;
-    input.style.overflowY =
-      input.scrollHeight > COMPOSER_INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
-  }, []);
-
   React.useLayoutEffect(() => {
     composerPartsRef.current = composerParts;
-    resizeComposerInput();
     const caretOffset = pendingComposerCaretOffsetRef.current;
     if (typeof caretOffset === 'number') {
       pendingComposerCaretOffsetRef.current = null;
@@ -1816,7 +1816,7 @@ export function Chat({
         setComposerSelectionOffset(input, caretOffset);
       }
     }
-  }, [composerDomVersion, composerParts, resizeComposerInput]);
+  }, [composerDomVersion, composerParts]);
 
   React.useEffect(() => {
     document.addEventListener('selectionchange', syncQuoteSelection);
@@ -2019,6 +2019,42 @@ export function Chat({
     updateRuntimeCapabilityPalette(composerPartsRef.current, selectionOffset);
   }, [setRuntimeCapabilityPalette, updateRuntimeCapabilityPalette]);
 
+  const setPromptComposerText = React.useCallback((text: string, offset = text.length) => {
+    const tokens = composerPartsRef.current.filter((part) => part.type !== 'text');
+    commitComposerParts([...tokens, ...createComposerTextParts(text)], {
+      caretOffset: getComposerEditingLength(tokens) + offset,
+      resetDom: true,
+      syncRemovedCapabilityTokens: false,
+    });
+  }, [commitComposerParts]);
+  const focusPromptComposer = React.useCallback((offset: number) => {
+    const tokens = composerPartsRef.current.filter((part) => part.type !== 'text');
+    focusComposerAt(getComposerEditingLength(tokens) + offset);
+  }, [focusComposerAt]);
+  const promptWorkflow = usePromptWorkflowDraft({
+    draft,
+    scope: JSON.stringify([stream.assistantId, activeProjectId, stream.threadId]),
+    hostCommands: composer?.slashCommands,
+    runtimeCommands: runtimeCapabilities?.commands,
+    setText: setPromptComposerText,
+    focus: focusPromptComposer,
+  });
+
+  const composerCapabilities = useComposerCapabilitySelection({
+    capabilities: runtimeCapabilities,
+    session: effectiveSessionRuntimeCapabilities,
+    run: runRuntimeCapabilities,
+    prompt: promptWorkflow.runtimeCapabilities,
+    parts: composerParts,
+    removeRun: removeRunRuntimeCapability,
+    removePrompt: promptWorkflow.removeCapability,
+    toggleSession: handleSessionRuntimeCapabilityToggle,
+  });
+  React.useEffect(() => {
+    onComposerCapabilityRemovedRef.current =
+      composerCapabilities.removeFromSessionAndPrompt;
+  }, [composerCapabilities.removeFromSessionAndPrompt]);
+
   const submitDraft = React.useCallback(
     (submitOptions: SubmitDraftOptions = {}) => {
       if (isSubmissionBlocked) return;
@@ -2046,7 +2082,7 @@ export function Chat({
       const {
         runtimeCapabilitiesForSubmit,
         runtimeCapabilityOptionsForMessage,
-      } = getRuntimeCapabilitiesForSubmit(submitOptions.runtimeCapabilities);
+      } = getRuntimeCapabilitiesForSubmit(submitOptions.runtimeCapabilities ?? promptWorkflow.runtimeCapabilities ?? undefined);
 
       const displayContent =
         submitOptions.displayText ||
@@ -2095,8 +2131,8 @@ export function Chat({
       if (runtimeCapabilitiesForSubmit) {
         inputPayload.runtimeCapabilities = runtimeCapabilitiesForSubmit;
       }
-      if (submitOptions.commandSource) {
-        inputPayload.commandSource = submitOptions.commandSource;
+      if (submitOptions.commandSource ?? promptWorkflow.commandSource) {
+        inputPayload.commandSource = submitOptions.commandSource ?? promptWorkflow.commandSource;
       }
 
       const requestOptions = buildInjectedRequestOptions({
@@ -2111,6 +2147,8 @@ export function Chat({
         !nextFollowUpMode;
 
       const submittedComposerParts = composerPartsRef.current;
+      const submittedPromptWorkflow = promptWorkflow.selected;
+      promptWorkflow.clear();
       const submittedReferences = references;
       const submittedWorkspaceFiles = referencedWorkspaceFiles;
       const submittedRunRuntimeCapabilities = runRuntimeCapabilities;
@@ -2133,6 +2171,7 @@ export function Chat({
       resetRunRuntimeCapabilities();
 
       const restoreSubmittedDraft = () => {
+        promptWorkflow.restore(submittedPromptWorkflow);
         const currentParts = composerPartsRef.current;
         const currentCapabilities = getComposerCapabilityPartMap(currentParts);
         const submittedPartsToRestore = submittedComposerParts.filter(
@@ -2202,6 +2241,7 @@ export function Chat({
       addRunRuntimeCapabilities,
       effectiveSessionRuntimeCapabilities,
       getRuntimeCapabilitiesForSubmit,
+      promptWorkflow,
       isSubmissionBlocked,
       options?.request,
       persistSessionRuntimeCapabilities,
@@ -2435,6 +2475,8 @@ export function Chat({
     setRunRuntimeCapabilities,
     insertComposerCapabilityToken,
     submitPrompt: submitDraft,
+    onSelectPromptWorkflow: promptWorkflow.select,
+    isPromptDraftActive: !!promptWorkflow.selected,
   });
   const slashPaletteEmptyLabel = runtimeCapabilityPalette
     ? t(
@@ -2673,20 +2715,20 @@ export function Chat({
     [stream.client],
   );
 
+  const addWorkspaceFileReference = React.useCallback((file: XpertWorkspaceFile) => {
+    const filePath = getWorkspaceFilePath(file);
+    setReferencedWorkspaceFiles((current) =>
+      current.some((item) => (item.workspacePath ?? item.filePath) === filePath)
+        ? current
+        : [...current, toReferencedWorkspaceFile(file)],
+    );
+  }, []);
+
   const selectWorkspaceFileMention = React.useCallback(
     (file: XpertWorkspaceFile) => {
       const mention = workspaceFileMention;
       if (!mention) return;
-
-      const filePath = getWorkspaceFilePath(file);
-
-      setReferencedWorkspaceFiles((current) =>
-        current.some(
-          (item) => (item.workspacePath ?? item.filePath) === filePath,
-        )
-          ? current
-          : [...current, toReferencedWorkspaceFile(file)],
-      );
+      addWorkspaceFileReference(file);
       const nextParts = replaceComposerRange(
         composerPartsRef.current,
         mention.start,
@@ -2702,6 +2744,7 @@ export function Chat({
       focusComposerAt(mention.start);
     },
     [
+      addWorkspaceFileReference,
       commitComposerParts,
       workspaceFileMention,
       focusComposerAt,
@@ -3036,27 +3079,20 @@ export function Chat({
     ],
   );
 
-  const loadConversationMessages = React.useCallback(
-    async (recordId: string, threadId?: string) => {
+  const loadThreadHistory = React.useCallback(
+    async (threadId: string) => {
       if (missingConfig) {
         setHistoryError(missingConfigShortMessage);
         return;
       }
       setHistoryError(null);
-      setIsHistoryLoading(true);
       try {
-        await stream.loadConversationMessages(recordId, threadId);
-        // setActiveThreadId(threadId ?? null);
-      } catch (err) {
-        console.warn('Failed to load thread messages', err);
-        setHistoryError(
-          err instanceof Error ? err.message : t('chat.errors.loadMessages'),
-        );
-      } finally {
-        setIsHistoryLoading(false);
+        await stream.loadThread(threadId);
+      } catch {
+        // Stream history state supplies the error and retry action.
       }
     },
-    [missingConfig, missingConfigShortMessage, stream, t],
+    [missingConfig, missingConfigShortMessage, stream],
   );
 
   const handleLoadMoreMessages = React.useCallback(async () => {
@@ -3124,20 +3160,8 @@ export function Chat({
     setHistoryError(null);
     const thread = threads.find((item) => item.id === id);
     if (!thread) return;
-    if (id === stream.threadId) {
-      if (
-        thread.status === 'interrupted' &&
-        thread.recordId &&
-        !stream.pendingHITLRequest
-      ) {
-        void loadConversationMessages(thread.recordId, thread.id);
-      }
-      return;
-    }
-    stream.reset(id, []);
-    if (thread.recordId) {
-      void loadConversationMessages(thread.recordId, thread.id);
-    }
+    if (id !== stream.threadId) stream.reset(id, []);
+    void loadThreadHistory(id);
   };
 
   const handleDeleteThread = (id: string) => {
@@ -3574,12 +3598,14 @@ export function Chat({
               {missingConfigDetailMessage}
             </div>
           )}
-          {isHistoryLoading && (
-            <div className="mb-4 rounded-lg border border-muted px-3 py-2 text-sm text-muted-foreground">
-              {t('chat.loadingThread')}
-            </div>
-          )}
-          {messages.length === 0 && !canLoadMoreMessages ? (
+          <ThreadHistoryStatus
+            state={stream.historyLoad}
+            isEmpty={Boolean(stream.threadId) && messages.length === 0 && !stream.isLoading}
+            onRetry={() => {
+              if (stream.threadId) void loadThreadHistory(stream.threadId);
+            }}
+          />
+          {!stream.threadId && messages.length === 0 && !canLoadMoreMessages ? (
             <StartScreen
               startScreen={startScreen}
               onPromptClick={handlePromptClick}
@@ -4013,12 +4039,6 @@ export function Chat({
               })}
             </div>
           )}
-          <DetachedRunRuntimeCapabilities
-            options={detachedRunRuntimeCapabilityOptions}
-            runOnlyLabel={t('composer.capabilities.runOnly')}
-            removeLabel={t('composer.capabilities.removeRunCapability')}
-            onRemove={removeRunRuntimeCapability}
-          />
 
           {showGoalStatus && (
             <div
@@ -4224,6 +4244,17 @@ export function Chat({
             attachToComposer
           />
 
+          {isInitialComposer && (
+            <PromptWorkflowShortcuts
+              commands={promptWorkflow.commands}
+              selected={promptWorkflow.shortcutCommand}
+              disabled={isSubmissionBlocked}
+              onSelect={(command) => { promptWorkflow.selectShortcut(command); setRuntimeCapabilityPalette(null); }}
+              onScenario={promptWorkflow.chooseScenario}
+              onBack={promptWorkflow.showPrompts}
+            />
+          )}
+
           {workspaceFileMention && (
             <WorkspaceFileMentionPalette
               ref={workspaceFileMentionPaletteRef}
@@ -4257,7 +4288,7 @@ export function Chat({
               className={cn(
                 'relative flex min-w-0 flex-1 flex-col overflow-visible',
                 'bg-composer-shell px-composer-inset pt-composer-inset',
-                !isProjectSelectorVisible && 'pb-composer-inset',
+                !isProjectSelectorVisible && !isFileSelectorVisible && 'pb-composer-inset',
                 'transition-[border-radius] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
                 'rounded-composer-shell shadow-composer-shell',
               )}
@@ -4270,48 +4301,72 @@ export function Chat({
                 )}
               >
                 <div
-                  key={composerDomVersion}
-                  ref={composerInputRef}
-                  role="textbox"
-                  aria-multiline="true"
-                  aria-disabled={
-                    missingConfig ||
-                    isHistoryLoading ||
-                    hasPendingInteractiveRequest
-                  }
-                  contentEditable={
-                    !(
+                  data-slot="composer-body"
+                  className="min-h-10 max-h-32 w-full cursor-text overflow-y-auto break-words px-2 py-2 text-base leading-6 text-foreground"
+                  onClick={(event) => {
+                    if (event.target === event.currentTarget) focusComposerAt();
+                  }}
+                >
+                  {composerCapabilities.inline.map((option) => (
+                    <ComposerCapabilityChip
+                      key={`${option.type}:${option.id}`}
+                      option={option}
+                      onRemove={composerCapabilities.remove}
+                      disabled={isPromptEditDisabled}
+                    />
+                  ))}
+                  <div
+                    key={composerDomVersion}
+                    ref={composerInputRef}
+                    role="textbox"
+                    aria-multiline="true"
+                    aria-disabled={
                       missingConfig ||
                       isHistoryLoading ||
                       hasPendingInteractiveRequest
-                    )
-                  }
-                  suppressContentEditableWarning
-                  onInput={handleComposerInput}
-                  onCompositionStart={handleComposerCompositionStart}
-                  onCompositionEnd={handleComposerCompositionEnd}
-                  onSelect={handleComposerSelect}
-                  onPaste={handleComposerPaste}
-                  onKeyDown={handleComposerKeyDown}
-                  data-placeholder={inputPlaceholder}
-                  className={cn(
-                    'min-h-10 max-h-36 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-2 py-2 text-base leading-6 text-foreground outline-none',
-                    'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
-                    (missingConfig ||
-                      isHistoryLoading ||
-                      hasPendingInteractiveRequest) &&
-                      'cursor-not-allowed opacity-50',
-                  )}
-                >
-                  {renderedComposerParts.map((part, index) =>
-                    part.type === 'text' ? (
-                      <React.Fragment key={`text-${index}`}>
-                        {part.text}
-                      </React.Fragment>
-                    ) : (
-                      <ComposerCapabilityToken key={part.key} part={part} />
-                    ),
-                  )}
+                    }
+                    contentEditable={
+                      !(
+                        missingConfig ||
+                        isHistoryLoading ||
+                        hasPendingInteractiveRequest
+                      )
+                    }
+                    suppressContentEditableWarning
+                    onInput={handleComposerInput}
+                    onCompositionStart={handleComposerCompositionStart}
+                    onCompositionEnd={handleComposerCompositionEnd}
+                    onSelect={handleComposerSelect}
+                    onPaste={handleComposerPaste}
+                    onKeyDown={handleComposerKeyDown}
+                    data-placeholder={inputPlaceholder}
+                    className={cn(
+                      'whitespace-pre-wrap break-words bg-transparent outline-none',
+                      composerCapabilities.inline.length > 0
+                        ? 'inline'
+                        : 'block min-h-10',
+                      'empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]',
+                      (missingConfig ||
+                        isHistoryLoading ||
+                        hasPendingInteractiveRequest) &&
+                        'cursor-not-allowed opacity-50',
+                    )}
+                  >
+                    {renderedComposerParts.map((part, index) =>
+                      part.type === 'text' ? (
+                        <React.Fragment key={`text-${index}`}>
+                          {part.text}
+                        </React.Fragment>
+                      ) : (
+                        <ComposerCapabilityToken
+                          key={part.key}
+                          part={part}
+                          onRemove={composerCapabilities.remove}
+                          disabled={isPromptEditDisabled}
+                        />
+                      ),
+                    )}
+                  </div>
                 </div>
                 <div
                   data-slot="composer-action-bar"
@@ -4333,11 +4388,9 @@ export function Chat({
                           runtimeCapabilitiesReady ? runtimeCapabilities : null
                         }
                         selectedRuntimeCapabilities={
-                          effectiveSessionRuntimeCapabilities
+                          composerCapabilities.selection
                         }
-                        onRuntimeCapabilityToggle={
-                          handleSessionRuntimeCapabilityToggle
-                        }
+                        onRuntimeCapabilityToggle={composerCapabilities.toggle}
                         connectorClient={xpertPlatformClient}
                         connectorXpertId={stream.assistantId}
                         connectorProjectId={activeProjectId}
@@ -4363,6 +4416,21 @@ export function Chat({
                       />
                     </div>
 
+                    {composerCapabilities.subAgents.length > 0 && (
+                      <div
+                        data-slot="composer-selected-sub-agents"
+                        className="pointer-events-auto flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none]! [&::-webkit-scrollbar]:hidden"
+                      >
+                        {composerCapabilities.subAgents.map((option) => (
+                          <ComposerCapabilityChip
+                            key={option.id}
+                            option={option}
+                            onRemove={composerCapabilities.remove}
+                            disabled={isPromptEditDisabled}
+                          />
+                        ))}
+                      </div>
+                    )}
                     {selectedTool && (
                       <span
                         data-slot="composer-selected-tool"
@@ -4445,27 +4513,51 @@ export function Chat({
                 </div>
               </div>
 
-              {projectsEnabled &&
-              (isConfiguredProjectLocked || !isProjectSelectionLocked) ? (
-                <ProjectSelector
-                  client={xpertPlatformClient}
-                  xpertId={stream.assistantId}
-                  activeProjectId={activeProjectId}
-                  locked={isConfiguredProjectLocked}
-                  label={options?.composer?.projects?.label}
-                  disabled={
-                    missingConfig ||
-                    isHistoryLoading ||
-                    isGoalLoading ||
-                    hasPendingInteractiveRequest
-                  }
-                  onAvailabilityChange={setHasSelectableProjects}
-                  onProjectChange={handleProjectSelectionChange}
-                  onProjectCreate={onProjectCreate}
-                />
-              ) : null}
+              <div data-slot="composer-context-rail" className="flex min-w-0 flex-wrap items-center">
+                <div className="min-w-0 max-w-full">
+                  {projectsEnabled &&
+                  (isConfiguredProjectLocked || !isProjectSelectionLocked) ? (
+                    <ProjectSelector
+                      client={xpertPlatformClient}
+                      xpertId={stream.assistantId}
+                      activeProjectId={activeProjectId}
+                      locked={isConfiguredProjectLocked}
+                      label={options?.composer?.projects?.label}
+                      disabled={
+                        missingConfig ||
+                        isHistoryLoading ||
+                        isGoalLoading ||
+                        hasPendingInteractiveRequest
+                      }
+                      onAvailabilityChange={setHasSelectableProjects}
+                      onProjectChange={handleProjectSelectionChange}
+                      onProjectCreate={onProjectCreate}
+                    />
+                  ) : null}
+                </div>
+                {isFileSelectorVisible && (
+                  <WorkspaceFileSelector
+                    client={xpertPlatformClient}
+                    assistantId={stream.assistantId ?? null}
+                    projectId={activeProjectId ?? null}
+                    selectedFilePaths={referencedWorkspaceFilePaths}
+                    disabled={missingConfig || isHistoryLoading || isGoalLoading || hasPendingInteractiveRequest}
+                    onSelect={addWorkspaceFileReference}
+                  />
+                )}
+              </div>
             </div>
           </form>
+
+          {isInitialComposer && startScreen?.promptsLayout === 'list' && (
+            <StarterPromptSuggestions
+              prompts={startScreen.prompts ?? []}
+              onPromptClick={handlePromptClick}
+              onPromptEdit={handlePromptEdit}
+              promptSendDisabled={isSubmissionBlocked}
+              promptEditDisabled={isPromptEditDisabled}
+            />
+          )}
 
           {/* Disclaimer */}
           {disclaimer?.text && (

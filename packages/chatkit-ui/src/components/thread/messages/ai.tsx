@@ -13,7 +13,13 @@ import type {
   TMessageContentReasoning,
   TMessageContentText,
 } from '@xpert-ai/chatkit-types';
-import { ChevronDown, Clock3, Loader2 } from 'lucide-react';
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Loader2,
+} from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import {
@@ -34,7 +40,6 @@ import { isNearBottom } from '../../../lib/scroll';
 import { cn } from '../../../lib/utils';
 import { Badge } from '../../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { InlinePetStatus } from '../../pet/InlinePetStatus';
 import { MarkdownText } from '../markdown-text';
 import { AgentEventRow, AgentRunGroup } from './agent-run-group';
@@ -72,6 +77,7 @@ export type AssistantMessageProps = {
 };
 
 type AssistantContentRenderOptions = {
+  isReasoning?: boolean;
   isThreadRunning?: boolean;
   organizationId?: string;
   apiUrl?: string;
@@ -145,24 +151,56 @@ function getInlinePetState(
 
 function ReasoningBlock({
   reasoning,
+  isReasoning = false,
 }: {
   reasoning: TMessageContentReasoning[];
+  isReasoning?: boolean;
 }) {
+  const { t } = useChatkitTranslation();
+  const [expanded, setExpanded] = React.useState(isReasoning);
+  React.useEffect(() => {
+    setExpanded(isReasoning);
+  }, [isReasoning]);
+  const contentId = React.useId();
   const blocks = reasoning.filter((item) => item.text?.trim());
   if (blocks.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      {blocks.map((item, index) => (
+    <div className="space-y-2 px-1 py-1">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-center justify-between gap-3 text-left opacity-60 hover:opacity-100 disabled:pointer-events-none data-[state=open]:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Brain aria-hidden="true" className="h-4 w-4 shrink-0" />
+          <span className="truncate">{t('message.reasoning')}</span>
+        </span>
+        <ChevronRight
+          aria-hidden="true"
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            expanded && 'rotate-90',
+          )}
+        />
+      </button>
+      {expanded ? (
         <div
-          key={item.id ?? `reasoning-${index}`}
-          className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground"
+          id={contentId}
+          className="space-y-2 border-l pl-3 text-sm text-muted-foreground"
         >
-          <p className="whitespace-pre-wrap wrap-break-word leading-relaxed">
-            {item.text}
-          </p>
+          {blocks.map((item, index) => (
+            <p
+              key={item.id ?? `reasoning-${index}`}
+              className="whitespace-pre-wrap wrap-break-word leading-relaxed"
+            >
+              {item.text}
+            </p>
+          ))}
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }
@@ -463,8 +501,11 @@ function renderContentItem(
 
   if (isReasoningContent(content)) {
     return (
-      <div key={content.id ?? `reasoning-${index}`}>
-        <ReasoningBlock reasoning={[content]} />
+      <div key={`reasoning-${content.id ?? index}`}>
+        <ReasoningBlock
+          reasoning={[content]}
+          isReasoning={options?.isReasoning}
+        />
       </div>
     );
   }
@@ -568,15 +609,63 @@ function renderContentItem(
   );
 }
 
+type MessageRenderUnit =
+  | ToolComponentRenderUnit
+  | {
+      type: 'reasoning-group';
+      items: TMessageContentReasoning[];
+      startIndex: number;
+    };
+
+function groupAdjacentReasoning(
+  units: ToolComponentRenderUnit[],
+): MessageRenderUnit[] {
+  const groups: MessageRenderUnit[] = [];
+  for (const unit of units) {
+    if (
+      unit.type === 'item' &&
+      typeof unit.item !== 'string' &&
+      isReasoningContent(unit.item)
+    ) {
+      const previous = groups[groups.length - 1];
+      if (previous?.type === 'reasoning-group') {
+        previous.items.push(unit.item);
+      } else {
+        groups.push({
+          type: 'reasoning-group',
+          items: [unit.item],
+          startIndex: unit.index,
+        });
+      }
+    } else {
+      groups.push(unit);
+    }
+  }
+  return groups;
+}
+
 function renderContentUnit(
-  unit: ToolComponentRenderUnit,
+  unit: MessageRenderUnit,
   message: ChatkitMessage,
   lookupMessages: ChatkitMessage[],
   hasFollowingItem: boolean,
   options?: AssistantContentRenderOptions,
 ): React.ReactNode {
+  if (unit.type === 'reasoning-group') {
+    return (
+      <ReasoningBlock
+        key={`reasoning-group-${unit.items[0]?.id ?? unit.startIndex}`}
+        reasoning={unit.items}
+        isReasoning={
+          options?.isReasoning && !hasFollowingItem && !options?.isAgentOutput
+        }
+      />
+    );
+  }
   if (unit.type === 'item') {
     return renderContentItem(unit.item, unit.index, message, lookupMessages, {
+      isReasoning:
+        options?.isReasoning && !hasFollowingItem && !options?.isAgentOutput,
       isThreadRunning: options?.isThreadRunning,
       organizationId: options?.organizationId,
       apiUrl: options?.apiUrl,
@@ -607,13 +696,15 @@ function renderEntryBatch(
 ) {
   if (entries.length === 0) return null;
 
-  const renderUnits = buildToolComponentRenderUnits(
-    entries.map((entry) => entry.item),
-    {
-      shouldGroupComponent: (item) =>
-        getRequestUserInputResultCardData(item, lookupMessages) === null &&
-        !isMcpAppComponent(item),
-    },
+  const renderUnits = groupAdjacentReasoning(
+    buildToolComponentRenderUnits(
+      entries.map((entry) => entry.item),
+      {
+        shouldGroupComponent: (item) =>
+          getRequestUserInputResultCardData(item, lookupMessages) === null &&
+          !isMcpAppComponent(item),
+      },
+    ),
   );
 
   return renderUnits.map((unit, index) =>
@@ -692,7 +783,7 @@ function renderContent(
   const renderTree = buildAssistantRenderTree(
     message as AssistantMessageWithAgentRuns,
   );
-  if (renderTree.hasAgentRuns) {
+  if (renderTree.hasAgentRuns || message.reasoning?.length) {
     return (
       <div className={assistantMessageStackClassName}>
         {renderAssistantRenderUnits(
@@ -713,11 +804,13 @@ function renderContent(
 
   if (!Array.isArray(content) || content.length === 0) return null;
 
-  const renderUnits = buildToolComponentRenderUnits(content, {
-    shouldGroupComponent: (item) =>
-      getRequestUserInputResultCardData(item, lookupMessages) === null &&
-      !isMcpAppComponent(item),
-  });
+  const renderUnits = groupAdjacentReasoning(
+    buildToolComponentRenderUnits(content, {
+      shouldGroupComponent: (item) =>
+        getRequestUserInputResultCardData(item, lookupMessages) === null &&
+        !isMcpAppComponent(item),
+    }),
+  );
 
   return (
     <div className="space-y-3">
@@ -743,7 +836,7 @@ export function AssistantStreamingIndicator({
 }) {
   const { t } = useChatkitTranslation();
   const labelMap: Record<AssistantStreamingStatus, string> = {
-    loading: t('message.loading'),
+    loading: t('message.thinking'),
     thinking: t('message.thinking'),
     answering: t('message.answering'),
   };
@@ -787,7 +880,6 @@ export function AssistantMessage({
   pet,
   mcpApps,
 }: AssistantMessageProps) {
-  const { t } = useChatkitTranslation();
   const renderTree = buildAssistantRenderTree(
     message as AssistantMessageWithAgentRuns,
   );
@@ -799,6 +891,11 @@ export function AssistantMessage({
   const hasReasoning = hasRenderableReasoning(rootReasoning);
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
+  // An idle answer can report "thinking" without starting another reasoning phase.
+  const isReasoning =
+    isStreaming &&
+    message.status !== 'answering' &&
+    resolvedStreamingStatus === 'thinking';
   const lookupMessages = messages?.length ? messages : [message];
   const inlinePetState = resolvedStreamingStatus
     ? getInlinePetState(resolvedStreamingStatus)
@@ -808,14 +905,12 @@ export function AssistantMessage({
   ) : null;
 
   const answerNode = renderContent(message, lookupMessages, {
+    isReasoning,
     isThreadRunning,
     organizationId,
     apiUrl,
     mcpApps,
   });
-  const reasoningNode = hasReasoning ? (
-    <ReasoningBlock reasoning={rootReasoning ?? []} />
-  ) : null;
 
   if (!hasContent && !hasReasoning && !resolvedStreamingStatus) return null;
 
@@ -833,39 +928,9 @@ export function AssistantMessage({
     );
   }
 
-  if (hasContent && hasReasoning) {
-    return (
-      <div className={cn('space-y-3', streamingClass, className)}>
-        <Tabs
-          defaultValue={message.status === 'reasoning' ? 'reasoning' : 'answer'}
-          className="w-full"
-        >
-          <div className="flex items-center gap-2">
-            {inlinePet}
-            <TabsList className="">
-              <TabsTrigger value="answer">{t('message.answer')}</TabsTrigger>
-              <TabsTrigger value="reasoning">
-                {t('message.reasoning')}
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value="answer" className="space-y-3">
-            {answerNode}
-          </TabsContent>
-          <TabsContent value="reasoning" className="space-y-3">
-            {reasoningNode}
-          </TabsContent>
-        </Tabs>
-        {resolvedStreamingStatus ? (
-          <AssistantStreamingIndicator status={resolvedStreamingStatus} />
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <div className={cn('space-y-3', streamingClass, className)}>
-      {hasReasoning ? reasoningNode : answerNode}
+      {answerNode}
       {resolvedStreamingStatus ? (
         <div className="flex items-center gap-2">
           {inlinePet}

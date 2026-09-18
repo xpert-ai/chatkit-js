@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type { ThreadHistoryState } from '../providers/useThreadHistory';
 
 const mocks = vi.hoisted(() => {
   const uploadFile = vi.fn();
@@ -69,6 +70,7 @@ const mocks = vi.hoisted(() => {
         hasMore: false,
         isLoadingMore: false,
       },
+      historyLoad: { threadId: null, status: 'idle' } as ThreadHistoryState,
       todos: null,
       runtimeActivities: {
         sandboxServices: {
@@ -314,6 +316,9 @@ describe('Chat start screen prompts', () => {
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
     mocks.stream.conversationId = null;
+    mocks.stream.historyLoad = { threadId: null, status: 'idle' };
+    mocks.stream.loadThread.mockReset();
+    mocks.stream.loadThread.mockResolvedValue(undefined);
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.pendingHITLRequest = null;
@@ -333,6 +338,129 @@ describe('Chat start screen prompts', () => {
       ).toBeNull();
       expect(screen.queryByText('Powered by Xpert AI')).not.toBeInTheDocument();
     });
+  });
+
+  it('shows loading history instead of the new-conversation greeting', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = { threadId: 'thread-1', status: 'loading' };
+    renderChat();
+    expect(await screen.findByText('chat.loadingThread')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'What can I help with today?' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a retry action after a history error without resending the user message', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = {
+      threadId: 'thread-1',
+      status: 'error',
+      error: new Error('unavailable'),
+    };
+    renderChat();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'chat.retryHistory' }),
+    );
+    await waitFor(() =>
+      expect(mocks.stream.loadThread).toHaveBeenCalledWith('thread-1'),
+    );
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('heading', { name: 'What can I help with today?' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows an existing empty conversation distinctly from a new one', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = { threadId: 'thread-1', status: 'loaded' };
+    renderChat();
+    expect(await screen.findByText('chat.emptyHistory')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'What can I help with today?' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('places compact suggestions below the composer and preserves send and edit actions', async () => {
+    const { container } = renderChat({
+      ...baseOptions,
+      startScreen: { ...baseOptions.startScreen, promptsLayout: 'list' },
+    });
+    const suggestion = await screen.findByRole('button', { name: 'Analyze notice' });
+    const composer = container.querySelector('[data-slot="chatkit-chat-composer"]');
+    const inputShell = container.querySelector('[data-slot="composer-input-shell"]');
+    const content = container.querySelector('[data-slot="chatkit-chat-content"]');
+
+    expect(inputShell?.closest('form')?.nextElementSibling).toHaveAttribute(
+      'data-slot', 'starter-prompt-suggestions',
+    );
+    expect(composer).toContainElement(suggestion);
+    expect(inputShell).not.toContainElement(suggestion);
+    expect(content).not.toContainElement(suggestion);
+    expect(screen.getAllByText('Analyze notice')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit prompt' }));
+    expect(screen.getByRole('textbox')).toHaveTextContent('Analyze this technical notice');
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+
+    fireEvent.click(suggestion);
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the slash menu next to the input when starter questions and shortcuts are visible', async () => {
+    const { container } = renderChat({
+      ...baseOptions,
+      composer: {
+        ...baseOptions.composer,
+        slashCommands: [{
+          name: 'slides', label: 'Create slides', kind: 'prompt_workflow',
+          workflow: { type: 'prompt_workflow' },
+          action: { type: 'insert_text', template: 'Create slides {{args}}' },
+        }],
+      },
+      startScreen: { ...baseOptions.startScreen, promptsLayout: 'list' },
+    });
+    await screen.findByRole('button', { name: 'Analyze notice' });
+    setComposerText(screen.getByRole('textbox'), '/');
+    const palette = container.querySelector('[data-slot="slash-palette"]');
+    const form = screen.getByRole('textbox').closest('form');
+    expect(palette).toBeInTheDocument();
+    expect(palette?.nextElementSibling).toBe(form);
+    expect(palette?.previousElementSibling).toHaveAttribute(
+      'data-slot', 'prompt-workflow-shortcuts',
+    );
+    expect(form?.nextElementSibling).toHaveAttribute(
+      'data-slot', 'starter-prompt-suggestions',
+    );
+  });
+
+  it('hides compact suggestions while sending and after the first message arrives', async () => {
+    const options: ChatKitOptions = {
+      ...baseOptions,
+      startScreen: { ...baseOptions.startScreen, promptsLayout: 'list' },
+    };
+    const { rerender } = renderChat(options);
+    fireEvent.click(await screen.findByRole('button', { name: 'Analyze notice' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+
+    mocks.stream.isLoading = true;
+    rerender(<Chat clientSecret="secret" options={options} />);
+    expect(screen.queryByText('Analyze notice')).not.toBeInTheDocument();
+
+    mocks.stream.isLoading = false;
+    mocks.stream.messages = [{ id: 'human-1', type: 'human', content: 'Analyze this technical notice' }];
+    rerender(<Chat clientSecret="secret" options={options} />);
+    expect(screen.queryByText('Analyze notice')).not.toBeInTheDocument();
+  });
+
+  it('hides compact suggestions when an existing thread is opened', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.historyLoad = { threadId: 'thread-1', status: 'loaded' };
+    renderChat({
+      ...baseOptions,
+      startScreen: { ...baseOptions.startScreen, promptsLayout: 'list' },
+    });
+    expect(await screen.findByText('chat.emptyHistory')).toBeInTheDocument();
+    expect(screen.queryByText('Analyze notice')).not.toBeInTheDocument();
   });
 
   it('limits the chat column width when layout maxWidth is configured', async () => {

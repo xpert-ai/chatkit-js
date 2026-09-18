@@ -605,7 +605,6 @@ export function ComposerMenu({
       >
         <Paperclip className="size-5" />
         <span className="flex-1 text-base">{t('composer.addAttachment')}</span>
-        <ChevronRight className="size-4" />
       </DropdownMenuItem>
       <DropdownMenuSeparator className="my-2" />
       <PrimaryPanelItem

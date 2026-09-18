@@ -115,6 +115,24 @@ function createMcpElicitationRequest(): PendingHITLRequest {
 }
 
 describe('HITLApprovalPanel', () => {
+  it('renders a plugin-provided summary instead of the raw description and preserves approval decisions', () => {
+    const onSubmit = vi.fn();
+    render(<HITLApprovalPanel request={createRequest({
+      actionRequests: [{ name: 'plugin_action', description: 'Confirm database change in English', display: { title: 'Plugin review', summary: 'Plugin summary', sections: [{ type: 'code', label: 'Content', code: 'SELECT 1' }] }, args: {
+        id: 'plan-1', target: { database: 'demo' },
+        import: { table: 'users', columns: ['id'], rowCount: 1, previewRows: [[1]] },
+      } }],
+      reviewConfigs: [{ actionName: 'plugin_action', allowedDecisions: ['approve', 'reject'] }],
+    })} onSubmit={onSubmit} />);
+    expect(screen.getByRole('heading', { name: 'Plugin review' })).toBeInTheDocument();
+    expect(screen.getByText('Plugin summary')).toBeInTheDocument();
+    expect(screen.queryByText('Confirm database change in English')).not.toBeInTheDocument();
+    expect(screen.queryByText('users')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'composer.hitl.technicalDetails' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(onSubmit).toHaveBeenCalledWith([{ type: 'approve' }]);
+  });
+
   beforeEach(() => {
     themeMock.theme = {
       radius: 'soft',
@@ -364,3 +382,30 @@ describe('HITLApprovalPanel', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+it.each(['Approve', 'Reject'])(
+  'submits a single binary approval immediately on %s',
+  (label) => {
+    const onSubmit = vi.fn();
+    render(
+      <HITLApprovalPanel
+        request={createRequest({
+          reviewConfigs: [
+            {
+              actionName: 'send_email',
+              allowedDecisions: ['approve', 'reject'],
+            },
+          ],
+        })}
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith([
+      { type: label.toLowerCase() },
+    ]);
+    expect(
+      screen.queryByRole('button', { name: 'Confirm' }),
+    ).not.toBeInTheDocument();
+  },
+);

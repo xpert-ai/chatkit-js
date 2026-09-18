@@ -148,7 +148,8 @@ export function getAgentRunDuration(info: AgentRunInfo, now?: number) {
       : null;
   }
 
-  const endedAt = parseDateValue(info.endedAt) ?? parseDateValue(info.updatedAt);
+  const endedAt =
+    parseDateValue(info.endedAt) ?? parseDateValue(info.updatedAt);
   if (endedAt === null) return null;
   return Math.max(0, endedAt - startedAt);
 }
@@ -337,17 +338,41 @@ function normalizeAssistantEntries(message: AssistantMessageWithAgentRuns) {
     });
   }
 
-  const contentCount = entries.length;
+  const hasTimedContent = entries.some(
+    (candidate) =>
+      typeof candidate.item !== 'string' &&
+      parseDateValue(candidate.item.created_date) !== null,
+  );
+  let legacyReasoningCount = 0;
   (message.reasoning ?? []).forEach((item, index) => {
-    entries.push({
+    const content: TMessageContentComplex = item;
+    const entry: AssistantContentEntry = {
       item,
       index,
       source: 'reasoning',
-      order: contentCount + index,
-    });
+      order: 0,
+    };
+    const timestamp = parseDateValue(content.created_date);
+    // Preserve content order and place each model round at its recorded start time.
+    // Old messages without timestamps retain reasoning-first presentation.
+    const nextIndex =
+      timestamp === null
+        ? -1
+        : entries.findIndex((candidate) => {
+            if (typeof candidate.item === 'string') return false;
+            const nextTimestamp = parseDateValue(candidate.item.created_date);
+            return nextTimestamp !== null && nextTimestamp > timestamp;
+          });
+    const position =
+      timestamp === null || !hasTimedContent
+        ? legacyReasoningCount++
+        : nextIndex < 0
+          ? entries.length
+          : nextIndex;
+    entries.splice(position, 0, entry);
   });
 
-  return entries;
+  return entries.map((entry, order) => ({ ...entry, order }));
 }
 
 function refreshAgentNodeOrder(node: AgentRunRenderNode): number {
@@ -395,9 +420,8 @@ export function buildAssistantRenderTree(
     if (!target || !shouldGroup) {
       if (entry.source === 'reasoning' && typeof entry.item !== 'string') {
         rootReasoning.push(entry.item as TMessageContentReasoning);
-      } else {
-        rootEntries.push(entry);
       }
+      rootEntries.push(entry);
       continue;
     }
 

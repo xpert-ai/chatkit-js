@@ -48,6 +48,8 @@
     "missingClientSecretDetail": "Missing ChatKit client secret. Check the `clientSecret` prop or `api.getClientSecret` integration.",
     "missingApiUrlAndClientSecretShort": "Missing ChatKit API URL and client secret.",
     "missingApiUrlAndClientSecretDetail": "Missing ChatKit API URL and client secret. Check `VITE_XPERTAI_API_URL`, `options.api.apiUrl`, and your client secret integration.",
+    "emptyHistory": "No messages in this conversation yet.",
+    "retryHistory": "Retry loading",
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",
@@ -152,6 +154,12 @@
     "editPrompt": "Edit prompt"
   },
   "composer": {
+    "promptWorkflows": {
+      "back": "Back to prompts",
+      "scenarios": "Preset scenarios",
+      "prompts": "Prompts",
+      "edit": "Edit the prompt and add your details."
+    },
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
     "addAttachment": "Add attachment",
@@ -206,6 +214,7 @@
       "plugins": "Plugins",
       "subAgents": "Sub-agents",
       "runOnly": "This run",
+      "removeSelection": "Remove selection: {{name}}",
       "removeRunCapability": "Remove capability",
       "emptySearch": "No matching skills, plugins, or sub-agents",
       "agent": "Agent",
@@ -259,6 +268,8 @@
     "quoteSelection": "Quote selection",
     "askInSideChat": "Ask in side chat",
     "fileMentions": {
+      "select": "Select file",
+      "search": "Search files",
       "title": "Reference workspace files",
       "loading": "Loading workspace files...",
       "empty": "No matching workspace files",
@@ -280,6 +291,7 @@
       "submit": "Continue"
     },
     "hitl": {
+      "technicalDetails": "Technical details",
       "title": "Action review",
       "mcpElicitationTitle": "MCP Elicitation",
       "fieldProgress": "Field {{current}}/{{total}}",

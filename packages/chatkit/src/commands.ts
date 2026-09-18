@@ -11,12 +11,20 @@ export type ChatKitSlashCommandKind = 'command' | 'prompt_workflow';
 
 export type ChatKitI18nText = LocalizedText;
 
+export type ChatKitPromptScenario = {
+  id: string;
+  label: string;
+  args: string;
+};
+
 export type ChatKitPromptWorkflow = {
   type: 'prompt_workflow';
   name?: string;
   label?: ChatKitI18nText;
   description?: ChatKitI18nText;
   tags?: string[];
+  /** Ordered argument presets shown after the prompt is inserted in the composer. */
+  scenarios?: ChatKitPromptScenario[];
 };
 
 export type ChatKitSlashCommandCapability =

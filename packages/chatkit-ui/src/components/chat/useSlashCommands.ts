@@ -92,6 +92,8 @@ export function useSlashCommands({
   setRunRuntimeCapabilities,
   insertComposerCapabilityToken,
   submitPrompt,
+  onSelectPromptWorkflow,
+  isPromptDraftActive,
 }: {
   hostCommands?: NonNullable<ChatKitOptions['composer']>['slashCommands'];
   runtimeCapabilities: RuntimeCapabilitiesWithCommands | null;
@@ -120,6 +122,11 @@ export function useSlashCommands({
     range?: ComposerReplaceRange,
   ) => void;
   submitPrompt: (options: SubmitSlashPromptOptions) => void;
+  onSelectPromptWorkflow?: (
+    command: ResolvedSlashCommand,
+    args: string,
+  ) => boolean;
+  isPromptDraftActive?: boolean;
 }) {
   const { t, i18n } = useChatkitTranslation();
   const resolvedCommands = React.useMemo(
@@ -279,6 +286,10 @@ export function useSlashCommands({
 
   const executeSlashCommand = React.useCallback(
     (command: ResolvedSlashCommand, args: string) => {
+      if (onSelectPromptWorkflow?.(command, args)) {
+        setPalette(null);
+        return true;
+      }
       const effect = createSlashCommandExecutionEffect(
         command,
         args,
@@ -379,6 +390,7 @@ export function useSlashCommands({
     },
     [
       addRunRuntimeCapabilities,
+      onSelectPromptWorkflow,
       focusComposerAt,
       getComposerEditingLength,
       i18n.language,
@@ -440,6 +452,7 @@ export function useSlashCommands({
   );
 
   const executeSlashCommandFromDraft = React.useCallback(() => {
+    if (isPromptDraftActive) return false;
     const invocation = parseSlashCommandInvocation(draft);
     if (!invocation) {
       return false;
@@ -456,7 +469,7 @@ export function useSlashCommands({
     }
 
     return executeSlashCommand(command, invocation.args);
-  }, [draft, executeSlashCommand, resolvedCommands]);
+  }, [draft, executeSlashCommand, resolvedCommands, isPromptDraftActive]);
 
   return {
     resolvedCommands: localizedResolvedCommands,
