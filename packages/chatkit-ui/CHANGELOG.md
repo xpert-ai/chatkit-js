@@ -1,5 +1,21 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.13
+
+### Patch Changes
+
+- 5e73eed: Add compact starter-question lists below the composer with send and edit actions, visible only before the conversation starts. Keep slash-command suggestions adjacent to the input.
+- 777b907: Add a searchable file selector beside the composer project selector. Reference files from the selected project or assistant workspace without changing the message draft, with keyboard selection and project scope changes supported.
+- 82c581d: Submit approve or reject immediately for a single human-review action restricted to those decisions. Preserve the existing review flow for multiple actions and editable or response decisions.
+- ed12227: Add typed prompt scenarios. Insert editable prompt drafts, replace scenario arguments while preserving body edits, and keep selected skill and agent chips aligned with submitted capabilities. Render agent selections with compact muted labels and truncated long names.
+- 2afd6d5: Render reasoning inline with answers in chronological order, group adjacent reasoning blocks, and replace the reasoning and answer tabs with collapsible sections. Expand active reasoning and collapse it when that phase ends; show thinking status while waiting for the first output.
+- 38025dc: Add optional validated approval display metadata with localized titles, summaries, text, code and table sections. Render plugin-provided content generically and collapse raw action arguments into technical details. Preserve legacy reviews and approval decisions without domain-specific tool checks.
+- 1875094: Track history loading separately from the selected thread, support retrying failed loads, and distinguish empty existing conversations from the new-task screen. Ignore stale history and stream results after thread switches, refresh hosted credentials when needed, and acknowledge host thread-loading commands after history is ready.
+- Updated dependencies [5e73eed]
+- Updated dependencies [ed12227]
+- Updated dependencies [38025dc]
+  - @xpert-ai/chatkit-types@0.5.9
+
 ## 0.5.12
 
 ### Patch Changes

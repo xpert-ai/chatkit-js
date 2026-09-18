@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.9
+
+### Patch Changes
+
+- 5e73eed: Add compact starter-question lists below the composer with send and edit actions, visible only before the conversation starts. Keep slash-command suggestions adjacent to the input.
+- ed12227: Add typed prompt scenarios. Insert editable prompt drafts, replace scenario arguments while preserving body edits, and keep selected skill and agent chips aligned with submitted capabilities. Render agent selections with compact muted labels and truncated long names.
+- 38025dc: Add optional validated approval display metadata with localized titles, summaries, text, code and table sections. Render plugin-provided content generically and collapse raw action arguments into technical details. Preserve legacy reviews and approval decisions without domain-specific tool checks.
+
 ## 0.5.8
 
 ### Patch Changes
