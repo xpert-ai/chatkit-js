@@ -157,6 +157,8 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return 'Success';
         case 'message.toolGroup.shell.running':
           return 'Running';
+        case 'message.toolGroup.shell.paused':
+          return 'Paused';
         case 'message.toolGroup.shell.failed':
           return 'Failed';
         case 'message.toolGroup.shell.exitCode':
@@ -295,7 +297,7 @@ describe('AssistantMessage tool components', () => {
     vi.useRealTimers();
   });
 
-  it('renders context compression components as standalone separators', () => {
+  it('renders context compression components as standalone status rows', () => {
     renderAssistant([
       createContextCompressionComponent(),
       createToolComponent('read-file'),
@@ -308,7 +310,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.queryByText('Processed 2 tools')).not.toBeInTheDocument();
   });
 
-  it('renders skipped context compression as a no-op separator', () => {
+  it('renders skipped context compression as a no-op status row', () => {
     renderAssistant([
       createContextCompressionComponent({
         reason: 'no_unprotected_history',
@@ -320,7 +322,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('Context not compressed')).toBeInTheDocument();
   });
 
-  it('adds a shimmer text effect to running context compression separators', () => {
+  it('adds a shimmer text effect to running context compression status rows', () => {
     renderAssistant([
       createContextCompressionComponent({
         status: 'running',
@@ -1754,6 +1756,42 @@ describe('AssistantMessage tool components', () => {
 
     expect(screen.getByText('1.5s')).toBeInTheDocument();
     expect(screen.queryByText('2.5s')).not.toBeInTheDocument();
+  });
+
+  it('keeps an unfinished tool neutral and frozen while the run is paused', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-04-24T12:24:54.398Z'));
+
+    renderAssistant(
+      [
+        createToolComponent('shell-paused', {
+          tool: 'sandbox_shell',
+          title: 'sandbox_shell',
+          input: { command: 'sleep 30' },
+          status: 'running',
+          end_date: undefined,
+        }),
+      ],
+      {},
+      { isThreadRunning: false, isThreadPaused: true },
+    );
+
+    const row = screen.getByRole('button', { name: /Running sleep 30/ });
+    expect(row).not.toHaveClass('text-destructive');
+    expect(
+      row.querySelector('.ck-tool-call-running-text'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('1.5s')).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByText('1.5s')).toBeInTheDocument();
+
+    fireEvent.click(row);
+    expect(screen.getByText('Paused')).toBeInTheDocument();
+    expect(screen.queryByText('Running')).not.toBeInTheDocument();
   });
 
   it('updates the running tool duration over time', () => {

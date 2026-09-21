@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Check, Copy, RefreshCw } from 'lucide-react';
+import { Check, Copy, Pencil, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
@@ -8,6 +8,7 @@ export type MessageActionsProps = {
   isAssistant?: boolean;
   isStreaming?: boolean;
   onRetry?: () => void;
+  onEdit?: () => void;
   className?: string;
 };
 
@@ -16,6 +17,7 @@ export function MessageActions({
   isAssistant = false,
   isStreaming = false,
   onRetry,
+  onEdit,
   className,
 }: MessageActionsProps) {
   const { t } = useChatkitTranslation();
@@ -57,6 +59,17 @@ export function MessageActions({
       </button>
 
       {/* Retry button (only for assistant messages) */}
+      {!isAssistant && onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title={t('threadControl.editMessage')}
+          aria-label={t('threadControl.editMessage')}
+        >
+          <Pencil size={14} />
+        </button>
+      )}
       {isAssistant && onRetry && (
         <button
           type="button"

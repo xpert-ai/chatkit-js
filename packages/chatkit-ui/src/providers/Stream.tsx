@@ -16,6 +16,8 @@ import {
   type Config,
   type StreamMode,
   type ChatMessage,
+  type ChatMessageInputCheckpoint,
+  type Thread,
 } from '@xpert-ai/xpert-sdk';
 import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
@@ -83,6 +85,13 @@ import {
   type LangGraphEventState,
 } from './langGraphEventMapper';
 import { createMessageId } from '../lib/utils';
+import { createResumedRootExecutionHydrator } from '../lib/resumed-root-executions';
+import {
+  parsePausedDisplaySnapshot,
+  reconcilePausedDisplaySteps,
+  serializePausedDisplaySnapshot,
+} from '../lib/paused-display-snapshot';
+import type { ThreadDisplayPause } from '@xpert-ai/xpert-sdk';
 import {
   applyThreadContextUsageEvent,
   extractThreadContextUsageEvent,
@@ -174,6 +183,9 @@ export {
 export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
+  rootExecutionIds?: string[];
+  /** `null`: the server has no saved input checkpoint, so the message cannot be edited into a branch. */
+  inputCheckpoint?: ChatMessageInputCheckpoint | null;
   status?: string;
   executionId?: string;
   createdAt?: string;
@@ -341,6 +353,10 @@ export type StreamContextType = {
   pendingRequestUserInput: PendingRequestUserInput | null;
   pendingHITLRequest: PendingHITLRequest | null;
   isLoading: boolean;
+  /** Visible output is frozen while the backend finishes and checkpoints its step. */
+  isDisplayPaused?: boolean;
+  displayPause?: ThreadDisplayPause | null;
+  resumeDisplay: () => Promise<void>;
   isReady: boolean;
   error: unknown;
   selectedModelId: string | null;
@@ -356,6 +372,10 @@ export type StreamContextType = {
     options?: StreamSubmitOptions,
   ) => Promise<void>;
   stop: () => void;
+  /** Current stream execution id, or null until the first assistant event. */
+  activeRunId: string | null;
+  pauseRun: (runId: string) => Promise<void>;
+  resumeRun: (runId: string, pauseId: string) => Promise<void>;
   reset: (
     newThreadId?: string | null,
     initialMessages?: ChatKitAIMessage[],
@@ -630,6 +650,15 @@ function parseEventData(raw: string): ChatEventEnvelope | null {
     }
   }
   return raw as ChatEventEnvelope;
+}
+
+function isStreamCompletionMarker(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === 'complete'
+  );
 }
 
 type StreamChunk = { id?: string; event: string; data: string };
@@ -1125,6 +1154,24 @@ function appendStreamTextToLatest(
   });
 }
 
+function readInputCheckpoint(
+  value: unknown,
+): ChatMessageInputCheckpoint | null | undefined {
+  if (value === null) return null;
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'version' in value &&
+    value.version === 1 &&
+    'graphRevision' in value &&
+    typeof value.graphRevision === 'string' &&
+    'checkpoint' in value
+  ) {
+    return value as ChatMessageInputCheckpoint;
+  }
+  return undefined;
+}
+
 function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   if (data == null) return null;
   if (typeof data === 'string') {
@@ -1192,12 +1239,16 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const taskSummary = normalizeTaskSummaryContribution(
     (raw as { taskSummary?: unknown }).taskSummary,
   );
+  const inputCheckpoint = readInputCheckpoint(
+    (raw as { inputCheckpoint?: unknown }).inputCheckpoint,
+  );
 
   return {
     id,
     type,
     content,
     executionId,
+    ...(inputCheckpoint !== undefined ? { inputCheckpoint } : {}),
     ...(createdAt ? { createdAt } : {}),
     ...(updatedAt ? { updatedAt } : {}),
     ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
@@ -1594,9 +1645,14 @@ export function applyStreamEvent(
   onThreadGoalPatched?: (event: ThreadGoalUpdatedPatchEvent) => void,
   preservedMessages?: ChatKitAIMessage[],
   onConversationStart?: (conversationId: string) => void,
+  onConversationEnd?: (status: string) => void,
 ) {
   const parsed = parseEventData(chunk.data);
   if (parsed == null) return;
+
+  // Redis persists this transport marker after the last chat event. It is not
+  // a ChatKit message and must never enter the display snapshot.
+  if (isStreamCompletionMarker(parsed)) return;
 
   if (chunk.event === 'error') {
     const message =
@@ -1717,8 +1773,30 @@ export function applyStreamEvent(
       if (conversationId) {
         onConversationStart?.(conversationId);
       }
+      const acknowledged = eventData.userMessage;
+      if (
+        isMessageMetadataContainer(acknowledged) &&
+        typeof acknowledged.id === 'string' &&
+        typeof acknowledged.clientMessageId === 'string'
+      ) {
+        const persistedId = acknowledged.id;
+        setValues((previous) => ({
+          ...previous,
+          messages: (previous.messages ?? []).map((message) =>
+            message.id === acknowledged.clientMessageId
+              ? { ...message, id: persistedId }
+              : message,
+          ),
+        }));
+      }
     }
 
+    if (
+      eventType === ChatMessageEventTypeEnum.ON_CONVERSATION_END &&
+      typeof eventData?.status === 'string'
+    ) {
+      onConversationEnd?.(eventData.status);
+    }
     switch (eventType) {
       case ChatMessageEventTypeEnum.ON_CONVERSATION_START:
       case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
@@ -1789,7 +1867,10 @@ export function applyStreamEvent(
           const last =
             lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
           if (!shouldStartFreshAssistant && last && isAssistantMessage(last)) {
-            if (executionId && last.executionId === executionId) {
+            if (
+              (executionId && last.executionId === executionId) ||
+              (meta.id && last.id === meta.id)
+            ) {
               const nextMessages = [...messages];
               const nextLast: ChatKitAIMessage = {
                 ...last,
@@ -1997,6 +2078,16 @@ const StreamSession = ({
     [],
   );
   const [values, setValues] = useState<StateType>({ messages: [] });
+  const [pausedDisplay, setPausedDisplayState] = useState<{
+    threadId: string;
+    values: StateType;
+    pause?: ThreadDisplayPause;
+  } | null>(null);
+  const pausedDisplayRef = useRef<typeof pausedDisplay>(null);
+  const setPausedDisplay = useCallback((next: typeof pausedDisplay) => {
+    pausedDisplayRef.current = next;
+    setPausedDisplayState(next);
+  }, []);
   const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
   const {
     state: historyLoad,
@@ -2054,6 +2145,11 @@ const StreamSession = ({
   );
   const lastStreamOptionsRef = useRef<ResumeStreamOptions>({});
   const lastExecutionIdRef = useRef<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const rememberActiveRunId = useCallback((executionId: string | null) => {
+    lastExecutionIdRef.current = executionId;
+    setActiveRunId((current) => (current === executionId ? current : executionId));
+  }, []);
   const lastEventIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const connectorBindingIdsRef = useRef<string[]>([]);
@@ -2266,8 +2362,8 @@ const StreamSession = ({
     [assistantId, projectId, updateConversationId],
   );
   const rememberHITLExecutionId = useCallback((executionId: string) => {
-    lastExecutionIdRef.current = executionId;
-  }, []);
+    rememberActiveRunId(executionId);
+  }, [rememberActiveRunId]);
   const {
     pendingHITLRequest,
     clearPendingHITLRequest,
@@ -2314,6 +2410,18 @@ const StreamSession = ({
   useEffect(() => {
     valuesRef.current = values;
   }, [values]);
+
+  // A pause only takes effect at the next node boundary, so the step that was
+  // already running finishes behind the frozen view. Settle those steps as the
+  // live state arrives, otherwise a completed tool keeps looking active.
+  useEffect(() => {
+    const frozen = pausedDisplayRef.current;
+    if (!frozen) return;
+    const settled = reconcilePausedDisplaySteps(frozen.values, values);
+    if (settled !== frozen.values) {
+      setPausedDisplay({ ...frozen, values: settled });
+    }
+  }, [values, setPausedDisplay]);
 
   useEffect(() => {
     isLoadingRef.current = isLoading;
@@ -2453,6 +2561,11 @@ const StreamSession = ({
     [apiUrl, fetchWithClientSecretRefresh, locale],
   );
   clientRef.current = client;
+  const hydrateResumedRootExecutions = useMemo(
+    () =>
+      createResumedRootExecutionHydrator((thread, run) => client.runs.get(thread, run)),
+    [client],
+  );
   const runtimeActivitiesEnabled =
     createMissingApiConfigurationError({
       apiUrl,
@@ -2504,12 +2617,9 @@ const StreamSession = ({
     }
   }, [clearPendingHITLRequest, clearPendingRequestUserInput, threadId]);
 
-  const stop = useCallback(() => {
-    const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
-    const activeRunId = lastExecutionIdRef.current;
-    const activeAbortController = abortRef.current;
-    const hasActiveRun = activeAbortController !== null;
-    activeAbortController?.abort();
+  const pauseRequestedRef = useRef(false);
+  const disconnect = useCallback(() => {
+    abortRef.current?.abort();
     abortRef.current = null;
     clearPendingRequestUserInput(
       createAbortError('The user input request was cancelled.'),
@@ -2517,6 +2627,52 @@ const StreamSession = ({
     clearPendingHITLRequest(
       createAbortError('The HITL request was cancelled.'),
     );
+    setIsLoading(false);
+    isLoadingRef.current = false;
+  }, [clearPendingHITLRequest, clearPendingRequestUserInput]);
+
+  const pauseRun = useCallback(
+    async (runId: string) => {
+      const target = activeThreadIdRef.current ?? threadId;
+      if (!target) return;
+      pauseRequestedRef.current = true;
+      const display = { threadId: target, values: valuesRef.current };
+      setPausedDisplay(display);
+      try {
+        const result = await client.runs.pause(target, runId, {
+          displaySnapshot: serializePausedDisplaySnapshot(display.values),
+        });
+        if (!result.displayPause?.snapshot) {
+          throw new Error('The server did not save the paused display snapshot. Update the server before retrying.');
+        }
+        if (pausedDisplayRef.current?.threadId === target && activeThreadIdRef.current === target) {
+          // The snapshot is captured at click time, so a step that was already
+          // running can settle while the server acknowledges the pause.
+          setPausedDisplay({
+            ...pausedDisplayRef.current,
+            values: reconcilePausedDisplaySteps(
+              parsePausedDisplaySnapshot(result.displayPause.snapshot),
+              valuesRef.current,
+            ),
+            pause: result.displayPause,
+          });
+        }
+      } catch (error) {
+        if (activeThreadIdRef.current === target) {
+          pauseRequestedRef.current = false;
+          if (pausedDisplayRef.current?.threadId === target) setPausedDisplay(null);
+        }
+        throw error;
+      }
+    },
+    [client, threadId],
+  );
+
+  const stop = useCallback(() => {
+    const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
+    const activeRunId = lastExecutionIdRef.current;
+    const hasActiveRun = abortRef.current !== null;
+    disconnect();
     if (hasActiveRun) {
       const interruptedAt = Date.now();
       setValues((prev) => {
@@ -2531,14 +2687,12 @@ const StreamSession = ({
           : { ...prev, messages: nextMessages };
       });
     }
-    setIsLoading(false);
-    isLoadingRef.current = false;
     if (hasActiveRun && activeThreadId && activeRunId) {
       client.runs
         .cancel(activeThreadId, activeRunId, false)
         .catch(() => undefined);
     }
-  }, [clearPendingHITLRequest, clearPendingRequestUserInput, client, threadId]);
+  }, [client, disconnect, threadId]);
 
   const addAutoQueuedFollowUpIds = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
@@ -2691,11 +2845,13 @@ const StreamSession = ({
       recordId: string,
       requestedThreadId: string | undefined,
       request: HistoryRequest,
+      threadOperation?: Thread['operation'],
+      displayPause?: ThreadDisplayPause | null,
     ) => {
       await ensureHistoryCredentials();
       if (!request.isCurrent()) return [];
       try {
-        stop();
+        disconnect();
       } catch {
         // ignore stop errors from an already-idle stream
       }
@@ -2726,18 +2882,32 @@ const StreamSession = ({
       if (!request.isCurrent() || conversationIdRef.current !== recordId) {
         return [];
       }
+      const loadedThreadId =
+        normalizeThreadIdentifier(requestedThreadId) ??
+        getConversationThreadId(conversationDetail);
       const page = normalizeConversationMessagesPage(response);
+      page.messages = await hydrateResumedRootExecutions(
+        page.messages,
+        loadedThreadId,
+      );
+      if (!request.isCurrent() || conversationIdRef.current !== recordId) return [];
       steerPriorityFollowUpIdsRef.current = new Set();
       const autoDrainIds = getAutoDrainQueuedFollowUpIds(page.pendingFollowUps);
       autoQueuedFollowUpIdsRef.current = new Set(autoDrainIds);
       pendingFollowUpsRef.current = page.pendingFollowUps;
       setAutoQueuedFollowUpIds(autoDrainIds);
       setPendingFollowUps(page.pendingFollowUps);
+      const protocolDisplay = displayPause !== undefined ? displayPause : loadedThreadId
+        ? (await client.threads.get(loadedThreadId)).displayPause
+        : null;
+      if (!request.isCurrent() || conversationIdRef.current !== recordId) return [];
+      if (protocolDisplay?.snapshot && loadedThreadId) {
+        setPausedDisplay({ threadId: loadedThreadId, pause: protocolDisplay, values: parsePausedDisplaySnapshot(protocolDisplay.snapshot) });
+      } else {
+        setPausedDisplay(null);
+      }
       const latestExecutionId = getLatestExecutionIdFromMessages(page.messages);
-      lastExecutionIdRef.current = latestExecutionId;
-      const loadedThreadId =
-        normalizeThreadIdentifier(requestedThreadId) ??
-        getConversationThreadId(conversationDetail);
+      rememberActiveRunId(latestExecutionId);
       if (loadedThreadId) {
         activeThreadIdRef.current = loadedThreadId;
         setThreadId(loadedThreadId);
@@ -2753,8 +2923,8 @@ const StreamSession = ({
       valuesRef.current = { messages: page.messages ?? [] };
       setValues(valuesRef.current);
       setHistoryMessageLoadVersion((version) => version + 1);
-      hydratePendingHITLRequestFromOperation(
-        (conversationDetail as { operation?: unknown } | null)?.operation,
+      if (!pauseRequestedRef.current) hydratePendingHITLRequestFromOperation(
+        threadOperation !== undefined ? threadOperation : conversationDetail?.operation,
         latestExecutionId,
       );
       return page.messages as ChatKitAIMessage[];
@@ -2764,8 +2934,10 @@ const StreamSession = ({
       client,
       ensureHistoryCredentials,
       hydratePendingHITLRequestFromOperation,
+      hydrateResumedRootExecutions,
+      rememberActiveRunId,
       setThreadId,
-      stop,
+      disconnect,
       updateConversationId,
       updateHistoryMessagePagination,
       updateTodos,
@@ -2797,7 +2969,7 @@ const StreamSession = ({
     const request = captureHistoryRequest();
     const pagination = historyMessagePaginationRef.current;
     const recordId = pagination.conversationId;
-    if (!recordId || !pagination.hasMore || pagination.isLoadingMore) {
+    if (pausedDisplayRef.current || !recordId || !pagination.hasMore || pagination.isLoadingMore) {
       return [];
     }
 
@@ -2819,6 +2991,10 @@ const StreamSession = ({
       const page = normalizeConversationMessagesPage(
         response,
         pagination.loadedCount,
+      );
+      page.messages = await hydrateResumedRootExecutions(
+        page.messages,
+        pagination.threadId,
       );
 
       if (!request.isCurrent()) return [];
@@ -2878,6 +3054,7 @@ const StreamSession = ({
   }, [
     addAutoQueuedFollowUpIds,
     captureHistoryRequest,
+    hydrateResumedRootExecutions,
     client,
     ensureHistoryCredentials,
     updateHistoryMessagePagination,
@@ -2915,6 +3092,15 @@ const StreamSession = ({
 
           consecutiveFailures = 0;
           const page = normalizeConversationMessagesPage(response);
+          page.messages = await hydrateResumedRootExecutions(
+            page.messages,
+            requestedThreadId,
+          );
+          if (
+            signal.aborted ||
+            conversationIdRef.current !== recordId ||
+            activeThreadIdRef.current !== requestedThreadId
+          ) return false;
           if (page.messages.length > 0) {
             setValues((previous) => ({
               ...previous,
@@ -2950,7 +3136,7 @@ const StreamSession = ({
       }
       return false;
     },
-    [client],
+    [client, hydrateResumedRootExecutions],
   );
 
   const reset = useCallback(
@@ -2960,6 +3146,8 @@ const StreamSession = ({
       options?: { suppressThreadChange?: boolean },
     ) => {
       resetHistory();
+      pauseRequestedRef.current = false;
+      setPausedDisplay(null);
       abortRef.current?.abort();
       abortRef.current = null;
       setIsLoading(false);
@@ -2987,7 +3175,7 @@ const StreamSession = ({
       updateConnectorBindingIdsState([]);
       activeThreadIdRef.current = newThreadId ?? null;
       shouldStartFreshAssistantMessageAfterSteerRef.current = false;
-      lastExecutionIdRef.current = null;
+      rememberActiveRunId(null);
       lastEventIdRef.current = null;
       if (newThreadId !== undefined) {
         if (options?.suppressThreadChange && newThreadId !== threadId) {
@@ -3007,6 +3195,7 @@ const StreamSession = ({
       updateHistoryMessagePagination,
       updateTodos,
       resetHistory,
+      rememberActiveRunId,
     ],
   );
 
@@ -3217,7 +3406,13 @@ const StreamSession = ({
 
   const canSendPendingFollowUpNow = useCallback(
     (id: string) => {
-      if (!id || isLoadingRef.current || autoQueuedFollowUpIdSet.has(id)) {
+      if (
+        !id ||
+        isLoadingRef.current ||
+        pauseRequestedRef.current ||
+        pausedDisplayRef.current ||
+        autoQueuedFollowUpIdSet.has(id)
+      ) {
         return false;
       }
 
@@ -3230,7 +3425,7 @@ const StreamSession = ({
 
   const sendPendingFollowUpNow = useCallback(
     async (id: string) => {
-      if (!id || isLoadingRef.current) {
+      if (!id || isLoadingRef.current || pauseRequestedRef.current || pausedDisplayRef.current) {
         return;
       }
 
@@ -3252,6 +3447,16 @@ const StreamSession = ({
         return;
       }
 
+      const target = activeThreadIdRef.current ?? threadId;
+      if (target) {
+        const current = await client.threads.get(target);
+        if (
+          activeThreadIdRef.current !== target ||
+          current.status === 'pausing' ||
+          current.status === 'paused'
+        )
+          return;
+      }
       removePendingFollowUps(mergedGroup.items.map((item) => item.id));
       insertPendingFollowUpsIntoTranscript(mergedGroup.items);
       await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
@@ -3260,16 +3465,21 @@ const StreamSession = ({
         threadId: activeThreadIdRef.current ?? threadId ?? undefined,
       });
     },
-    [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId],
+    [
+      client,
+      insertPendingFollowUpsIntoTranscript,
+      removePendingFollowUps,
+      threadId,
+    ],
   );
 
   const drainQueuedFollowUps = useCallback(async () => {
-    if (queueDrainPromiseRef.current || isLoadingRef.current) {
+    if (pausedDisplayRef.current || queueDrainPromiseRef.current || isLoadingRef.current) {
       return queueDrainPromiseRef.current ?? Promise.resolve();
     }
 
     const drainPromise = (async () => {
-      while (!isLoadingRef.current) {
+      while (!isLoadingRef.current && !pausedDisplayRef.current) {
         const nextItem = getNextAutoQueuedFollowUp(
           pendingFollowUpsRef.current,
           autoQueuedFollowUpIdsRef.current,
@@ -3278,6 +3488,24 @@ const StreamSession = ({
 
         if (!nextItem) {
           break;
+        }
+
+        const targetThreadId = activeThreadIdRef.current ?? threadId;
+        if (targetThreadId) {
+          const current = await client.threads.get(targetThreadId);
+          if (
+            activeThreadIdRef.current !== targetThreadId ||
+            current?.status === 'paused' ||
+            current?.status === 'pausing'
+          )
+            break;
+          if (
+            pauseRequestedRef.current &&
+            current?.status !== 'idle' &&
+            current?.status !== 'error'
+          )
+            break;
+          pauseRequestedRef.current = false;
         }
 
         const groupedItems = getQueuedFollowUpGroup(
@@ -3307,7 +3535,12 @@ const StreamSession = ({
 
     queueDrainPromiseRef.current = drainPromise;
     return drainPromise;
-  }, [insertPendingFollowUpsIntoTranscript, removePendingFollowUps, threadId]);
+  }, [
+    client,
+    insertPendingFollowUpsIntoTranscript,
+    removePendingFollowUps,
+    threadId,
+  ]);
 
   const runStream = useCallback(
     async (
@@ -3378,7 +3611,7 @@ const StreamSession = ({
             eventContext,
             (executionId) => {
               if (executionId) {
-                lastExecutionIdRef.current = executionId;
+                rememberActiveRunId(executionId);
               }
             },
             (event) => {
@@ -3443,10 +3676,14 @@ const StreamSession = ({
             },
             preservedMessages,
             updateConversationId,
+            (status) => {
+              pauseRequestedRef.current =
+                status === 'pausing' || status === 'paused';
+            },
           );
         }
 
-        if (interrupts.length > 0) {
+        if (interrupts.length > 0 && !pauseRequestedRef.current) {
           for await (const interruptData of interrupts) {
             if (
               abortController.signal.aborted ||
@@ -3506,6 +3743,7 @@ const StreamSession = ({
       handleRuntimeActivityTrigger,
       updateConversationId,
       reconcileLatestAssistantMessage,
+      rememberActiveRunId,
     ],
   );
 
@@ -3513,7 +3751,9 @@ const StreamSession = ({
     if (isLoading) {
       return;
     }
-    void drainQueuedFollowUps();
+    void drainQueuedFollowUps().catch((error) =>
+      setError(error instanceof Error ? error : new Error(String(error))),
+    );
   }, [drainQueuedFollowUps, isLoading]);
 
   const loadThread = useCallback(
@@ -3524,6 +3764,7 @@ const StreamSession = ({
       }
       return loadHistory(threadId, async (request) => {
         setError(null);
+        setPausedDisplay(null);
         updateTodos(null);
         clearRuntimeActivities();
         if (activeThreadIdRef.current !== threadId) {
@@ -3532,7 +3773,7 @@ const StreamSession = ({
         }
 
         try {
-          stop();
+          disconnect();
         } catch {
           // ignore stop errors from an already-idle stream
         }
@@ -3547,6 +3788,9 @@ const StreamSession = ({
           .get(threadId)
           .catch(() => null);
         if (!request.isCurrent()) return;
+        pauseRequestedRef.current =
+          protocolThread?.status === 'paused' ||
+          protocolThread?.status === 'pausing';
         const protocolMetadata = isRecord(protocolThread?.metadata)
           ? protocolThread.metadata
           : null;
@@ -3604,6 +3848,8 @@ const StreamSession = ({
           conversation.id,
           threadId,
           request,
+          protocolThread?.operation,
+          protocolThread?.displayPause ?? null,
         );
         if (!request.isCurrent()) return;
         await refreshSandboxServices({
@@ -3615,20 +3861,26 @@ const StreamSession = ({
           loadedMessages as ChatKitAIMessage[],
         );
         if (latestExecutionId) {
-          lastExecutionIdRef.current = latestExecutionId;
+          rememberActiveRunId(latestExecutionId);
         }
-        const hasPendingHITL = hydratePendingHITLRequestFromOperation(
-          (conversationDetail as { operation?: unknown }).operation,
+        const hasPendingHITL = !pauseRequestedRef.current && hydratePendingHITLRequestFromOperation(
+          protocolThread?.operation !== undefined ? protocolThread.operation : conversationDetail.operation,
           latestExecutionId,
         );
         if (hasPendingHITL) return;
 
         const status = String(
-          conversationDetail.status ?? conversation.status ?? '',
+          protocolThread?.status ??
+            conversationDetail.status ??
+            conversation.status ??
+            '',
         ).toLowerCase();
-        if (status === 'interrupted') return;
+        if (status === 'interrupted' || status === 'paused') return;
         const conversationMayBeRunning =
-          !status || status === 'running' || status === 'busy';
+          !status ||
+          status === 'running' ||
+          status === 'busy' ||
+          status === 'pausing';
 
         let runId: string | null = null;
         let runLookupFailed = false;
@@ -3665,7 +3917,7 @@ const StreamSession = ({
         }
         if (!request.isCurrent() || !runId) return;
         if (activeThreadIdRef.current !== threadId) return;
-        lastExecutionIdRef.current = runId;
+        rememberActiveRunId(runId);
 
         // History is ready; a resumed stream must not keep the load request pending.
         void runStream(threadId, null, { joinExistingThread: true }, runId);
@@ -3677,7 +3929,7 @@ const StreamSession = ({
       ensureHistoryCredentials,
       projectId,
       runStream,
-      stop,
+      disconnect,
       readConversationMessages,
       loadHistory,
       hydratePendingHITLRequestFromOperation,
@@ -3688,6 +3940,7 @@ const StreamSession = ({
       updateConnectorBindingIdsState,
       updateHistoryMessagePagination,
       updateTodos,
+      rememberActiveRunId,
     ],
   );
 
@@ -3722,10 +3975,49 @@ const StreamSession = ({
   const submit = useCallback(
     async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
       setError(null);
-      const followUpMode = isLoadingRef.current
-        ? options?.followUpMode
-        : undefined;
       const humanInput = input && 'input' in input ? input : null;
+      if (humanInput && (pauseRequestedRef.current || pausedDisplayRef.current) && !options?.newThread) {
+        const target = options?.threadId ?? activeThreadIdRef.current ?? threadId;
+        if (target) {
+          try {
+            const current = await client.threads.get(target);
+            if (activeThreadIdRef.current !== target) {
+              throw createAbortError('The active thread changed before sending.');
+            }
+            if (current.status === 'pausing' || current.status === 'busy') {
+              throw new Error(
+                'The workflow is still pausing. Wait for it to pause before sending a new message.',
+              );
+            }
+            if (current.status === 'paused') {
+              if (!current.runControl?.executionId) {
+                throw new Error('The paused task has no execution identity.');
+              }
+              await client.runs.cancel(
+                target,
+                current.runControl.executionId,
+                true,
+              );
+            }
+            if (activeThreadIdRef.current !== target) {
+              throw createAbortError('The active thread changed before sending.');
+            }
+            if (current.status !== 'paused' && current.displayPause) {
+              await client.threads.releaseDisplayPause(target, current.displayPause.pauseId);
+              if (activeThreadIdRef.current !== target) throw createAbortError('The active thread changed before sending.');
+            }
+            disconnect();
+            pauseRequestedRef.current = false;
+          } catch (error) {
+            if (activeThreadIdRef.current === target) setError(error);
+            throw error;
+          }
+        }
+      }
+      const followUpMode =
+        isLoadingRef.current && !pauseRequestedRef.current
+          ? options?.followUpMode
+          : undefined;
       if (humanInput && followUpMode) {
         const pending = createPendingFollowUp(
           {
@@ -3776,7 +4068,8 @@ const StreamSession = ({
         return;
       }
 
-      const previousThreadId = threadId ?? null;
+      const previousThreadId = activeThreadIdRef.current ?? threadId ?? null;
+      setPausedDisplay(null);
       const previousActiveThreadId = activeThreadIdRef.current;
       const previousConversationId = conversationIdRef.current;
       const previousConnectorBindingIds = connectorBindingIdsRef.current;
@@ -3791,7 +4084,7 @@ const StreamSession = ({
         updateConversationId(null);
         updateConnectorBindingIdsState([]);
         updateHistoryMessagePagination(createEmptyHistoryMessagePagination());
-        lastExecutionIdRef.current = null;
+        rememberActiveRunId(null);
         lastEventIdRef.current = null;
       }
       const optimistic = options?.optimisticValues;
@@ -3831,8 +4124,11 @@ const StreamSession = ({
       setIsLoading(true);
       isLoadingRef.current = true;
       try {
-        let nextThreadId = threadId ?? null;
         const desiredThreadId = options?.threadId ?? null;
+        let nextThreadId =
+          options?.joinExistingThread && desiredThreadId
+            ? desiredThreadId
+            : (threadId ?? null);
         if (shouldStartNewThread) {
           nextThreadId = null;
         }
@@ -3941,6 +4237,7 @@ const StreamSession = ({
       markPendingFollowUpsAsQueued,
       runStream,
       markHistoryLoaded,
+      disconnect,
       clearRuntimeActivities,
       sendSteerFollowUp,
       setThreadId,
@@ -3950,16 +4247,69 @@ const StreamSession = ({
       updateConnectorBindingIdsState,
       updateHistoryMessagePagination,
       updateTodos,
+      rememberActiveRunId,
     ],
   );
 
   submitRef.current = submit;
+
+  const resumeDisplay = useCallback(async () => {
+    const display = pausedDisplayRef.current;
+    if (!display?.pause) return;
+    const recordId = conversationIdRef.current;
+    if (recordId) {
+      const refreshed = await reconcileLatestAssistantMessage(recordId, display.threadId, new AbortController().signal);
+      if (pausedDisplayRef.current !== display || activeThreadIdRef.current !== display.threadId) return;
+      if (!refreshed) throw new Error('Failed to load the completed response. Please retry.');
+    }
+    await client.threads.releaseDisplayPause(display.threadId, display.pause.pauseId);
+    if (pausedDisplayRef.current === display && activeThreadIdRef.current === display.threadId) {
+      pauseRequestedRef.current = false;
+      setPausedDisplay(null);
+    }
+  }, [client, setPausedDisplay, reconcileLatestAssistantMessage]);
+
+  const resumeRun = useCallback(
+    async (runId: string, pauseId: string) => {
+      const target = activeThreadIdRef.current ?? threadId;
+      if (!target) return;
+      const run = await client.runs.resume(target, runId, pauseId);
+      if (activeThreadIdRef.current !== target) return;
+      pauseRequestedRef.current = false;
+      setValues((previous) => ({
+        ...previous,
+        messages: previous.messages.map((message) =>
+          message.executionId === runId
+            ? {
+                ...message,
+                rootExecutionIds: [...new Set([
+                  ...(message.rootExecutionIds ?? []), runId, run.run_id,
+                ])],
+              }
+            : message,
+        ),
+      }));
+      setPausedDisplay(null);
+      rememberActiveRunId(run.run_id);
+      lastEventIdRef.current = null;
+      void runStream(
+        target,
+        null,
+        { joinExistingThread: true },
+        run.run_id,
+      ).catch(setError);
+    },
+    [client, rememberActiveRunId, runStream, threadId],
+  );
 
   // isReady is true when we have a valid client secret (starts with 'cs-x-')
   const isReady = Boolean(
     runtimeClientSecret && runtimeClientSecret.startsWith('cs-x-'),
   );
 
+  const isDisplayPaused = pausedDisplay?.threadId === threadId;
+  const displayValues =
+    isDisplayPaused && pausedDisplay ? pausedDisplay.values : values;
   const value: StreamContextType = {
     client,
     authenticatedFetch: fetchWithClientSecretRefresh,
@@ -3973,10 +4323,10 @@ const StreamSession = ({
     connectorBindingIds,
     threadGoal,
     contextUsageByAgentKey,
-    values,
-    messages: values.messages ?? [],
+    values: displayValues,
+    messages: displayValues.messages ?? [],
     historyMessageLoadVersion,
-    historyMessagePagination,
+    historyMessagePagination: isDisplayPaused ? { ...historyMessagePagination, hasMore: false } : historyMessagePagination,
     historyLoad,
     todos,
     runtimeActivities,
@@ -3984,6 +4334,9 @@ const StreamSession = ({
     pendingRequestUserInput,
     pendingHITLRequest,
     isLoading,
+    isDisplayPaused,
+    displayPause: isDisplayPaused ? pausedDisplay?.pause ?? null : null,
+    resumeDisplay,
     isReady,
     error,
     selectedModelId,
@@ -3993,6 +4346,9 @@ const StreamSession = ({
     loadMoreConversationMessages,
     submit,
     stop,
+    activeRunId,
+    pauseRun,
+    resumeRun,
     reset,
     removePendingFollowUp,
     canSendPendingFollowUpNow,

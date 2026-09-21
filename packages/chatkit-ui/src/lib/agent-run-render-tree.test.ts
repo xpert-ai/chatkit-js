@@ -73,6 +73,47 @@ describe('buildAssistantRenderTree', () => {
     ).toEqual(['reasoning', 'reasoning', 'content']);
   });
 
+  it('keeps resumed root output flat and preserves real child agents across resumes', () => {
+    const result = buildAssistantRenderTree({
+      id: 'reply',
+      type: 'assistant',
+      executionId: 'resumed-root',
+      rootExecutionIds: ['original-root', 'middle-root'],
+      agentRuns: [
+        { id: 'original-root', agentKey: 'same-agent' },
+        { id: 'middle-root', agentKey: 'same-agent' },
+        { id: 'child', parentId: 'original-root', agentKey: 'same-agent' },
+      ],
+      content: [
+        { type: 'text', text: 'Before pause', executionId: 'original-root' },
+        {
+          type: 'text',
+          text: 'After first resume',
+          executionId: 'middle-root',
+        },
+        {
+          type: 'text',
+          text: 'Child output',
+          executionId: 'child',
+          parentExecutionId: 'original-root',
+        },
+        {
+          type: 'text',
+          text: 'After second resume',
+          executionId: 'resumed-root',
+        },
+      ],
+    });
+    expect(result.units.filter((unit) => unit.type === 'entry')).toHaveLength(
+      3,
+    );
+    expect(
+      result.units
+        .filter((unit) => unit.type === 'agent')
+        .map((unit) => unit.node.id),
+    ).toEqual(['child']);
+  });
+
   it('marks incomplete grouped agent nodes successful when the saved message completed', () => {
     const nodes = getAgentNodes({
       id: 'message-1',

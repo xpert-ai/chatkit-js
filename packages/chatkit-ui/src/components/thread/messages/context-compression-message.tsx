@@ -6,7 +6,7 @@ import {
   type LocalizedText,
   type TMessageContentComponent,
 } from '@xpert-ai/chatkit-types';
-import { FileText, Loader2, XCircle } from 'lucide-react';
+import { ScrollText, XCircle } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
@@ -81,18 +81,12 @@ function ContextCompressionIcon({
   const status = data.status ?? 'running';
   const skipped = isSkipped(status, data.reason);
 
-  if (status === 'running') {
-    return (
-      <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
-    );
-  }
-
   if (status === 'fail') {
     return <XCircle aria-hidden="true" className="h-4 w-4 shrink-0" />;
   }
 
   return (
-    <FileText
+    <ScrollText
       aria-hidden="true"
       className={cn('h-4 w-4 shrink-0', skipped && 'opacity-80')}
     />
@@ -119,18 +113,18 @@ export function ContextCompressionMessage({
   const status = data.status ?? 'running';
   const tooltipText = getTooltipText(data, i18n.language);
   const label = <ContextCompressionLabel data={data} />;
-  const center = (
+  const row = (
     <div
       className={cn(
-        'inline-flex max-w-[80%] shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-        tooltipText && 'cursor-help',
-        status === 'fail' && 'text-destructive hover:text-destructive',
+        'inline-flex max-w-full min-w-0 items-center gap-2 text-left text-sm font-medium text-muted-foreground transition-opacity',
+        tooltipText && 'cursor-help hover:opacity-100',
+        status === 'fail' ? 'text-destructive' : 'opacity-60',
       )}
     >
       <ContextCompressionIcon data={data} />
       <span
         className={cn(
-          'truncate',
+          'min-w-0 truncate',
           status === 'running' && 'ck-tool-call-running-text',
         )}
       >
@@ -140,11 +134,10 @@ export function ContextCompressionMessage({
   );
 
   return (
-    <div className="flex w-full items-center justify-center gap-3 py-6">
-      <div className="h-px min-w-8 flex-1 bg-border" />
+    <div className="px-1 py-1">
       {tooltipText ? (
         <Tooltip>
-          <TooltipTrigger asChild>{center}</TooltipTrigger>
+          <TooltipTrigger asChild>{row}</TooltipTrigger>
           <TooltipContent
             side="top"
             className="max-h-80 max-w-xl overflow-auto whitespace-pre-wrap text-left text-xs leading-5"
@@ -153,9 +146,8 @@ export function ContextCompressionMessage({
           </TooltipContent>
         </Tooltip>
       ) : (
-        center
+        row
       )}
-      <div className="h-px min-w-8 flex-1 bg-border" />
     </div>
   );
 }
