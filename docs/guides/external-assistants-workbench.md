@@ -10,7 +10,9 @@ Both the main chat and the external execution view use `thread/MessageList`.
 The execution adapter projects the selected run's input and output into regular
 messages, retaining tool components, reasoning, and descendant run identities.
 The view only owns execution navigation and metadata; it has no separate message
-renderer. Copying is shared, while retry is supplied only by the main chat.
+renderer. Copying is shared, while retry and message editing are supplied only by
+the main chat. The shared transcript preserves paused display state and input
+checkpoint eligibility when editing a message into a new conversation branch.
 
 This view is enabled by default and does not require remote view manifests or
 `workbench.enabled`. Closing the tab only closes the view; it does not cancel a

@@ -191,11 +191,24 @@ function isThreadKnownIdle(isThreadRunning: ToolStepRunState) {
   return isThreadRunning === false;
 }
 
+/** A paused run keeps its unfinished steps; only an idle run orphans them. */
+export function isPausedToolStep(
+  data: PartialStepData,
+  isThreadPaused?: boolean,
+) {
+  return data.status === 'running' && isThreadPaused === true;
+}
+
 export function getEffectiveToolStepStatus(
   data: PartialStepData,
   isThreadRunning?: ToolStepRunState,
+  isThreadPaused?: boolean,
 ): StepStatus | undefined {
-  if (data.status === 'running' && isThreadKnownIdle(isThreadRunning)) {
+  if (
+    data.status === 'running' &&
+    isThreadKnownIdle(isThreadRunning) &&
+    !isPausedToolStep(data, isThreadPaused)
+  ) {
     return 'fail';
   }
 
@@ -248,18 +261,20 @@ function useToolStepDurationLabel(
   options?: {
     status?: StepStatus;
     fallbackEndedAt?: number | null;
+    isPaused?: boolean;
   },
 ) {
   const [durationNow, setDurationNow] = React.useState(() => Date.now());
   const createdAt = parseStepDate(data.created_date);
   const explicitEndedAt = parseStepDate(data.end_date);
   const status = options?.status ?? data.status;
+  const isElapsing = status === 'running' && !options?.isPaused;
   const endedAt =
     explicitEndedAt ??
-    (status !== 'running' ? (options?.fallbackEndedAt ?? null) : null);
+    (!isElapsing ? (options?.fallbackEndedAt ?? null) : null);
 
   React.useEffect(() => {
-    if (status !== 'running' || createdAt === null || endedAt !== null) {
+    if (!isElapsing || createdAt === null || endedAt !== null) {
       return;
     }
 
@@ -271,7 +286,7 @@ function useToolStepDurationLabel(
     return () => {
       window.clearInterval(timer);
     };
-  }, [createdAt, endedAt, status]);
+  }, [createdAt, endedAt, isElapsing]);
 
   if (createdAt === null) return null;
 
@@ -951,13 +966,22 @@ function DefaultToolCallOutput({
   );
 }
 
-function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
+function ToolCallDetails({
+  content,
+  isThreadPaused,
+}: {
+  content: TMessageContentComponent;
+  isThreadPaused?: boolean;
+}) {
   const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
   if (isSandboxShellStep(data)) {
     return (
       <div className="ml-2 mt-1">
-        <SandboxShellToolCallCard data={data} />
+        <SandboxShellToolCallCard
+          data={data}
+          isPaused={isPausedToolStep(data, isThreadPaused)}
+        />
       </div>
     );
   }
@@ -1016,6 +1040,7 @@ function ToolCallDetails({ content }: { content: TMessageContentComponent }) {
 type ToolCallRowProps = {
   content: TMessageContentComponent;
   isThreadRunning?: ToolStepRunState;
+  isThreadPaused?: boolean;
   organizationId?: string;
   apiUrl?: string;
 };
@@ -1028,6 +1053,7 @@ function areToolCallRowPropsEqual(
     previous.content.id === next.content.id &&
     previous.content.data === next.content.data &&
     previous.isThreadRunning === next.isThreadRunning &&
+    previous.isThreadPaused === next.isThreadPaused &&
     previous.organizationId === next.organizationId &&
     previous.apiUrl === next.apiUrl
   );
@@ -1036,12 +1062,18 @@ function areToolCallRowPropsEqual(
 function ToolCallRowContent({
   content,
   isThreadRunning,
+  isThreadPaused,
   organizationId,
   apiUrl,
 }: ToolCallRowProps) {
   const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
-  const status = getEffectiveToolStepStatus(data, isThreadRunning);
+  const isPaused = isPausedToolStep(data, isThreadPaused);
+  const status = getEffectiveToolStepStatus(
+    data,
+    isThreadRunning,
+    isThreadPaused,
+  );
   const hasError = status === 'fail' || Boolean(data.error);
   const isSandboxShell = isSandboxShellStep(data);
   const detailsId = React.useId();
@@ -1062,11 +1094,12 @@ function ToolCallRowContent({
     data.artifact !== undefined ||
     hasCustomDetails;
   const fallbackEndedAt = useFrozenTimestamp(
-    data.status === 'running' && status === 'fail',
+    data.status === 'running' && (status === 'fail' || isPaused),
   );
   const durationLabel = useToolStepDurationLabel(data, {
     status,
     fallbackEndedAt,
+    isPaused,
   });
   const [isExpanded, setIsExpanded] = React.useState(false);
 
@@ -1116,7 +1149,7 @@ function ToolCallRowContent({
         <span
           className={cn(
             'min-w-0 truncate',
-            status === 'running' && 'ck-tool-call-running-text',
+            status === 'running' && !isPaused && 'ck-tool-call-running-text',
           )}
           title={label}
         >
@@ -1139,7 +1172,7 @@ function ToolCallRowContent({
       </button>
       {hasDetails && isExpanded ? (
         <div id={detailsId}>
-          <ToolCallDetails content={content} />
+          <ToolCallDetails content={content} isThreadPaused={isThreadPaused} />
         </div>
       ) : null}
     </li>
@@ -1153,12 +1186,14 @@ export function ToolComponentGroup({
   items,
   hasFollowingItem,
   isThreadRunning,
+  isThreadPaused,
   organizationId,
   apiUrl,
 }: {
   items: TMessageContentComponent[];
   hasFollowingItem: boolean;
   isThreadRunning?: ToolStepRunState;
+  isThreadPaused?: boolean;
   organizationId?: string;
   apiUrl?: string;
 }) {
@@ -1214,6 +1249,7 @@ export function ToolComponentGroup({
               key={item.id ?? `tool-item-${index}`}
               content={item}
               isThreadRunning={isThreadRunning}
+              isThreadPaused={isThreadPaused}
               organizationId={organizationId}
               apiUrl={apiUrl}
             />

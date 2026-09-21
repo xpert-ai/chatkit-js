@@ -1,10 +1,11 @@
-import type { Message } from '@xpert-ai/xpert-sdk';
+import type { ChatMessageInputCheckpoint, Message } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../../providers/Stream';
 import type {
   ChatKitOptions,
   ChatkitMessage,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
+  FollowUpBehavior,
 } from '@xpert-ai/chatkit-types';
 import { FileText } from 'lucide-react';
 import type { AssistantMessageWithAgentRuns } from '../../lib/agent-run-render-tree';
@@ -33,6 +34,7 @@ import {
 } from '../chat/runtime-capabilities';
 import { AssistantMessage, AssistantStreamingIndicator } from './messages/ai';
 import { MessageActions } from './MessageActions';
+import { MessageEditor } from './MessageEditor';
 import { Button } from '../ui/button';
 
 type UploadedMessageFile = ChatAttachmentFile;
@@ -46,6 +48,9 @@ export type HumanMessageWithMeta = Message & {
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   runtimeCapabilityOptions?: RuntimeCapabilityOption[];
   model?: string;
+  followUpMode?: FollowUpBehavior;
+  /** Null means the server has no saved input checkpoint for branching. */
+  inputCheckpoint?: ChatMessageInputCheckpoint | null;
 };
 
 type TranscriptMessage = StateType['messages'][number] | ChatkitMessage;
@@ -91,6 +96,7 @@ export type MessageListProps = {
   assistantTitle?: string;
   isLoading?: boolean;
   isThreadRunning?: boolean;
+  isThreadPaused?: boolean;
   lastStreamOutputAt?: number | null;
   streamingNow?: number;
   showLoadingDots?: boolean;
@@ -105,6 +111,16 @@ export type MessageListProps = {
   onRetry?: (index: number) => void;
   onMessageAnchor?: (id: string, node: HTMLDivElement | null) => void;
   enableQuotes?: boolean;
+  editing?: {
+    messageId: string | null;
+    enabled: boolean;
+    onStart: (messageId: string) => void;
+    onCancel: () => void;
+    onSave: (
+      message: Omit<HumanMessageWithMeta, 'content' | 'type'>,
+      text: string,
+    ) => Promise<void>;
+  };
 };
 
 /** Shared transcript presentation for main chat and read-only workbench views. */
@@ -114,6 +130,7 @@ export function MessageList({
   assistantTitle,
   isLoading = false,
   isThreadRunning,
+  isThreadPaused,
   lastStreamOutputAt,
   streamingNow,
   showLoadingDots = false,
@@ -128,6 +145,7 @@ export function MessageList({
   onRetry,
   onMessageAnchor,
   enableQuotes = true,
+  editing,
 }: MessageListProps) {
   const { t } = useChatkitTranslation();
   return (
@@ -206,6 +224,14 @@ export function MessageList({
           : [];
         const hasHumanAttachments =
           isHumanMessage && humanAttachments.length > 0;
+        const isEditingMessage =
+          Boolean(message.id) && editing?.messageId === message.id;
+        const canEditMessage =
+          isHumanMessage &&
+          editing?.enabled &&
+          Boolean(message.id) &&
+          humanMessage.inputCheckpoint !== null &&
+          !humanMessage.followUpMode;
         const canQuoteMessage =
           enableQuotes && (isHumanMessage || isAssistantMessage);
         const quoteSource = isHumanMessage
@@ -239,117 +265,134 @@ export function MessageList({
             <div
               className={cn(
                 'flex flex-col px-3 overflow-hidden',
-                isAssistantMessage && 'min-w-0 flex-1',
+                (isAssistantMessage || isEditingMessage) && 'min-w-0 flex-1',
               )}
             >
-              <div
-                {...(canQuoteMessage
-                  ? {
-                      'data-quote-message-id': message.id,
-                      'data-quote-source': quoteSource,
-                    }
-                  : {})}
-                className={cn(
-                  'max-w-full rounded-2xl',
-                  isHumanMessage
-                    ? 'bg-primary text-primary-foreground px-4 py-2.5'
-                    : message.type === 'system'
-                      ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
-                      : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
-                )}
-              >
-                {isAssistantMessage ? (
-                  <AssistantMessage
-                    message={{
-                      ...(message as ChatkitMessage),
-                      type: 'assistant',
-                    }}
-                    messages={(
-                      lookupMessages ?? messages.slice(0, index + 1)
-                    ).map(
-                      (item) =>
-                        ({
-                          ...(item as ChatkitMessage),
-                          type:
-                            String(item.type) === 'ai'
-                              ? 'assistant'
-                              : item.type,
-                        }) as ChatkitMessage,
+              {isEditingMessage && editing ? (
+                <MessageEditor
+                  key={message.id}
+                  initialText={messageContent}
+                  onCancel={editing.onCancel}
+                  onSave={(text) => editing.onSave(humanMessage, text)}
+                />
+              ) : (
+                <>
+                  <div
+                    {...(canQuoteMessage
+                      ? {
+                          'data-quote-message-id': message.id,
+                          'data-quote-source': quoteSource,
+                        }
+                      : {})}
+                    className={cn(
+                      'max-w-full rounded-2xl',
+                      isHumanMessage
+                        ? 'bg-primary text-primary-foreground px-4 py-2.5'
+                        : message.type === 'system'
+                          ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
+                          : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
                     )}
-                    isStreaming={isStreamingMessage}
-                    streamingStatus={streamingStatus}
-                    isThreadRunning={isThreadRunning}
-                    organizationId={organizationId}
-                    apiUrl={apiUrl}
-                    pet={pet}
-                    mcpApps={mcpApps}
-                  />
-                ) : (
-                  <>
-                    {isHumanMessage &&
-                      humanRuntimeCapabilityOptions.length > 0 && (
-                        <HumanRuntimeCapabilityChips
-                          options={humanRuntimeCapabilityOptions}
-                        />
-                      )}
-                    {isHumanMessage && humanReferences.length > 0 && (
-                      <div className="mb-2 flex flex-wrap gap-1.5">
-                        {humanReferences.map((reference) => (
-                          <ReferenceChip
-                            key={getReferenceKey(reference)}
-                            reference={reference}
-                            variant="message"
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {/* Show attachments for human messages */}
-                    {isHumanMessage && humanAttachments.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {humanAttachments.map((file, fileIndex) => (
-                          <div
-                            key={fileIndex}
-                            className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
-                          >
-                            <FileText size={12} />
-                            <span className="max-w-[100px] truncate">
-                              {file.originalName ?? file.id}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {Array.isArray(message.content) ? (
-                      message.content.map((part, partIndex) => (
-                        <p
-                          key={`${part.type}-${partIndex}`}
-                          className="wrap-break-word text-sm leading-relaxed"
-                        >
-                          {formatMessageContent(part)}
-                        </p>
-                      ))
+                  >
+                    {isAssistantMessage ? (
+                      <AssistantMessage
+                        message={{
+                          ...(message as ChatkitMessage),
+                          type: 'assistant',
+                        }}
+                        messages={(
+                          lookupMessages ?? messages.slice(0, index + 1)
+                        ).map(
+                          (item) =>
+                            ({
+                              ...(item as ChatkitMessage),
+                              type:
+                                String(item.type) === 'ai'
+                                  ? 'assistant'
+                                  : item.type,
+                            }) as ChatkitMessage,
+                        )}
+                        isStreaming={isStreamingMessage}
+                        streamingStatus={streamingStatus}
+                        isThreadRunning={isThreadRunning}
+                        isThreadPaused={isThreadPaused}
+                        organizationId={organizationId}
+                        apiUrl={apiUrl}
+                        pet={pet}
+                        mcpApps={mcpApps}
+                      />
                     ) : (
-                      <span className="wrap-break-word text-sm leading-relaxed">
-                        {formatMessageContent(message.content)}
-                      </span>
+                      <>
+                        {isHumanMessage &&
+                          humanRuntimeCapabilityOptions.length > 0 && (
+                            <HumanRuntimeCapabilityChips
+                              options={humanRuntimeCapabilityOptions}
+                            />
+                          )}
+                        {isHumanMessage && humanReferences.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {humanReferences.map((reference) => (
+                              <ReferenceChip
+                                key={getReferenceKey(reference)}
+                                reference={reference}
+                                variant="message"
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {/* Show attachments for human messages */}
+                        {isHumanMessage && humanAttachments.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {humanAttachments.map((file, fileIndex) => (
+                              <div
+                                key={fileIndex}
+                                className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
+                              >
+                                <FileText size={12} />
+                                <span className="max-w-[100px] truncate">
+                                  {file.originalName ?? file.id}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {Array.isArray(message.content) ? (
+                          message.content.map((part, partIndex) => (
+                            <p
+                              key={`${part.type}-${partIndex}`}
+                              className="wrap-break-word text-sm leading-relaxed"
+                            >
+                              {formatMessageContent(part)}
+                            </p>
+                          ))
+                        ) : (
+                          <span className="wrap-break-word text-sm leading-relaxed">
+                            {formatMessageContent(message.content)}
+                          </span>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </div>
-              {/* Message actions - hidden during streaming, retry only for last AI message */}
-              <MessageActions
-                content={messageContent}
-                isAssistant={isAssistantMessage}
-                isStreaming={isStreamingMessage}
-                onRetry={
-                  onRetry &&
-                  isAssistantMessage &&
-                  !isLoading &&
-                  index === messages.length - 1
-                    ? () => onRetry(index)
-                    : undefined
-                }
-              />
+                  </div>
+                  {/* Message actions - hidden during streaming, retry only for last AI message */}
+                  <MessageActions
+                    content={messageContent}
+                    isAssistant={isAssistantMessage}
+                    isStreaming={isStreamingMessage}
+                    onEdit={
+                      canEditMessage && editing
+                        ? () => editing.onStart(message.id!)
+                        : undefined
+                    }
+                    onRetry={
+                      onRetry &&
+                      isAssistantMessage &&
+                      !isLoading &&
+                      index === messages.length - 1
+                        ? () => onRetry(index)
+                        : undefined
+                    }
+                  />
+                </>
+              )}
             </div>
           </div>
         );

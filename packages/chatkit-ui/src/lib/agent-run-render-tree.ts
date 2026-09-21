@@ -18,6 +18,7 @@ import { isThreadContextUsageRenderArtifact } from './thread-context-usage';
 
 export type AssistantMessageWithAgentRuns = ChatkitMessage & {
   executionId?: string;
+  rootExecutionIds?: string[];
   agentRuns?: AgentRunInfo[];
 };
 
@@ -400,6 +401,10 @@ export function buildAssistantRenderTree(
   message: AssistantMessageWithAgentRuns,
 ) {
   const rootExecutionId = message.executionId;
+  const rootExecutionIds = new Set([
+    rootExecutionId,
+    ...(message.rootExecutionIds ?? []),
+  ]);
   const runs = (message.agentRuns ?? []).filter(
     (run) => !isMiddlewareAgentRunInfo(run),
   );
@@ -417,7 +422,7 @@ export function buildAssistantRenderTree(
     const target = getEntryRunTarget(entry, runs, rootExecutionId);
     const shouldGroup =
       Boolean(target?.executionId) &&
-      (target?.executionId !== rootExecutionId ||
+      (!rootExecutionIds.has(target?.executionId) ||
         Boolean(target?.parentExecutionId));
 
     if (!target || !shouldGroup) {
@@ -440,12 +445,16 @@ export function buildAssistantRenderTree(
 
   const roots: AgentRunRenderNode[] = [];
   for (const node of nodes.values()) {
-    if (node.id === rootExecutionId && !node.info.parentId) {
+    if (
+      rootExecutionIds.has(node.id) &&
+      !node.info.parentId &&
+      !node.info.parentExecutionId
+    ) {
       continue;
     }
 
     const parentId = node.info.parentId ?? node.info.parentExecutionId;
-    if (parentId && parentId !== rootExecutionId && parentId !== node.id) {
+    if (parentId && !rootExecutionIds.has(parentId) && parentId !== node.id) {
       const parent = nodes.get(parentId);
       if (parent) {
         parent.children.push(node);

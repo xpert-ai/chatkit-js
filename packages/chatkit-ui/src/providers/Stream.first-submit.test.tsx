@@ -461,4 +461,23 @@ describe('first submission setup', () => {
       await rejection;
     });
   });
+  it('uses an explicit existing branch from a callback captured before the branch was selected', async () => {
+    renderStream();
+    const submit = getStream().submit;
+    await act(async () => {
+      getStream().reset('edited-branch', []);
+    });
+    await act(async () => {
+      await submit(
+        { input: { input: 'Edited input' } },
+        {
+          threadId: 'edited-branch',
+          joinExistingThread: true,
+        },
+      );
+    });
+    expect(sdkMocks.threadsCreate).not.toHaveBeenCalled();
+    expect(sdkMocks.runsStream.mock.calls[0][0]).toBe('edited-branch');
+    expect(getStream().threadId).toBe('edited-branch');
+  });
 });

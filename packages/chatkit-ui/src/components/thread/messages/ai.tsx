@@ -75,6 +75,7 @@ export type AssistantMessageProps = {
   isStreaming?: boolean;
   streamingStatus?: AssistantStreamingStatus | null;
   isThreadRunning?: boolean;
+  isThreadPaused?: boolean;
   organizationId?: string;
   apiUrl?: string;
   pet?: ChatKitOptions['pet'] | null;
@@ -84,6 +85,7 @@ export type AssistantMessageProps = {
 type AssistantContentRenderOptions = {
   isReasoning?: boolean;
   isThreadRunning?: boolean;
+  isThreadPaused?: boolean;
   organizationId?: string;
   apiUrl?: string;
   isAgentOutput?: boolean;
@@ -578,6 +580,7 @@ function renderContentItem(
             items={[content]}
             hasFollowingItem={false}
             isThreadRunning={options?.isThreadRunning}
+            isThreadPaused={options?.isThreadPaused}
             organizationId={options?.organizationId}
             apiUrl={options?.apiUrl}
           />
@@ -673,6 +676,7 @@ function renderContentUnit(
       isReasoning:
         options?.isReasoning && !hasFollowingItem && !options?.isAgentOutput,
       isThreadRunning: options?.isThreadRunning,
+      isThreadPaused: options?.isThreadPaused,
       organizationId: options?.organizationId,
       apiUrl: options?.apiUrl,
       isAgentOutput: options?.isAgentOutput,
@@ -686,6 +690,7 @@ function renderContentUnit(
         items={unit.items}
         hasFollowingItem={hasFollowingItem}
         isThreadRunning={options?.isThreadRunning}
+        isThreadPaused={options?.isThreadPaused}
         organizationId={options?.organizationId}
         apiUrl={options?.apiUrl}
       />
@@ -894,6 +899,7 @@ export function AssistantMessage({
   isStreaming = false,
   streamingStatus,
   isThreadRunning,
+  isThreadPaused,
   organizationId,
   apiUrl,
   pet,
@@ -930,6 +936,7 @@ export function AssistantMessage({
       : undefined,
     isReasoning,
     isThreadRunning,
+    isThreadPaused,
     organizationId,
     apiUrl,
     mcpApps,

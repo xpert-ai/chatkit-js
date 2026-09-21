@@ -584,6 +584,7 @@
       "shell": {
         "success": "Success",
         "running": "Running",
+        "paused": "Paused",
         "failed": "Failed",
         "exitCode": "Exit code {{code}}",
         "ranCommand": "Ran {{command}}",
@@ -619,6 +620,28 @@
           "other": "{{count}} tools"
         }
       }
+    }
+  },
+  "threadControl": {
+    "branch": "Conversation branch",
+    "branchNumber": "Branch {{number}}",
+    "pause": "Pause workflow",
+    "resume": "Resume workflow",
+    "cancelRun": "Stop task",
+    "pausing": "Saving and pausing…",
+    "paused": "Workflow paused",
+    "editMessage": "Edit message",
+    "sourcePauseUnavailable": "The original task cannot be paused yet. Try again after it finishes.",
+    "discardEdit": "Cancel",
+    "saveBranch": "Send",
+    "status": {
+      "busy": "Running",
+      "pausing": "Pausing",
+      "paused": "Paused",
+      "idle": "Idle",
+      "interrupted": "Waiting",
+      "error": "Error",
+      "running": "Running"
     }
   }
 }

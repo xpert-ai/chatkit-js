@@ -28,6 +28,7 @@ import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   ChatKitCommandSource,
+  FollowUpBehavior,
   ModelOption,
   ToolOption,
   ThreadGoal,
@@ -81,6 +82,7 @@ import { usePetAutoState } from './chat/usePetAutoState';
 import { useSlashCommands } from './chat/useSlashCommands';
 import { MessageList, type HumanMessageWithMeta } from './thread/MessageList';
 import { MessageNavigator } from './thread/MessageNavigator';
+import { useThreadBranches } from '../hooks/useThreadBranches';
 import { StartScreen } from './thread/StartScreen';
 import { StarterPromptSuggestions } from './composer/StarterPromptSuggestions';
 import {
@@ -457,6 +459,61 @@ export function Chat({
     options?.messageNavigation?.enabled !== false;
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
+  const branchState = useThreadBranches(
+    stream.client,
+    stream.conversationId,
+    stream.threadId,
+    Boolean(stream.isReady && stream.client?.conversations?.listThreads),
+    stream.isLoading,
+  );
+  const [editingMessageId, setEditingMessageId] = React.useState<string | null>(
+    null,
+  );
+  const editRequestRef = React.useRef<{
+    messageId: string;
+    requestId: string;
+  } | null>(null);
+  const [isChangingBranch, setIsChangingBranch] = React.useState(false);
+  const [runControlRequest, setRunControlRequest] = React.useState<{
+    action: 'pause' | 'resume';
+    threadId: string;
+    runId: string;
+  } | null>(null);
+  const runControlRequestRef = React.useRef<typeof runControlRequest>(null);
+  const [runControlError, setRunControlError] = React.useState<{
+    threadId: string;
+    message: string;
+  } | null>(null);
+  const currentRunControl = branchState.current?.runControl;
+  const pauseRunId =
+    stream.activeRunId ??
+    currentRunControl?.executionId ??
+    stream.displayPause?.executionId ??
+    null;
+  const canPauseRun = Boolean(
+    stream.threadId &&
+      pauseRunId &&
+      (stream.isLoading || currentRunControl?.state === 'running'),
+  );
+  const isRunPausing =
+    (runControlRequest?.threadId === stream.threadId &&
+      runControlRequest.action === 'pause') ||
+    branchState.current?.status === 'pausing';
+  const isRunPaused = branchState.current?.status === 'paused';
+  const canRevealPausedDisplay = Boolean(stream.displayPause) &&
+    ['idle', 'error', 'interrupted'].includes(branchState.current?.status ?? '');
+  // Switch the control as soon as output pauses, before checkpointing finishes.
+  const isPauseActive = isRunPausing || isRunPaused || stream.isDisplayPaused;
+  const isResumingRun =
+    runControlRequest?.threadId === stream.threadId &&
+    runControlRequest.action === 'resume';
+  const isVisibleStreaming = stream.isLoading && !stream.isDisplayPaused;
+  const activeBranchRef = React.useRef(stream.threadId);
+  activeBranchRef.current = stream.threadId;
+  React.useEffect(() => {
+    setEditingMessageId(null);
+    editRequestRef.current = null;
+  }, [stream.threadId]);
   const workbench = useWorkbench();
   const xpertPlatformClient = stream.client;
   const { theme } = useTheme();
@@ -1664,13 +1721,19 @@ export function Chat({
   // File parsing can continue after submit; only the transport upload blocks send.
   const hasUploadingFiles = attachmentState.hasUploadingFiles;
   const isSubmissionBlocked =
+    isChangingBranch ||
+    isResumingRun ||
+    isRunPausing ||
     hasPendingInteractiveRequest ||
     missingConfig ||
     isHistoryUnavailable ||
     hasUploadingFiles ||
     isUploadingReferenceImages;
+  const hasComposerInput = Boolean(
+    trimmedDraft || hasReferences || attachmentState.uploadedFiles.length,
+  );
   const isSendDisabled =
-    (!trimmedDraft && !hasReferences) || isSubmissionBlocked;
+    !hasComposerInput || isSubmissionBlocked;
   const isPromptEditDisabled =
     hasPendingInteractiveRequest || missingConfig || isHistoryLoading;
   const canUploadAttachments =
@@ -1940,7 +2003,10 @@ export function Chat({
       const filesToSend = mergedFiles.length > 0 ? mergedFiles : undefined;
       const referencesToSend =
         references.length > 0 ? [...references] : undefined;
-      const nextFollowUpMode = stream.isLoading ? 'queue' : undefined;
+      const nextFollowUpMode =
+        stream.isLoading && !stream.isDisplayPaused && !isRunPaused
+          ? 'queue'
+          : undefined;
       const effectivePlanMode = submitOptions.planMode ?? planModeEnabled;
       const humanInput =
         buildHumanMessageInputPayload({
@@ -2076,6 +2142,7 @@ export function Chat({
 
       const submission = stream.submit(
         {
+          id: newMessage.id,
           input: inputPayload,
           ...(requestOptions.state ? { state: requestOptions.state } : {}),
         },
@@ -2116,6 +2183,7 @@ export function Chat({
       getRuntimeCapabilitiesForSubmit,
       promptWorkflow,
       isSubmissionBlocked,
+      isRunPaused,
       options?.request,
       persistSessionRuntimeCapabilities,
       references,
@@ -3071,6 +3139,156 @@ export function Chat({
       });
   };
 
+  const handleComposerRunControl = async (action: 'pause' | 'resume') => {
+    const sourceThreadId = stream.threadId;
+    if (isChangingBranch || isRunPausing || isResumingRun) return;
+    if (action === 'resume') {
+      if (!sourceThreadId || (!canRevealPausedDisplay && (!isRunPaused || !currentRunControl?.pauseId))) return;
+    } else {
+      if (isRunPaused) return;
+      if (!sourceThreadId || !pauseRunId) return;
+    }
+    if (!sourceThreadId) return;
+    if (runControlRequestRef.current?.threadId === sourceThreadId) return;
+    const runId = pauseRunId;
+    if (!runId) return;
+    const request = {
+      action,
+      threadId: sourceThreadId,
+      runId,
+    };
+    runControlRequestRef.current = request;
+    setRunControlRequest(request);
+    setRunControlError(null);
+    try {
+      if (action === 'resume' && canRevealPausedDisplay) {
+        await stream.resumeDisplay();
+      } else if (action === 'resume' && currentRunControl?.pauseId) {
+        await stream.resumeRun(request.runId, currentRunControl.pauseId);
+      } else {
+        await stream.pauseRun(request.runId);
+      }
+      if (activeBranchRef.current === sourceThreadId) {
+        await branchState.refresh();
+      }
+    } catch (error) {
+      if (
+        activeBranchRef.current === sourceThreadId &&
+        runControlRequestRef.current === request
+      ) {
+        setRunControlError({
+          threadId: sourceThreadId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } finally {
+      if (runControlRequestRef.current === request) {
+        runControlRequestRef.current = null;
+        setRunControlRequest(null);
+      }
+    }
+  };
+
+  const saveEditedMessage = async (
+    message: Omit<HumanMessageWithMeta, 'content' | 'type'>,
+    text: string,
+  ) => {
+    const sourceThreadId = stream.threadId;
+    if (!sourceThreadId || !message.id) return;
+    const request =
+      editRequestRef.current?.messageId === message.id
+        ? editRequestRef.current
+        : { messageId: message.id, requestId: createMessageId() };
+    editRequestRef.current = request;
+    setIsChangingBranch(true);
+    try {
+      const branch = await stream.client.threads.copy(sourceThreadId, {
+        beforeMessageId: message.id,
+        requestId: request.requestId,
+      });
+      if (activeBranchRef.current !== sourceThreadId) return;
+      // Read fresh run identity: the branch list may still show a finished run.
+      const source = await stream.client.threads.get(sourceThreadId);
+      if (activeBranchRef.current !== sourceThreadId) return;
+      if (source.status === 'busy') {
+        if (!source.runControl?.executionId) {
+          throw new Error(t('threadControl.sourcePauseUnavailable'));
+        }
+        try {
+          await stream.pauseRun(source.runControl.executionId);
+        } catch (error) {
+          // Completion or another pause can win the race with this request.
+          // Continue only after verifying the source is no longer running.
+          const latest = await stream.client.threads
+            .get(sourceThreadId)
+            .catch(() => null);
+          if (!latest || latest.status === 'busy') throw error;
+        }
+      }
+      if (activeBranchRef.current !== sourceThreadId) return;
+      // A pause acknowledgement is enough; an in-flight tool can finish while
+      // the new branch starts. Detaching the stream must not cancel that tool.
+      activeBranchRef.current = branch.thread_id;
+      stream.reset(branch.thread_id, []);
+      await stream.loadThread(branch.thread_id);
+      if (activeBranchRef.current !== branch.thread_id) return;
+      const humanInput = buildHumanMessageInputPayload({
+        content: text,
+        references: message.references,
+        referenceComposition: 'compose',
+      });
+      if (!humanInput) return;
+      const files = mergeSubmittedFiles(
+        message.fileAssets ?? [],
+        message.attachments ?? [],
+      );
+      const edited: HumanMessageWithMeta = {
+        ...message,
+        type: 'human',
+        id: createMessageId(),
+        content: text,
+        submittedInput: humanInput.input,
+        referenceComposition: humanInput.referenceComposition,
+      };
+      const input = {
+        ...humanInput,
+        ...(files.length ? { files } : {}),
+        ...(message.runtimeCapabilities
+          ? { runtimeCapabilities: message.runtimeCapabilities }
+          : {}),
+        ...(message.model ? { model: message.model } : {}),
+      };
+      const requestOptions = buildInjectedRequestOptions({
+        defaults: options?.request,
+        humanInput: input,
+      });
+      setEditingMessageId(null);
+      setIsChangingBranch(false);
+      const submission = stream.submit(
+        {
+          id: edited.id,
+          input,
+          ...(requestOptions.state ? { state: requestOptions.state } : {}),
+        },
+        {
+          threadId: branch.thread_id,
+          joinExistingThread: true,
+          ...(requestOptions.context ? { context: requestOptions.context } : {}),
+          ...(requestOptions.config ? { config: requestOptions.config } : {}),
+          optimisticValues: (previous) => ({
+            ...previous,
+            messages: [...(previous.messages ?? []), edited],
+          }),
+        },
+      );
+      void submission.catch((error) => {
+        setHistoryError(error instanceof Error ? error.message : String(error));
+      });
+    } finally {
+      setIsChangingBranch(false);
+    }
+  };
+
   const handleRetry = (messageIndex: number) => {
     // Find the last human message before this AI message to resend
     const messagesUpToIndex = messages.slice(0, messageIndex);
@@ -3497,11 +3715,12 @@ export function Chat({
             <MessageList
               messages={messages}
               assistantTitle={assistantTitle}
-              isLoading={stream.isLoading}
+              isLoading={isVisibleStreaming}
               isThreadRunning={currentThreadIsRunning}
+              isThreadPaused={isPauseActive}
               lastStreamOutputAt={lastStreamOutputAtRef.current}
               streamingNow={streamingNow}
-              showLoadingDots={showLoadingDots}
+              showLoadingDots={showLoadingDots && !stream.isDisplayPaused}
               organizationId={stream.organizationId}
               apiUrl={stream.apiUrl}
               pet={effectivePet}
@@ -3510,7 +3729,23 @@ export function Chat({
               canLoadMoreMessages={canLoadMoreMessages}
               isLoadingMoreMessages={isLoadingMoreMessages}
               onLoadMore={handleLoadMoreMessages}
-              onRetry={handleRetry}
+              onRetry={
+                branchState.current?.status !== 'paused' &&
+                branchState.current?.status !== 'pausing' &&
+                !stream.isLoading
+                  ? handleRetry
+                  : undefined
+              }
+              editing={{
+                messageId: editingMessageId,
+                enabled: Boolean(branchState.current) && !isChangingBranch,
+                onStart: (messageId) => {
+                  editRequestRef.current = null;
+                  setEditingMessageId(messageId);
+                },
+                onCancel: () => setEditingMessageId(null),
+                onSave: saveEditedMessage,
+              }}
               onMessageAnchor={setMessageNavigationAnchor}
             />
           )}
@@ -3579,6 +3814,11 @@ export function Chat({
           )}
           style={chatColumnStyle}
         >
+          {runControlError?.threadId === stream.threadId && (
+            <p role="alert" className="text-xs text-destructive">
+              {runControlError.message}
+            </p>
+          )}
           {!isAtBottom && messages.length > 0 && (
             <div
               data-slot="scroll-to-bottom"
@@ -4123,14 +4363,26 @@ export function Chat({
                       disabled={isSendDisabled}
                       isLoading={stream.isLoading}
                       showStop={
-                        stream.isLoading &&
-                        (!trimmedDraft || hasPendingInteractiveRequest)
+                        !isPauseActive &&
+                        (stream.isLoading || canPauseRun) &&
+                        (!hasComposerInput || hasPendingInteractiveRequest)
                       }
-                      onStop={() => stream.stop()}
-                      stopLabel={t('chat.stop')}
+                      stopDisabled={isChangingBranch || !canPauseRun}
+                      onStop={() => void handleComposerRunControl('pause')}
+                      stopLabel={t('threadControl.pause')}
+                      showResume={isPauseActive && !hasComposerInput}
+                      resumeDisabled={
+                        (!isRunPaused && !canRevealPausedDisplay) ||
+                        isRunPausing ||
+                        isResumingRun ||
+                        isChangingBranch ||
+                        (!currentRunControl?.pauseId && !canRevealPausedDisplay)
+                      }
+                      onResume={() => void handleComposerRunControl('resume')}
+                      resumeLabel={t('threadControl.resume')}
                       sendLabel={t('chat.send')}
                       shortcuts={
-                        stream.isLoading && trimmedDraft
+                        isVisibleStreaming && !isRunPaused && trimmedDraft
                           ? [
                               {
                                 label: t('chat.followUps.queue'),
