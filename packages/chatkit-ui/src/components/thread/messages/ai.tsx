@@ -42,7 +42,12 @@ import { Badge } from '../../ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { InlinePetStatus } from '../../pet/InlinePetStatus';
 import { MarkdownText } from '../markdown-text';
-import { AgentEventRow, AgentRunGroup } from './agent-run-group';
+import {
+  AgentEventRow,
+  AgentRunGroup,
+} from './agent-run-group';
+import { ExternalAssistantRunRow } from './external-assistant-run-row';
+import { useWorkbench } from '../../../workbench/context';
 import {
   ContextCompressionMessage,
   isContextCompressionComponent,
@@ -82,6 +87,7 @@ type AssistantContentRenderOptions = {
   organizationId?: string;
   apiUrl?: string;
   isAgentOutput?: boolean;
+  onOpenExternalAssistant?: (executionId: string) => void;
   mcpApps?: ChatKitOptions['mcpApps'];
 };
 
@@ -753,6 +759,19 @@ function renderAssistantRenderUnits(
     }
 
     flushEntries(true);
+    if (
+      unit.node.info.invocationKind === 'external_assistant' &&
+      options?.onOpenExternalAssistant
+    ) {
+      rendered.push(
+        <ExternalAssistantRunRow
+          key={unit.node.id}
+          info={unit.node.info}
+          onOpen={options.onOpenExternalAssistant}
+        />,
+      );
+      return;
+    }
     rendered.push(
       <AgentRunGroup
         key={unit.node.id}
@@ -880,6 +899,7 @@ export function AssistantMessage({
   pet,
   mcpApps,
 }: AssistantMessageProps) {
+  const workbench = useWorkbench();
   const renderTree = buildAssistantRenderTree(
     message as AssistantMessageWithAgentRuns,
   );
@@ -905,6 +925,9 @@ export function AssistantMessage({
   ) : null;
 
   const answerNode = renderContent(message, lookupMessages, {
+    onOpenExternalAssistant: workbench.externalAssistantsEnabled
+      ? workbench.openExternalAssistant
+      : undefined,
     isReasoning,
     isThreadRunning,
     organizationId,

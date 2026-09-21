@@ -60,6 +60,7 @@ import {
   createAgentEventContent,
   isMiddlewareAgentRunInfo,
   normalizeAgentRunInfo,
+  upsertAgentRun,
   type AgentRunInfo,
 } from '../lib/agent-runs';
 import {
@@ -552,6 +553,26 @@ function mergePreservedMessages(
   preservedMessages: ChatKitAIMessage[] | undefined,
   previousMessages: ChatKitAIMessage[],
 ): ChatKitAIMessage[] {
+  const previousById = new Map(
+    previousMessages.map((message) => [message.id, message]),
+  );
+  messages = messages.map((message) => {
+    const previous = previousById.get(message.id);
+    if (
+      !previous?.agentRuns?.length ||
+      (message.executionId && previous.executionId &&
+        message.executionId !== previous.executionId)
+    ) return message;
+    const agentRuns = (message.agentRuns ?? []).reduce(
+      (runs, incoming) => upsertAgentRun(runs, incoming),
+      previous.agentRuns,
+    );
+    return {
+      ...message,
+      executionId: message.executionId ?? previous.executionId,
+      agentRuns,
+    };
+  });
   if (!preservedMessages?.length) {
     return messages;
   }
@@ -687,6 +708,7 @@ function getStreamEventErrorMessage(
 
 type PersistedChatMessage = ChatMessage &
   MessageMetadataContainer & {
+    agentRuns?: unknown;
     attachments?: unknown;
     fileAssets?: unknown;
     followUpMode?: FollowUpBehavior;
@@ -780,6 +802,11 @@ function mapChatMessageToUiMessage(
   const attachments = normalizeMessageFiles(message.attachments);
   const fileAssets = normalizeMessageFiles(message.fileAssets);
   const taskSummary = normalizeTaskSummaryContribution(message.taskSummary);
+  const agentRuns = Array.isArray(message.agentRuns)
+    ? message.agentRuns
+        .map((run) => normalizeAgentRunInfo(run))
+        .filter((run): run is AgentRunInfo => Boolean(run))
+    : [];
 
   return {
     id: message.id ?? createMessageId(),
@@ -788,6 +815,7 @@ function mapChatMessageToUiMessage(
     ...(typeof message.status === 'string' ? { status: message.status } : {}),
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
+    ...(agentRuns.length ? { agentRuns } : {}),
     ...(message.createdAt ? { createdAt: message.createdAt } : {}),
     ...(message.updatedAt ? { updatedAt: message.updatedAt } : {}),
     ...(references.length > 0 ? { references } : {}),

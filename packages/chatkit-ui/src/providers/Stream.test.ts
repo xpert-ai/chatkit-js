@@ -41,6 +41,34 @@ import {
   withConversationScope,
 } from './Stream';
 
+describe('historical external assistant executions', () => {
+  it('keeps live execution metadata when the final conversation snapshot omits it', () => {
+    let state: import('./Stream').StateType = { messages: [{ id: 'a', type: 'ai', executionId: 'root', content: '',
+      agentRuns: [{ id: 'external', parentId: 'root', invocationKind: 'external_assistant', model: 'model-a', status: 'success' }],
+    }] };
+    const setValues: React.Dispatch<React.SetStateAction<import('./Stream').StateType>> = (update) => {
+      state = typeof update === 'function' ? update(state) : update;
+    };
+    applyStreamEvent({ event: 'message', data: JSON.stringify({ type: ChatMessageTypeEnum.EVENT,
+      event: ChatMessageEventTypeEnum.ON_CONVERSATION_END,
+      data: { messages: [{ id: 'a', type: 'ai', content: [{ type: 'text', text: 'Final output', executionId: 'external' }] }] },
+    }) }, setValues, vi.fn(), vi.fn(), [], createLangGraphEventState());
+    expect(state.messages[0].agentRuns?.[0]).toMatchObject({ invocationKind: 'external_assistant', status: 'success', model: 'model-a' });
+    expect(state.messages[0].executionId).toBe('root');
+    expect(state.messages[0].content).toEqual([{ type: 'text', text: 'Final output', executionId: 'external' }]);
+  });
+
+  it('restores explicit execution identity, status and model alongside message content', () => {
+    const message = { id: 'message-1', role: 'ai', executionId: 'root', status: 'success',
+      content: [{ type: 'text', text: 'review result', executionId: 'external-1' }],
+      agentRuns: [{ id: 'external-1', parentId: 'root', invocationKind: 'external_assistant', xpertId: 'reviewer', model: 'model-a', status: 'success' }],
+    };
+    const page = normalizeConversationMessagesPage({ items: [message] });
+    expect(page.messages[0].agentRuns).toEqual([expect.objectContaining({ id: 'external-1', invocationKind: 'external_assistant', xpertId: 'reviewer', model: 'model-a', status: 'success' })]);
+    expect(page.messages[0].content).toEqual(message.content);
+  });
+});
+
 describe('assistant thread creation', () => {
   it('binds generated threads to the current assistant', () => {
     expect(createAssistantThreadPayload('assistant-1')).toEqual({

@@ -119,7 +119,7 @@ describe('App', () => {
 
     expect(screen.getByTestId('stream-provider')).toBeInTheDocument();
     expect(screen.getByTestId('chat')).toBeInTheDocument();
-    expect(screen.queryByTestId('workbench-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId('workbench-shell')).toBeInTheDocument();
     expect(StreamProvider).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: undefined,
@@ -162,7 +162,15 @@ describe('App', () => {
     );
   });
 
-  it('mounts the workbench shell only when explicitly enabled', () => {
+  it('mounts the workbench shell for native external assistants by default', () => {
+    const { rerender } = render(<App clientSecret="secret" options={options} />);
+    expect(screen.getByTestId('workbench-shell')).toBeInTheDocument();
+    rerender(<App clientSecret="secret" options={{ ...options, workbench: { externalAssistants: { enabled: false } } }} />);
+    expect(screen.queryByTestId('workbench-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chat')).toBeInTheDocument();
+  });
+
+  it('mounts the workbench shell when remote views are enabled', () => {
     render(
       <App
         clientSecret="secret"

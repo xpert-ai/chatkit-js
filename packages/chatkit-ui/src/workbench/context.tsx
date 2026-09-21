@@ -18,9 +18,11 @@ export type WorkbenchContextValue = {
   toggle: () => void;
   sideChatEnabled: boolean;
   askInSideChat: (reference: ChatKitReference) => Promise<void>;
+  externalAssistantsEnabled?: boolean;
+  openExternalAssistant?: (executionId: string) => void;
 };
 
-export const WorkbenchContext = React.createContext<WorkbenchContextValue>({
+export const disabledWorkbenchContext: WorkbenchContextValue = {
   enabled: false,
   open: false,
   loading: false,
@@ -28,7 +30,10 @@ export const WorkbenchContext = React.createContext<WorkbenchContextValue>({
   toggle: () => undefined,
   sideChatEnabled: false,
   askInSideChat: async () => undefined,
-});
+};
+export const WorkbenchContext = React.createContext<WorkbenchContextValue>(
+  disabledWorkbenchContext,
+);
 
 export function useWorkbench() {
   return React.useContext(WorkbenchContext);

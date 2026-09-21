@@ -506,6 +506,8 @@ export type ChatKitWorkbenchClientCommandRequest = {
 };
 
 export type ChatKitWorkbenchOptions = {
+  /** Show external Assistant executions in a native workbench tab. Enabled by default. */
+  externalAssistants?: { enabled?: boolean };
   /**
    * Enables the right-side Xpert Remote Views workbench.
    *
