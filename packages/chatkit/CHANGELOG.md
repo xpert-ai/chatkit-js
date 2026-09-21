@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.5.10
+
+### Patch Changes
+
+- ba90709: external assistant
+
 ## 0.5.9
 
 ### Patch Changes
