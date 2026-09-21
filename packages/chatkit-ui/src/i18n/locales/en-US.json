@@ -188,7 +188,22 @@
       "namePlaceholder": "Project name",
       "loading": "Loading projects...",
       "empty": "No projects available",
-      "loadError": "Failed to load projects. Try again later."
+      "loadError": "Failed to load projects. Try again later.",
+      "application": "Application",
+      "type": "Project type",
+      "allApplications": "All applications",
+      "allTypes": "All types",
+      "unclassified": "Unclassified",
+      "display": "Project view",
+      "grouped": "By type",
+      "recent": "Recently updated",
+      "clearFilter": "Clear type filter",
+      "filterType": "Show only projects of this type",
+      "loaded": "Loaded {{count}} / {{total}}",
+      "loadMore": "Load more",
+      "retry": "Retry",
+      "loadMoreError": "Could not load more projects. Loaded projects are still available.",
+      "filters": "Filter application and type"
     },
     "connectors": {
       "search": "Search connectors",

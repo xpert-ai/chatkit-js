@@ -1,3 +1,4 @@
+import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import {
   ArrowDown,
@@ -213,7 +214,8 @@ export type ChatProps = {
   projectsEnabled?: boolean;
   connectorsEnabled?: boolean;
   onProjectChange?: (projectId: string | null) => void;
-  onProjectCreate?: (name: string) => void;
+  onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
+  onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
   onConnectorsChange?: (connectorBindingIds: string[]) => void;
 };
 
@@ -584,6 +586,7 @@ export function Chat({
   connectorsEnabled = false,
   onProjectChange,
   onProjectCreate,
+  onProjectTypeCreate,
   onConnectorsChange,
 }: ChatProps) {
   const { t, i18n } = useChatkitTranslation();
@@ -4823,6 +4826,7 @@ export function Chat({
                       onAvailabilityChange={setHasSelectableProjects}
                       onProjectChange={handleProjectSelectionChange}
                       onProjectCreate={onProjectCreate}
+                      onProjectTypeCreate={onProjectTypeCreate}
                     />
                   ) : null}
                 </div>
