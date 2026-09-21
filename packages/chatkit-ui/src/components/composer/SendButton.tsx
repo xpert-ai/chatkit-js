@@ -1,4 +1,4 @@
-import { ArrowUp, Square } from 'lucide-react';
+import { ArrowUp, Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
@@ -11,8 +11,13 @@ export type SendButtonProps = {
   disabled?: boolean;
   isLoading?: boolean;
   showStop?: boolean;
+  stopDisabled?: boolean;
   onStop?: () => void;
   stopLabel?: string;
+  showResume?: boolean;
+  resumeDisabled?: boolean;
+  onResume?: () => void;
+  resumeLabel?: string;
   sendLabel?: string;
   shortcuts?: SendButtonShortcut[];
 };
@@ -21,25 +26,35 @@ export function SendButton({
   disabled = false,
   isLoading = false,
   showStop = isLoading,
+  stopDisabled = false,
   onStop,
   stopLabel = 'Stop',
+  showResume = false,
+  resumeDisabled = false,
+  onResume,
+  resumeLabel = 'Resume',
   sendLabel = 'Send',
   shortcuts,
 }: SendButtonProps) {
-  if (showStop) {
+  if (showStop || showResume) {
+    const label = showStop ? stopLabel : resumeLabel;
+    const Icon = showStop ? Square : Play;
     return (
       <button
         type="button"
-        onClick={onStop}
+        onClick={showStop ? onStop : onResume}
+        disabled={showStop ? stopDisabled : resumeDisabled}
         className={cn(
           'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full',
           'bg-foreground text-background',
           'transition-transform duration-150 ease-out',
           'hover:scale-105 active:scale-95',
+          'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100',
         )}
-        aria-label={stopLabel}
+        aria-label={label}
+        title={label}
       >
-        <Square
+        <Icon
           size={14}
           fill="currentColor"
           stroke="currentColor"

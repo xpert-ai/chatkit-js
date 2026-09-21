@@ -255,9 +255,11 @@ function ShellCopyButton({
 function SandboxShellStatus({
   data,
   exitCode,
+  isPaused,
 }: {
   data: ShellStepData;
   exitCode: number | null;
+  isPaused?: boolean;
 }) {
   const { t } = useChatkitTranslation();
 
@@ -265,6 +267,14 @@ function SandboxShellStatus({
     return (
       <span className="text-muted-foreground/90">
         {t('message.toolGroup.shell.exitCode', { code: exitCode })}
+      </span>
+    );
+  }
+
+  if (isPaused && data.status === 'running') {
+    return (
+      <span className="text-muted-foreground/90">
+        {t('message.toolGroup.shell.paused')}
       </span>
     );
   }
@@ -293,7 +303,13 @@ function SandboxShellStatus({
   );
 }
 
-export function SandboxShellToolCallCard({ data }: { data: ShellStepData }) {
+export function SandboxShellToolCallCard({
+  data,
+  isPaused,
+}: {
+  data: ShellStepData;
+  isPaused?: boolean;
+}) {
   const { i18n } = useChatkitTranslation();
   const command = getSandboxShellCommand(data, i18n.language);
   const formattedCommand = formatShellCommand(command);
@@ -358,7 +374,7 @@ export function SandboxShellToolCallCard({ data }: { data: ShellStepData }) {
           SANDBOX_SHELL_TEXT_CLASS,
         )}
       >
-        <SandboxShellStatus data={data} exitCode={exitCode} />
+        <SandboxShellStatus data={data} exitCode={exitCode} isPaused={isPaused} />
       </div>
     </div>
   );

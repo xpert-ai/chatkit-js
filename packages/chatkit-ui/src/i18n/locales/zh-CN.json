@@ -575,6 +575,7 @@
       "shell": {
         "success": "成功",
         "running": "运行中",
+        "paused": "已暂停",
         "failed": "失败",
         "exitCode": "退出码 {{code}}",
         "ranCommand": "已运行 {{command}}",
@@ -610,6 +611,28 @@
           "other": "{{count}} 个工具调用"
         }
       }
+    }
+  },
+  "threadControl": {
+    "branch": "历史分支",
+    "branchNumber": "分支 {{number}}",
+    "pause": "暂停流程",
+    "resume": "恢复流程",
+    "cancelRun": "停止任务",
+    "pausing": "正在保存并暂停…",
+    "paused": "流程已暂停",
+    "editMessage": "编辑消息",
+    "sourcePauseUnavailable": "原任务暂不支持暂停，请在任务完成后重试。",
+    "discardEdit": "取消",
+    "saveBranch": "发送",
+    "status": {
+      "busy": "运行中",
+      "pausing": "正在暂停",
+      "paused": "已暂停",
+      "idle": "空闲",
+      "interrupted": "等待处理",
+      "error": "出错",
+      "running": "运行中"
     }
   }
 }
