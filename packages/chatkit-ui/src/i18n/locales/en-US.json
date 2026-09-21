@@ -34,6 +34,15 @@
       "requestFailed": "The remote view request failed.",
       "requestTimeout": "The remote view request timed out.",
       "clientCommandUnavailable": "No handler is configured for client command {{commandKey}}."
+    },
+    "externalAssistants": {
+      "title": "External assistants",
+      "openRun": "View execution: {{name}}",
+      "back": "Back to executions",
+      "close": "Close external assistants",
+      "empty": "No external assistant executions in this conversation.",
+      "noMessages": "No messages yet.",
+      "unavailable": "This execution is no longer available in the current conversation."
     }
   },
   "chat": {

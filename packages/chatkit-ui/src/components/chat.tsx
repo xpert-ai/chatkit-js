@@ -4,7 +4,6 @@ import {
   ArrowDown,
   ChevronDown,
   FileText,
-  ImageIcon,
   Loader2,
   MessageSquarePlus,
   Minus,
@@ -20,8 +19,6 @@ import {
 
 import type {
   AssistantModelsResponse,
-  ChatMessageInputCheckpoint,
-  Message,
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
 import type {
@@ -47,10 +44,7 @@ import {
   getMenuItemRoundedClass,
   getPanelRoundedClass,
 } from '../lib/utils';
-import {
-  getAssistantStreamingStatus,
-  hasRenderableAssistantMessage,
-} from '../lib/message';
+import { getAssistantStreamingStatus } from '../lib/message';
 import { isNearBottom } from '../lib/scroll';
 import { type AgentFile, type StorageFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
@@ -83,16 +77,11 @@ import {
   type ChatAttachmentsState,
 } from './chat/attachments';
 import { UploadDroppedFiles } from './chat/upload-dropped-files';
-import { getVisibleHumanAttachments } from './chat/message-files';
+import { ReferenceChip } from './chat/ReferenceChip';
 import { usePetAutoState } from './chat/usePetAutoState';
 import { useSlashCommands } from './chat/useSlashCommands';
-import {
-  AssistantMessage,
-  AssistantStreamingIndicator,
-} from './thread/messages/ai';
+import { MessageList, type HumanMessageWithMeta } from './thread/MessageList';
 import { MessageNavigator } from './thread/MessageNavigator';
-import { MessageActions } from './thread/MessageActions';
-import { MessageEditor } from './thread/MessageEditor';
 import { useThreadBranches } from '../hooks/useThreadBranches';
 import { StartScreen } from './thread/StartScreen';
 import { StarterPromptSuggestions } from './composer/StarterPromptSuggestions';
@@ -111,9 +100,6 @@ import { buildInjectedRequestOptions } from '../lib/request-options';
 import {
   buildHumanMessageInputPayload,
   getReferenceKey,
-  getReferenceLabel,
-  getReferenceMetaLine,
-  getReferenceTitle,
   mergeReferences,
   normalizeReferences,
   type ComposerValuePayload,
@@ -140,7 +126,6 @@ import {
   type PetLocalSettings,
 } from './pet/pet-local-settings';
 import {
-  getRecommendedRuntimeCapabilitiesSelection,
   type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
 } from '../lib/runtime-capabilities';
@@ -172,9 +157,7 @@ import { hasSelectedRuntimeSlashCommand } from '../lib/slash-commands';
 import { WorkbenchToggleButton, useWorkbench } from '../workbench/context';
 import {
   ComposerCapabilityToken,
-  HumanRuntimeCapabilityChips,
   getRemovedComposerCapabilityParts,
-  getRuntimeCapabilityOptionsForSelection,
   getRuntimeCapabilityPaletteEmptyLabelKey,
   removeComposerCapabilityPartsFromSelection,
   useRuntimeCapabilitiesState,
@@ -182,7 +165,6 @@ import {
 } from './chat/runtime-capabilities';
 import {
   buildMessageNavigationItems,
-  getMessageNavigationItemId,
   MESSAGE_NAVIGATION_MIN_ITEMS,
   type MessageNavigationItem,
   type MessageNavigationLabels,
@@ -256,22 +238,6 @@ function formatGoalElapsed(seconds: number): string {
   const remainingSeconds = seconds % 60;
   return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
 }
-
-type UploadedMessageFile = ChatAttachmentFile;
-
-type HumanMessageWithMeta = Message & {
-  attachments?: UploadedMessageFile[];
-  fileAssets?: UploadedMessageFile[];
-  references?: ChatKitReference[];
-  submittedInput?: string;
-  referenceComposition?: ChatKitReferenceCompositionMode;
-  runtimeCapabilities?: RuntimeCapabilitiesSelection;
-  runtimeCapabilityOptions?: RuntimeCapabilityOption[];
-  model?: string;
-  followUpMode?: FollowUpBehavior;
-  /** `null`: the server has no saved input checkpoint, so the message cannot be branched. */
-  inputCheckpoint?: ChatMessageInputCheckpoint | null;
-};
 
 type QuoteSelectionState = {
   reference: ChatKitReference;
@@ -408,35 +374,6 @@ function buildPastedImageReference(
   };
 }
 
-function formatMessageContent(content: Message['content'][number]): string {
-  if (typeof content === 'string') {
-    return content;
-  }
-
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') return part;
-        if (part && typeof part === 'object' && 'text' in part) {
-          const textValue = (part as { text?: unknown }).text;
-          return typeof textValue === 'string' ? textValue : '';
-        }
-        return '';
-      })
-      .join('');
-  }
-
-  if (content == null) return '';
-
-  // Handle object with text property (e.g., {"type":"text","text":"..."})
-  if (typeof content === 'object' && 'text' in content) {
-    const textValue = (content as { text?: unknown }).text;
-    return typeof textValue === 'string' ? textValue : '';
-  }
-
-  return '';
-}
-
 function getClosestQuoteContainer(node: Node | null): HTMLElement | null {
   if (!node) {
     return null;
@@ -450,83 +387,6 @@ function getClosestQuoteContainer(node: Node | null): HTMLElement | null {
         : null;
 
   return element?.closest('[data-quote-message-id]') ?? null;
-}
-
-function ReferenceChip({
-  reference,
-  variant,
-  onRemove,
-  removeLabel,
-}: {
-  reference: ChatKitReference;
-  variant: 'composer' | 'message';
-  onRemove?: () => void;
-  removeLabel?: string;
-}) {
-  const metaLine = getReferenceMetaLine(reference);
-  const isComposer = variant === 'composer';
-  const Icon =
-    reference.type === 'quote'
-      ? Quote
-      : reference.type === 'image'
-        ? ImageIcon
-        : FileText;
-
-  return (
-    <div
-      className={cn(
-        'flex items-start gap-2 rounded-md px-2 py-1',
-        isComposer ? 'bg-muted text-foreground' : 'bg-primary-foreground/20',
-      )}
-      title={getReferenceTitle(reference)}
-    >
-      <Icon
-        size={isComposer ? 14 : 12}
-        className={cn(
-          'mt-0.5 shrink-0',
-          isComposer ? 'text-muted-foreground' : 'text-primary-foreground/80',
-        )}
-      />
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            'truncate whitespace-pre-wrap',
-            isComposer ? 'text-sm' : 'text-xs font-medium',
-          )}
-        >
-          {getReferenceLabel(reference)}
-        </div>
-        {metaLine && (
-          <div
-            className={cn(
-              'truncate whitespace-pre-wrap',
-              isComposer
-                ? 'text-xs text-muted-foreground'
-                : 'text-[10px] text-primary-foreground/75',
-            )}
-          >
-            {metaLine}
-          </div>
-        )}
-      </div>
-      {onRemove && removeLabel && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className={cn(
-            'ml-1 rounded-full p-0.5',
-            isComposer
-              ? 'hover:bg-muted-foreground/20'
-              : 'hover:bg-primary-foreground/20',
-          )}
-          title={removeLabel}
-          aria-label={removeLabel}
-        >
-          <X size={12} />
-        </button>
-      )}
-    </div>
-  );
 }
 
 function WorkspaceFileChip({
@@ -3852,312 +3712,42 @@ export function Chat({
               className="px-4 pb-4 pt-2"
             />
           ) : (
-            <div className="space-y-4">
-              {canLoadMoreMessages && (
-                <div className="flex items-center gap-3 py-1">
-                  <div className="h-px min-w-8 flex-1 bg-border" />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleLoadMoreMessages}
-                    disabled={isLoadingMoreMessages}
-                    className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-                  >
-                    {isLoadingMoreMessages
-                      ? t('chat.loadingMoreMessages')
-                      : t('chat.loadMoreMessages')}
-                  </Button>
-                  <div className="h-px min-w-8 flex-1 bg-border" />
-                </div>
-              )}
-              {messages.map((message, index) => {
-                const messageType = String(message.type);
-                const isAssistantMessage =
-                  messageType === 'assistant' || messageType === 'ai';
-                const isStreamingMessage =
-                  isVisibleStreaming && index === messages.length - 1;
-                const streamingStatus = isAssistantMessage
-                  ? getAssistantStreamingStatus(
-                      {
-                        ...(message as ChatkitMessage),
-                        lastStreamOutputAt: lastStreamOutputAtRef.current,
-                      },
-                      isStreamingMessage,
-                      { now: streamingNow },
-                    )
-                  : null;
-
-                if (
-                  isAssistantMessage &&
-                  !hasRenderableAssistantMessage(message as ChatkitMessage) &&
-                  !streamingStatus
-                ) {
-                  return null;
-                }
-
-                const messageContent =
-                  typeof message.content === 'string'
-                    ? message.content
-                    : Array.isArray(message.content)
-                      ? message.content
-                          .map((part) => formatMessageContent(part as any))
-                          .join('')
-                      : formatMessageContent(message.content);
-                const hasPlainRenderableContent =
-                  messageContent.trim().length > 0;
-                const humanMessage = message as HumanMessageWithMeta;
-                const humanReferences = humanMessage.references ?? [];
-                const humanAttachments = getVisibleHumanAttachments(
-                  [
-                    ...(humanMessage.fileAssets ?? []),
-                    ...(humanMessage.attachments ?? []),
-                  ],
-                  humanReferences,
-                );
-                const humanRuntimeCapabilityOptions =
-                  message.type === 'human'
-                    ? (humanMessage.runtimeCapabilityOptions ??
-                      getRuntimeCapabilityOptionsForSelection(
-                        getRecommendedRuntimeCapabilitiesSelection(
-                          humanMessage.runtimeCapabilities,
-                        ),
-                        runtimeCapabilityOptions,
-                      ))
-                    : [];
-                const hasHumanAttachments =
-                  message.type === 'human' && humanAttachments.length > 0;
-                const canQuoteMessage =
-                  message.type === 'human' || isAssistantMessage;
-                const isEditingMessage =
-                  Boolean(message.id) && editingMessageId === message.id;
-                // `null` is the server's explicit "no saved input checkpoint"; local
-                // sends have not been acknowledged yet and stay editable.
-                const canEditMessage =
-                  message.type === 'human' &&
-                  Boolean(branchState.current) &&
-                  Boolean(message.id) &&
-                  humanMessage.inputCheckpoint !== null &&
-                  !humanMessage.followUpMode &&
-                  !isChangingBranch;
-                const quoteSource =
-                  message.type === 'human'
-                    ? t('chat.youLabel')
-                    : assistantTitle;
-                const messageNavigationId = getMessageNavigationItemId(
-                  message as MessageNavigationSourceMessage,
-                  index,
-                );
-
-                if (
-                  !isAssistantMessage &&
-                  !hasPlainRenderableContent &&
-                  !hasHumanAttachments &&
-                  humanRuntimeCapabilityOptions.length === 0 &&
-                  humanReferences.length === 0
-                ) {
-                  return null;
-                }
-
-                return (
-                  <div
-                    key={message.id ?? `${message.type}-${index}`}
-                    ref={(node) =>
-                      setMessageNavigationAnchor(messageNavigationId, node)
-                    }
-                    data-message-navigation-id={messageNavigationId}
-                    className={cn(
-                      'group flex gap-3',
-                      message.type === 'human'
-                        ? 'justify-end'
-                        : 'justify-start -ml-1', // AI messages: slightly closer to left
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        'flex flex-col px-3 overflow-hidden',
-                        (isAssistantMessage || isEditingMessage) &&
-                          'min-w-0 flex-1',
-                      )}
-                    >
-                      {isEditingMessage ? (
-                        <MessageEditor
-                          key={message.id}
-                          initialText={
-                            typeof message.content === 'string'
-                              ? message.content
-                              : messageContent
-                          }
-                          onCancel={() => setEditingMessageId(null)}
-                          onSave={(text) => saveEditedMessage(message, text)}
-                        />
-                      ) : (
-                      <>
-                      <div
-                        {...(canQuoteMessage
-                          ? {
-                              'data-quote-message-id': message.id,
-                              'data-quote-source': quoteSource,
-                            }
-                          : {})}
-                        className={cn(
-                          'max-w-full rounded-2xl',
-                          message.type === 'human'
-                            ? 'bg-primary text-primary-foreground px-4 py-2.5'
-                            : message.type === 'system'
-                              ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
-                              : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
-                        )}
-                      >
-                        {isAssistantMessage ? (
-                          <AssistantMessage
-                            message={{
-                              ...(message as ChatkitMessage),
-                              type: 'assistant',
-                            }}
-                            messages={messages.slice(0, index + 1).map(
-                              (item) =>
-                                ({
-                                  ...(item as ChatkitMessage),
-                                  type:
-                                    String(item.type) === 'ai'
-                                      ? 'assistant'
-                                      : item.type,
-                                }) as ChatkitMessage,
-                            )}
-                            isStreaming={isStreamingMessage}
-                            streamingStatus={streamingStatus}
-                            isThreadRunning={currentThreadIsRunning}
-                            isThreadPaused={isPauseActive}
-                            organizationId={stream.organizationId}
-                            apiUrl={stream.apiUrl}
-                            pet={effectivePet}
-                            mcpApps={options?.mcpApps}
-                          />
-                        ) : (
-                          <>
-                            {message.type === 'human' &&
-                              humanRuntimeCapabilityOptions.length > 0 && (
-                                <HumanRuntimeCapabilityChips
-                                  options={humanRuntimeCapabilityOptions}
-                                />
-                              )}
-                            {message.type === 'human' &&
-                              humanReferences.length > 0 && (
-                                <div className="mb-2 flex flex-wrap gap-1.5">
-                                  {humanReferences.map((reference) => (
-                                    <ReferenceChip
-                                      key={getReferenceKey(reference)}
-                                      reference={reference}
-                                      variant="message"
-                                    />
-                                  ))}
-                                </div>
-                              )}
-                            {/* Show attachments for human messages */}
-                            {message.type === 'human' &&
-                              humanAttachments.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mb-2">
-                                  {humanAttachments.map((file, fileIndex) => (
-                                    <div
-                                      key={fileIndex}
-                                      className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
-                                    >
-                                      <FileText size={12} />
-                                      <span className="max-w-[100px] truncate">
-                                        {file.originalName ?? file.id}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            {Array.isArray(message.content) ? (
-                              message.content.map((part, partIndex) => (
-                                <p
-                                  key={`${part.type}-${partIndex}`}
-                                  className="wrap-break-word text-sm leading-relaxed"
-                                >
-                                  {formatMessageContent(part as any)}
-                                </p>
-                              ))
-                            ) : (
-                              <span className="wrap-break-word text-sm leading-relaxed">
-                                {formatMessageContent(message.content)}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      {/* Message actions - hidden during streaming, retry only for last AI message */}
-                      <MessageActions
-                        content={messageContent}
-                        isAssistant={isAssistantMessage}
-                        isStreaming={isStreamingMessage}
-                        onEdit={
-                          canEditMessage
-                            ? () => {
-                                editRequestRef.current = null;
-                                setEditingMessageId(message.id ?? null);
-                              }
-                            : undefined
-                        }
-                        onRetry={
-                          isAssistantMessage &&
-                          branchState.current?.status !== 'paused' &&
-                          branchState.current?.status !== 'pausing' &&
-                          !stream.isLoading &&
-                          index === messages.length - 1
-                            ? () => handleRetry(index)
-                            : undefined
-                        }
-                      />
-                      </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {/* Show loading indicator with minimum display time */}
-              {showLoadingDots &&
-                !stream.isDisplayPaused &&
-                (() => {
-                  const lastMessage = messages[messages.length - 1];
-                  const lastMessageType = lastMessage
-                    ? String(lastMessage.type)
-                    : '';
-                  const isLastMessageFromAI =
-                    lastMessageType === 'ai' || lastMessageType === 'assistant';
-                  const lastAssistantStatus = isLastMessageFromAI
-                    ? getAssistantStreamingStatus(
-                        {
-                          ...(lastMessage as ChatkitMessage),
-                          lastStreamOutputAt: lastStreamOutputAtRef.current,
-                        },
-                        stream.isLoading,
-                        { now: streamingNow },
-                      )
-                    : null;
-                  if (lastAssistantStatus) return null;
-                  const fallbackStreamingStatus = getAssistantStreamingStatus(
-                    {
-                      status: undefined,
-                      reasoning: undefined,
-                      lastStreamOutputAt: lastStreamOutputAtRef.current,
-                    },
-                    stream.isLoading,
-                    { now: streamingNow },
-                  );
-                  return (
-                    <div className="flex justify-start gap-3 -ml-2">
-                      <div className="max-w-full rounded-2xl py-2.5">
-                        <AssistantStreamingIndicator
-                          status={fallbackStreamingStatus ?? 'loading'}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-            </div>
+            <MessageList
+              messages={messages}
+              assistantTitle={assistantTitle}
+              isLoading={isVisibleStreaming}
+              isThreadRunning={currentThreadIsRunning}
+              isThreadPaused={isPauseActive}
+              lastStreamOutputAt={lastStreamOutputAtRef.current}
+              streamingNow={streamingNow}
+              showLoadingDots={showLoadingDots && !stream.isDisplayPaused}
+              organizationId={stream.organizationId}
+              apiUrl={stream.apiUrl}
+              pet={effectivePet}
+              mcpApps={options?.mcpApps}
+              runtimeCapabilityOptions={runtimeCapabilityOptions}
+              canLoadMoreMessages={canLoadMoreMessages}
+              isLoadingMoreMessages={isLoadingMoreMessages}
+              onLoadMore={handleLoadMoreMessages}
+              onRetry={
+                branchState.current?.status !== 'paused' &&
+                branchState.current?.status !== 'pausing' &&
+                !stream.isLoading
+                  ? handleRetry
+                  : undefined
+              }
+              editing={{
+                messageId: editingMessageId,
+                enabled: Boolean(branchState.current) && !isChangingBranch,
+                onStart: (messageId) => {
+                  editRequestRef.current = null;
+                  setEditingMessageId(messageId);
+                },
+                onCancel: () => setEditingMessageId(null),
+                onSave: saveEditedMessage,
+              }}
+              onMessageAnchor={setMessageNavigationAnchor}
+            />
           )}
         </div>
 

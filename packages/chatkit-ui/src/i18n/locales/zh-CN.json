@@ -34,6 +34,15 @@
       "requestFailed": "远程视图请求失败。",
       "requestTimeout": "远程视图请求超时。",
       "clientCommandUnavailable": "未配置客户端命令 {{commandKey}} 的处理器。"
+    },
+    "externalAssistants": {
+      "title": "外部助手",
+      "openRun": "查看执行：{{name}}",
+      "back": "返回执行列表",
+      "close": "关闭外部助手",
+      "empty": "此会话暂无外部助手执行。",
+      "noMessages": "暂无消息。",
+      "unavailable": "当前会话中已无法找到此执行。"
     }
   },
   "chat": {

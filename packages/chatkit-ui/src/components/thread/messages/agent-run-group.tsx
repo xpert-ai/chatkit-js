@@ -153,7 +153,7 @@ function MiddlewareEventRow({ content }: { content: AgentEventContent }) {
   );
 }
 
-function formatStepDuration(durationMs: number): string {
+export function formatStepDuration(durationMs: number): string {
   if (durationMs < 1_000) {
     return `${durationMs}ms`;
   }
@@ -177,7 +177,7 @@ function formatStepDuration(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-function getAgentRunStatusConfig(status?: string | null, hasReply = false) {
+export function getAgentRunStatusConfig(status?: string | null, hasReply = false) {
   const normalized = normalizeRunStatus(status);
   if (normalized === 'running') {
     return {
@@ -252,7 +252,7 @@ function AgentRunHeaderMetric({
   );
 }
 
-function getAgentNodeUnits(node: AgentRunRenderNode): AssistantRenderUnit[] {
+export function getAgentNodeUnits(node: AgentRunRenderNode): AssistantRenderUnit[] {
   return [
     ...node.entries.map((entry) => ({
       type: 'entry' as const,

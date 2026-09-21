@@ -34,6 +34,7 @@ export function App({
   const locale = options?.locale;
   const requestLocale = locale ?? getLanguage();
   const workbenchEnabled =
+    options?.workbench?.externalAssistants?.enabled !== false ||
     options?.workbench?.enabled === true ||
     options?.workbench?.sideChat?.enabled === true;
   const hostedApi =

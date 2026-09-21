@@ -5,10 +5,12 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
+import type { StateType } from '../providers/Stream';
 
 const mocks = vi.hoisted(() => ({
   listSlotViews: vi.fn(),
@@ -55,6 +57,7 @@ const mocks = vi.hoisted(() => ({
     organizationId: 'organization-1',
     threadId: 'thread-1',
     isLoading: false,
+    messages: [] as StateType['messages'],
     submit: vi.fn(),
   },
 }));
@@ -104,6 +107,25 @@ import {
   useWorkbench,
 } from './WorkbenchShell';
 import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './SideChatCloseDialog';
+import { AssistantMessage } from '../components/thread/messages/ai';
+import { toWorkbenchMessages } from './external-assistant-runs';
+import { ThemeProvider } from '../providers/Theme';
+
+function ExternalTranscript() {
+  return <>{toWorkbenchMessages(mocks.stream.messages).map((message) =>
+    <AssistantMessage key={message.id} message={{ ...message, type: 'assistant' }} />)}</>;
+}
+
+function externalMessages(text = 'External response'): StateType['messages'] {
+  return [{ id: 'message-1', type: 'ai', executionId: 'root', content: [
+    { type: 'text', text: 'Main response' },
+    { type: 'text', text, executionId: 'external-1', parentExecutionId: 'root' },
+    { type: 'text', text: 'Unchanged sub-agent output', executionId: 'sub-1', parentExecutionId: 'root' },
+  ], agentRuns: [
+    { id: 'external-1', parentId: 'root', invocationKind: 'external_assistant', title: 'External review', model: 'model-review', status: 'running' },
+    { id: 'sub-1', parentId: 'root', invocationKind: 'sub_agent', title: 'Internal reviewer', status: 'running' },
+  ] }];
+}
 
 const manifest: XpertExtensionViewManifest = {
   key: 'provider__documents',
@@ -160,8 +182,131 @@ describe('WorkbenchShell', () => {
     mocks.sideChatUnmounts = 0;
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
+    mocks.stream.messages = [];
+    mocks.stream.threadId = 'thread-1';
     window.localStorage.removeItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY);
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+  });
+
+  it('moves only external output into a live native tab and reopens it without creating a thread', () => {
+    mocks.stream.messages = externalMessages();
+    const onContext = vi.fn();
+    const tree = () => <WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={onContext}><ExternalTranscript /></WorkbenchShell>;
+    const { rerender } = render(tree());
+    expect(screen.getByText('Main response')).toBeInTheDocument();
+    expect(screen.getByText('Unchanged sub-agent output')).toBeInTheDocument();
+    expect(screen.queryByText('External response')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    expect(screen.getByRole('tab', { name: 'External assistants' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('External response')).toBeInTheDocument();
+    expect(screen.getByText('model-review')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    expect(screen.getAllByRole('tab', { name: 'External assistants' })).toHaveLength(1);
+    mocks.stream.messages = externalMessages('External response updated');
+    rerender(tree());
+    expect(screen.getByText('External response updated')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close external assistants' }));
+    expect(screen.queryByText('External response updated')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    expect(screen.getByText('External response updated')).toBeInTheDocument();
+    expect(mocks.copyThread).not.toHaveBeenCalled();
+    expect(mocks.listSlotViews).not.toHaveBeenCalled();
+    mocks.stream.threadId = 'thread-2';
+    mocks.stream.messages = [];
+    rerender(tree());
+    expect(screen.queryByRole('tab', { name: 'External assistants' })).not.toBeInTheDocument();
+  });
+
+  it('keeps native details available while remote views load and after they fail', async () => {
+    mocks.stream.messages = externalMessages();
+    let rejectViews: (reason: Error) => void = () => undefined;
+    mocks.listSlotViews.mockImplementation(() => new Promise((_, reject) => { rejectViews = reject; }));
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>);
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    expect(screen.getByText('External response')).toBeInTheDocument();
+    await act(async () => { rejectViews(new Error('Remote views failed')); });
+    expect(screen.getByRole('tab', { name: 'External assistants' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('External response')).toBeInTheDocument();
+    expect(screen.queryByText('Remote views failed')).not.toBeInTheDocument();
+  });
+
+  it('does not display a null execution error or null input from persisted history', () => {
+    mocks.stream.messages = externalMessages();
+    mocks.stream.messages[0].agentRuns![0] = {
+      ...mocks.stream.messages[0].agentRuns![0], status: 'success', error: null, inputs: null,
+    };
+    render(<WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>);
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    const panel = screen.getByRole('tabpanel', { name: 'External assistants' });
+    expect(within(panel).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('null')).not.toBeInTheDocument();
+    expect(within(panel).getByText('External response')).toBeInTheDocument();
+  });
+
+  it('shows the expert avatar in the call row, execution header and execution list', () => {
+    mocks.stream.messages = externalMessages();
+    mocks.stream.messages[0].agentRuns![0].avatar = { emoji: { id: 'memo', unified: '1f4dd' } };
+    render(<ThemeProvider><WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell></ThemeProvider>);
+    const call = screen.getByRole('button', { name: 'View execution: External review' });
+    expect(within(call).getByText('\u{1f4dd}')).toBeInTheDocument();
+    fireEvent.click(call);
+    const panel = screen.getByRole('tabpanel', { name: 'External assistants' });
+    expect(within(panel).getByText('\u{1f4dd}')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to executions' }));
+    const row = within(panel).getByRole('button', { name: 'View execution: External review' });
+    expect(within(row).getByText('\u{1f4dd}')).toBeInTheDocument();
+  });
+
+  it('uses the shared transcript for input, Markdown, copying and streaming without allowing retry', () => {
+    mocks.stream.messages = externalMessages('**Expert response**');
+    const info = mocks.stream.messages[0].agentRuns![0];
+    info.inputs = { input: 'Review this document' };
+    const tree = () => <WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>;
+    const { rerender } = render(tree());
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    const panel = screen.getByRole('tabpanel', { name: 'External assistants' });
+    const transcript = panel.querySelector('[data-slot="chatkit-message-list"]')! as HTMLElement;
+    expect(within(transcript).getByText('Review this document')).toHaveClass('text-sm');
+    expect(within(transcript).getByText('Expert response').tagName).toBe('STRONG');
+    // Only the input can be copied while the answer is still streaming.
+    expect(within(transcript).getAllByRole('button', { name: 'Copy to clipboard' })).toHaveLength(1);
+    info.status = 'success';
+    mocks.stream.messages = [...mocks.stream.messages];
+    rerender(tree());
+    expect(within(transcript).getAllByRole('button', { name: 'Copy to clipboard' })).toHaveLength(2);
+    expect(within(transcript).queryByRole('button', { name: 'Regenerate response' })).not.toBeInTheDocument();
+    expect(within(panel).queryByText('Main response')).not.toBeInTheDocument();
+    expect(within(panel).queryByText('Unchanged sub-agent output')).not.toBeInTheDocument();
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+
+  it('retains the inline external group when the native feature is disabled', () => {
+    mocks.stream.messages = externalMessages();
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { externalAssistants: { enabled: false } } }} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>);
+    expect(screen.getByText('External response')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View execution: External review' })).not.toBeInTheDocument();
+  });
+
+  it('selects separate executions of the same external assistant from the list', () => {
+    const first = externalMessages();
+    mocks.stream.messages = [...first, { id: 'message-2', type: 'ai', executionId: 'root-2', content: [
+      { type: 'text', text: 'Second execution output', executionId: 'external-2', parentExecutionId: 'root-2' },
+    ], agentRuns: [{ id: 'external-2', parentId: 'root-2', invocationKind: 'external_assistant', title: 'External review', status: 'success' }] }];
+    render(<WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>);
+    fireEvent.click(screen.getAllByRole('button', { name: 'View execution: External review' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to executions' }));
+    const panel = screen.getByRole('tabpanel');
+    fireEvent.click(within(panel).getAllByRole('button', { name: 'View execution: External review' })[1]);
+    expect(within(panel).getByText('Second execution output')).toBeInTheDocument();
+    expect(within(panel).queryByText('External response')).not.toBeInTheDocument();
+  });
+
+  it('opens native execution details in the narrow-screen workbench drawer', () => {
+    mocks.stream.messages = externalMessages();
+    render(<WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>);
+    act(() => mocks.resizeCallback?.([{ contentRect: { width: 720 } } as ResizeObserverEntry], {} as ResizeObserver));
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    expect(within(screen.getByRole('dialog')).getByText('External response')).toBeInTheDocument();
   });
 
   it('does not load or render controls when the option is disabled', () => {

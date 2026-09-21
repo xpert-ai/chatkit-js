@@ -123,6 +123,9 @@ export function hasVisibleAgentRunDetails(info: AgentRunInfo) {
 
 export function getAgentRunTitle(info: AgentRunInfo, fallback?: string) {
   return (
+    (info.invocationKind === 'external_assistant'
+      ? info.xpertName?.trim()
+      : undefined) ||
     info.title?.trim() ||
     info.xpertName?.trim() ||
     info.agentKey?.trim() ||

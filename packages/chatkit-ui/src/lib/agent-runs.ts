@@ -4,6 +4,10 @@ import {
 } from '@xpert-ai/chatkit-types';
 
 import { createMessageId } from './utils';
+import {
+  normalizeChatkitAvatar,
+  type ChatkitAvatarData,
+} from '../components/ui/chatkit-avatar';
 
 export type AgentRunInfo = {
   id: string;
@@ -12,7 +16,11 @@ export type AgentRunInfo = {
   nodeType?: string;
   category?: string;
   agentKey?: string;
+  invocationKind?: 'external_assistant' | 'sub_agent';
+  xpertId?: string;
+  model?: string;
   xpertName?: string;
+  avatar?: ChatkitAvatarData;
   title?: string;
   status?: string;
   elapsedTime?: number;
@@ -145,13 +153,17 @@ export function normalizeAgentRunInfo(
     undefined;
   const xpertName =
     readTrimmedString(value.xpertName) ??
+    (isRecord(value.metadata)
+      ? readTrimmedString(value.metadata.assistantName)
+      : null) ??
     readNestedName(value.agent) ??
     readNestedName(value.xpert);
   const status =
     eventType === ChatMessageEventTypeEnum.ON_AGENT_START
       ? 'running'
       : (readTrimmedString(value.status) ?? undefined);
-  const nodeType = readTrimmedString(value.type);
+  const nodeType =
+    readTrimmedString(value.nodeType) ?? readTrimmedString(value.type);
   const category = readTrimmedString(value.category);
   const agentKey = readTrimmedString(value.agentKey);
   const title = readTrimmedString(value.title);
@@ -161,14 +173,33 @@ export function normalizeAgentRunInfo(
   const updatedAt = readTrimmedString(value.updatedAt);
   const startedAt = readTrimmedString(value.startedAt);
   const endedAt = readTrimmedString(value.endedAt);
+  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const invocationKind = value.invocationKind ?? metadata?.invocationKind;
+  const xpertId =
+    readTrimmedString(value.xpertId) ??
+    (isRecord(value.xpert) ? readTrimmedString(value.xpert.id) : null);
+  const model =
+    readTrimmedString(value.model) ?? readTrimmedString(metadata?.model);
+  const avatar = normalizeChatkitAvatar(
+    value.avatar ??
+      metadata?.assistantAvatar ??
+      (isRecord(value.xpert) ? value.xpert.avatar : undefined),
+  );
 
   return {
     id,
+    ...(invocationKind === 'external_assistant' ||
+    invocationKind === 'sub_agent'
+      ? { invocationKind }
+      : {}),
+    ...(xpertId ? { xpertId } : {}),
+    ...(model ? { model } : {}),
     ...(parentId ? { parentId, parentExecutionId: parentId } : {}),
     ...(nodeType ? { nodeType } : {}),
     ...(category ? { category } : {}),
     ...(agentKey ? { agentKey } : {}),
     ...(xpertName ? { xpertName } : {}),
+    ...(avatar ? { avatar } : {}),
     ...(title ? { title } : {}),
     ...(status ? { status } : {}),
     ...(elapsedTime !== undefined ? { elapsedTime } : {}),
@@ -198,6 +229,7 @@ export function mergeAgentRunInfo(
     category: incoming.category ?? previous.category,
     agentKey: incoming.agentKey ?? previous.agentKey,
     xpertName: incoming.xpertName ?? previous.xpertName,
+    avatar: incoming.avatar ?? previous.avatar,
     title: incoming.title ?? previous.title,
     status: incoming.status ?? previous.status,
     elapsedTime: incoming.elapsedTime ?? previous.elapsedTime,
@@ -206,7 +238,9 @@ export function mergeAgentRunInfo(
   };
 }
 
-export function isMiddlewareAgentRunInfo(info: AgentRunInfo | null | undefined) {
+export function isMiddlewareAgentRunInfo(
+  info: AgentRunInfo | null | undefined,
+) {
   return info?.nodeType?.trim().toLowerCase() === 'middleware';
 }
 
