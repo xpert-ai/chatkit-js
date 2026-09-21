@@ -990,6 +990,17 @@ function getLatestExecutionIdFromMessages(messages: ChatKitAIMessage[]) {
   return null;
 }
 
+function isLiveThreadRunStatus(status: string | undefined | null): boolean {
+  const normalized = String(status ?? '').toLowerCase();
+  return (
+    normalized === 'busy' ||
+    normalized === 'running' ||
+    normalized === 'pausing' ||
+    normalized === 'paused' ||
+    normalized === 'interrupted'
+  );
+}
+
 function getLatestAssistantMessageTarget(messages: ChatKitAIMessage[]) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -2907,7 +2918,14 @@ const StreamSession = ({
         setPausedDisplay(null);
       }
       const latestExecutionId = getLatestExecutionIdFromMessages(page.messages);
-      rememberActiveRunId(latestExecutionId);
+      if (
+        isLiveThreadRunStatus(conversationDetail?.status) &&
+        latestExecutionId
+      ) {
+        rememberActiveRunId(latestExecutionId);
+      } else {
+        rememberActiveRunId(null);
+      }
       if (loadedThreadId) {
         activeThreadIdRef.current = loadedThreadId;
         setThreadId(loadedThreadId);
@@ -3860,8 +3878,13 @@ const StreamSession = ({
         const latestExecutionId = getLatestExecutionIdFromMessages(
           loadedMessages as ChatKitAIMessage[],
         );
-        if (latestExecutionId) {
+        if (
+          isLiveThreadRunStatus(protocolThread?.status) &&
+          latestExecutionId
+        ) {
           rememberActiveRunId(latestExecutionId);
+        } else {
+          rememberActiveRunId(null);
         }
         const hasPendingHITL = !pauseRequestedRef.current && hydratePendingHITLRequestFromOperation(
           protocolThread?.operation !== undefined ? protocolThread.operation : conversationDetail.operation,

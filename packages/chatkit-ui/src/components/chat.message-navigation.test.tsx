@@ -685,4 +685,30 @@ describe('Chat message navigation', () => {
     expect(mocks.stream.loadThread).not.toHaveBeenCalled();
     expect(mocks.stream.submit).not.toHaveBeenCalled();
   });
+
+  it('lets the composer pause the new branch while the edited submit is still streaming', async () => {
+    mocks.stream.submit.mockReturnValue(new Promise<void>(() => undefined));
+    mocks.stream.loadThread.mockImplementation(async (id: string) => {
+      mocks.stream.threadId = id;
+      mocks.stream.activeRunId = 'edited-run';
+      mocks.stream.isLoading = true;
+      mocks.stream.client.conversations.listThreads.mockResolvedValue([
+        {
+          thread_id: id,
+          status: 'busy',
+          runControl: { executionId: 'edited-run', state: 'running' },
+        },
+      ]);
+    });
+    const { rerender } = await editSecondMessage();
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalled());
+    rerender(<Chat options={baseOptions} />);
+    const pause = await screen.findByRole('button', { name: 'threadControl.pause' });
+    expect(pause).not.toBeDisabled();
+    fireEvent.click(pause);
+    await waitFor(() =>
+      expect(mocks.stream.pauseRun).toHaveBeenCalledWith('edited-run'),
+    );
+    expect(mocks.stream.stop).not.toHaveBeenCalled();
+  });
 });

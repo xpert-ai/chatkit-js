@@ -168,6 +168,20 @@ describe('thread history restoration', () => {
     expect(mocks.searchMessages).toHaveBeenCalledTimes(1);
   });
 
+  it('does not treat a completed history execution as the active run on an idle thread', async () => {
+    mocks.getThread.mockResolvedValue({
+      metadata: { id: 'conversation-thread-1' },
+      status: 'idle',
+    });
+    mocks.getConversation.mockResolvedValue({
+      id: 'conversation-thread-1',
+      status: 'idle',
+    });
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.messages).toHaveLength(2));
+    expect(stream.activeRunId).toBeNull();
+  });
+
   it('restores root execution ancestry before displaying a resumed history message', async () => {
     mocks.searchMessages.mockResolvedValue({ items: [{
       id: 'reply', role: 'ai', executionId: 'resumed-root',

@@ -3403,28 +3403,27 @@ export function Chat({
         humanInput: input,
       });
       setEditingMessageId(null);
-      try {
-        await stream.submit(
-          {
-            id: edited.id,
-            input,
-            ...(requestOptions.state ? { state: requestOptions.state } : {}),
-          },
-          {
-            threadId: branch.thread_id,
-            joinExistingThread: true,
-            ...(requestOptions.context ? { context: requestOptions.context } : {}),
-            ...(requestOptions.config ? { config: requestOptions.config } : {}),
-            optimisticValues: (previous) => ({
-              ...previous,
-              messages: [...(previous.messages ?? []), edited],
-            }),
-          },
-        );
-      } catch (error) {
+      setIsChangingBranch(false);
+      const submission = stream.submit(
+        {
+          id: edited.id,
+          input,
+          ...(requestOptions.state ? { state: requestOptions.state } : {}),
+        },
+        {
+          threadId: branch.thread_id,
+          joinExistingThread: true,
+          ...(requestOptions.context ? { context: requestOptions.context } : {}),
+          ...(requestOptions.config ? { config: requestOptions.config } : {}),
+          optimisticValues: (previous) => ({
+            ...previous,
+            messages: [...(previous.messages ?? []), edited],
+          }),
+        },
+      );
+      void submission.catch((error) => {
         setHistoryError(error instanceof Error ? error.message : String(error));
-        throw error;
-      }
+      });
     } finally {
       setIsChangingBranch(false);
     }
