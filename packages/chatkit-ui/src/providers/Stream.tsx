@@ -1943,7 +1943,15 @@ export function applyStreamEvent(
               nextMessages[lastAssistantIndex] = nextLast;
               return { ...prev, messages: nextMessages };
             }
-            if (typeof last.content === 'string' && last.content.length === 0) {
+            // Only reuse a trailing empty placeholder. An empty assistant
+            // message with newer items after it belongs to an earlier failed
+            // run; replacing it in place would insert the new response above
+            // those items.
+            if (
+              typeof last.content === 'string' &&
+              last.content.length === 0 &&
+              lastAssistantIndex === messages.length - 1
+            ) {
               const nextMessages = [...messages];
               nextMessages[lastAssistantIndex] = {
                 ...message,

@@ -1084,6 +1084,48 @@ describe('applyStreamEvent', () => {
     });
   });
 
+  it('appends the new response after newer messages instead of reusing a stale empty placeholder from a failed run', () => {
+    let state = {
+      messages: [
+        { id: 'human-a', type: 'human', content: 'first question' },
+        { id: 'ai-stale', type: 'ai', executionId: 'failed-exec', content: '' },
+        { id: 'human-b', type: 'human', content: 'second question' },
+      ],
+    } as any;
+    const setValues = vi.fn((updater) => {
+      state = typeof updater === 'function' ? updater(state) : updater;
+    });
+
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_MESSAGE_START,
+          data: {
+            id: 'ai-new',
+            type: 'ai',
+            executionId: 'new-exec',
+            content: '',
+          },
+        }),
+      },
+      setValues,
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+
+    expect(state.messages.map((message: { id: string }) => message.id)).toEqual(
+      ['human-a', 'ai-stale', 'human-b', 'ai-new'],
+    );
+    expect(state.messages[3]).toMatchObject({
+      id: 'ai-new',
+      executionId: 'new-exec',
+    });
+  });
+
   it('preserves execution metadata on streamed text and merged components', () => {
     let state = {
       messages: [
