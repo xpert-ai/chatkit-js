@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { ChevronDown, FileText, Search } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { cn, getPanelRoundedClass } from '../../lib/utils';
+import { useTheme } from '../../providers/Theme';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import {
@@ -18,6 +20,7 @@ type Props = Omit<
 
 export function WorkspaceFileSelector({ disabled, ...props }: Props) {
   const { t } = useChatkitTranslation();
+  const { theme } = useTheme();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const paletteRef = React.useRef<WorkspaceFileMentionPaletteHandle>(null);
@@ -57,7 +60,10 @@ export function WorkspaceFileSelector({ disabled, ...props }: Props) {
           align="start"
           sideOffset={8}
           collisionPadding={8}
-          className="w-80 max-w-[calc(100vw-1rem)] max-h-(--radix-popover-content-available-height) overflow-y-auto p-1"
+          className={cn(
+            'w-80 max-w-[calc(100vw-1rem)] max-h-(--radix-popover-content-available-height) overflow-y-auto p-1',
+            getPanelRoundedClass(theme.radius),
+          )}
         >
           <div className="relative m-1">
             <Search

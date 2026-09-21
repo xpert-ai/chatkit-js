@@ -188,7 +188,22 @@
       "namePlaceholder": "项目名称",
       "loading": "正在加载项目...",
       "empty": "没有可选项目",
-      "loadError": "项目加载失败，请稍后重试"
+      "loadError": "项目加载失败，请稍后重试",
+      "application": "应用",
+      "type": "项目类型",
+      "allApplications": "全部应用",
+      "allTypes": "全部类型",
+      "unclassified": "未分类",
+      "display": "项目显示方式",
+      "grouped": "按类型分组",
+      "recent": "最近更新",
+      "clearFilter": "清除类型筛选",
+      "filterType": "仅显示此类型的项目",
+      "loaded": "已加载 {{count}} / {{total}}",
+      "loadMore": "加载更多",
+      "retry": "重试",
+      "loadMoreError": "更多项目加载失败，已加载的项目仍可使用。",
+      "filters": "筛选应用与类型"
     },
     "connectors": {
       "search": "搜索连接器",

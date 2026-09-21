@@ -1,3 +1,4 @@
+import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { A2UIProvider } from '@xpert-ai/a2ui-react';
@@ -99,10 +100,10 @@ export function App({
     [activeProjectId, sendEvent],
   );
   const handleProjectCreate = React.useCallback(
-    (name: string) => {
+    (name: string, projectType?: XpertProjectTypeRef) => {
       sendEvent('public_event', [
         'effect',
-        { name: 'project.create', data: { name } },
+        { name: 'project.create', data: { name, ...(projectType ? { projectType: { applicationKey: projectType.applicationKey, projectTypeKey: projectType.projectTypeKey } } : {}) } },
       ]);
     },
     [sendEvent],
@@ -125,6 +126,9 @@ export function App({
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
       onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
+      onProjectTypeCreate={projectCreationEnabled ? (projectType) => sendEvent('public_event', ['effect', {
+        name: 'project.create-entry', data: { applicationKey: projectType.applicationKey, projectTypeKey: projectType.projectTypeKey }
+      }]) : undefined}
       onConnectorsChange={handleConnectorsChange}
     />
   );
