@@ -1,14 +1,20 @@
+import { resolveLocalizedText } from '../../i18n/localized-text';
 import * as React from 'react';
 import {
   Check,
   ChevronDown,
   Folder,
   FolderLock,
-  FolderX,
+  LoaderCircle,
   Plus,
   Search,
 } from 'lucide-react';
-import type { Client, XpertProject } from '@xpert-ai/xpert-sdk';
+import type {
+  Client,
+  XpertProject,
+  XpertProjectTypeRef,
+  XpertProjectTypeSummary,
+} from '@xpert-ai/xpert-sdk';
 
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import {
@@ -19,6 +25,10 @@ import {
 import { useTheme } from '../../providers/Theme';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Separator } from '../ui/separator';
+import { groupProjects } from './project-groups';
+import { ProjectFilterButton } from './ProjectFilterButton';
+import { ProjectListViewport } from './ProjectListViewport';
 
 export type ProjectSelectorProps = {
   client: Client | null;
@@ -29,41 +39,11 @@ export type ProjectSelectorProps = {
   label?: string;
   onAvailabilityChange?: (available: boolean) => void;
   onProjectChange?: (projectId: string | null) => void;
-  onProjectCreate?: (name: string) => void;
+  onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
+  onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
 };
 
-const PROJECT_PAGE_SIZE = 100;
-
-async function listAllAvailableProjects(
-  projectsClient: Client['projects'],
-  xpertId: string,
-  signal: AbortSignal,
-): Promise<XpertProject[]> {
-  const projects: XpertProject[] = [];
-  let skip = 0;
-
-  while (!signal.aborted) {
-    const page = await projectsClient.list({
-      xpertId,
-      status: 'active',
-      skip,
-      take: PROJECT_PAGE_SIZE,
-      signal,
-    });
-    projects.push(...page.items);
-    skip += page.items.length;
-
-    if (
-      page.items.length === 0 ||
-      page.items.length < PROJECT_PAGE_SIZE ||
-      skip >= page.total
-    ) {
-      break;
-    }
-  }
-
-  return projects;
-}
+const PROJECT_PAGE_SIZE = 20;
 
 export function ProjectSelector({
   client,
@@ -75,14 +55,34 @@ export function ProjectSelector({
   onAvailabilityChange,
   onProjectChange,
   onProjectCreate,
+  onProjectTypeCreate,
 }: ProjectSelectorProps) {
-  const { t } = useChatkitTranslation();
+  const { t, i18n } = useChatkitTranslation();
   const { theme } = useTheme();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [createMode, setCreateMode] = React.useState(false);
   const [newProjectName, setNewProjectName] = React.useState('');
   const [projects, setProjects] = React.useState<XpertProject[]>([]);
+  const [types, setTypes] = React.useState<XpertProjectTypeSummary[]>([]);
+  const [defaultType, setDefaultType] = React.useState<
+    XpertProjectTypeRef | undefined
+  >();
+  const [applicationKey, setApplicationKey] = React.useState('');
+  const [projectTypeKey, setProjectTypeKey] = React.useState('');
+  const [skip, setSkip] = React.useState(0);
+  const [total, setTotal] = React.useState(0);
+  const [nextSkip, setNextSkip] = React.useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [hasDiscoveredProjects, setHasDiscoveredProjects] =
+    React.useState(false);
+  const [retry, setRetry] = React.useState(0);
+  const [view, setView] = React.useState<'grouped' | 'recent'>('grouped');
+  const [showFilters, setShowFilters] = React.useState(false);
+  const [catalogReady, setCatalogReady] = React.useState(false);
+  const [catalogFailed, setCatalogFailed] = React.useState(false);
+  const [activeLabel, setActiveLabel] = React.useState(label);
   const [loadFailed, setLoadFailed] = React.useState(false);
   const [loadedFor, setLoadedFor] = React.useState<{
     client: Client;
@@ -98,16 +98,77 @@ export function ProjectSelector({
   }, [disabled]);
 
   React.useEffect(() => {
+    // Retain data for filter changes, but never carry choices into another client or Assistant scope.
+    setProjects([]);
+    setLoadedFor(null);
+    setTotal(0);
+    setNextSkip(null);
+    setHasDiscoveredProjects(false);
+    setTypes([]);
+    setDefaultType(undefined);
+    setApplicationKey('');
+    setProjectTypeKey('');
+    setSkip(0);
+    setCatalogReady(false);
+    setCatalogFailed(false);
+    if (!client || !xpertId || locked) {
+      setCatalogReady(true);
+      return;
+    }
+    const controller = new AbortController();
+    // Older hosts may still expose only the unclassified Project list.
+    if (!client.projects?.types) {
+      setCatalogReady(true);
+      return;
+    }
+    client.projects
+      .types({ xpertId, signal: controller.signal })
+      .then((catalog) => {
+        if (controller.signal.aborted) return;
+        setTypes(catalog.items);
+        setDefaultType(catalog.defaultProjectType);
+        setApplicationKey(catalog.defaultProjectType?.applicationKey ?? '');
+        setProjectTypeKey(catalog.defaultProjectType?.projectTypeKey ?? '');
+        setCatalogReady(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setCatalogFailed(true);
+        }
+      });
+    return () => controller.abort();
+  }, [client, xpertId, locked]);
+
+  React.useEffect(() => {
+    if (locked || !activeProjectId || !client?.projects?.get) {
+      setActiveLabel(label);
+      return;
+    }
+    const controller = new AbortController();
+    client.projects
+      .get(activeProjectId, { signal: controller.signal })
+      .then((project) => {
+        if (!controller.signal.aborted) setActiveLabel(project.name);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setActiveLabel(label);
+      });
+    return () => controller.abort();
+  }, [client, activeProjectId, label, locked]);
+
+  React.useEffect(() => {
     if (locked) {
       setProjects([]);
       setLoadFailed(false);
       setLoadedFor(null);
+      setRefreshing(false);
       return;
     }
-    if (!client || !xpertId) {
+    if (!client || !xpertId || !catalogReady) {
       setProjects([]);
       setLoadFailed(false);
       setLoadedFor(null);
+      setRefreshing(false);
       return;
     }
 
@@ -123,55 +184,182 @@ export function ProjectSelector({
     }
 
     const controller = new AbortController();
-    setProjects([]);
     setLoadFailed(false);
-    setLoadedFor(null);
+    setLoadingMore(skip > 0);
+    // Keep the mounted list and its dimensions until the next response replaces it atomically.
+    setRefreshing(skip === 0);
 
-    listAllAvailableProjects(projectsClient, xpertId, controller.signal)
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        setProjects(result);
-        setLoadedFor({ client, xpertId });
-      })
-      .catch((loadError) => {
-        if (controller.signal.aborted) return;
-        console.warn('[Chat] Failed to load projects:', loadError);
-        setProjects([]);
-        setLoadFailed(true);
-        setLoadedFor({ client, xpertId });
-      });
+    const timer = setTimeout(
+      () =>
+        projectsClient
+          .list({
+            xpertId,
+            status: 'active',
+            skip,
+            take: PROJECT_PAGE_SIZE,
+            signal: controller.signal,
+            ...(query.trim() ? { search: query.trim() } : {}),
+            ...(applicationKey && applicationKey !== '__unclassified'
+              ? { applicationKey }
+              : {}),
+            ...(projectTypeKey ? { projectTypeKey } : {}),
+            ...(applicationKey === '__unclassified'
+              ? { unclassified: true }
+              : {}),
+          })
+          .then((result) => {
+            if (controller.signal.aborted) return;
+            setProjects((previous) =>
+              skip === 0
+                ? result.items
+                : Array.from(
+                    new Map(
+                      [...previous, ...result.items].map((project) => [
+                        project.id,
+                        project,
+                      ]),
+                    ).values(),
+                  ),
+            );
+            setTotal(result.total);
+            const offset = skip + result.items.length;
+            setNextSkip(
+              result.items.length > 0 && offset < result.total ? offset : null,
+            );
+            setLoadingMore(false);
+            setRefreshing(false);
+            if (result.items.length > 0) setHasDiscoveredProjects(true);
+            setLoadedFor({ client, xpertId });
+          })
+          .catch((loadError) => {
+            if (controller.signal.aborted) return;
+            console.warn('[Chat] Failed to load projects:', loadError);
+            setLoadingMore(false);
+            setRefreshing(false);
+            setLoadFailed(true);
+            setLoadedFor({ client, xpertId });
+          }),
+      query.trim() ? 200 : 0,
+    );
 
-    return () => controller.abort();
-  }, [client, locked, xpertId]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    client,
+    locked,
+    xpertId,
+    catalogReady,
+    query,
+    applicationKey,
+    projectTypeKey,
+    skip,
+    retry,
+  ]);
 
   const activeProject = React.useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [activeProjectId, projects],
   );
 
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredProjects = React.useMemo(
+  const groups = React.useMemo(
     () =>
-      projects.filter((project) => {
-        if (!normalizedQuery) return true;
-        return project.name.toLocaleLowerCase().includes(normalizedQuery);
-      }),
-    [normalizedQuery, projects],
+      groupProjects(
+        projects,
+        types,
+        i18n.language,
+        t('composer.projects.unclassified'),
+      ),
+    [projects, types, i18n.language, t],
   );
-
+  const applications = Array.from(
+    new Map(types.map((type) => [type.applicationKey, type.applicationTitle])),
+  );
+  const localized = (text: XpertProjectTypeSummary['title']) =>
+    resolveLocalizedText(text, i18n.language) ?? '';
+  const scopedTypes = types.filter(
+    (type) => type.applicationKey === applicationKey,
+  );
+  const creationRef =
+    applicationKey && applicationKey !== '__unclassified'
+      ? {
+          applicationKey,
+          projectTypeKey:
+            projectTypeKey ||
+            (scopedTypes.length === 1 ? scopedTypes[0].projectTypeKey : ''),
+        }
+      : (defaultType ?? {
+          applicationKey: 'platform',
+          projectTypeKey: 'general',
+        });
+  const creationType = types.find(
+    (type) =>
+      type.applicationKey === creationRef.applicationKey &&
+      type.projectTypeKey === creationRef.projectTypeKey,
+  );
+  const canCreate =
+    catalogReady &&
+    !catalogFailed &&
+    (types.length === 0 || Boolean(creationType?.available)) &&
+    (creationType?.binding.kind === 'entity'
+      ? Boolean(onProjectTypeCreate)
+      : Boolean(onProjectCreate));
   const hasAvailableProjects = locked
     ? Boolean(activeProjectId)
     : loadedFor?.client === client &&
       loadedFor.xpertId === xpertId &&
-      !loadFailed &&
-      projects.length > 0;
-  const projectRailAvailable = hasAvailableProjects || Boolean(onProjectCreate);
+      hasDiscoveredProjects;
+  const projectRailAvailable =
+    hasAvailableProjects ||
+    Boolean(onProjectCreate) ||
+    types.length > 0 ||
+    Boolean(activeProjectId);
   const isLoadingProjects =
-    !locked && Boolean(client && xpertId) && loadedFor === null && !loadFailed;
+    !locked &&
+    Boolean(client && xpertId) &&
+    loadedFor === null &&
+    !loadFailed &&
+    !catalogFailed;
 
   React.useEffect(() => {
     onAvailabilityChange?.(projectRailAvailable);
   }, [onAvailabilityChange, projectRailAvailable]);
+
+  /** Reset only the type scope; the user's search and selected Project remain intact. */
+  const clearTypeFilter = () => {
+    setApplicationKey('');
+    setProjectTypeKey('');
+    setSkip(0);
+  };
+  const staleProjects = refreshing || (loadFailed && skip === 0);
+
+  const renderProject = (project: XpertProject) => (
+    <button
+      key={project.id}
+      type="button"
+      data-slot="composer-project-item"
+      title={project.name}
+      disabled={disabled || staleProjects}
+      className={cn(
+        'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+        menuItemRoundedClass,
+        project.id === activeProjectId && 'bg-accent text-accent-foreground',
+      )}
+      onClick={() => {
+        if (disabled || staleProjects) return;
+        if (project.id !== activeProjectId) onProjectChange?.(project.id);
+        setOpen(false);
+      }}
+    >
+      <span className="min-w-0 flex-1 truncate font-normal">
+        {project.name}
+      </span>
+      {project.id === activeProjectId ? (
+        <Check className="size-4 shrink-0" />
+      ) : null}
+    </button>
+  );
 
   if (locked && activeProjectId) {
     return (
@@ -206,6 +394,7 @@ export function ProjectSelector({
           setOpen(nextOpen);
           if (!nextOpen) {
             setQuery('');
+            setSkip(0);
             setCreateMode(false);
             setNewProjectName('');
           }
@@ -220,7 +409,9 @@ export function ProjectSelector({
           >
             <Folder className="size-3.5 shrink-0" />
             <span className="truncate">
-              {activeProject?.name ?? t('composer.projects.select')}
+              {activeProject?.name ??
+                activeLabel ??
+                t('composer.projects.select')}
             </span>
             <ChevronDown className="size-3.5 shrink-0" />
           </button>
@@ -231,7 +422,7 @@ export function ProjectSelector({
           sideOffset={8}
           collisionPadding={8}
           className={cn(
-            'flex max-h-(--radix-popover-content-available-height) w-64 max-w-[calc(100vw-1rem)] overflow-hidden border-0 bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
+            'flex max-h-(--radix-popover-content-available-height) w-80 max-w-[calc(100vw-1rem)] overflow-hidden bg-popover p-1 text-popover-foreground shadow-md',
             panelRoundedClass,
           )}
         >
@@ -239,6 +430,55 @@ export function ProjectSelector({
             data-slot="composer-project-command"
             className="flex min-h-0 w-full flex-col overflow-hidden"
           >
+            {!createMode && showFilters && types.length > 0 ? (
+              <div className="grid gap-1 p-1">
+                <select
+                  aria-label={t('composer.projects.application')}
+                  className="min-w-0 rounded border border-border bg-popover px-2 py-1 text-sm"
+                  value={applicationKey}
+                  onChange={(event) => {
+                    setApplicationKey(event.target.value);
+                    setProjectTypeKey('');
+                    setSkip(0);
+                  }}
+                >
+                  <option value="">
+                    {t('composer.projects.allApplications')}
+                  </option>
+                  <option value="__unclassified">
+                    {t('composer.projects.unclassified')}
+                  </option>
+                  {applications.map(([key, title]) => (
+                    <option key={key} value={key}>
+                      {localized(title)}
+                    </option>
+                  ))}
+                </select>
+                {applicationKey && applicationKey !== '__unclassified' ? (
+                  <select
+                    aria-label={t('composer.projects.type')}
+                    className="min-w-0 rounded border border-border bg-popover px-2 py-1 text-sm"
+                    value={projectTypeKey}
+                    onChange={(event) => {
+                      setProjectTypeKey(event.target.value);
+                      setSkip(0);
+                    }}
+                  >
+                    <option value="">{t('composer.projects.allTypes')}</option>
+                    {types
+                      .filter((type) => type.applicationKey === applicationKey)
+                      .map((type) => (
+                        <option
+                          key={type.projectTypeKey}
+                          value={type.projectTypeKey}
+                        >
+                          {localized(type.title)}
+                        </option>
+                      ))}
+                  </select>
+                ) : null}
+              </div>
+            ) : null}
             {createMode ? (
               <form
                 data-slot="composer-project-create-form"
@@ -247,7 +487,8 @@ export function ProjectSelector({
                   event.preventDefault();
                   const name = newProjectName.trim();
                   if (!name || disabled) return;
-                  onProjectCreate?.(name);
+                  if (creationType) onProjectCreate?.(name, creationType);
+                  else onProjectCreate?.(name);
                   setOpen(false);
                 }}
               >
@@ -289,32 +530,139 @@ export function ProjectSelector({
                   data-slot="composer-project-search"
                   className="relative mb-2 shrink-0"
                 >
-                  <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+                  {refreshing && !isLoadingProjects ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 animate-spin text-muted-foreground motion-reduce:animate-none"
+                    />
+                  ) : (
+                    <Search
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                  )}
+                  <span role="status" className="sr-only">
+                    {refreshing ? t('composer.projects.loading') : ''}
+                  </span>
                   <Input
                     autoFocus
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setSkip(0);
+                    }}
                     placeholder={t('composer.projects.search')}
                     className={cn(
-                      'h-10 border-0 bg-muted pl-9 pr-3 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0',
+                      'h-10 border-0 bg-muted pl-9 pr-10 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0',
                       menuItemRoundedClass,
                     )}
                   />
+                  {types.length > 0 || applicationKey ? (
+                    <ProjectFilterButton
+                      active={Boolean(applicationKey)}
+                      label={t(
+                        applicationKey
+                          ? 'composer.projects.clearFilter'
+                          : 'composer.projects.filters',
+                      )}
+                      expanded={applicationKey ? undefined : showFilters}
+                      className="absolute right-2 top-1/2 -translate-y-1/2"
+                      onClick={
+                        applicationKey
+                          ? clearTypeFilter
+                          : () => setShowFilters((value) => !value)
+                      }
+                    />
+                  ) : null}
                 </div>
                 <div
-                  data-slot="composer-project-scroll-region"
-                  className="min-h-0 flex-1 max-h-75 overflow-y-auto overscroll-contain"
+                  role="group"
+                  aria-label={t('composer.projects.display')}
+                  className="mb-1 flex shrink-0 gap-1 px-1"
+                >
+                  {(['grouped', 'recent'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={view === mode}
+                      className={cn(
+                        'flex-1 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                        view === mode
+                          ? 'bg-accent font-medium text-accent-foreground'
+                          : 'text-muted-foreground',
+                      )}
+                      onClick={() => setView(mode)}
+                    >
+                      {t(`composer.projects.${mode}`)}
+                    </button>
+                  ))}
+                </div>
+                <ProjectListViewport
+                  ready={!isLoadingProjects && loadedFor !== null}
+                  busy={isLoadingProjects || refreshing || loadingMore}
+                  footer={
+                    total > PROJECT_PAGE_SIZE ||
+                    (loadFailed && projects.length > 0) ? (
+                      <div
+                        data-slot="composer-project-pagination"
+                        className="shrink-0 border-t border-border px-2 py-2 text-xs"
+                      >
+                        {loadFailed ? (
+                          <p
+                            role="status"
+                            className="mb-1 text-muted-foreground"
+                          >
+                            {t(
+                              skip > 0
+                                ? 'composer.projects.loadMoreError'
+                                : 'composer.projects.loadError',
+                            )}
+                          </p>
+                        ) : null}
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            aria-live="polite"
+                            className="text-muted-foreground"
+                          >
+                            {t('composer.projects.loaded', {
+                              count: projects.length,
+                              total,
+                            })}
+                          </span>
+                          {nextSkip !== null || loadFailed ? (
+                            <button
+                              type="button"
+                              disabled={loadingMore || refreshing}
+                              className="rounded px-2 py-1 font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                              onClick={() => {
+                                if (loadFailed) setRetry((value) => value + 1);
+                                else if (nextSkip !== null) setSkip(nextSkip);
+                              }}
+                            >
+                              {t(
+                                loadingMore
+                                  ? 'composer.projects.loading'
+                                  : loadFailed
+                                    ? 'composer.projects.retry'
+                                    : 'composer.projects.loadMore',
+                              )}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null
+                  }
                 >
                   <div
                     data-slot="composer-project-list"
                     className="flex flex-col"
                   >
-                    {activeProjectId && !normalizedQuery ? (
+                    {activeProjectId && !query.trim() ? (
                       <button
                         type="button"
                         data-slot="composer-project-clear"
                         className={cn(
-                          'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1.5 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+                          'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
                           menuItemRoundedClass,
                         )}
                         onClick={() => {
@@ -323,7 +671,6 @@ export function ProjectSelector({
                           setOpen(false);
                         }}
                       >
-                        <FolderX className="size-5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate font-normal">
                           {t('composer.projects.none')}
                         </span>
@@ -334,56 +681,94 @@ export function ProjectSelector({
                       <ProjectMessage>
                         {t('composer.projects.loading')}
                       </ProjectMessage>
-                    ) : loadFailed ? (
+                    ) : (loadFailed || catalogFailed) &&
+                      projects.length === 0 ? (
                       <ProjectMessage>
                         {t('composer.projects.loadError')}
                       </ProjectMessage>
-                    ) : filteredProjects.length === 0 ? (
+                    ) : projects.length === 0 ? (
                       <ProjectMessage>
                         {t('composer.projects.empty')}
                       </ProjectMessage>
+                    ) : view === 'recent' ? (
+                      projects.map(renderProject)
                     ) : (
-                      filteredProjects.map((project) => (
-                        <button
-                          key={project.id}
-                          type="button"
-                          data-slot="composer-project-item"
-                          className={cn(
-                            'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1.5 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
-                            menuItemRoundedClass,
-                            project.id === activeProjectId &&
-                              'bg-accent text-accent-foreground',
-                          )}
-                          onClick={() => {
-                            if (disabled) return;
-                            if (project.id !== activeProjectId) {
-                              onProjectChange?.(project.id);
-                            }
-                            setOpen(false);
-                          }}
-                        >
-                          <Folder className="size-5 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate font-normal">
-                            {project.name}
-                          </span>
-                          {project.id === activeProjectId ? (
-                            <Check className="size-4 shrink-0" />
-                          ) : null}
-                        </button>
-                      ))
+                      groups.map((group) => {
+                        const filtered =
+                          applicationKey ===
+                            (group.applicationKey ?? '__unclassified') &&
+                          (!projectTypeKey ||
+                            projectTypeKey === group.projectTypeKey);
+                        const filter = () => {
+                          setApplicationKey(
+                            group.applicationKey ?? '__unclassified',
+                          );
+                          setProjectTypeKey(group.projectTypeKey ?? '');
+                          setSkip(0);
+                        };
+                        return (
+                          <section
+                            key={group.key}
+                            aria-label={group.label}
+                            className="min-w-0 pb-2 last:pb-0"
+                          >
+                            <div className="sticky top-0 z-10 flex w-full items-center gap-2 bg-popover px-2 text-xs font-medium text-muted-foreground">
+                              <button
+                                type="button"
+                                data-slot="composer-project-group"
+                                className="min-w-0 flex-1 truncate py-2 text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                                title={t('composer.projects.filterType')}
+                                onClick={filter}
+                              >
+                                {group.label}
+                              </button>
+                              <ProjectFilterButton
+                                active={filtered}
+                                label={t(
+                                  filtered
+                                    ? 'composer.projects.clearFilter'
+                                    : 'composer.projects.filterType',
+                                )}
+                                onClick={filtered ? clearTypeFilter : filter}
+                              />
+                            </div>
+                            {group.projects.map(renderProject)}
+                          </section>
+                        );
+                      })
                     )}
                   </div>
-                </div>
-                {onProjectCreate ? (
-                  <button
-                    type="button"
-                    data-slot="composer-project-create"
-                    className="mt-1 flex w-full shrink-0 items-center gap-3 border-t border-border px-1.5 py-1.5 text-left text-sm font-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
-                    onClick={() => setCreateMode(true)}
-                  >
-                    <Plus className="size-4 shrink-0" />
-                    <span>{t('composer.projects.new')}</span>
-                  </button>
+                </ProjectListViewport>
+                {onProjectCreate || onProjectTypeCreate ? (
+                  <>
+                    <Separator className="mt-1" />
+                    <button
+                      type="button"
+                      data-slot="composer-project-create"
+                      disabled={!canCreate}
+                      className={cn(
+                        'flex w-full shrink-0 items-center gap-3 px-1.5 py-1 text-left text-sm font-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+                        menuItemRoundedClass,
+                      )}
+                      onClick={() => {
+                        if (!canCreate) return;
+                        if (creationType?.binding.kind === 'entity') {
+                          onProjectTypeCreate?.({
+                            applicationKey: creationType.applicationKey,
+                            projectTypeKey: creationType.projectTypeKey,
+                          });
+                          setOpen(false);
+                        } else setCreateMode(true);
+                      }}
+                    >
+                      <Plus className="size-4 shrink-0" />
+                      <span>
+                        {creationType
+                          ? `${t('composer.projects.new')} · ${localized(creationType.title)}`
+                          : t('composer.projects.new')}
+                      </span>
+                    </button>
+                  </>
                 ) : null}
               </>
             )}

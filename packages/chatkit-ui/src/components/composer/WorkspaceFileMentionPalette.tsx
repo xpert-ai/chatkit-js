@@ -207,7 +207,7 @@ export const WorkspaceFileMentionPalette = React.forwardRef<
                   setActiveIndex(index);
                 }}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted',
+                  'flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted',
                   index === activeIndex && 'bg-muted',
                 )}
               >
