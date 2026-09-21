@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.5.17
+
+### Patch Changes
+
+- ba90709: external assistant
+- Updated dependencies [ba90709]
+  - @xpert-ai/chatkit-types@0.5.10
+
 ## 0.5.16
 
 ### Patch Changes
