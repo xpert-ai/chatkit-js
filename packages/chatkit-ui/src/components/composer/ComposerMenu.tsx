@@ -89,6 +89,7 @@ export type ComposerMenuProps = {
   selectedConnectorBindingIds?: string[];
   onConnectorSelectionChange?: (bindingIds: string[]) => void;
   connectorsEnabled?: boolean;
+  unifiedResourcesEnabled?: boolean;
   apiUrl?: string;
   disabled?: boolean;
 };
@@ -147,6 +148,7 @@ export function ComposerMenu({
   selectedConnectorBindingIds,
   onConnectorSelectionChange,
   connectorsEnabled = false,
+  unifiedResourcesEnabled = false,
   apiUrl,
   disabled = false,
 }: ComposerMenuProps) {
@@ -630,7 +632,7 @@ export function ComposerMenu({
         onSelect={() => choosePanel('skills')}
         className={menuItemRoundedClass}
       />
-      <PrimaryPanelItem
+      {!unifiedResourcesEnabled && <PrimaryPanelItem
         icon={<Plug />}
         label={t('composer.workbuddy.connectors')}
         count={selectedConnectorBindingIds?.length ?? 0}
@@ -638,7 +640,7 @@ export function ComposerMenu({
         disabled={!connectorsEnabled}
         onSelect={() => choosePanel('connectors')}
         className={menuItemRoundedClass}
-      />
+      />}
     </div>
   );
 

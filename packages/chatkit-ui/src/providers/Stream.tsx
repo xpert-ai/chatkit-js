@@ -158,7 +158,10 @@ import {
   getConversationConnectorBindingIds,
   persistConversationConnectorBindingIds,
 } from '../lib/conversation-connectors';
-import { createXpertThreadConversation } from '../lib/xpert-conversation-bootstrap';
+import {
+  createXpertThreadConversation,
+  withPersistedRuntimeResources,
+} from '../lib/xpert-conversation-bootstrap';
 import { createConversationThreadSearchWhere } from '../lib/conversation-runtime-capabilities';
 import {
   useThreadHistory,
@@ -289,7 +292,10 @@ export type StreamSubmitOptions = {
   newThread?: boolean;
   joinExistingThread?: boolean;
   followUpMode?: FollowUpBehavior;
-  onThreadResolved?: (threadId: string) => void | Promise<void>;
+  onThreadResolved?: (
+    threadId: string,
+    conversationId?: string | null,
+  ) => void | Promise<void>;
 };
 
 type ResumeStreamOptions = Pick<
@@ -4207,12 +4213,22 @@ const StreamSession = ({
             assistantId,
             threadId: desiredThreadId,
             projectId,
+            runtimeResources:
+              input && !isResumeRunInput(input)
+                ? input.input.runtimeResources
+                : undefined,
             connectorBindingIds: connectorBindingIdsRef.current,
             onThreadCreated: (resolvedThreadId) => {
               createdThreadId = resolvedThreadId;
             },
           });
           nextThreadId = created.threadId;
+          if (input && !isResumeRunInput(input)) {
+            input = withPersistedRuntimeResources(
+              input,
+              created.runtimeResources,
+            );
+          }
           updateConversationId(created.conversation.id);
           setThreadId(nextThreadId);
         }
@@ -4220,12 +4236,22 @@ const StreamSession = ({
           const created = await createXpertThreadConversation(client, {
             assistantId,
             projectId,
+            runtimeResources:
+              input && !isResumeRunInput(input)
+                ? input.input.runtimeResources
+                : undefined,
             connectorBindingIds: connectorBindingIdsRef.current,
             onThreadCreated: (resolvedThreadId) => {
               createdThreadId = resolvedThreadId;
             },
           });
           nextThreadId = created.threadId;
+          if (input && !isResumeRunInput(input)) {
+            input = withPersistedRuntimeResources(
+              input,
+              created.runtimeResources,
+            );
+          }
           updateConversationId(created.conversation.id);
           setThreadId(nextThreadId);
         }
@@ -4234,7 +4260,9 @@ const StreamSession = ({
           setThreadId(desiredThreadId);
         }
         if (options?.onThreadResolved) {
-          void Promise.resolve(options.onThreadResolved(nextThreadId)).catch(
+          void Promise.resolve(
+            options.onThreadResolved(nextThreadId, conversationIdRef.current),
+          ).catch(
             (callbackError) => {
               console.warn(
                 '[chatkit-ui] Failed to run thread resolved callback',

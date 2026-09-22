@@ -153,10 +153,10 @@ describe('ProjectSelector', () => {
     ).toHaveClass('overflow-hidden');
     expect(
       document.querySelector('[data-slot="composer-project-search"]'),
-    ).toHaveClass('relative', 'mb-2');
+    ).toHaveClass('relative');
     expect(screen.getByPlaceholderText('Search projects')).toHaveClass(
       'rounded-md',
-      'bg-muted',
+      'bg-transparent',
       'focus-visible:border-transparent',
       'focus-visible:ring-0',
       'focus-visible:ring-offset-0',

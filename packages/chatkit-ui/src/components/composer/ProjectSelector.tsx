@@ -1,3 +1,4 @@
+import { SELECTOR_SEARCH_CLASS } from './selector-styles';
 import { resolveLocalizedText } from '../../i18n/localized-text';
 import * as React from 'react';
 import {
@@ -7,7 +8,6 @@ import {
   FolderLock,
   LoaderCircle,
   Plus,
-  Search,
 } from 'lucide-react';
 import type {
   Client,
@@ -342,7 +342,7 @@ export function ProjectSelector({
       title={project.name}
       disabled={disabled || staleProjects}
       className={cn(
-        'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+        'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
         menuItemRoundedClass,
         project.id === activeProjectId && 'bg-accent text-accent-foreground',
       )}
@@ -528,19 +528,14 @@ export function ProjectSelector({
               <>
                 <div
                   data-slot="composer-project-search"
-                  className="relative mb-2 shrink-0"
+                  className="relative shrink-0"
                 >
                   {refreshing && !isLoadingProjects ? (
                     <LoaderCircle
                       aria-hidden="true"
                       className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 animate-spin text-muted-foreground motion-reduce:animate-none"
                     />
-                  ) : (
-                    <Search
-                      aria-hidden="true"
-                      className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                  )}
+                  ) : null}
                   <span role="status" className="sr-only">
                     {refreshing ? t('composer.projects.loading') : ''}
                   </span>
@@ -553,7 +548,9 @@ export function ProjectSelector({
                     }}
                     placeholder={t('composer.projects.search')}
                     className={cn(
-                      'h-10 border-0 bg-muted pl-9 pr-10 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0',
+                      SELECTOR_SEARCH_CLASS,
+                      'pr-10',
+                      refreshing && !isLoadingProjects && 'pl-9',
                       menuItemRoundedClass,
                     )}
                   />
@@ -662,7 +659,7 @@ export function ProjectSelector({
                         type="button"
                         data-slot="composer-project-clear"
                         className={cn(
-                          'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1 text-left text-base outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+                          'relative flex w-full cursor-default select-none items-center gap-3 px-1.5 py-1 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
                           menuItemRoundedClass,
                         )}
                         onClick={() => {

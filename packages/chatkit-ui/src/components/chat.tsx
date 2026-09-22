@@ -1,3 +1,5 @@
+import { useRuntimeResources } from './chat/useRuntimeResources';
+import { RuntimeResourceSelector } from './composer/RuntimeResourceSelector';
 import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import {
@@ -22,13 +24,11 @@ import type {
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
 import type {
-  ChatkitMessage,
   ChatKitImageReference,
   ChatKitOptions,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   ChatKitCommandSource,
-  FollowUpBehavior,
   ModelOption,
   ToolOption,
   ThreadGoal,
@@ -44,7 +44,6 @@ import {
   getMenuItemRoundedClass,
   getPanelRoundedClass,
 } from '../lib/utils';
-import { getAssistantStreamingStatus } from '../lib/message';
 import { isNearBottom } from '../lib/scroll';
 import { type AgentFile, type StorageFile } from '../lib/types';
 import { useStreamContext } from '../providers/Stream';
@@ -1717,10 +1716,14 @@ export function Chat({
     }
   }, [stream.isLoading, messages, scrollToBottom]);
 
+  const resourcesEnabled = options?.composer?.resources?.enabled === true && Boolean(xpertPlatformClient && stream.assistantId);
+  const runtimeResources = useRuntimeResources({ client: xpertPlatformClient, enabled: resourcesEnabled, assistantId: stream.assistantId, projectId: activeProjectId, conversationId: stream.conversationId, threadId: stream.threadId });
+
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
   // File parsing can continue after submit; only the transport upload blocks send.
   const hasUploadingFiles = attachmentState.hasUploadingFiles;
   const isSubmissionBlocked =
+    (resourcesEnabled && (runtimeResources.busy || !runtimeResources.ready)) ||
     isChangingBranch ||
     isResumingRun ||
     isRunPausing ||
@@ -2054,6 +2057,7 @@ export function Chat({
         references?: ChatKitReference[];
         referenceComposition?: ChatKitReferenceCompositionMode;
         planMode?: boolean;
+        runtimeResources?: import('@xpert-ai/chatkit-types').RuntimeResourcesSelection;
         runtimeCapabilities?: RuntimeCapabilitiesSelection;
         commandSource?: ChatKitCommandSource;
         model?: string;
@@ -2061,6 +2065,7 @@ export function Chat({
         ...humanInput,
         ...(stream.selectedModelId ? { model: stream.selectedModelId } : {}),
       };
+      if (resourcesEnabled && (runtimeResources.selection.resources.length || runtimeResources.selection.revision)) inputPayload.runtimeResources = runtimeResources.selection;
       if (filesToSend) {
         inputPayload.files = filesToSend;
       }
@@ -2140,6 +2145,9 @@ export function Chat({
         addRunRuntimeCapabilities(submittedRunRuntimeCapabilities);
       };
 
+      const resourceSubmission = !nextFollowUpMode
+        ? runtimeResources.beginSubmission()
+        : undefined;
       const submission = stream.submit(
         {
           id: newMessage.id,
@@ -2152,13 +2160,20 @@ export function Chat({
             ? { context: requestOptions.context }
             : {}),
           ...(requestOptions.config ? { config: requestOptions.config } : {}),
-          ...(shouldPersistSessionRuntimeCapabilities
+          ...(shouldPersistSessionRuntimeCapabilities || resourceSubmission
             ? {
-                onThreadResolved: (threadId) =>
-                  persistSessionRuntimeCapabilities(
-                    threadId,
-                    sessionRuntimeCapabilitiesForPersistence,
-                  ),
+                onThreadResolved: (
+                  threadId: string,
+                  conversationId?: string | null,
+                ) => {
+                  resourceSubmission?.onThreadResolved(threadId, conversationId);
+                  if (shouldPersistSessionRuntimeCapabilities) {
+                    return persistSessionRuntimeCapabilities(
+                      threadId,
+                      sessionRuntimeCapabilitiesForPersistence,
+                    );
+                  }
+                },
               }
             : {}),
           ...(!nextFollowUpMode
@@ -2171,9 +2186,13 @@ export function Chat({
             : {}),
         },
       );
-      void submission.catch(() => {
-        restoreSubmittedDraft();
-      });
+      void submission.then(
+        () => resourceSubmission?.onSettled(true),
+        () => {
+          resourceSubmission?.onSettled(false);
+          restoreSubmittedDraft();
+        },
+      );
 
       scrollToBottom(true, true);
     },
@@ -2186,6 +2205,11 @@ export function Chat({
       isRunPaused,
       options?.request,
       persistSessionRuntimeCapabilities,
+      resourcesEnabled,
+      runtimeResources.selection,
+      runtimeResources.busy,
+      runtimeResources.ready,
+      runtimeResources.beginSubmission,
       references,
       referencedWorkspaceFiles,
       resetRunRuntimeCapabilities,
@@ -4278,6 +4302,7 @@ export function Chat({
                             });
                         }}
                         connectorsEnabled={connectorsEnabled}
+                        unifiedResourcesEnabled={resourcesEnabled}
                         apiUrl={apiUrl}
                         disabled={
                           missingConfig ||
@@ -4428,6 +4453,9 @@ export function Chat({
                     disabled={missingConfig || isHistoryLoading || isGoalLoading || hasPendingInteractiveRequest}
                     onSelect={addWorkspaceFileReference}
                   />
+                )}
+                {resourcesEnabled && xpertPlatformClient && stream.assistantId && (
+                  <RuntimeResourceSelector key={JSON.stringify([stream.assistantId, activeProjectId, stream.conversationId, stream.threadId])} connectorsEnabled={connectorsEnabled} connectorBindingIds={stream.connectorBindingIds} onConnect={options?.composer?.resources?.onConnect} onConnectorsChange={async (ids) => { await stream.setConnectorBindingIds(ids); onConnectorsChange?.(ids); }} client={xpertPlatformClient} assistantId={stream.assistantId} projectId={activeProjectId} selection={runtimeResources.selection} busy={runtimeResources.busy} canEditResources={runtimeResources.canEdit} error={runtimeResources.error} disabled={missingConfig || isHistoryLoading || hasPendingInteractiveRequest} onToggle={runtimeResources.toggle} onRefresh={runtimeResources.refresh} />
                 )}
               </div>
             </div>

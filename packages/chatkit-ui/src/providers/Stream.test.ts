@@ -60,7 +60,7 @@ describe('historical external assistant executions', () => {
   });
 
   it('restores explicit execution identity, status and model alongside message content', () => {
-    const message = { id: 'message-1', role: 'ai', executionId: 'root', status: 'success',
+    const message: import('@xpert-ai/xpert-sdk').ChatMessage = { id: 'message-1', role: 'ai', executionId: 'root', status: 'success',
       content: [{ type: 'text', text: 'review result', executionId: 'external-1' }],
       agentRuns: [{ id: 'external-1', parentId: 'root', invocationKind: 'external_assistant', xpertId: 'reviewer', model: 'model-a', status: 'success' }],
     };

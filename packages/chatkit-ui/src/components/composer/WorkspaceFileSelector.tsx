@@ -1,5 +1,6 @@
+import { SELECTOR_SEARCH_CLASS } from './selector-styles';
 import * as React from 'react';
-import { ChevronDown, FileText, Search } from 'lucide-react';
+import { ChevronDown, FileText } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn, getPanelRoundedClass } from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
@@ -65,17 +66,13 @@ export function WorkspaceFileSelector({ disabled, ...props }: Props) {
             getPanelRoundedClass(theme.radius),
           )}
         >
-          <div className="relative m-1">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            />
+          <div className="relative">
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               aria-label={t('composer.fileMentions.search')}
               placeholder={t('composer.fileMentions.search')}
-              className="h-9 border-0 bg-muted pl-9 pr-3 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+              className={SELECTOR_SEARCH_CLASS}
               onKeyDown={(event) => {
                 if (event.nativeEvent.isComposing) return;
                 if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {

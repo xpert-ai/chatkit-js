@@ -14,6 +14,7 @@ import {
   type FollowUpBehavior,
   type SendUserMessageParams,
   type ToolOutputAttachmentPreviewRequest,
+  type WorkspaceConnectorConnectRequest,
 } from '@xpert-ai/chatkit-types';
 import {
   isTrustedChatKitMessageEvent,
@@ -32,6 +33,7 @@ import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { createMessageId } from '../lib/utils';
 
 type CommandMessageMap = {
+  onConnectWorkspaceConnector: WorkspaceConnectorConnectRequest;
   onSendUserMessage: SendUserMessageParams;
   onSetComposerValue: ComposerValuePayload | null;
   onSetRuntimeCapabilities: RuntimeCapabilitiesSelection | null;
