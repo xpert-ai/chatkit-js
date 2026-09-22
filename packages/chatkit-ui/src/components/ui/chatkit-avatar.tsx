@@ -19,7 +19,7 @@ export type ChatkitAvatarData = {
 
 export type ChatkitAvatarProps = React.ComponentProps<typeof Avatar> & {
   avatar?: ChatkitAvatarData | null;
-  fallback?: string;
+  fallback?: React.ReactNode;
   fallbackClassName?: string;
   imageClassName?: string;
   label: string;

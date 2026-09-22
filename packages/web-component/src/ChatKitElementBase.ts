@@ -12,6 +12,7 @@ import type {
   Entity,
   ListView,
   ToolOutputAttachmentPreviewRequest,
+  WorkspaceConnectorConnectRequest,
 } from '@xpert-ai/chatkit-types';
 import { normalizePetOptions } from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
@@ -184,6 +185,19 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
           );
         }
         return onRequestPreview(request);
+      },
+      onConnectWorkspaceConnector: async (
+        request: WorkspaceConnectorConnectRequest,
+      ) => {
+        const connect = this.#opts?.composer?.resources?.onConnect;
+        if (!connect) {
+          this.#emitAndThrow(
+            new IntegrationError(
+              'Add composer.resources.onConnect to handle workspace Connector connections.',
+            ),
+          );
+        }
+        return connect(request);
       },
       onWorkbenchClientCommand: async ({
         commandKey,

@@ -566,6 +566,7 @@ export type TChatRequestHuman = {
   references?: ChatKitReference[];
   referenceComposition?: ChatKitReferenceCompositionMode;
   planMode?: boolean;
+  runtimeResources?: import('./runtime-resources.js').RuntimeResourcesSelection;
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   commandSource?: ChatKitCommandSource;
   [key: string]: unknown;

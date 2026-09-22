@@ -2,15 +2,18 @@ import type {
   ChatConversation,
   Client,
   RuntimeCapabilitiesSelection,
+  RuntimeResourcesSelection,
   Thread,
 } from '@xpert-ai/xpert-sdk';
+import type { TChatRequest } from '@xpert-ai/chatkit-types';
 
 import { withConnectorBindingIds } from './conversation-connectors';
 
 export type XpertConversationBootstrapClient = {
   threads: Pick<Client<unknown>['threads'], 'create'> &
     Partial<Pick<Client<unknown>['threads'], 'delete'>>;
-  conversations: Pick<Client<unknown>['conversations'], 'create'>;
+  conversations: Pick<Client<unknown>['conversations'], 'create'> &
+    Partial<Pick<Client<unknown>['conversations'], 'updateRuntimeResources'>>;
 };
 
 export type XpertConversationBootstrapParams = {
@@ -19,6 +22,7 @@ export type XpertConversationBootstrapParams = {
   projectId?: string | null;
   connectorBindingIds?: readonly string[];
   runtimeCapabilities?: RuntimeCapabilitiesSelection | null;
+  runtimeResources?: RuntimeResourcesSelection;
   onThreadCreated?: (threadId: string) => void;
 };
 
@@ -86,5 +90,36 @@ export async function createXpertThreadConversation(
       params.runtimeCapabilities,
     ),
   );
-  return { thread, threadId, conversation };
+  // Publish the new conversation only after its first selection is committed.
+  // Otherwise the UI can read an empty selection before the run saves it.
+  let runtimeResources: RuntimeResourcesSelection | undefined;
+  if (params.runtimeResources) {
+    if (!client.conversations.updateRuntimeResources) {
+      throw new Error('The Xpert SDK does not support conversation resources');
+    }
+    runtimeResources = await client.conversations.updateRuntimeResources(
+      conversation.id,
+      params.runtimeResources,
+    );
+  }
+  return { thread, threadId, conversation, runtimeResources };
+}
+
+export function withPersistedRuntimeResources(
+  request: TChatRequest,
+  selection: RuntimeResourcesSelection | undefined,
+): TChatRequest {
+  if (!selection) return request;
+  return {
+    ...request,
+    input: { ...request.input, runtimeResources: selection },
+    ...(request.state
+      ? {
+          state: {
+            ...request.state,
+            human: { ...request.state.human, runtimeResources: selection },
+          },
+        }
+      : {}),
+  };
 }

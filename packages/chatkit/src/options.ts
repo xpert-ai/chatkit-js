@@ -824,9 +824,20 @@ export type ChatKitOptions = {
       label?: string;
     };
 
+    /** Unified conversation resource selector for plugins, middleware and experts. */
+    resources?: {
+      enabled?: boolean;
+      /** Opens the host's workspace Connector flow. Never returns credentials to ChatKit. */
+      onConnect?: import('./runtime-resources.js').WorkspaceConnectorConnectHandler;
+    };
+
     /**
      * Conversation-level Connector bindings for the current Xpert or Project.
      * Disabled by default and ignored by custom APIs.
+     *
+     * @deprecated Prefer `composer.resources` for unified resource selection.
+     * Retained for compatibility; this option still controls native Connector
+     * capabilities until their migration to `composer.resources` is complete.
      */
     connectors?: {
       enabled?: boolean;
