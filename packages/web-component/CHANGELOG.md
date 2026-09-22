@@ -1,5 +1,20 @@
 # @xpert-ai/chatkit-web-component
 
+## 0.6.0
+
+### Minor Changes
+
+- 54f4adf: Add composer.resources.onConnect to open workspace Connector configuration directly in the host. Forward Assistant and binding identities through the iframe bridge, show the action only with workspace configuration permission, and verify connection readiness before adding capabilities. Credentials and OAuth remain in the host; cancellation leaves the selection unchanged.
+
+### Patch Changes
+
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+  - @xpert-ai/chatkit-types@0.6.0
+  - @xpert-ai/chatkit-web-shared@0.4.5
+
 ## 0.5.4
 
 ### Patch Changes

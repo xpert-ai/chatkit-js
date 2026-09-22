@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-word-addin
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+  - @xpert-ai/chatkit-types@0.6.0
+  - @xpert-ai/chatkit-react@0.4.3
+
 ## 0.1.3
 
 ### Patch Changes

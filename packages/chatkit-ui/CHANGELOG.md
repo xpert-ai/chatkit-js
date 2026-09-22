@@ -1,5 +1,28 @@
 # @xpert-ai/chatkit-ui
 
+## 0.6.0
+
+### Minor Changes
+
+- 54f4adf: Resolve Agent Plugin dependencies through workspace-owned Connector settings and cancellable readiness polling. Only workspace administrators configure or reconnect services; chat users select capabilities through their Assistant access. Legacy personal credentials are never reused as shared credentials. Keep credential-only Connectors out of the standalone middleware selector. Requires the SDK release with typed resource authorization and browser callback credentials.
+- 54f4adf: Add opt-in composer.resources with plugin, middleware and published expert selection, revisioned conversation persistence, workspace connections and searchable responsive resource details. Requires @xpert-ai/xpert-sdk ^0.3.0 for runtime resource methods.
+- 54f4adf: Unify executable Connector capabilities and Agent Plugins under Connect plugins, retaining separate binding identities and conversation persistence. Cache catalogs by client, Assistant and project; use workspace management links and readiness without individual OAuth. Keep the legacy Connector picker for hosts without runtime resources enabled.
+
+### Patch Changes
+
+- 54f4adf: Read workspace connection readiness through the Assistant-scoped SDK runtime API so ChatKit session credentials work without access to administrator OAuth endpoints.
+- b0515d3: fix: append the AI response after newer messages instead of reusing a stale empty placeholder left by a failed run
+- 54f4adf: Keep conversation resource selections through first-message creation and failed-send rollback. Persist the initial selection before starting execution and send its committed revision in both input and injected state. Coordinate resource info cards with one active card and cancellable hover/focus timers.
+- 54f4adf: Support I18nObject resource descriptions in information cards, details, and cached resource search. Render translations using the current locale and shared fallback rules, including legacy expert descriptions stored as JSON strings. Keep ordinary descriptions as plain text.
+- 54f4adf: Use the published Xpert SDK 0.3.0. Block resource edits after failed conversation reads until a successful retry restores the server revision. Resolve selected resource versions independently of catalog search and pagination, revalidate older selections without upgrading them, and distinguish checking, temporary failures and unavailable resources. Invalidate availability caches when returning from workspace management.
+- 54f4adf: Add composer.resources.onConnect to open workspace Connector configuration directly in the host. Forward Assistant and binding identities through the iframe bridge, show the action only with workspace configuration permission, and verify connection readiness before adding capabilities. Credentials and OAuth remain in the host; cancellation leaves the selection unchanged.
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+  - @xpert-ai/chatkit-types@0.6.0
+  - @xpert-ai/chatkit-web-shared@0.4.5
+
 ## 0.5.17
 
 ### Patch Changes
