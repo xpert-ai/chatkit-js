@@ -169,7 +169,7 @@ describe('ProjectSelector', () => {
     );
     expect(
       document.querySelector('[data-slot="composer-project-item"]'),
-    ).toHaveClass('gap-3', 'rounded-md', 'px-1.5', 'py-1', 'text-base');
+    ).toHaveClass('gap-3', 'rounded-md', 'px-1.5', 'py-1', 'text-sm');
     expect(screen.getByText('Second project')).toHaveClass('font-normal');
     expect(screen.getByText('Second project')).not.toHaveClass(
       'font-medium',
