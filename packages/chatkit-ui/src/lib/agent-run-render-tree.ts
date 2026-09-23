@@ -409,6 +409,29 @@ export function buildAssistantRenderTree(
     (run) => !isMiddlewareAgentRunInfo(run),
   );
   const entries = normalizeAssistantEntries(message);
+  for (const run of runs) {
+    if (run.isRoot) rootExecutionIds.add(run.id);
+  }
+  if (message.historical) {
+    // Branch copies have no execution FK. Older snapshots contain only child
+    // runs; newer snapshots explicitly mark the root. Parentless content outside
+    // the child hierarchy remains root output in either format.
+    const childExecutionIds = new Set(
+      runs.filter((run) => !run.isRoot).map((run) => run.id),
+    );
+    for (const { item } of entries) {
+      const executionId = readContentExecutionId(item);
+      if (executionId && readContentParentExecutionId(item)) {
+        childExecutionIds.add(executionId);
+      }
+    }
+    for (const { item } of entries) {
+      const executionId = readContentExecutionId(item);
+      if (executionId && !childExecutionIds.has(executionId)) {
+        rootExecutionIds.add(executionId);
+      }
+    }
+  }
   const nodes = new Map<string, AgentRunRenderNode>();
   const rootEntries: AssistantContentEntry[] = [];
   const rootReasoning: TMessageContentReasoning[] = [];

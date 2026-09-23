@@ -67,6 +67,7 @@ import {
 } from './request-user-input-result-card';
 import { WidgetMessage } from './widget';
 import { isMcpAppComponentData, McpAppMessage } from './mcp-app';
+import { HistoricalMcpAppResult } from './historical-mcp-app-result';
 
 export type AssistantMessageProps = {
   message: ChatkitMessage & { type: 'assistant' };
@@ -559,6 +560,9 @@ function renderContentItem(
     }
 
     if (isMcpAppComponent(content)) {
+      if (message.historical) {
+        return <HistoricalMcpAppResult key={content.id ?? `mcp-app-${index}`} data={content.data} />;
+      }
       return (
         <div key={content.id ?? `mcp-app-${index}`}>
           <McpAppMessage
@@ -931,7 +935,7 @@ export function AssistantMessage({
   ) : null;
 
   const answerNode = renderContent(message, lookupMessages, {
-    onOpenExternalAssistant: workbench.externalAssistantsEnabled
+    onOpenExternalAssistant: workbench.externalAssistantsEnabled && !message.historical
       ? workbench.openExternalAssistant
       : undefined,
     isReasoning,

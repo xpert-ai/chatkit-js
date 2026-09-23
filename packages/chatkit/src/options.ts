@@ -735,6 +735,8 @@ export type ChatKitOptions = {
   };
 
   threadItemActions?: {
+    /** Show Branch in new chat when the server advertises a saved assistant boundary. Defaults to true. */
+    branch?: boolean;
     /**
      * Whether or not to show the response feedback buttons (thumbs up / thumbs
      * down) in the response view. When the user clicks on one of the buttons, the

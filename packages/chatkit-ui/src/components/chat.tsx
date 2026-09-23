@@ -82,6 +82,7 @@ import { useSlashCommands } from './chat/useSlashCommands';
 import { MessageList, type HumanMessageWithMeta } from './thread/MessageList';
 import { MessageNavigator } from './thread/MessageNavigator';
 import { useThreadBranches } from '../hooks/useThreadBranches';
+import { useConversationBranch } from '../hooks/useConversationBranch';
 import { StartScreen } from './thread/StartScreen';
 import { StarterPromptSuggestions } from './composer/StarterPromptSuggestions';
 import {
@@ -1720,9 +1721,32 @@ export function Chat({
   const runtimeResources = useRuntimeResources({ client: xpertPlatformClient, enabled: resourcesEnabled, assistantId: stream.assistantId, projectId: activeProjectId, conversationId: stream.conversationId, threadId: stream.threadId });
 
   const showMissingConfig = !isClientSecretInitializing && missingConfig;
+  const conversationBranch = useConversationBranch({
+    client: stream.client,
+    conversationId: stream.conversationId,
+    threadId: stream.threadId,
+    navigate: async (threadId) => {
+      activeBranchRef.current = threadId;
+      stream.reset(threadId, []);
+      await stream.loadThread(threadId);
+    },
+    onReady: () => {
+      commitComposerParts([], { resetDom: true, syncRemovedCapabilityTokens: false });
+      attachmentsRef.current?.clear();
+      setReferences([]);
+      setReferencedWorkspaceFiles([]);
+      setWorkspaceFileMention(null);
+      setSelectedTool(null);
+      setEditingMessageId(null);
+      resetRunRuntimeCapabilities();
+      requestAnimationFrame(() => composerInputRef.current?.focus());
+    },
+    refresh: refreshThreads,
+  });
   // File parsing can continue after submit; only the transport upload blocks send.
   const hasUploadingFiles = attachmentState.hasUploadingFiles;
   const isSubmissionBlocked =
+    Boolean(conversationBranch.pendingMessageId) ||
     (resourcesEnabled && (runtimeResources.busy || !runtimeResources.ready)) ||
     isChangingBranch ||
     isResumingRun ||
@@ -3714,6 +3738,16 @@ export function Chat({
               {historyError}
             </div>
           )}
+          {conversationBranch.error && (
+            <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {t('messageActions.branchFailed')}
+              <p className="mt-1 text-xs">
+                {/^(?:failed to fetch|network\s*(?:request\s*)?(?:failed|error)|load failed)$/i.test(conversationBranch.error)
+                  ? t('messageActions.branchNetworkError')
+                  : conversationBranch.error}
+              </p>
+            </div>
+          )}
           {showMissingConfig && (
             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               {missingConfigDetailMessage}
@@ -3753,6 +3787,11 @@ export function Chat({
               canLoadMoreMessages={canLoadMoreMessages}
               isLoadingMoreMessages={isLoadingMoreMessages}
               onLoadMore={handleLoadMoreMessages}
+              onBranch={options?.threadItemActions?.branch !== false && stream.conversationId &&
+                typeof stream.client?.conversations?.branch === 'function' && !isChangingBranch
+                ? (messageId) => { void conversationBranch.branch(messageId); } : undefined}
+              onMessageActionTooltipOpen={disableAutoFollow}
+              branchingMessageId={conversationBranch.pendingMessageId}
               onRetry={
                 branchState.current?.status !== 'paused' &&
                 branchState.current?.status !== 'pausing' &&

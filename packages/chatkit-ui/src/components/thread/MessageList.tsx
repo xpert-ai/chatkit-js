@@ -109,6 +109,9 @@ export type MessageListProps = {
   isLoadingMoreMessages?: boolean;
   onLoadMore?: () => void;
   onRetry?: (index: number) => void;
+  onBranch?: (messageId: string) => void;
+  onMessageActionTooltipOpen?: () => void;
+  branchingMessageId?: string | null;
   onMessageAnchor?: (id: string, node: HTMLDivElement | null) => void;
   enableQuotes?: boolean;
   editing?: {
@@ -143,6 +146,9 @@ export function MessageList({
   isLoadingMoreMessages,
   onLoadMore,
   onRetry,
+  onBranch,
+  onMessageActionTooltipOpen,
+  branchingMessageId,
   onMessageAnchor,
   enableQuotes = true,
   editing,
@@ -377,6 +383,15 @@ export function MessageList({
                     content={messageContent}
                     isAssistant={isAssistantMessage}
                     isStreaming={isStreamingMessage}
+                    onActionTooltipOpen={onMessageActionTooltipOpen}
+                    branching={(message as ChatkitMessage).branching}
+                    isBranching={branchingMessageId === message.id}
+                    branchDisabled={Boolean(branchingMessageId)}
+                    onBranch={
+                      onBranch && message.id
+                        ? () => onBranch(message.id!)
+                        : undefined
+                    }
                     onEdit={
                       canEditMessage && editing
                         ? () => editing.onStart(message.id!)

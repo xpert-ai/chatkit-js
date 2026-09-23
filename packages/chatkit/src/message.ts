@@ -325,6 +325,13 @@ export type TChatEventMessage = {
 };
 
 export interface ChatkitMessage {
+  createdAt?: string | Date | null;
+  updatedAt?: string | Date | null;
+  historical?: boolean;
+  branching?: {
+    available: boolean;
+    reason?: 'message_not_complete' | 'checkpoint_unavailable' | 'graph_changed' | 'state_not_supported';
+  };
   status?: string;
   content: TMessageItems | string;
   reasoning?: TMessageContentReasoning[];

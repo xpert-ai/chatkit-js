@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
         getRuntimeCapabilities: vi.fn(() => new Promise(() => undefined)),
       },
       conversations: {
+        branch: vi.fn().mockResolvedValue({ id: 'branched-conversation', threadId: 'branched-thread' }),
         listThreads: vi.fn().mockResolvedValue([]),
         search: vi.fn().mockResolvedValue({ items: [] }),
         update: vi.fn(),
@@ -250,6 +251,28 @@ function setMessages(count = 3) {
 }
 
 describe('Chat message navigation', () => {
+  it('opens a new conversation from a sealed historical AI reply without pausing the source run', async () => {
+    setMessages(3);
+    Object.assign(mocks.stream.messages[1], { branching: { available: true } });
+    mocks.stream.isLoading = true;
+    render(<Chat options={baseOptions} />);
+    fireEvent.click(screen.getByRole('button', { name: 'messageActions.branch' }));
+    await waitFor(() => expect(mocks.stream.loadThread).toHaveBeenCalledWith('branched-thread'));
+    expect(mocks.stream.client.conversations.branch).toHaveBeenCalledWith('conversation-1', {
+      sourceThreadId: 'thread-1', afterMessageId: 'assistant-1', requestId: expect.any(String),
+    });
+    expect(mocks.stream.pauseRun).not.toHaveBeenCalled();
+    expect(mocks.stream.stop).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.refreshThreads).toHaveBeenCalled());
+  });
+
+  it('lets hosts disable conversation branching', () => {
+    Object.assign(mocks.stream.messages[1], { branching: { available: true } });
+    render(<Chat options={{ ...baseOptions, threadItemActions: { branch: false } }} />);
+    expect(screen.queryByRole('button', { name: 'messageActions.branch' })).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.threads.splice(0);
