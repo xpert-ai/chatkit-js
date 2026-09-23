@@ -527,6 +527,13 @@
     "langGraphMessages": "LangGraph 消息..."
   },
   "message": {
+    "process": {
+      "title": "处理过程",
+      "running": "正在处理…",
+      "duration": "用时 {{duration}}",
+      "seconds": "{{seconds}}秒",
+      "minutesSeconds": "{{minutes}}分{{seconds}}秒"
+    },
     "historicalAppResult": "应用历史结果",
     "historicalAppResultUnavailable": "此应用没有保存可展示的结果。",
     "answer": "回答",

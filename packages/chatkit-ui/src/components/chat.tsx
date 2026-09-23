@@ -3785,6 +3785,7 @@ export function Chat({
             />
           ) : (
             <MessageList
+              collapseProcess={options?.messagePresentation?.collapseProcess === true}
               messages={messages}
               assistantTitle={assistantTitle}
               isLoading={isVisibleStreaming}

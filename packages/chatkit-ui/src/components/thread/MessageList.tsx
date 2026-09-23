@@ -9,6 +9,10 @@ import type {
 } from '@xpert-ai/chatkit-types';
 import { FileText } from 'lucide-react';
 import type { AssistantMessageWithAgentRuns } from '../../lib/agent-run-render-tree';
+import {
+  getFinalAnswerText,
+  groupAssistantProcessMessages,
+} from '../../lib/assistant-presentation';
 import { cn } from '../../lib/utils';
 import {
   getAssistantStreamingStatus,
@@ -90,6 +94,10 @@ function formatMessageContent(
 }
 
 export type MessageListProps = {
+  collapseProcess?: boolean;
+  showActions?: boolean;
+  /** Nested process entries reuse the parent answer's horizontal padding. */
+  embedded?: boolean;
   messages: TranscriptMessage[];
   /** Original conversation for tool-result and interactive component lookups. */
   lookupMessages?: ChatkitMessage[];
@@ -128,6 +136,9 @@ export type MessageListProps = {
 
 /** Shared transcript presentation for main chat and read-only workbench views. */
 export function MessageList({
+  collapseProcess = false,
+  showActions = true,
+  embedded = false,
   messages,
   lookupMessages,
   assistantTitle,
@@ -154,6 +165,10 @@ export function MessageList({
   editing,
 }: MessageListProps) {
   const { t } = useChatkitTranslation();
+  const processGroups = collapseProcess
+    ? groupAssistantProcessMessages(messages as AssistantMessageWithAgentRuns[])
+    : new Map<number, number[]>();
+  const foldedIndexes = new Set([...processGroups.values()].flat());
   return (
     <div data-slot="chatkit-message-list" className="space-y-4">
       {canLoadMoreMessages && (
@@ -175,6 +190,8 @@ export function MessageList({
         </div>
       )}
       {messages.map((message, index) => {
+        if (foldedIndexes.has(index)) return null;
+        const processIndexes = processGroups.get(index);
         const messageType = String(message.type);
         const isHumanMessage =
           messageType === 'human' || messageType === 'user';
@@ -261,16 +278,32 @@ export function MessageList({
         return (
           <div
             key={message.id ?? `${message.type}-${index}`}
-            ref={(node) => onMessageAnchor?.(messageNavigationId, node)}
+            ref={(node) => {
+              onMessageAnchor?.(messageNavigationId, node);
+              processIndexes?.forEach((processIndex) =>
+                onMessageAnchor?.(
+                  getMessageNavigationItemId(
+                    messages[processIndex],
+                    processIndex,
+                  ),
+                  node,
+                ),
+              );
+            }}
             data-message-navigation-id={messageNavigationId}
             className={cn(
               'group flex gap-3',
-              isHumanMessage ? 'justify-end' : 'justify-start -ml-1', // AI messages: slightly closer to left
+              isHumanMessage
+                ? 'justify-end'
+                : embedded
+                  ? 'justify-start'
+                  : 'justify-start -ml-1',
             )}
           >
             <div
               className={cn(
-                'flex flex-col px-3 overflow-hidden',
+                'flex flex-col overflow-hidden',
+                !embedded && 'px-3',
                 (isAssistantMessage || isEditingMessage) && 'min-w-0 flex-1',
               )}
             >
@@ -301,6 +334,26 @@ export function MessageList({
                   >
                     {isAssistantMessage ? (
                       <AssistantMessage
+                        collapseProcess={collapseProcess}
+                        processPrefix={
+                          processIndexes?.length ? (
+                            <MessageList
+                              messages={processIndexes.map(
+                                (processIndex) => messages[processIndex],
+                              )}
+                              lookupMessages={
+                                (lookupMessages ?? messages) as ChatkitMessage[]
+                              }
+                              assistantTitle={assistantTitle}
+                              organizationId={organizationId}
+                              apiUrl={apiUrl}
+                              mcpApps={mcpApps}
+                              enableQuotes={enableQuotes}
+                              showActions={false}
+                              embedded
+                            />
+                          ) : undefined
+                        }
                         message={{
                           ...(message as ChatkitMessage),
                           type: 'assistant',
@@ -379,33 +432,41 @@ export function MessageList({
                     )}
                   </div>
                   {/* Message actions - hidden during streaming, retry only for last AI message */}
-                  <MessageActions
-                    content={messageContent}
-                    isAssistant={isAssistantMessage}
-                    isStreaming={isStreamingMessage}
-                    onActionTooltipOpen={onMessageActionTooltipOpen}
-                    branching={(message as ChatkitMessage).branching}
-                    isBranching={branchingMessageId === message.id}
-                    branchDisabled={Boolean(branchingMessageId)}
-                    onBranch={
-                      onBranch && message.id
-                        ? () => onBranch(message.id!)
-                        : undefined
-                    }
-                    onEdit={
-                      canEditMessage && editing
-                        ? () => editing.onStart(message.id!)
-                        : undefined
-                    }
-                    onRetry={
-                      onRetry &&
-                      isAssistantMessage &&
-                      !isLoading &&
-                      index === messages.length - 1
-                        ? () => onRetry(index)
-                        : undefined
-                    }
-                  />
+                  {showActions && (
+                    <MessageActions
+                      content={
+                        collapseProcess && isAssistantMessage
+                          ? (getFinalAnswerText(
+                              message as AssistantMessageWithAgentRuns,
+                            ) ?? messageContent)
+                          : messageContent
+                      }
+                      isAssistant={isAssistantMessage}
+                      isStreaming={isStreamingMessage}
+                      onActionTooltipOpen={onMessageActionTooltipOpen}
+                      branching={(message as ChatkitMessage).branching}
+                      isBranching={branchingMessageId === message.id}
+                      branchDisabled={Boolean(branchingMessageId)}
+                      onBranch={
+                        onBranch && message.id
+                          ? () => onBranch(message.id!)
+                          : undefined
+                      }
+                      onEdit={
+                        canEditMessage && editing
+                          ? () => editing.onStart(message.id!)
+                          : undefined
+                      }
+                      onRetry={
+                        onRetry &&
+                        isAssistantMessage &&
+                        !isLoading &&
+                        index === messages.length - 1
+                          ? () => onRetry(index)
+                          : undefined
+                      }
+                    />
+                  )}
                 </>
               )}
             </div>

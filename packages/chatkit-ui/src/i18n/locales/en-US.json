@@ -527,6 +527,13 @@
     "langGraphMessages": "LangGraph Messages..."
   },
   "message": {
+    "process": {
+      "title": "Process",
+      "running": "Working…",
+      "duration": "Took {{duration}}",
+      "seconds": "{{seconds}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s"
+    },
     "historicalAppResult": "Historical app result",
     "historicalAppResultUnavailable": "This app did not save a displayable result.",
     "answer": "Answer",

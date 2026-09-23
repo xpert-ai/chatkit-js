@@ -211,11 +211,22 @@ vi.mock('./composer/hitl-approval-panel', () => ({
 }));
 
 vi.mock('./thread/messages/ai', () => ({
-  AssistantMessage: ({ isStreaming }: { isStreaming: boolean }) =>
-    isStreaming ? <span data-testid="streaming-output" /> : null,
+  AssistantMessage: ({
+    isStreaming,
+    collapseProcess,
+  }: {
+    isStreaming: boolean;
+    collapseProcess?: boolean;
+  }) => (
+    <span
+      data-testid="assistant-presentation"
+      data-collapse-process={Boolean(collapseProcess)}
+    >
+      {isStreaming ? <span data-testid="streaming-output" /> : null}
+    </span>
+  ),
   AssistantStreamingIndicator: () => <span data-testid="streaming-output" />,
 }));
-
 
 vi.mock('./ui/chatkit-avatar', () => ({
   ChatkitAvatar: () => null,
@@ -253,6 +264,25 @@ function setMessages(count = 3) {
 }
 
 describe('Chat message navigation', () => {
+  it('passes the opt-in process presentation option to assistant messages', () => {
+    const { rerender } = render(<Chat options={baseOptions} />);
+    expect(screen.getAllByTestId('assistant-presentation')[0]).toHaveAttribute(
+      'data-collapse-process',
+      'false',
+    );
+    rerender(
+      <Chat
+        options={{
+          ...baseOptions,
+          messagePresentation: { collapseProcess: true },
+        }}
+      />,
+    );
+    expect(screen.getAllByTestId('assistant-presentation')[0]).toHaveAttribute(
+      'data-collapse-process',
+      'true',
+    );
+  });
   it('opens a new conversation from a sealed historical AI reply without pausing the source run', async () => {
     setMessages(3);
     Object.assign(mocks.stream.messages[1], { branching: { available: true } });

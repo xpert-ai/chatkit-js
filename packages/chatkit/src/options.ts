@@ -607,6 +607,12 @@ export type ChatKitOptions = {
    */
   messageNavigation?: ChatKitMessageNavigationOptions;
 
+  /** Message presentation only; never changes stored messages or model context. */
+  messagePresentation?: {
+    /** Collapse the process preceding each final assistant answer. Default: false. */
+    collapseProcess?: boolean;
+  };
+
   /**
    * Optional Xpert Remote Views workbench.
    *
