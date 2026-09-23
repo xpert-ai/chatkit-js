@@ -1,5 +1,9 @@
 import type { ChatMessageInputCheckpoint, Message } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../../providers/Stream';
+import {
+  getMessageSkillUsages,
+  mergeChatSkillUsages,
+} from '@xpert-ai/chatkit-types';
 import type {
   ChatKitOptions,
   ChatkitMessage,
@@ -456,6 +460,16 @@ export function MessageList({
                           : messageContent
                       }
                       isAssistant={isAssistantMessage}
+                      skillUsages={
+                        isAssistantMessage
+                          ? mergeChatSkillUsages(
+                              ...(processIndexes ?? []).map((i) =>
+                                getMessageSkillUsages(messages[i]),
+                              ),
+                              getMessageSkillUsages(message),
+                            )
+                          : undefined
+                      }
                       isStreaming={isStreamingMessage}
                       alwaysVisible={
                         isAssistantMessage && index === lastAssistantIndex

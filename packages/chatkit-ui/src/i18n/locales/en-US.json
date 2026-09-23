@@ -164,6 +164,15 @@
     "threadFallback": "Thread"
   },
   "messageActions": {
+    "skills": {
+      "title": "Skills used",
+      "sources": {
+        "workspace": "Workspace",
+        "project": "Project",
+        "assistant": "Assistant",
+        "plugin": "Plugin"
+      }
+    },
     "copied": "Copied!",
     "copy": "Copy to clipboard",
     "regenerate": "Regenerate response",

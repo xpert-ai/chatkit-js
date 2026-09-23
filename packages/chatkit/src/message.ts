@@ -325,6 +325,7 @@ export type TChatEventMessage = {
 };
 
 export interface ChatkitMessage {
+  taskSummary?: TChatTaskSummaryContribution;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
   historical?: boolean;

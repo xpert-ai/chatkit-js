@@ -164,6 +164,15 @@
     "threadFallback": "线程"
   },
   "messageActions": {
+    "skills": {
+      "title": "使用的技能",
+      "sources": {
+        "workspace": "工作空间",
+        "project": "项目",
+        "assistant": "Assistant",
+        "plugin": "插件"
+      }
+    },
     "copied": "已复制！",
     "copy": "复制到剪贴板",
     "regenerate": "重新生成回复",
