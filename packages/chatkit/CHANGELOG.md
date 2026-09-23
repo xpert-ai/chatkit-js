@@ -1,5 +1,15 @@
 # @xpert-ai/chatkit-types
 
+## 0.6.1
+
+### Patch Changes
+
+- 8ee52f7: Add a direct Branch in new chat action and tooltips for message action buttons to completed assistant messages that advertise a sealed server checkpoint. Requires Xpert SDK 0.4.0 and the conversation branching backend migration. Preserve source drafts on failure, deduplicate retries, and ignore responses after navigation. Historical app results are displayed without reconnecting to source executions.
+- 56407c3: Add opt-in `messagePresentation.collapseProcess` to group assistant progress and tool history above the final reply, preserving interactive content and original message identities.
+- ee6fc28: Show persisted root execution duration in process disclosures and localized updatedAt timestamps beneath assistant and human messages on message hover or focus. Keep the latest assistant reply's action buttons visible. Preserve server timestamps across streaming and history hydration, including root timing in branched history snapshots.
+
+  Include a localized relative day for recent past messages and a calendar date for older messages, while keeping today's timestamps compact.
+
 ## 0.6.0
 
 ### Minor Changes

@@ -1,5 +1,25 @@
 # @xpert-ai/chatkit-ui
 
+## 0.6.1
+
+### Patch Changes
+
+- 8ee52f7: Add a direct Branch in new chat action and tooltips for message action buttons to completed assistant messages that advertise a sealed server checkpoint. Requires Xpert SDK 0.4.0 and the conversation branching backend migration. Preserve source drafts on failure, deduplicate retries, and ignore responses after navigation. Historical app results are displayed without reconnecting to source executions.
+- 56407c3: Add opt-in `messagePresentation.collapseProcess` to group assistant progress and tool history above the final reply, preserving interactive content and original message identities.
+- 191610f: Place tool-group disclosure arrows next to their summaries and show them on hover, keyboard focus, or while expanded.
+- 8ee52f7: Render copied main-assistant replies as normal messages after branching, while preserving child-agent and external-assistant groups.
+- bea041a: Allow renaming the conversation title inline in the chat header without changing its height, with keyboard controls, save feedback, and synchronized history titles.
+- ee6fc28: Show persisted root execution duration in process disclosures and localized updatedAt timestamps beneath assistant and human messages on message hover or focus. Keep the latest assistant reply's action buttons visible. Preserve server timestamps across streaming and history hydration, including root timing in branched history snapshots.
+
+  Include a localized relative day for recent past messages and a calendar date for older messages, while keeping today's timestamps compact.
+
+- 539ab69: Display a theme-aware message skeleton while thread history loads, with an accessible loading status and reduced-motion support.
+- 8df6fa6: Upgrade the Xpert SDK dependency to the published 0.4.0 release with conversation branching and root execution summaries.
+- Updated dependencies [8ee52f7]
+- Updated dependencies [56407c3]
+- Updated dependencies [ee6fc28]
+  - @xpert-ai/chatkit-types@0.6.1
+
 ## 0.6.0
 
 ### Minor Changes
