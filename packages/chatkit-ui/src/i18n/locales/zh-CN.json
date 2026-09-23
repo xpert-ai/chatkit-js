@@ -527,6 +527,7 @@
     "langGraphMessages": "LangGraph 消息..."
   },
   "message": {
+    "updatedAt": "更新于 {{time}}",
     "process": {
       "title": "处理过程",
       "running": "正在处理…",

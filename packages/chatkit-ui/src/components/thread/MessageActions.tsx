@@ -8,6 +8,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { ChatMessageBranching } from '@xpert-ai/xpert-sdk';
+import type { ChatkitMessage } from '@xpert-ai/chatkit-types';
+import { MessageTimestamp } from './MessageTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
@@ -74,9 +76,11 @@ function MessageActionButton({
 }
 
 export type MessageActionsProps = {
+  updatedAt?: ChatkitMessage['updatedAt'];
   content: string;
   isAssistant?: boolean;
   isStreaming?: boolean;
+  alwaysVisible?: boolean;
   onRetry?: () => void;
   onEdit?: () => void;
   onBranch?: () => void;
@@ -88,9 +92,11 @@ export type MessageActionsProps = {
 };
 
 export function MessageActions({
+  updatedAt,
   content,
   isAssistant = false,
   isStreaming = false,
+  alwaysVisible = false,
   onRetry,
   onEdit,
   onBranch,
@@ -127,7 +133,8 @@ export function MessageActions({
       <div
         className={cn(
           'flex items-center gap-1 opacity-100 transition-opacity',
-          'sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
+          !alwaysVisible &&
+            'sm:opacity-0 sm:group-hover/message:opacity-100 sm:focus-within:opacity-100',
         )}
       >
         <MessageActionButton
@@ -173,6 +180,7 @@ export function MessageActions({
           </MessageActionButton>
         )}
       </div>
+      <MessageTimestamp updatedAt={updatedAt} />
     </div>
   );
 }

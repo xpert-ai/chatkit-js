@@ -38,6 +38,7 @@ import {
 } from '../chat/runtime-capabilities';
 import { AssistantMessage, AssistantStreamingIndicator } from './messages/ai';
 import { MessageActions } from './MessageActions';
+import { MessageTimestamp } from './MessageTimestamp';
 import { MessageEditor } from './MessageEditor';
 import { Button } from '../ui/button';
 
@@ -169,6 +170,14 @@ export function MessageList({
     ? groupAssistantProcessMessages(messages as AssistantMessageWithAgentRuns[])
     : new Map<number, number[]>();
   const foldedIndexes = new Set([...processGroups.values()].flat());
+  const lastAssistantIndex = messages.reduce(
+    (lastIndex, message, index) =>
+      !foldedIndexes.has(index) &&
+      ['assistant', 'ai'].includes(String(message.type))
+        ? index
+        : lastIndex,
+    -1,
+  );
   return (
     <div data-slot="chatkit-message-list" className="space-y-4">
       {canLoadMoreMessages && (
@@ -292,7 +301,7 @@ export function MessageList({
             }}
             data-message-navigation-id={messageNavigationId}
             className={cn(
-              'group flex gap-3',
+              'group group/message flex gap-3',
               isHumanMessage
                 ? 'justify-end'
                 : embedded
@@ -434,6 +443,11 @@ export function MessageList({
                   {/* Message actions - hidden during streaming, retry only for last AI message */}
                   {showActions && (
                     <MessageActions
+                      updatedAt={
+                        isAssistantMessage || isHumanMessage
+                          ? message.updatedAt
+                          : undefined
+                      }
                       content={
                         collapseProcess && isAssistantMessage
                           ? (getFinalAnswerText(
@@ -443,6 +457,9 @@ export function MessageList({
                       }
                       isAssistant={isAssistantMessage}
                       isStreaming={isStreamingMessage}
+                      alwaysVisible={
+                        isAssistantMessage && index === lastAssistantIndex
+                      }
                       onActionTooltipOpen={onMessageActionTooltipOpen}
                       branching={(message as ChatkitMessage).branching}
                       isBranching={branchingMessageId === message.id}
@@ -467,6 +484,11 @@ export function MessageList({
                       }
                     />
                   )}
+                  {!showActions &&
+                    !isStreamingMessage &&
+                    (isAssistantMessage || isHumanMessage) && (
+                      <MessageTimestamp updatedAt={message.updatedAt} />
+                    )}
                 </>
               )}
             </div>

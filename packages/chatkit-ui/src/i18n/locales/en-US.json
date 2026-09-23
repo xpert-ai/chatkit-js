@@ -527,6 +527,7 @@
     "langGraphMessages": "LangGraph Messages..."
   },
   "message": {
+    "updatedAt": "Updated {{time}}",
     "process": {
       "title": "Process",
       "running": "Working…",
