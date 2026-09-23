@@ -344,7 +344,8 @@ describe('Chat start screen prompts', () => {
     mocks.stream.threadId = 'thread-1';
     mocks.stream.historyLoad = { threadId: 'thread-1', status: 'loading' };
     renderChat();
-    expect(await screen.findByText('chat.loadingThread')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'chat.loadingThread' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText('chat.loadingThread')).toHaveClass('sr-only');
     expect(
       screen.queryByRole('heading', { name: 'What can I help with today?' }),
     ).not.toBeInTheDocument();

@@ -1,6 +1,7 @@
 import type { ThreadHistoryState } from '../../providers/useThreadHistory';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { Button } from '../ui/button';
+import { ThreadHistorySkeleton } from './ThreadHistorySkeleton';
 
 export function ThreadHistoryStatus({
   state,
@@ -13,14 +14,7 @@ export function ThreadHistoryStatus({
 }) {
   const { t } = useChatkitTranslation();
   if (state?.status === 'loading') {
-    return (
-      <div
-        role="status"
-        className="mb-4 px-3 py-2 text-sm text-muted-foreground"
-      >
-        {t('chat.loadingThread')}
-      </div>
-    );
+    return <ThreadHistorySkeleton />;
   }
   if (state?.status === 'error') {
     return (
