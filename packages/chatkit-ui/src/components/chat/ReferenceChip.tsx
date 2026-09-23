@@ -1,5 +1,5 @@
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
-import { FileText, ImageIcon, Quote, X } from 'lucide-react';
+import { FileText, ImageIcon, MessageCircle, Quote, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
   getReferenceLabel,
@@ -21,7 +21,9 @@ export function ReferenceChip({
   const metaLine = getReferenceMetaLine(reference);
   const isComposer = variant === 'composer';
   const Icon =
-    reference.type === 'quote'
+    reference.type === 'thread'
+      ? MessageCircle
+      : reference.type === 'quote'
       ? Quote
       : reference.type === 'image'
         ? ImageIcon

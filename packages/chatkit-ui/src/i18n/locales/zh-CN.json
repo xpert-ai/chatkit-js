@@ -47,7 +47,7 @@
   },
   "chat": {
     "title": "聊天",
-    "placeholder": "今天帮你做些什么？ @ 引用工作区文件，/ 调用技能与指令",
+    "placeholder": "今天帮你做些什么？ @ 引用对话，/ 调用技能与指令",
     "statusOnline": "在线",
     "conversationTitle": {
       "rename": "重命名对话",
@@ -416,6 +416,14 @@
       "hostUnavailable": "当前宿主尚未支持工作空间连接，请联系管理员。",
       "contactAdmin": "你没有此工作空间的连接配置权限，请联系管理员进行配置。",
       "checkConnection": "检查连接并继续"
+    },
+    "threadMentions": {
+      "title": "引用对话",
+      "loading": "正在搜索对话…",
+      "empty": "没有匹配的对话",
+      "error": "无法加载对话",
+      "untitled": "未命名对话",
+      "remove": "移除对话引用：{{title}}"
     }
   },
   "settings": {

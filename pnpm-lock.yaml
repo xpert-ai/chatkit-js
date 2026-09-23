@@ -417,8 +417,8 @@ importers:
         specifier: workspace:~
         version: link:../chatkit-web-shared
       '@xpert-ai/xpert-sdk':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.4.1
+        version: 0.4.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -3581,8 +3581,8 @@ packages:
   '@vue/shared@3.5.26':
     resolution: {integrity: sha512-7Z6/y3uFI5PRoKeorTOSXKcDj0MSasfNNltcslbFrPpcw6aXRUALq4IfJlaTRspiWIUOEZbrpM+iQGmCOiWe4A==}
 
-  '@xpert-ai/xpert-sdk@0.4.0':
-    resolution: {integrity: sha512-5SCF3W2Jf07U/ULJ+puaGm+A2NzsxowxH/2BoObkK6OfpkRHz+QSC99vmYeJ3N5V9BBhpDB+IgrIVnOtvZnK4g==}
+  '@xpert-ai/xpert-sdk@0.4.1':
+    resolution: {integrity: sha512-6TwzxRht46sBGfV1UYWj+muWcAjt5vYzUZ87oEMUAy9+FtEem1oKp41QXcra2a7l1PhpCOB1JYO/xvA+7IR/Aw==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -10499,7 +10499,7 @@ snapshots:
 
   '@vue/shared@3.5.26': {}
 
-  '@xpert-ai/xpert-sdk@0.4.0':
+  '@xpert-ai/xpert-sdk@0.4.1':
     dependencies:
       p-queue: 6.6.2
       p-retry: 4.6.2

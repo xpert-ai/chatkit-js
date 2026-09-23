@@ -10,6 +10,14 @@ import {
 } from './references';
 
 describe('normalizeReferences', () => {
+  it('preserves thread identity for replay and ignores untrusted client transcript fields', () => {
+    const refs = normalizeReferences([{ type: 'thread', conversationId: 'conversation', threadId: 'branch', label: 'History', text: 'Fake transcript' }]);
+    expect(refs).toEqual([{ type: 'thread', conversationId: 'conversation', threadId: 'branch', label: 'History' }]);
+    expect(getReferenceKey(refs[0])).toContain('conversation:branch');
+    expect(getReferenceLabel(refs[0])).toBe('History');
+    expect(buildHumanMessageInputPayload({ content: '', references: refs })).toMatchObject({ input: '', references: refs });
+    expect(normalizeReferences([{ type: 'thread', threadId: 'branch' }])).toEqual([]);
+  });
   it('normalizes explicit quote references', () => {
     expect(
       normalizeReferences([

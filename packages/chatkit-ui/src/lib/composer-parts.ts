@@ -1,8 +1,9 @@
+import type { ChatKitThreadReference } from '@xpert-ai/chatkit-types';
 import type { RuntimeCapabilityOption } from './runtime-capabilities';
 
 export const COMPOSER_CAPABILITY_TOKEN_LENGTH = 1;
 export const COMPOSER_CAPABILITY_TOKEN = '\uFFFC';
-export const COMPOSER_CAPABILITY_SELECTOR = '[data-composer-capability-key]';
+export const COMPOSER_CAPABILITY_SELECTOR = '[data-composer-capability-key], [data-composer-thread-key]';
 
 export type ComposerTextPart = {
   type: 'text';
@@ -15,7 +16,21 @@ export type ComposerCapabilityPart = {
   capability: RuntimeCapabilityOption;
 };
 
-export type ComposerPart = ComposerTextPart | ComposerCapabilityPart;
+export type ComposerThreadPart = {
+  type: 'thread';
+  key: string;
+  reference: ChatKitThreadReference;
+};
+
+export type ComposerPart = ComposerTextPart | ComposerCapabilityPart | ComposerThreadPart;
+
+export function getComposerTokenPartMap(parts: ComposerPart[]): Map<string, ComposerCapabilityPart | ComposerThreadPart> {
+  return new Map(parts.filter((part): part is ComposerCapabilityPart | ComposerThreadPart => part.type !== 'text').map(part => [part.key, part]));
+}
+
+export function getComposerThreadReferences(parts: ComposerPart[]): ChatKitThreadReference[] {
+  return parts.flatMap(part => part.type === 'thread' ? [part.reference] : []);
+}
 
 export type ComposerSelectionOffsets = {
   start: number;
@@ -143,7 +158,7 @@ export function sliceComposerParts(
       break;
     }
 
-    if (part.type === 'capability') {
+    if (part.type !== 'text') {
       if (partStart >= start && partEnd <= end) {
         result.push(part);
       }
@@ -189,11 +204,11 @@ export function removeComposerCapabilityTokens(
   );
 }
 
-export function findAdjacentComposerCapability(
+export function findAdjacentComposerToken(
   parts: ComposerPart[],
   offset: number,
   direction: 'before' | 'after',
-): ComposerCapabilityPart | null {
+): ComposerCapabilityPart | ComposerThreadPart | null {
   let cursor = 0;
   for (const part of parts) {
     const length = getComposerPartLength(part);
@@ -201,7 +216,7 @@ export function findAdjacentComposerCapability(
     const end = cursor + length;
     cursor = end;
 
-    if (part.type !== 'capability') {
+    if (part.type === 'text') {
       continue;
     }
 
@@ -217,7 +232,7 @@ export function findAdjacentComposerCapability(
 
 export function readComposerPartsFromElement(
   element: HTMLElement,
-  existingCapabilities: Map<string, ComposerCapabilityPart>,
+  existingCapabilities: ReadonlyMap<string, ComposerCapabilityPart | ComposerThreadPart>,
 ): ComposerPart[] {
   const parts: ComposerPart[] = [];
   const appendText = (text: string) => {
@@ -239,7 +254,7 @@ export function readComposerPartsFromElement(
     }
 
     if (node.matches(COMPOSER_CAPABILITY_SELECTOR)) {
-      const key = node.dataset.composerCapabilityKey;
+      const key = node.dataset.composerCapabilityKey ?? node.dataset.composerThreadKey;
       const capability = key ? existingCapabilities.get(key) : null;
       if (capability) {
         parts.push(capability);

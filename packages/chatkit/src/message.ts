@@ -409,6 +409,7 @@ export type ChatKitFileElementReference = ChatKitReferenceBase & {
 };
 
 export type ChatKitReference =
+  | import('./thread-reference.js').ChatKitThreadReference
   | ChatKitCodeReference
   | ChatKitQuoteReference
   | ChatKitImageReference

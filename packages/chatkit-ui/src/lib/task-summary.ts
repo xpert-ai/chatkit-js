@@ -617,6 +617,13 @@ function sourceFromReference(
   message: TaskSummaryMessage,
 ): ChatTaskSummarySource {
   const updatedAt = message.updatedAt ?? message.createdAt;
+  if (reference.type === 'thread') return {
+    id: `thread:${reference.conversationId}:${reference.threadId}`,
+    title: reference.label || reference.threadId,
+    kind: 'quote',
+    messageId: message.id,
+    updatedAt,
+  };
   const common = {
     id:
       stringValue(reference.id) ?? `${reference.type}:${reference.text}`.trim(),

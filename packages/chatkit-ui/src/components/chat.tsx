@@ -24,6 +24,7 @@ import type {
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
 import type {
+  ChatKitThreadReference,
   ChatKitImageReference,
   ChatKitOptions,
   ChatKitReference,
@@ -51,11 +52,11 @@ import { ComposerMenu } from './composer/ComposerMenu';
 import { PromptWorkflowShortcuts } from './composer/PromptWorkflowShortcuts';
 import { usePromptWorkflowDraft } from './chat/usePromptWorkflowDraft';
 import { ModelPicker } from './composer/ModelPicker';
+import { ThreadMentionPalette, type ThreadMentionPaletteHandle } from './composer/ThreadMentionPalette';
+import { ComposerThreadToken } from './composer/ComposerThreadToken';
 import { WorkspaceFileSelector } from './composer/WorkspaceFileSelector';
 import {
-  WorkspaceFileMentionPalette,
   getWorkspaceFilePath,
-  type WorkspaceFileMentionPaletteHandle,
 } from './composer/WorkspaceFileMentionPalette';
 import { ProjectSelector } from './composer/ProjectSelector';
 import { SendButton } from './composer/SendButton';
@@ -142,8 +143,10 @@ import {
 import { withConnectorBindingIds } from '../lib/conversation-connectors';
 import {
   createComposerTextParts,
-  findAdjacentComposerCapability,
-  getComposerCapabilityPartMap,
+  findAdjacentComposerToken,
+  getComposerTokenPartMap,
+  getComposerThreadReferences,
+  getComposerEditingText,
   getComposerEditingLength,
   getComposerPlainText,
   getComposerSelectionOffset,
@@ -246,7 +249,7 @@ type QuoteSelectionState = {
   left: number;
 };
 
-type WorkspaceFileMentionState = {
+type ThreadMentionState = {
   start: number;
   end: number;
   query: string;
@@ -260,10 +263,10 @@ type SubmitDraftOptions = {
   planMode?: boolean;
 };
 
-function getWorkspaceFileMention(
+function getThreadMention(
   text: string,
   caretOffset: number,
-): WorkspaceFileMentionState | null {
+): ThreadMentionState | null {
   const beforeCaret = text.slice(0, caretOffset);
   const mentionStart = beforeCaret.lastIndexOf('@');
   if (mentionStart < 0) return null;
@@ -688,8 +691,8 @@ export function Chat({
   const [references, setReferences] = React.useState<ChatKitReference[]>([]);
   const [referencedWorkspaceFiles, setReferencedWorkspaceFiles] =
     React.useState<ChatAttachmentFile[]>([]);
-  const [workspaceFileMention, setWorkspaceFileMention] =
-    React.useState<WorkspaceFileMentionState | null>(null);
+  const [threadMention, setThreadMention] =
+    React.useState<ThreadMentionState | null>(null);
   const [isUploadingReferenceImages, setIsUploadingReferenceImages] =
     React.useState(false);
   const [quoteSelection, setQuoteSelection] =
@@ -722,8 +725,8 @@ export function Chat({
   const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
     [],
   );
-  const workspaceFileMentionPaletteRef =
-    React.useRef<WorkspaceFileMentionPaletteHandle>(null);
+  const threadMentionPaletteRef =
+    React.useRef<ThreadMentionPaletteHandle>(null);
   const composerPartsRef = React.useRef<ComposerPart[]>([]);
   const pendingComposerCaretOffsetRef = React.useRef<number | null>(null);
   const shouldAutoScrollRef = React.useRef(true);
@@ -879,7 +882,7 @@ export function Chat({
   );
   const trimmedDraft = draft.trim();
   const hasReferences =
-    references.length > 0 || referencedWorkspaceFiles.length > 0;
+    references.length > 0 || getComposerThreadReferences(composerParts).length > 0 || referencedWorkspaceFiles.length > 0;
   const referencedWorkspaceFilePaths = React.useMemo(
     () =>
       new Set(
@@ -1012,7 +1015,7 @@ export function Chat({
       attachmentsRef.current?.clear();
       setReferences([]);
       setReferencedWorkspaceFiles([]);
-      setWorkspaceFileMention(null);
+      setThreadMention(null);
       setSelectedTool(null);
       resetRunRuntimeCapabilities();
       void stream.setConnectorBindingIds([]).catch((persistError) => {
@@ -1737,7 +1740,7 @@ export function Chat({
       attachmentsRef.current?.clear();
       setReferences([]);
       setReferencedWorkspaceFiles([]);
-      setWorkspaceFileMention(null);
+      setThreadMention(null);
       setSelectedTool(null);
       setEditingMessageId(null);
       resetRunRuntimeCapabilities();
@@ -1913,7 +1916,7 @@ export function Chat({
 
   const syncComposerInputFromElement = React.useCallback(
     (input: HTMLDivElement) => {
-      const previousCapabilities = getComposerCapabilityPartMap(
+      const previousCapabilities = getComposerTokenPartMap(
         composerPartsRef.current,
       );
       const nextParts = readComposerPartsFromElement(
@@ -1927,11 +1930,11 @@ export function Chat({
         caretOffset: selectionOffset,
         resetDom: false,
       });
-      const nextMention = getWorkspaceFileMention(
-        getComposerPlainText(nextParts),
+      const nextMention = getThreadMention(
+        getComposerEditingText(nextParts),
         selectionOffset,
       );
-      setWorkspaceFileMention(nextMention);
+      setThreadMention(nextMention);
       if (nextMention) {
         setRuntimeCapabilityPalette(null);
       } else {
@@ -1971,11 +1974,11 @@ export function Chat({
       ? getComposerSelectionOffset(composerInputRef.current)
       : undefined;
     if (typeof selectionOffset === 'number') {
-      const mention = getWorkspaceFileMention(
-        getComposerPlainText(composerPartsRef.current),
+      const mention = getThreadMention(
+        getComposerEditingText(composerPartsRef.current),
         selectionOffset,
       );
-      setWorkspaceFileMention(mention);
+      setThreadMention(mention);
       if (mention) {
         setRuntimeCapabilityPalette(null);
         return;
@@ -2030,8 +2033,8 @@ export function Chat({
         referencedWorkspaceFiles,
       );
       const filesToSend = mergedFiles.length > 0 ? mergedFiles : undefined;
-      const referencesToSend =
-        references.length > 0 ? [...references] : undefined;
+      const mergedReferences = mergeReferences(references, getComposerThreadReferences(composerPartsRef.current));
+      const referencesToSend = mergedReferences.length > 0 ? mergedReferences : undefined;
       const nextFollowUpMode =
         stream.isLoading && !stream.isDisplayPaused && !isRunPaused
           ? 'queue'
@@ -2134,7 +2137,7 @@ export function Chat({
         attachmentsRef.current?.clearWithRollback() ?? (() => undefined);
       setReferences([]);
       setReferencedWorkspaceFiles([]);
-      setWorkspaceFileMention(null);
+      setThreadMention(null);
       if (submittedTool) {
         setSelectedTool(null);
       }
@@ -2143,7 +2146,7 @@ export function Chat({
       const restoreSubmittedDraft = () => {
         promptWorkflow.restore(submittedPromptWorkflow);
         const currentParts = composerPartsRef.current;
-        const currentCapabilities = getComposerCapabilityPartMap(currentParts);
+        const currentCapabilities = getComposerTokenPartMap(currentParts);
         const submittedPartsToRestore = submittedComposerParts.filter(
           (part) => part.type === 'text' || !currentCapabilities.has(part.key),
         );
@@ -2715,37 +2718,27 @@ export function Chat({
     );
   }, []);
 
-  const selectWorkspaceFileMention = React.useCallback(
-    (file: XpertWorkspaceFile) => {
-      const mention = workspaceFileMention;
+  const selectThreadMention = React.useCallback(
+    (reference: ChatKitThreadReference) => {
+      const mention = threadMention;
       if (!mention) return;
-      addWorkspaceFileReference(file);
-      const nextParts = replaceComposerRange(
-        composerPartsRef.current,
-        mention.start,
-        mention.end,
-        [],
-      );
-      commitComposerParts(nextParts, {
-        caretOffset: mention.start,
-        resetDom: true,
+      const part: ComposerPart = { type: 'thread', key: getReferenceKey(reference), reference };
+      commitComposerParts(replaceComposerRange(composerPartsRef.current, mention.start, mention.end, [part, ...createComposerTextParts(' ')]), {
+        caretOffset: mention.start + 2, resetDom: true,
       });
-      setWorkspaceFileMention(null);
+      setThreadMention(null);
       setRuntimeCapabilityPalette(null);
-      focusComposerAt(mention.start);
-    },
-    [
-      addWorkspaceFileReference,
-      commitComposerParts,
-      workspaceFileMention,
-      focusComposerAt,
-      setRuntimeCapabilityPalette,
-    ],
+      focusComposerAt(mention.start + 2);
+    }, [threadMention, commitComposerParts, setRuntimeCapabilityPalette, focusComposerAt],
   );
 
+  const removeThreadToken = React.useCallback((key: string) => {
+    commitComposerParts(composerPartsRef.current.filter(part => part.type !== 'thread' || part.key !== key), { resetDom: true });
+    focusComposerAt();
+  }, [commitComposerParts, focusComposerAt]);
   React.useEffect(() => {
     setReferencedWorkspaceFiles([]);
-    setWorkspaceFileMention(null);
+    setThreadMention(null);
   }, [activeProjectId, stream.assistantId]);
 
   React.useEffect(() => {
@@ -2760,10 +2753,13 @@ export function Chat({
   const handleComposerKeyDown = (
     event: React.KeyboardEvent<HTMLDivElement>,
   ) => {
-    if (workspaceFileMention) {
+    // Embedded token buttons keep their native keyboard activation.
+    if (event.target instanceof Element && event.target.closest('button')) return;
+    if (event.nativeEvent.isComposing || isComposerComposingRef.current) return;
+    if (threadMention) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        setWorkspaceFileMention(null);
+        setThreadMention(null);
         return;
       }
 
@@ -2773,7 +2769,7 @@ export function Chat({
         event.key === 'Tab'
       ) {
         event.preventDefault();
-        workspaceFileMentionPaletteRef.current?.moveActive(
+        threadMentionPaletteRef.current?.moveActive(
           event.key === 'ArrowUp' ? -1 : 1,
         );
         return;
@@ -2781,7 +2777,7 @@ export function Chat({
 
       if (event.key === 'Enter') {
         event.preventDefault();
-        workspaceFileMentionPaletteRef.current?.selectActive();
+        threadMentionPaletteRef.current?.selectActive();
         return;
       }
     }
@@ -2830,7 +2826,7 @@ export function Chat({
       const input = composerInputRef.current;
       const selection = input ? getComposerSelectionOffsets(input) : null;
       if (selection && selection.start === selection.end) {
-        const adjacentCapability = findAdjacentComposerCapability(
+        const adjacentCapability = findAdjacentComposerToken(
           composerPartsRef.current,
           selection.start,
           event.key === 'Backspace' ? 'before' : 'after',
@@ -2844,8 +2840,7 @@ export function Chat({
           commitComposerParts(
             composerPartsRef.current.filter(
               (part) =>
-                part.type !== 'capability' ||
-                part.key !== adjacentCapability.key,
+                part.type === 'text' || part.key !== adjacentCapability.key,
             ),
             { caretOffset: nextCaret, resetDom: true },
           );
@@ -4204,19 +4199,20 @@ export function Chat({
             </div>
           )}
 
-          {workspaceFileMention && (
-            <WorkspaceFileMentionPalette
-              ref={workspaceFileMentionPaletteRef}
+          {threadMention && (
+            <ThreadMentionPalette
+              ref={threadMentionPaletteRef}
               client={xpertPlatformClient}
               assistantId={stream.assistantId ?? null}
               projectId={activeProjectId ?? null}
-              query={workspaceFileMention.query}
-              selectedFilePaths={referencedWorkspaceFilePaths}
-              onSelect={selectWorkspaceFileMention}
+              query={threadMention.query}
+              threadId={stream.threadId}
+              selectedThreadIds={new Set([...references, ...getComposerThreadReferences(composerParts)].flatMap(reference => reference.type === 'thread' ? [reference.threadId] : []))}
+              onSelect={selectThreadMention}
             />
           )}
 
-          {runtimeCapabilityPalette && !workspaceFileMention && (
+          {runtimeCapabilityPalette && !threadMention && (
             <SlashPalette
               palette={runtimeCapabilityPalette}
               options={slashPaletteOptions}
@@ -4306,6 +4302,8 @@ export function Chat({
                         <React.Fragment key={`text-${index}`}>
                           {part.text}
                         </React.Fragment>
+                      ) : part.type === 'thread' ? (
+                        <ComposerThreadToken key={part.key} part={part} onRemove={removeThreadToken} disabled={isPromptEditDisabled} />
                       ) : (
                         <ComposerCapabilityToken
                           key={part.key}
