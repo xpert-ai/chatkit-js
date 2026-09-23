@@ -1224,20 +1224,20 @@ export function ToolComponentGroup({
     <div className="px-1 py-1">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 text-left opacity-60 hover:opacity-100 disabled:pointer-events-none data-[state=open]:bg-muted"
+        className="group/tool-group inline-flex max-w-full items-center gap-1 text-left opacity-60 hover:opacity-100 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={isExpanded}
         aria-controls={contentId}
         onClick={() => setIsExpanded((prev) => !prev)}
       >
-        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
           <StatusIcon className={cn('h-4 w-4 shrink-0', config.iconClass)} />
           <span className="truncate">{summary}</span>
-        </div>
+        </span>
         <ChevronRight
           aria-hidden="true"
           className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-            isExpanded && 'rotate-90',
+            'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/tool-group:opacity-100 group-focus-visible/tool-group:opacity-100',
+            isExpanded && 'rotate-90 opacity-100',
           )}
         />
       </button>

@@ -17,8 +17,10 @@ import {
   type StreamMode,
   type ChatMessage,
   type ChatMessageInputCheckpoint,
+  type ChatMessageBranching,
   type Thread,
 } from '@xpert-ai/xpert-sdk';
+import { readMessageBranching } from '../lib/message-branching';
 import type { Message } from '@langchain/core/messages';
 import { type ToolCall } from '@langchain/core/messages/tool';
 import {
@@ -187,6 +189,8 @@ export {
 export type { PendingHITLRequest } from '../lib/hitl';
 
 type ChatKitAIMessage = Message & {
+  historical?: boolean;
+  branching?: ChatMessageBranching;
   rootExecutionIds?: string[];
   /** `null`: the server has no saved input checkpoint, so the message cannot be edited into a branch. */
   inputCheckpoint?: ChatMessageInputCheckpoint | null;
@@ -585,18 +589,21 @@ function mergePreservedMessages(
   messages = messages.map((message) => {
     const previous = previousById.get(message.id);
     if (
-      !previous?.agentRuns?.length ||
+      !previous ||
       (message.executionId && previous.executionId &&
         message.executionId !== previous.executionId)
     ) return message;
     const agentRuns = (message.agentRuns ?? []).reduce(
       (runs, incoming) => upsertAgentRun(runs, incoming),
-      previous.agentRuns,
+      previous.agentRuns ?? [],
     );
     return {
       ...message,
+      createdAt: message.createdAt ?? previous.createdAt,
+      updatedAt: message.updatedAt ?? previous.updatedAt,
+      status: message.status ?? previous.status,
       executionId: message.executionId ?? previous.executionId,
-      agentRuns,
+      ...(agentRuns.length ? { agentRuns } : {}),
     };
   });
   if (!preservedMessages?.length) {
@@ -848,6 +855,9 @@ function mapChatMessageToUiMessage(
     type,
     content,
     ...(typeof message.status === 'string' ? { status: message.status } : {}),
+    ...(message.branching ? { branching: readMessageBranching(message.branching) } : {}),
+    ...(message.historical ? { historical: true } : {}),
+    ...(message.inputCheckpoint !== undefined ? { inputCheckpoint: message.inputCheckpoint } : {}),
     ...(message.reasoning ? { reasoning: message.reasoning as any } : {}),
     ...(message.executionId ? { executionId: message.executionId } : {}),
     ...(agentRuns.length ? { agentRuns } : {}),
@@ -879,10 +889,10 @@ function parseMessageCreatedAt(message: { createdAt?: string }): number | null {
   return Number.isNaN(time) ? null : time;
 }
 
-function sortMessagesByCreatedAt<T extends { createdAt?: string }>(
+function sortMessagesByCreatedAt<T extends { id?: string; parentId?: string | null; createdAt?: string }>(
   items: T[],
 ): T[] {
-  return items
+  const chronological = items
     .map((item, index) => ({
       item,
       index,
@@ -899,6 +909,19 @@ function sortMessagesByCreatedAt<T extends { createdAt?: string }>(
       return a.time === null ? 1 : -1;
     })
     .map(({ item }) => item);
+  // Tree edges define message order even when persisted timestamps are equal.
+  const byId = new Map(items.filter((item) => item.id).map((item) => [item.id, item]));
+  const visited = new Set<T>();
+  const ordered: T[] = [];
+  const visit = (item: T) => {
+    if (visited.has(item)) return;
+    visited.add(item);
+    const parent = item.parentId ? byId.get(item.parentId) : undefined;
+    if (parent) visit(parent);
+    ordered.push(item);
+  };
+  chronological.forEach(visit);
+  return ordered;
 }
 
 function normalizeHistoryTotal(total: unknown, loadedCount: number): number {
@@ -1287,13 +1310,17 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
   const inputCheckpoint = readInputCheckpoint(
     (raw as { inputCheckpoint?: unknown }).inputCheckpoint,
   );
+  const branching = readMessageBranching('branching' in raw ? raw.branching : undefined);
 
   return {
     id,
     type,
     content,
     executionId,
+    ...(typeof raw.status === 'string' ? { status: raw.status } : {}),
     ...(inputCheckpoint !== undefined ? { inputCheckpoint } : {}),
+    ...(branching ? { branching } : {}),
+    ...('historical' in raw && raw.historical === true ? { historical: true } : {}),
     ...(createdAt ? { createdAt } : {}),
     ...(updatedAt ? { updatedAt } : {}),
     ...(toolCalls ? { clientToolCalls: toolCalls } : {}),
@@ -1310,6 +1337,11 @@ function createMessageFromData(data: unknown): ChatKitAIMessage | null {
 
 function extractMessageMeta(raw: MessageMetadataContainer) {
   const meta: {
+    createdAt?: string;
+    updatedAt?: string;
+    status?: string;
+    agentRuns?: AgentRunInfo[];
+    branching?: ChatMessageBranching;
     id?: string;
     type?: ChatKitAIMessage['type'];
     content?: ChatKitAIMessage['content'];
@@ -1323,6 +1355,15 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
   } = {};
 
   if (typeof raw.id === 'string') meta.id = raw.id;
+  if (typeof raw.createdAt === 'string') meta.createdAt = raw.createdAt;
+  if (typeof raw.updatedAt === 'string') meta.updatedAt = raw.updatedAt;
+  if (typeof raw.status === 'string') meta.status = raw.status;
+  if ('agentRuns' in raw && Array.isArray(raw.agentRuns)) {
+    meta.agentRuns = raw.agentRuns
+      .map((run) => normalizeAgentRunInfo(run))
+      .filter((run): run is AgentRunInfo => Boolean(run));
+  }
+  meta.branching = readMessageBranching('branching' in raw ? raw.branching : undefined);
   meta.type = normalizeMessageType(raw.type ?? raw.role);
   if ('content' in raw) {
     meta.content = filterInternalMessageContentArtifacts(
@@ -1825,11 +1866,21 @@ export function applyStreamEvent(
         typeof acknowledged.clientMessageId === 'string'
       ) {
         const persistedId = acknowledged.id;
+        const acknowledgedMeta = extractMessageMeta(acknowledged);
         setValues((previous) => ({
           ...previous,
           messages: (previous.messages ?? []).map((message) =>
             message.id === acknowledged.clientMessageId
-              ? { ...message, id: persistedId }
+              ? {
+                  ...message,
+                  id: persistedId,
+                  ...(acknowledgedMeta.createdAt
+                    ? { createdAt: acknowledgedMeta.createdAt }
+                    : {}),
+                  ...(acknowledgedMeta.updatedAt
+                    ? { updatedAt: acknowledgedMeta.updatedAt }
+                    : {}),
+                }
               : message,
           ),
         }));
@@ -1888,6 +1939,9 @@ export function applyStreamEvent(
           type: meta.type ?? 'ai',
           content: meta.content ?? '',
           executionId,
+          ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
+          ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
+          ...(meta.status ? { status: meta.status } : {}),
           ...(meta.references ? { references: meta.references } : {}),
           ...(meta.attachments ? { attachments: meta.attachments } : {}),
           ...(meta.fileAssets ? { fileAssets: meta.fileAssets } : {}),
@@ -1920,6 +1974,9 @@ export function applyStreamEvent(
               const nextLast: ChatKitAIMessage = {
                 ...last,
                 executionId,
+                ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
+                ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
+                ...(meta.status ? { status: meta.status } : {}),
                 ...(meta.id ? { id: meta.id } : {}),
                 ...(meta.type ? { type: meta.type } : {}),
                 ...(meta.references ? { references: meta.references } : {}),
@@ -1975,6 +2032,8 @@ export function applyStreamEvent(
           meta.content === undefined &&
           meta.id === undefined &&
           meta.type === undefined &&
+          meta.updatedAt === undefined &&
+          meta.agentRuns === undefined &&
           !meta.runtimeCapabilities
         ) {
           break;
@@ -1982,8 +2041,13 @@ export function applyStreamEvent(
         updateLatestMessage(setValues, (message) => {
           return {
             ...(message as ChatKitAIMessage),
+            ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
+            ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
+            ...(meta.status ? { status: meta.status } : {}),
+            ...(meta.agentRuns ? { agentRuns: meta.agentRuns } : {}),
             ...(meta.id ? { id: meta.id } : {}),
             ...(meta.type ? { type: meta.type } : {}),
+            ...(meta.branching ? { branching: meta.branching } : {}),
             ...(meta.content !== undefined ? { content: meta.content } : {}),
             ...(meta.references ? { references: meta.references } : {}),
             ...(meta.submittedInput !== undefined

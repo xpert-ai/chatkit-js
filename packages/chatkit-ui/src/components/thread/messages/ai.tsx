@@ -67,8 +67,16 @@ import {
 } from './request-user-input-result-card';
 import { WidgetMessage } from './widget';
 import { isMcpAppComponentData, McpAppMessage } from './mcp-app';
+import { HistoricalMcpAppResult } from './historical-mcp-app-result';
+import { AssistantProcess } from './assistant-process';
+import {
+  getAssistantPresentation,
+  needsProcessAttention,
+} from '../../../lib/assistant-presentation';
 
 export type AssistantMessageProps = {
+  collapseProcess?: boolean;
+  processPrefix?: React.ReactNode;
   message: ChatkitMessage & { type: 'assistant' };
   messages?: ChatkitMessage[];
   className?: string;
@@ -83,6 +91,9 @@ export type AssistantMessageProps = {
 };
 
 type AssistantContentRenderOptions = {
+  collapseProcess?: boolean;
+  processPrefix?: React.ReactNode;
+  isStreaming?: boolean;
   isReasoning?: boolean;
   isThreadRunning?: boolean;
   isThreadPaused?: boolean;
@@ -559,6 +570,9 @@ function renderContentItem(
     }
 
     if (isMcpAppComponent(content)) {
+      if (message.historical) {
+        return <HistoricalMcpAppResult key={content.id ?? `mcp-app-${index}`} data={content.data} />;
+      }
       return (
         <div key={content.id ?? `mcp-app-${index}`}>
           <McpAppMessage
@@ -804,6 +818,47 @@ function renderContent(
   lookupMessages: ChatkitMessage[],
   options?: AssistantContentRenderOptions,
 ) {
+  if (options?.collapseProcess) {
+    const presentation = getAssistantPresentation(
+      message as AssistantMessageWithAgentRuns,
+    );
+    if (
+      presentation.canSeparate &&
+      (presentation.process.length || options.processPrefix)
+    ) {
+      return (
+        <AssistantProcess
+          running={Boolean(options.isStreaming)}
+          forceExpanded={
+            needsProcessAttention(message) ||
+            (message.status !== 'success' && !options.isStreaming) ||
+            Boolean(options.isThreadPaused && message.status !== 'success')
+          }
+          durationMs={presentation.durationMs}
+          process={
+            <>
+              {options.processPrefix}
+              {renderAssistantRenderUnits(
+                presentation.process,
+                message,
+                lookupMessages,
+                options,
+              )}
+            </>
+          }
+        >
+          <div className={assistantMessageStackClassName}>
+            {renderAssistantRenderUnits(
+              presentation.answer,
+              message,
+              lookupMessages,
+              options,
+            )}
+          </div>
+        </AssistantProcess>
+      );
+    }
+  }
   const renderTree = buildAssistantRenderTree(
     message as AssistantMessageWithAgentRuns,
   );
@@ -893,6 +948,8 @@ export function AssistantStreamingIndicator({
 }
 
 export function AssistantMessage({
+  collapseProcess,
+  processPrefix,
   message,
   messages,
   className,
@@ -931,7 +988,10 @@ export function AssistantMessage({
   ) : null;
 
   const answerNode = renderContent(message, lookupMessages, {
-    onOpenExternalAssistant: workbench.externalAssistantsEnabled
+    collapseProcess,
+    processPrefix,
+    isStreaming,
+    onOpenExternalAssistant: workbench.externalAssistantsEnabled && !message.historical
       ? workbench.openExternalAssistant
       : undefined,
     isReasoning,

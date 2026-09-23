@@ -49,6 +49,14 @@
     "title": "Chat",
     "placeholder": "What can I help you with today? @ reference workspace files, / use skills and commands",
     "statusOnline": "Online",
+    "conversationTitle": {
+      "rename": "Rename conversation",
+      "label": "Conversation title",
+      "save": "Save title",
+      "cancel": "Cancel rename",
+      "required": "Enter a conversation title.",
+      "saveFailed": "Could not save the title. Please try again."
+    },
     "missingConfigShort": "Missing ChatKit configuration.",
     "missingConfigDetail": "Missing ChatKit configuration. Check `VITE_XPERTAI_API_URL`, and the `clientSecret` prop.",
     "missingApiUrlShort": "Missing ChatKit API URL.",
@@ -158,7 +166,18 @@
   "messageActions": {
     "copied": "Copied!",
     "copy": "Copy to clipboard",
-    "regenerate": "Regenerate response"
+    "regenerate": "Regenerate response",
+    "more": "More actions",
+    "branch": "Branch in new chat",
+    "branchFailed": "Could not open the branched chat. Your conversation and draft are preserved. Retry using the same message’s branch button.",
+    "branchNetworkError": "The network connection failed. Check your connection and try again.",
+    "branching": "Creating branched chat…",
+    "branchReasons": {
+      "message_not_complete": "This message has not completed.",
+      "checkpoint_unavailable": "Saved execution state is unavailable for this message.",
+      "graph_changed": "The Assistant workflow has changed.",
+      "state_not_supported": "This execution state cannot be transferred to a new conversation."
+    }
   },
   "startScreen": {
     "greeting": "What can I help with today?",
@@ -508,6 +527,16 @@
     "langGraphMessages": "LangGraph Messages..."
   },
   "message": {
+    "updatedAt": "Updated {{time}}",
+    "process": {
+      "title": "Process",
+      "running": "Working…",
+      "duration": "Took {{duration}}",
+      "seconds": "{{seconds}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s"
+    },
+    "historicalAppResult": "Historical app result",
+    "historicalAppResultUnavailable": "This app did not save a displayable result.",
     "answer": "Answer",
     "reasoning": "Reasoning",
     "loading": "Loading",

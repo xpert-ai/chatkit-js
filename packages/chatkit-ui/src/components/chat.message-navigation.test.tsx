@@ -5,6 +5,7 @@ import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type { MessageNavigationItem } from '../lib/message-navigation';
 
 const mocks = vi.hoisted(() => ({
+  updateThread: vi.fn().mockResolvedValue(undefined),
   refreshThreads: vi.fn().mockResolvedValue(undefined),
   threads: [] as Array<{
     id: string;
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
         getRuntimeCapabilities: vi.fn(() => new Promise(() => undefined)),
       },
       conversations: {
+        branch: vi.fn().mockResolvedValue({ id: 'branched-conversation', threadId: 'branched-thread' }),
         listThreads: vi.fn().mockResolvedValue([]),
         search: vi.fn().mockResolvedValue({ items: [] }),
         update: vi.fn(),
@@ -115,6 +117,7 @@ vi.mock('../hooks/useStream', () => ({
 vi.mock('../hooks/useThreads', () => ({
   useThreads: () => ({
     threads: mocks.threads,
+    updateThread: mocks.updateThread,
     deleteThread: vi.fn(),
     refreshThreads: mocks.refreshThreads,
     isLoading: false,
@@ -208,11 +211,22 @@ vi.mock('./composer/hitl-approval-panel', () => ({
 }));
 
 vi.mock('./thread/messages/ai', () => ({
-  AssistantMessage: ({ isStreaming }: { isStreaming: boolean }) =>
-    isStreaming ? <span data-testid="streaming-output" /> : null,
+  AssistantMessage: ({
+    isStreaming,
+    collapseProcess,
+  }: {
+    isStreaming: boolean;
+    collapseProcess?: boolean;
+  }) => (
+    <span
+      data-testid="assistant-presentation"
+      data-collapse-process={Boolean(collapseProcess)}
+    >
+      {isStreaming ? <span data-testid="streaming-output" /> : null}
+    </span>
+  ),
   AssistantStreamingIndicator: () => <span data-testid="streaming-output" />,
 }));
-
 
 vi.mock('./ui/chatkit-avatar', () => ({
   ChatkitAvatar: () => null,
@@ -250,6 +264,47 @@ function setMessages(count = 3) {
 }
 
 describe('Chat message navigation', () => {
+  it('passes the opt-in process presentation option to assistant messages', () => {
+    const { rerender } = render(<Chat options={baseOptions} />);
+    expect(screen.getAllByTestId('assistant-presentation')[0]).toHaveAttribute(
+      'data-collapse-process',
+      'false',
+    );
+    rerender(
+      <Chat
+        options={{
+          ...baseOptions,
+          messagePresentation: { collapseProcess: true },
+        }}
+      />,
+    );
+    expect(screen.getAllByTestId('assistant-presentation')[0]).toHaveAttribute(
+      'data-collapse-process',
+      'true',
+    );
+  });
+  it('opens a new conversation from a sealed historical AI reply without pausing the source run', async () => {
+    setMessages(3);
+    Object.assign(mocks.stream.messages[1], { branching: { available: true } });
+    mocks.stream.isLoading = true;
+    render(<Chat options={baseOptions} />);
+    fireEvent.click(screen.getByRole('button', { name: 'messageActions.branch' }));
+    await waitFor(() => expect(mocks.stream.loadThread).toHaveBeenCalledWith('branched-thread'));
+    expect(mocks.stream.client.conversations.branch).toHaveBeenCalledWith('conversation-1', {
+      sourceThreadId: 'thread-1', afterMessageId: 'assistant-1', requestId: expect.any(String),
+    });
+    expect(mocks.stream.pauseRun).not.toHaveBeenCalled();
+    expect(mocks.stream.stop).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.refreshThreads).toHaveBeenCalled());
+  });
+
+  it('lets hosts disable conversation branching', () => {
+    Object.assign(mocks.stream.messages[1], { branching: { available: true } });
+    render(<Chat options={{ ...baseOptions, threadItemActions: { branch: false } }} />);
+    expect(screen.queryByRole('button', { name: 'messageActions.branch' })).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.threads.splice(0);
@@ -373,6 +428,24 @@ describe('Chat message navigation', () => {
 
     expect(screen.getByText('Fix onboarding copy')).toBeInTheDocument();
     expect(screen.queryByText('Online')).not.toBeInTheDocument();
+  });
+
+  it('renames the conversation from a secondary thread using its record ID', async () => {
+    mocks.threads.push({
+      id: 'main-thread',
+      recordId: 'conversation-1',
+      title: 'Original title',
+      status: 'idle',
+    });
+    render(<Chat options={baseOptions} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.conversationTitle.rename' }));
+    const input = screen.getByRole('textbox', { name: 'chat.conversationTitle.label' });
+    fireEvent.change(input, { target: { value: 'Renamed conversation' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(mocks.updateThread).toHaveBeenCalledWith(
+      'conversation-1', { title: 'Renamed conversation' },
+    ));
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
   });
 
   it.each([true, false])('pauses from the composer and prevents duplicate requests (streaming: %s)', async (isLoading) => {

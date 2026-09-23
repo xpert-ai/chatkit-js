@@ -11,6 +11,7 @@ import {
 
 export type AgentRunInfo = {
   id: string;
+  isRoot?: boolean;
   parentId?: string;
   parentExecutionId?: string;
   nodeType?: string;
@@ -188,6 +189,7 @@ export function normalizeAgentRunInfo(
 
   return {
     id,
+    ...(value.isRoot === true ? { isRoot: true } : {}),
     ...(invocationKind === 'external_assistant' ||
     invocationKind === 'sub_agent'
       ? { invocationKind }

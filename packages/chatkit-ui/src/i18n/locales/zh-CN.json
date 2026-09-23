@@ -49,6 +49,14 @@
     "title": "聊天",
     "placeholder": "今天帮你做些什么？ @ 引用工作区文件，/ 调用技能与指令",
     "statusOnline": "在线",
+    "conversationTitle": {
+      "rename": "重命名对话",
+      "label": "对话标题",
+      "save": "保存标题",
+      "cancel": "取消重命名",
+      "required": "请输入对话标题。",
+      "saveFailed": "标题保存失败，请重试。"
+    },
     "missingConfigShort": "缺少 ChatKit 配置。",
     "missingConfigDetail": "缺少 ChatKit 配置。请检查 `VITE_XPERTAI_API_URL` 和 `clientSecret` 参数。",
     "missingApiUrlShort": "缺少 ChatKit API URL。",
@@ -158,7 +166,18 @@
   "messageActions": {
     "copied": "已复制！",
     "copy": "复制到剪贴板",
-    "regenerate": "重新生成回复"
+    "regenerate": "重新生成回复",
+    "more": "更多操作",
+    "branch": "在新对话中分叉",
+    "branchFailed": "未能打开分叉对话。原对话和草稿已保留，请点击同一条消息的分叉按钮重试。",
+    "branchNetworkError": "网络连接失败，请检查连接后重试。",
+    "branching": "正在创建分叉对话…",
+    "branchReasons": {
+      "message_not_complete": "消息尚未完成，暂不能分叉。",
+      "checkpoint_unavailable": "此消息没有可恢复的执行状态。",
+      "graph_changed": "Assistant 工作流已经改变。",
+      "state_not_supported": "此执行状态无法迁移到新对话。"
+    }
   },
   "startScreen": {
     "greeting": "今天我能帮你什么？",
@@ -508,6 +527,16 @@
     "langGraphMessages": "LangGraph 消息..."
   },
   "message": {
+    "updatedAt": "更新于 {{time}}",
+    "process": {
+      "title": "处理过程",
+      "running": "正在处理…",
+      "duration": "用时 {{duration}}",
+      "seconds": "{{seconds}}秒",
+      "minutesSeconds": "{{minutes}}分{{seconds}}秒"
+    },
+    "historicalAppResult": "应用历史结果",
+    "historicalAppResultUnavailable": "此应用没有保存可展示的结果。",
     "answer": "回答",
     "reasoning": "思考",
     "loading": "正在加载",

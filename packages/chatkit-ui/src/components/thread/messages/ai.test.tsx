@@ -282,6 +282,16 @@ function renderAssistant(
 }
 
 describe('AssistantMessage tool components', () => {
+  it('shows copied MCP results without reconnecting to the original app instance', () => {
+    const { container } = renderAssistant([{ type: 'component', data: {
+      type: 'McpApp', appInstanceId: 'source-instance', resourceUri: 'ui://source', toolName: 'lookup',
+      toolResult: { content: [{ type: 'text', text: 'Saved tool result' }] },
+    } }], { historical: true });
+    expect(screen.getByText('message.historicalAppResult')).toBeVisible();
+    expect(screen.getByText(/Saved tool result/)).toBeVisible();
+    expect(container.querySelector('iframe')).toBeNull();
+  });
+
   beforeEach(() => {
     chatkitLanguage.value = 'en-US';
     writeTextMock.mockClear();
@@ -1884,6 +1894,23 @@ describe('AssistantMessage tool components', () => {
     expect(setIntervalSpy).not.toHaveBeenCalled();
 
     setIntervalSpy.mockRestore();
+  });
+
+  it('renders a branched main assistant reply without an agent card', () => {
+    renderAssistant(
+      [{
+        type: 'text',
+        text: 'Copied main assistant answer',
+        executionId: 'source-root',
+        agentKey: 'main-agent',
+      }],
+      { historical: true, status: 'success', agentRuns: [] },
+    );
+    expect(screen.getByText('Copied main assistant answer')).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: /main-agent/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Done')).not.toBeInTheDocument();
   });
 
   it('groups interleaved sub-agent output by execution id', () => {
