@@ -5,6 +5,7 @@ import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type { MessageNavigationItem } from '../lib/message-navigation';
 
 const mocks = vi.hoisted(() => ({
+  updateThread: vi.fn().mockResolvedValue(undefined),
   refreshThreads: vi.fn().mockResolvedValue(undefined),
   threads: [] as Array<{
     id: string;
@@ -116,6 +117,7 @@ vi.mock('../hooks/useStream', () => ({
 vi.mock('../hooks/useThreads', () => ({
   useThreads: () => ({
     threads: mocks.threads,
+    updateThread: mocks.updateThread,
     deleteThread: vi.fn(),
     refreshThreads: mocks.refreshThreads,
     isLoading: false,
@@ -396,6 +398,24 @@ describe('Chat message navigation', () => {
 
     expect(screen.getByText('Fix onboarding copy')).toBeInTheDocument();
     expect(screen.queryByText('Online')).not.toBeInTheDocument();
+  });
+
+  it('renames the conversation from a secondary thread using its record ID', async () => {
+    mocks.threads.push({
+      id: 'main-thread',
+      recordId: 'conversation-1',
+      title: 'Original title',
+      status: 'idle',
+    });
+    render(<Chat options={baseOptions} />);
+    fireEvent.click(screen.getByRole('button', { name: 'chat.conversationTitle.rename' }));
+    const input = screen.getByRole('textbox', { name: 'chat.conversationTitle.label' });
+    fireEvent.change(input, { target: { value: 'Renamed conversation' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(mocks.updateThread).toHaveBeenCalledWith(
+      'conversation-1', { title: 'Renamed conversation' },
+    ));
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
   });
 
   it.each([true, false])('pauses from the composer and prevents duplicate requests (streaming: %s)', async (isLoading) => {

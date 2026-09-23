@@ -49,6 +49,14 @@
     "title": "聊天",
     "placeholder": "今天帮你做些什么？ @ 引用工作区文件，/ 调用技能与指令",
     "statusOnline": "在线",
+    "conversationTitle": {
+      "rename": "重命名对话",
+      "label": "对话标题",
+      "save": "保存标题",
+      "cancel": "取消重命名",
+      "required": "请输入对话标题。",
+      "saveFailed": "标题保存失败，请重试。"
+    },
     "missingConfigShort": "缺少 ChatKit 配置。",
     "missingConfigDetail": "缺少 ChatKit 配置。请检查 `VITE_XPERTAI_API_URL` 和 `clientSecret` 参数。",
     "missingApiUrlShort": "缺少 ChatKit API URL。",

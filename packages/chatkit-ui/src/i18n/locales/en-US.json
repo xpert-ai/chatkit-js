@@ -49,6 +49,14 @@
     "title": "Chat",
     "placeholder": "What can I help you with today? @ reference workspace files, / use skills and commands",
     "statusOnline": "Online",
+    "conversationTitle": {
+      "rename": "Rename conversation",
+      "label": "Conversation title",
+      "save": "Save title",
+      "cancel": "Cancel rename",
+      "required": "Enter a conversation title.",
+      "saveFailed": "Could not save the title. Please try again."
+    },
     "missingConfigShort": "Missing ChatKit configuration.",
     "missingConfigDetail": "Missing ChatKit configuration. Check `VITE_XPERTAI_API_URL`, and the `clientSecret` prop.",
     "missingApiUrlShort": "Missing ChatKit API URL.",

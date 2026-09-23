@@ -62,6 +62,7 @@ import { SendButton } from './composer/SendButton';
 import { SlashPalette } from './composer/SlashPalette';
 import { ThreadHistoryStatus } from './history/ThreadHistoryStatus';
 import { HistorySidebar } from './history/HistorySidebar';
+import { ConversationTitle } from './history/ConversationTitle';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
 import { PendingTodos } from './composer/pending-todos';
@@ -699,6 +700,7 @@ export function Chat({
   const [hasUpdatesBelow, setHasUpdatesBelow] = React.useState(false);
   const {
     threads,
+    updateThread,
     deleteThread,
     refreshThreads,
     isLoading: isThreadsLoading,
@@ -3403,8 +3405,12 @@ export function Chat({
         .join(',')
     : undefined;
   const currentThread = React.useMemo(
-    () => threads.find((item) => item.id === stream.threadId),
-    [threads, stream.threadId],
+    () => threads.find((item) =>
+      stream.conversationId
+        ? item.recordId === stream.conversationId
+        : item.id === stream.threadId,
+    ),
+    [threads, stream.threadId, stream.conversationId],
   );
   const assistantStatusText = React.useMemo(() => {
     if (!stream.threadId) return t('chat.statusOnline');
@@ -3580,7 +3586,7 @@ export function Chat({
             className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
             style={chatColumnStyle}
           >
-            <div className="flex min-w-0 items-center gap-3 overflow-hidden">
+            <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
               <div className="relative shrink-0">
                 <ChatkitAvatar
                   avatar={assistantAvatar}
@@ -3589,22 +3595,30 @@ export function Chat({
                 />
                 <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h2
                   className="text-lg font-semibold truncate"
                   title={assistantTitle}
                 >
                   {assistantTitle}
                 </h2>
-                <p
-                  className="truncate text-xs text-muted-foreground"
+                <ConversationTitle
+                  key={stream.conversationId ?? stream.threadId ?? 'new'}
                   title={assistantStatusText}
-                >
-                  {assistantStatusText}
-                </p>
+                  onSave={
+                    currentThread && stream.threadId && stream.isReady &&
+                    !isHistoryLoading && !isChangingBranch
+                      ? async (nextTitle) => {
+                          await updateThread(currentThread.recordId, {
+                            title: nextTitle,
+                          });
+                        }
+                      : undefined
+                  }
+                />
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               {taskSummaryAvailable && (
                 <TaskSummaryTrigger
                   {...taskSummaryProps}
