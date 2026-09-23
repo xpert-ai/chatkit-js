@@ -1,3 +1,4 @@
+import { normalizeChatSkillUsages } from '@xpert-ai/chatkit-types';
 import type {
   ChatKitReference,
   ChatTaskSummaryOutput,
@@ -124,6 +125,7 @@ type ContributionCandidate = {
   todos?: unknown;
   outputs?: unknown;
   sources?: unknown;
+  skillUsages?: unknown;
 };
 
 type SummaryItemCandidate = {
@@ -193,6 +195,7 @@ export function normalizeTaskSummaryContribution(
   if (!isObject(value)) return null;
   const candidate = value as ContributionCandidate;
   if (candidate.version !== 1) return null;
+  const skillUsages = normalizeChatSkillUsages(candidate.skillUsages);
   const plan = normalizePlan(candidate.plan);
   const todos = normalizeTodos(candidate.todos);
   const outputs = Array.isArray(candidate.outputs)
@@ -207,6 +210,7 @@ export function normalizeTaskSummaryContribution(
     ...(todos ? { todos } : {}),
     ...(outputs.length ? { outputs } : {}),
     ...(sources.length ? { sources } : {}),
+    ...(skillUsages.length ? { skillUsages } : {}),
   };
 }
 
@@ -617,6 +621,13 @@ function sourceFromReference(
   message: TaskSummaryMessage,
 ): ChatTaskSummarySource {
   const updatedAt = message.updatedAt ?? message.createdAt;
+  if (reference.type === 'thread') return {
+    id: `thread:${reference.conversationId}:${reference.threadId}`,
+    title: reference.label || reference.threadId,
+    kind: 'quote',
+    messageId: message.id,
+    updatedAt,
+  };
   const common = {
     id:
       stringValue(reference.id) ?? `${reference.type}:${reference.text}`.trim(),

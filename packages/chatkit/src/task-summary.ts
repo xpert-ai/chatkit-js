@@ -1,3 +1,5 @@
+import type { ChatSkillUsage } from './skill-usage.js';
+
 export const CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT =
   'task_summary.open_resource' as const;
 
@@ -108,6 +110,7 @@ export type TChatTaskSummaryContribution = {
   todos?: ChatTaskSummaryTodos;
   outputs?: ChatTaskSummaryOutput[];
   sources?: ChatTaskSummarySource[];
+  skillUsages?: ChatSkillUsage[];
 };
 
 export type ChatTaskSummaryOpenResourceEffect = {

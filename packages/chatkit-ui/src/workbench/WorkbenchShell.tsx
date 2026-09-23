@@ -307,10 +307,10 @@ export function WorkbenchShell({
           title:
             current?.sourceThreadId === sourceThreadId
               ? current.title
-              : reference.text.trim().slice(0, 32) ||
+              : (reference.type === 'thread' ? reference.label || reference.threadId : reference.text).trim().slice(0, 32) ||
                 t('workbench.sideChat.title'),
           referenceRequest: {
-            id: `${Date.now()}-${reference.text.slice(0, 24)}`,
+            id: `${Date.now()}-${(reference.type === 'thread' ? reference.threadId : reference.text).slice(0, 24)}`,
             reference,
           },
         }));

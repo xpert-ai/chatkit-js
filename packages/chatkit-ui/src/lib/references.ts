@@ -1,3 +1,4 @@
+import { normalizeThreadReference } from '@xpert-ai/chatkit-types';
 import type {
   Attachment,
   ChatKitCodeReference,
@@ -465,6 +466,9 @@ export function normalizeReference(value: unknown): ChatKitReference | null {
     return null;
   }
 
+  const thread = normalizeThreadReference(value);
+  if (thread) return thread;
+
   const candidate = value as ReferenceCandidate;
   const type = toOptionalString(candidate.type);
 
@@ -558,6 +562,7 @@ function getImageReferenceMetaParts(
 }
 
 export function getReferenceKey(reference: ChatKitReference): string {
+  if (reference.type === 'thread') return `thread:${reference.conversationId}:${reference.threadId}`;
   if (reference.type === 'image' && reference.fileId?.trim()) {
     return `image:${reference.fileId.trim()}`;
   }
@@ -635,6 +640,7 @@ export function mergeReferences(
 }
 
 export function getReferenceLabel(reference: ChatKitReference): string {
+  if (reference.type === 'thread') return reference.label?.trim() || reference.threadId;
   if (reference.label && reference.label.trim()) {
     return reference.label.trim();
   }
@@ -700,6 +706,7 @@ export function getReferenceMetaLine(
 }
 
 export function getReferenceTitle(reference: ChatKitReference): string {
+  if (reference.type === 'thread') return getReferenceLabel(reference);
   if (reference.type === 'code') {
     return `${getCodeReferenceLocation(reference)}\n\n${reference.text}`;
   }

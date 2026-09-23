@@ -8,7 +8,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { ChatMessageBranching } from '@xpert-ai/xpert-sdk';
-import type { ChatkitMessage } from '@xpert-ai/chatkit-types';
+import type { ChatkitMessage, ChatSkillUsage } from '@xpert-ai/chatkit-types';
+import { MessageSkills } from './MessageSkills';
 import { MessageTimestamp } from './MessageTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
@@ -89,6 +90,7 @@ export type MessageActionsProps = {
   isBranching?: boolean;
   branchDisabled?: boolean;
   className?: string;
+  skillUsages?: readonly ChatSkillUsage[];
 };
 
 export function MessageActions({
@@ -105,6 +107,7 @@ export function MessageActions({
   isBranching = false,
   branchDisabled = false,
   className,
+  skillUsages,
 }: MessageActionsProps) {
   const { t } = useChatkitTranslation();
   const [copied, setCopied] = React.useState(false);
@@ -178,6 +181,9 @@ export function MessageActions({
               <GitBranch size={14} />
             )}
           </MessageActionButton>
+        )}
+        {isAssistant && skillUsages && skillUsages.length > 0 && (
+          <MessageSkills usages={skillUsages} onOpen={onActionTooltipOpen} />
         )}
       </div>
       <MessageTimestamp updatedAt={updatedAt} />

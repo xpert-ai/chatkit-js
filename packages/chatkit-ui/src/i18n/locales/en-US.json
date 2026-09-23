@@ -47,7 +47,7 @@
   },
   "chat": {
     "title": "Chat",
-    "placeholder": "What can I help you with today? @ reference workspace files, / use skills and commands",
+    "placeholder": "What can I help you with today? @ reference conversations, / use skills and commands",
     "statusOnline": "Online",
     "conversationTitle": {
       "rename": "Rename conversation",
@@ -164,6 +164,15 @@
     "threadFallback": "Thread"
   },
   "messageActions": {
+    "skills": {
+      "title": "Skills used",
+      "sources": {
+        "workspace": "Workspace",
+        "project": "Project",
+        "assistant": "Assistant",
+        "plugin": "Plugin"
+      }
+    },
     "copied": "Copied!",
     "copy": "Copy to clipboard",
     "regenerate": "Regenerate response",
@@ -416,6 +425,14 @@
       "hostUnavailable": "The host does not support workspace connections yet. Contact an administrator.",
       "contactAdmin": "You do not have permission to configure connections in this workspace. Contact an administrator.",
       "checkConnection": "Check connection and continue"
+    },
+    "threadMentions": {
+      "title": "Reference a conversation",
+      "loading": "Searching conversations...",
+      "empty": "No matching conversations",
+      "error": "Could not load conversations",
+      "untitled": "Untitled conversation",
+      "remove": "Remove conversation reference: {{title}}"
     }
   },
   "settings": {
