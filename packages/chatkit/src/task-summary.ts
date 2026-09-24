@@ -1,7 +1,20 @@
 import type { ChatSkillUsage } from './skill-usage.js';
+import type { ChatFileChange } from './file-activity.js';
 
 export const CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT =
   'task_summary.open_resource' as const;
+
+export type FileChangeResource = {
+  type: 'file_change';
+  first: { artifactId: string; artifactVersionId: string };
+  last: { artifactId: string; artifactVersionId: string };
+};
+
+export type FileChangeSetResource = {
+  type: 'file_change_set';
+  messageId: string;
+  changes: { workspacePath: string; resource?: FileChangeResource }[];
+};
 
 export type ChatTaskSummaryResourceReference =
   | {
@@ -17,7 +30,10 @@ export type ChatTaskSummaryResourceReference =
   | {
       type: 'artifact';
       artifactId: string;
+      artifactVersionId?: string;
     }
+  | FileChangeResource
+  | FileChangeSetResource
   | {
       type: 'browser';
       serviceId?: string;
@@ -53,6 +69,12 @@ export type ChatTaskSummaryOutput = {
   resource?: ChatTaskSummaryResourceReference;
   messageId?: string;
   updatedAt?: string;
+  /** Only host-verified, explicitly presented files get message-end cards. */
+  origin?: 'tool' | 'integration' | 'legacy';
+  workspacePath?: string;
+  mimeType?: string;
+  size?: number;
+  sha256?: string;
 };
 
 export type ChatTaskSummarySourceKind =
@@ -111,6 +133,11 @@ export type TChatTaskSummaryContribution = {
   outputs?: ChatTaskSummaryOutput[];
   sources?: ChatTaskSummarySource[];
   skillUsages?: ChatSkillUsage[];
+  /** Presence marks the new semantic projection; old writes are never deliveries. */
+  fileActivityVersion?: 1;
+  fileActivityToolCallId?: string;
+  fileChangeCoverage?: 'bounded' | 'partial' | 'unavailable';
+  fileChanges?: ChatFileChange[];
 };
 
 export type ChatTaskSummaryOpenResourceEffect = {

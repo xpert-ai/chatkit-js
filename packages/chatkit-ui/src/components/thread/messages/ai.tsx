@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { MessageFileActivity } from '../../task-summary/FileActivity';
 
 import type {
   ChatKitOptions,
@@ -25,11 +26,12 @@ import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import {
   type AssistantStreamingStatus,
   getAssistantStreamingStatus,
+  hasRenderableFileActivity,
   hasRenderableMessageContent,
   hasRenderableReasoning,
 } from '../../../lib/message';
 import { isAgentEventContent } from '../../../lib/agent-runs';
-import { isThreadContextUsageRenderArtifact } from '../../../lib/thread-context-usage';
+import { isInternalMessageContent } from '../../../lib/internal-message-content';
 import {
   buildAssistantRenderTree,
   type AssistantContentEntry,
@@ -506,7 +508,7 @@ function renderContentItem(
     );
   }
 
-  if (isThreadContextUsageRenderArtifact(content)) {
+  if (isInternalMessageContent(content)) {
     return null;
   }
 
@@ -970,7 +972,7 @@ export function AssistantMessage({
     ? renderTree.rootReasoning
     : message.reasoning;
   const hasContent =
-    hasRenderableMessageContent(message.content) || renderTree.hasAgentRuns;
+    hasRenderableMessageContent(message.content) || renderTree.hasAgentRuns || hasRenderableFileActivity(message);
   const hasReasoning = hasRenderableReasoning(rootReasoning);
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
@@ -1021,6 +1023,7 @@ export function AssistantMessage({
   return (
     <div className={cn('space-y-3', streamingClass, className)}>
       {answerNode}
+      {!isStreaming && <MessageFileActivity message={message} />}
       {resolvedStreamingStatus ? (
         <div className="flex items-center gap-2">
           {inlinePet}

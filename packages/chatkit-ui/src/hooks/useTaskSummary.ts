@@ -1,6 +1,7 @@
 import * as React from 'react';
 import type { Client } from '@xpert-ai/xpert-sdk';
 import type {
+  ChatFileChange,
   ChatTaskSummaryOutput,
   ChatTaskSummarySource,
 } from '@xpert-ai/chatkit-types';
@@ -14,6 +15,7 @@ import {
 } from '../lib/task-summary';
 
 type TaskSummaryHistorySections = Partial<{
+  fileChanges: ChatFileChange[];
   outputs: ChatTaskSummaryOutput[];
   sources: ChatTaskSummarySource[];
   agents: TaskSummaryAgent[];
@@ -85,7 +87,8 @@ export function useTaskSummary({
           requestVersionRef.current !== requestVersion
         )
           return;
-        setLoaded(null);
+        // A failed refresh must not replace the complete baseline with a
+        // partial page of messages. Conversation identity is checked below.
         setError(nextError);
       });
 
@@ -127,7 +130,12 @@ export function useTaskSummary({
           section,
           { offset: current, limit: 50, signal: controller.signal },
         );
-        if (conversationIdRef.current !== conversationId) return;
+        if (
+          controller.signal.aborted ||
+          sectionControllersRef.current.get(section) !== controller ||
+          conversationIdRef.current !== conversationId
+        )
+          return;
         setHistorySections(
           (state) =>
             ({
@@ -142,9 +150,9 @@ export function useTaskSummary({
       } finally {
         if (sectionControllersRef.current.get(section) === controller) {
           sectionControllersRef.current.delete(section);
-        }
-        if (conversationIdRef.current === conversationId) {
-          setLoadingSections((state) => ({ ...state, [section]: false }));
+          if (conversationIdRef.current === conversationId) {
+            setLoadingSections((state) => ({ ...state, [section]: false }));
+          }
         }
       }
     },
@@ -158,6 +166,7 @@ export function useTaskSummary({
     loadSection,
     loadingSections,
     loadedSectionCounts: {
+      fileChanges: activeHistorySections.fileChanges?.length ?? 0,
       outputs: activeHistorySections.outputs?.length ?? 0,
       sources: activeHistorySections.sources?.length ?? 0,
       agents: activeHistorySections.agents?.length ?? 0,

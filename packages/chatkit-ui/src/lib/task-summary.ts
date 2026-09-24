@@ -1,6 +1,7 @@
-import { normalizeChatSkillUsages } from '@xpert-ai/chatkit-types';
+import { normalizeChatSkillUsages, projectMessageFileActivity, mergeFileChanges, normalizeFileChanges } from '@xpert-ai/chatkit-types';
 import type {
   ChatKitReference,
+  ChatFileChange,
   ChatTaskSummaryOutput,
   ChatTaskSummaryOutputKind,
   ChatTaskSummaryPlan,
@@ -35,12 +36,7 @@ export type TaskSummaryPending =
 const PLAN_PATTERN = /<proposed_plan>\s*([\s\S]*?)\s*<\/proposed_plan>/i;
 const WEB_SEARCH_RESULT_PATTERN =
   /^Title:\s*(.+?)\r?\nURL:\s*(https?:\/\/\S+)\s*$/gim;
-const SANDBOX_FILE_OUTPUT_TOOLS = new Set([
-  'sandbox_write_file',
-  'sandbox_append_file',
-  'sandbox_edit_file',
-  'sandbox_multi_edit_file',
-]);
+
 
 export type TaskSummaryMessage = {
   id?: string;
@@ -68,6 +64,8 @@ export type TaskSummaryLiveData = {
   goal?: ThreadGoal | null;
   plan?: ChatTaskSummaryPlan;
   todos?: ChatTaskSummaryTodos;
+  fileChangeCoverage?: TChatTaskSummaryContribution['fileChangeCoverage'];
+  fileChanges: ChatFileChange[];
   outputs: ChatTaskSummaryOutput[];
   sources: ChatTaskSummarySource[];
   agents: TaskSummaryAgent[];
@@ -76,7 +74,7 @@ export type TaskSummaryLiveData = {
 };
 
 export type MergedTaskSummary = TaskSummaryLiveData & {
-  totals: Record<'outputs' | 'sources' | 'agents' | 'pending', number>;
+  totals: Record<'fileChanges' | 'outputs' | 'sources' | 'agents' | 'pending', number>;
 };
 
 type ComponentPartCandidate = {
@@ -110,6 +108,7 @@ type SummaryMetaCandidate = {
 type ArtifactCandidate = {
   id?: unknown;
   artifactId?: unknown;
+  artifactVersionId?: unknown;
   kind?: unknown;
   title?: unknown;
   description?: unknown;
@@ -120,6 +119,9 @@ type ArtifactCandidate = {
 };
 
 type ContributionCandidate = {
+  fileChanges?: unknown;
+  fileChangeCoverage?: 'bounded' | 'partial' | 'unavailable'
+  fileActivityVersion?: unknown;
   version?: unknown;
   plan?: unknown;
   todos?: unknown;
@@ -129,6 +131,11 @@ type ContributionCandidate = {
 };
 
 type SummaryItemCandidate = {
+  origin?: ChatTaskSummaryOutput['origin'];
+  workspacePath?: string;
+  mimeType?: string;
+  size?: number;
+  sha256?: string;
   id?: unknown;
   kind?: unknown;
   title?: unknown;
@@ -146,6 +153,7 @@ type SummaryResourceCandidate = {
   fileAssetId?: unknown;
   storageFileId?: unknown;
   artifactId?: unknown;
+  artifactVersionId?: unknown;
   serviceId?: unknown;
   url?: unknown;
 };
@@ -206,6 +214,9 @@ export function normalizeTaskSummaryContribution(
     : [];
   return {
     version: 1,
+    fileChanges: normalizeFileChanges(candidate.fileChanges),
+    fileChangeCoverage: candidate.fileChangeCoverage,
+    ...(candidate.fileActivityVersion === 1 ? { fileActivityVersion: 1 as const } : {}),
     ...(plan ? { plan } : {}),
     ...(todos ? { todos } : {}),
     ...(outputs.length ? { outputs } : {}),
@@ -293,6 +304,7 @@ function normalizeOutput(value: unknown): ChatTaskSummaryOutput | null {
   return {
     id,
     kind,
+    origin: candidate.origin, workspacePath: candidate.workspacePath, mimeType: candidate.mimeType, size: candidate.size, sha256: candidate.sha256,
     title,
     description: stringValue(candidate.description),
     status: normalizedStatus,
@@ -358,7 +370,7 @@ function normalizeResource(
   }
   if (candidate.type === 'artifact') {
     const artifactId = stringValue(candidate.artifactId);
-    return artifactId ? { type: 'artifact', artifactId } : undefined;
+    return artifactId ? { type: 'artifact', artifactId, artifactVersionId: stringValue(candidate.artifactVersionId) } : undefined;
   }
   if (candidate.type === 'browser') {
     const serviceId = stringValue(candidate.serviceId);
@@ -488,8 +500,6 @@ function knownPartOutputs(
   if (part.type !== 'component' || !isObject(part.data)) return [];
   const data = part.data as ComponentDataCandidate;
   const outputs = [...(contributionFromPart(part)?.outputs ?? [])];
-  const sandboxOutput = sandboxFileOutput(data, message);
-  if (sandboxOutput) outputs.push(sandboxOutput);
   if (
     isObject(data.artifact) &&
     isCompletedOutputStatus((data.artifact as ArtifactCandidate).status)
@@ -546,69 +556,6 @@ function knownPartOutputs(
     });
   }
   return outputs;
-}
-
-function sandboxFileOutput(
-  data: ComponentDataCandidate,
-  message: TaskSummaryMessage,
-): ChatTaskSummaryOutput | undefined {
-  const tool = stringValue(data.tool);
-  const status = stringValue(data.status)?.toLowerCase();
-  if (
-    !tool ||
-    !SANDBOX_FILE_OUTPUT_TOOLS.has(tool) ||
-    status !== 'success' ||
-    !isObject(data.input)
-  ) {
-    return undefined;
-  }
-  const workspacePath = portableWorkspacePath(
-    (data.input as SandboxFileInputCandidate).file_path,
-  );
-  if (!workspacePath) return undefined;
-  return {
-    id: `workspace-file:${workspacePath}`,
-    kind: outputKindFromPath(workspacePath),
-    title: workspacePath.split('/').at(-1) ?? workspacePath,
-    status: 'success',
-    resource: { type: 'workspace_file', workspacePath },
-    messageId: message.id,
-    updatedAt: message.updatedAt ?? message.createdAt,
-  };
-}
-
-function portableWorkspacePath(value: unknown) {
-  const path = stringValue(value)
-    ?.replace(/\\/g, '/')
-    .replace(/^\.\/+/, '')
-    .replace(/\/{2,}/g, '/');
-  if (
-    !path ||
-    path.startsWith('/') ||
-    /^[a-z]:\//i.test(path) ||
-    path.split('/').some((segment) => segment === '..')
-  ) {
-    return undefined;
-  }
-  return path;
-}
-
-function outputKindFromPath(path: string): ChatTaskSummaryOutputKind {
-  const extension = path.match(/\.([^./]+)$/)?.[1]?.toLowerCase();
-  if (extension === 'html' || extension === 'htm') return 'site';
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(extension ?? ''))
-    return 'image';
-  if (['csv', 'xls', 'xlsx', 'ods'].includes(extension ?? ''))
-    return 'spreadsheet';
-  if (['ppt', 'pptx', 'odp'].includes(extension ?? ''))
-    return 'presentation';
-  if (
-    ['pdf', 'doc', 'docx', 'md', 'markdown', 'txt', 'rtf', 'odt'].includes(
-      extension ?? '',
-    )
-  )
-    return 'document';
-  return 'file';
 }
 
 function isCompletedOutputStatus(value: unknown) {
@@ -782,12 +729,19 @@ export function collectLiveTaskSummary({
   running?: TaskSummaryRuntimeItem[];
   agentNames?: ReadonlyMap<string, string>;
 }): TaskSummaryLiveData {
-  const contributions = messages.flatMap((message) => [
-    ...(message.taskSummary?.version === 1 ? [message.taskSummary] : []),
-    ...contentParts(message.content).flatMap(
-      (part) => contributionFromPart(part) ?? [],
-    ),
-  ]);
+  const contributions = messages.map((message) => projectMessageFileActivity(message, {
+    ...message.taskSummary, version: 1,
+    plan: message.taskSummary?.plan ?? contentParts(message.content).flatMap((part) => contributionFromPart(part)?.plan ?? []).at(-1),
+    todos: message.taskSummary?.todos ?? contentParts(message.content).flatMap((part) => contributionFromPart(part)?.todos ?? []).at(-1),
+    outputs: [
+      ...(message.taskSummary?.outputs ?? []),
+      ...contentParts(message.content).flatMap((part) => knownPartOutputs(part, message)),
+    ],
+    sources: [
+      ...(message.taskSummary?.sources ?? []),
+      ...contentParts(message.content).flatMap((part) => contributionFromPart(part)?.sources ?? []),
+    ],
+  }));
   const messagePlans = messages.flatMap(
     (message) => extractPlan(message) ?? [],
   );
@@ -832,14 +786,9 @@ export function collectLiveTaskSummary({
           updatedAt: todos.endDate ?? todos.createdDate,
         }
       : newest(contributions.flatMap((item) => item.todos ?? [])),
-    outputs: mergeLatest([
-      ...contributions.flatMap((item) => item.outputs ?? []),
-      ...messages.flatMap((message) =>
-        contentParts(message.content).flatMap((part) =>
-          knownPartOutputs(part, message),
-        ),
-      ),
-    ]).filter(isCompletedOpenableOutput),
+    fileChangeCoverage: contributions.some((item) => item.fileChangeCoverage === 'unavailable') ? 'unavailable' : contributions.some((item) => item.fileChangeCoverage === 'partial') ? 'partial' : 'bounded',
+    fileChanges: mergeFileChanges(contributions.flatMap((item) => item.fileChanges ?? [])),
+    outputs: mergeLatest(contributions.flatMap((item) => item.outputs ?? [])).filter(isCompletedOpenableOutput),
     sources: mergeSources([
       ...contributions
         .flatMap((item) => item.sources ?? [])
@@ -865,12 +814,19 @@ export function mergeTaskSummary(
   history: TaskSummarySnapshot | null,
   live: TaskSummaryLiveData,
   historySections?: Partial<{
+    fileChanges: ChatFileChange[];
     outputs: ChatTaskSummaryOutput[];
     sources: ChatTaskSummarySource[];
     agents: TaskSummaryAgent[];
     pending: TaskSummaryPending[];
   }>,
 ): MergedTaskSummary {
+  // Loaded messages can be only one page. Their net changes cannot be merged
+  // with a conversation-wide net result: canceled paths have no tombstones.
+  // Message cards stay live; persisted-message reconciliation refreshes history.
+  const fileChanges = history?.fileChanges
+    ? (historySections?.fileChanges ?? history.fileChanges.items)
+    : mergeFileChanges(live.fileChanges ?? []);
   const outputs = mergeLatest([
     ...(historySections?.outputs ?? history?.outputs.items ?? []),
     ...live.outputs,
@@ -913,11 +869,14 @@ export function mergeTaskSummary(
       ),
     ),
     outputs,
+    fileChangeCoverage: live.fileChangeCoverage,
+    fileChanges,
     sources,
     agents,
     pending,
     running: live.running,
     totals: {
+      fileChanges: history?.fileChanges?.total ?? fileChanges.length,
       outputs: Math.max(history?.outputs.total ?? 0, outputs.length),
       sources: sourceTotal,
       agents: Math.max(historyAgentTotal, agents.length),

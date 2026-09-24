@@ -1,3 +1,4 @@
+import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import React from 'react';
 import {
   act,
@@ -11,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   return {
+    theme: { radius: 'soft', density: 'normal' } as ChatKitTheme,
     stream: {
       client: {
         contexts: {
@@ -145,9 +147,7 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
 
 vi.mock('../providers/Theme', () => ({
   useTheme: () => ({
-    theme: {
-      radius: 'soft',
-    },
+    theme: mocks.theme,
     isDarkMode: false,
   }),
 }));
@@ -528,6 +528,7 @@ describe('Chat plan mode payload', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    mocks.theme = { radius: 'soft', density: 'normal' };
     globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
     mocks.stream.client.assistants.getRuntimeCapabilities.mockReset();
     mocks.stream.client.assistants.getRuntimeCapabilities.mockRejectedValue({
@@ -584,6 +585,16 @@ describe('Chat plan mode payload', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+  });
+
+  it('updates composer surface geometry after a theme change', () => {
+    mocks.theme = { radius: 'sharp', density: 'compact' };
+    const { rerender } = render(<Chat clientSecret="secret" options={baseChatOptions} />);
+    const shell = document.querySelector('[data-slot="composer-input-shell"]');
+    expect(shell).toHaveStyle('--chat-panel-radius: 0px; --chat-density-scale: 0.75');
+    mocks.theme = { radius: 'pill', density: 'spacious' };
+    rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+    expect(shell).toHaveStyle('--chat-panel-radius: calc(var(--radius, 0.625rem) + 12px); --chat-density-scale: 1.25');
   });
 
   it('renders the stacked WorkBuddy composer with project rail and context before send', async () => {

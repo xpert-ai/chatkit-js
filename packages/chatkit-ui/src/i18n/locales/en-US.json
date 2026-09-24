@@ -511,7 +511,8 @@
       "sources": "Sources",
       "running": "Running",
       "agents": "Agent activity",
-      "pending": "Pending"
+      "pending": "Pending",
+      "fileChanges": "File changes"
     },
     "status": {
       "pending": "Pending",
@@ -743,5 +744,31 @@
       "error": "Error",
       "running": "Running"
     }
+  },
+  "fileActivity": {
+    "textLineChanges": "Text line changes",
+    "showAllFiles": "Show all {{count}} files",
+    "showFiles": "Show files",
+    "hideFiles": "Hide files",
+
+    "open": "Open",
+    "review": "Review",
+    "savedVersion": "Saved version",
+    "added": "Added",
+    "modified": "Modified",
+    "deleted": "Deleted",
+    "legacy": "Historical operation · no snapshot",
+    "unknown": "Unknown change",
+    "changedFiles": "Changed {{count}} files",
+    "kinds": {
+      "file": "File",
+      "document": "Document",
+      "spreadsheet": "Spreadsheet",
+      "presentation": "Presentation",
+      "image": "Image",
+      "site": "Web page"
+    },
+    "incomplete": "File change records are incomplete; some files could not be observed or saved.",
+    "legacyOutput": "Historical output · unclassified"
   }
 }

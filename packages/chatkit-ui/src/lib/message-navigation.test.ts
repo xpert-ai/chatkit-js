@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { changesReceipt, deliveryReceipt, legacyReceipt } from '../test/file-activity-fixtures';
 
 import {
   buildMessageNavigationItem,
@@ -24,6 +25,11 @@ const labels: MessageNavigationLabels = {
 };
 
 describe('message navigation extraction', () => {
+  it('excludes new and legacy file receipts from navigation text and tags', () => {
+    const plain = { id: 'reply', type: 'ai', content: [{ type: 'text', text: 'Your report is ready.' }] };
+    expect(buildMessageNavigationItem({ ...plain, content: [...plain.content, changesReceipt, deliveryReceipt, legacyReceipt] }, 0, { labels }))
+      .toEqual(buildMessageNavigationItem(plain, 0, { labels }));
+  });
   it('builds one navigation item for each user and assistant message pair', () => {
     const items = buildMessageNavigationItems(
       [

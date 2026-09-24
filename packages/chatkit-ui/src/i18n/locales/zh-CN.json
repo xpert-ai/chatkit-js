@@ -507,11 +507,12 @@
     "addSource": "添加来源",
     "sections": {
       "task": "任务",
-      "outputs": "产出",
+      "outputs": "输出内容",
       "sources": "来源",
       "running": "运行中",
       "agents": "Agent 活动",
-      "pending": "待处理"
+      "pending": "待处理",
+      "fileChanges": "文件变更"
     },
     "status": {
       "pending": "待处理",
@@ -743,5 +744,31 @@
       "error": "出错",
       "running": "运行中"
     }
+  },
+  "fileActivity": {
+    "textLineChanges": "文本行变更",
+    "showAllFiles": "展开全部 {{count}} 个文件",
+    "showFiles": "展开文件",
+    "hideFiles": "收起文件",
+
+    "open": "打开",
+    "review": "审阅",
+    "savedVersion": "已保存版本",
+    "added": "新增",
+    "modified": "修改",
+    "deleted": "删除",
+    "legacy": "历史操作 · 无内容快照",
+    "unknown": "变更状态未知",
+    "changedFiles": "已变更 {{count}} 个文件",
+    "kinds": {
+      "file": "文件",
+      "document": "文档",
+      "spreadsheet": "电子表格",
+      "presentation": "演示文稿",
+      "image": "图片",
+      "site": "网页"
+    },
+    "incomplete": "本次文件变更记录不完整，部分文件未能采集或保存。",
+    "legacyOutput": "历史产出 · 未分类"
   }
 }

@@ -1,3 +1,5 @@
+import { isInternalMessageContent } from './internal-message-content'
+import { parseFileActivityContent, projectMessageFileActivity, upsertFileActivityContent } from '@xpert-ai/chatkit-types'
 import type {
   ChatkitMessage,
   TMessageContentComplex,
@@ -24,16 +26,14 @@ export function isRenderableMessageContentItem(
 ): item is TMessageContentComplex | string {
   if (item === undefined) return false
   if (typeof item === 'string') return true
-  return !isThreadContextUsageRenderArtifact(item)
+  return !isInternalMessageContent(item)
 }
 
 export function filterInternalMessageContentArtifacts<T>(content: T): T {
   if (!Array.isArray(content)) return content
 
   const filtered = content.filter((item) =>
-    isRenderableMessageContentItem(
-      item as TMessageContentComplex | string | undefined,
-    ),
+    !isThreadContextUsageRenderArtifact(item),
   )
   return filtered.length === content.length ? content : (filtered as T)
 }
@@ -77,11 +77,25 @@ export function hasRenderableMessageContent(
 }
 
 export function hasRenderableAssistantMessage(
-  message: Pick<ChatkitMessage, 'content' | 'reasoning'>,
+  message: Pick<ChatkitMessage, 'content' | 'reasoning' | 'taskSummary'>,
 ): boolean {
   return (
     hasRenderableMessageContent(message.content) ||
-    hasRenderableReasoning(message.reasoning)
+    hasRenderableReasoning(message.reasoning) ||
+    hasRenderableFileActivity(message)
+  )
+}
+
+/** A reply may contain deliverables even when there is no prose or tool row. */
+export function hasRenderableFileActivity(
+  message: Pick<ChatkitMessage, 'content' | 'taskSummary'>,
+): boolean {
+  const summary = projectMessageFileActivity(message, message.taskSummary ?? { version: 1 })
+  return Boolean(
+    summary.outputs?.some((output) => output.origin === 'tool') ||
+    summary.fileChanges?.length ||
+    summary.fileChangeCoverage === 'partial' ||
+    summary.fileChangeCoverage === 'unavailable',
   )
 }
 
@@ -144,6 +158,12 @@ export function appendMessageContent(
     return
   }
 
+  const receipt = parseFileActivityContent(content)
+  if (receipt) {
+    const parts = Array.isArray(aiMessage.content) ? aiMessage.content : aiMessage.content ? [{ type: 'text' as const, text: aiMessage.content }] : []
+    aiMessage.content = upsertFileActivityContent(parts, receipt)
+    return
+  }
   aiMessage.status = 'answering'
   const _content = aiMessage.content
   if (typeof content === 'string') {

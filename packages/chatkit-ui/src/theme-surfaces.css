@@ -1,0 +1,121 @@
+/* Surface sizes share one density scale: compact .75, normal 1, spacious 1.25.
+   Explicit tokens on portal roots prevent dependence on DOM theme inheritance. */
+.chatkit-summary-section {
+  padding: calc(0.75rem * var(--chat-density-scale, 1))
+    calc(1rem * var(--chat-density-scale, 1));
+}
+.chatkit-summary-heading {
+  min-height: calc(1.75rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+}
+.chatkit-summary-items {
+  margin-top: calc(0.25rem * var(--chat-density-scale, 1));
+}
+.chatkit-summary-items > * + *,
+.chatkit-file-change-list > * + * {
+  margin-top: calc(0.125rem * var(--chat-density-scale, 1));
+}
+.chatkit-summary-row,
+.chatkit-summary-action {
+  border-radius: var(--chat-item-radius, 0.5rem);
+  gap: calc(0.625rem * var(--chat-density-scale, 1));
+  padding: calc(0.375rem * var(--chat-density-scale, 1))
+    calc(0.5rem * var(--chat-density-scale, 1));
+}
+.chatkit-summary-prompt {
+  border-radius: var(--chat-item-radius, 0.5rem);
+  padding-block: calc(0.25rem * var(--chat-density-scale, 1));
+}
+.chatkit-summary-error {
+  border-radius: var(--chat-item-radius, 0.5rem);
+  margin: calc(0.75rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+  padding: calc(0.5rem * var(--chat-density-scale, 1))
+    calc(0.75rem * var(--chat-density-scale, 1));
+}
+.chatkit-file-activity > * + * {
+  margin-top: calc(0.75rem * var(--chat-density-scale, 1));
+}
+.chatkit-delivery-card {
+  border-radius: var(--chat-panel-radius, 0.625rem);
+  padding: calc(1rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+}
+.chatkit-file-type-icon img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+}
+.chatkit-file-type-tile {
+  width: calc(3rem * var(--chat-density-scale, 1));
+  height: calc(3rem * var(--chat-density-scale, 1));
+  border-radius: var(--chat-item-radius, 0.5rem);
+}
+.chatkit-file-type-tile img {
+  width: calc(2rem * var(--chat-density-scale, 1));
+  height: calc(2rem * var(--chat-density-scale, 1));
+}
+.chatkit-file-change-details {
+  border-radius: var(--chat-panel-radius, 0.625rem);
+  padding: calc(0.75rem * var(--chat-density-scale, 1))
+    calc(1rem * var(--chat-density-scale, 1));
+}
+[data-slot='composer-input-shell'] [data-slot='composer-editor-surface'] {
+  min-height: calc(6.5rem * var(--chat-density-scale, 1));
+  padding: calc(0.5rem * var(--chat-density-scale, 1));
+  /* The action buttons retain an unscaled minimum target. */
+  padding-bottom: max(2.75rem, calc(3.5rem * var(--chat-density-scale, 1)));
+}
+[data-slot='composer-input-shell'] [data-slot='composer-body'] {
+  min-height: calc(2.5rem * var(--chat-density-scale, 1));
+  max-height: calc(8rem * var(--chat-density-scale, 1));
+  padding: calc(0.5rem * var(--chat-density-scale, 1));
+}
+[data-slot='composer-body'] > [role='textbox'] {
+  min-height: calc(2.5rem * var(--chat-density-scale, 1));
+}
+[data-slot='composer-input-shell'] [data-slot='composer-action-bar'] {
+  inset-inline: calc(0.75rem * var(--chat-density-scale, 1));
+  bottom: calc(0.5rem * var(--chat-density-scale, 1));
+  min-height: max(2rem, calc(2.5rem * var(--chat-density-scale, 1)));
+  gap: calc(0.5rem * var(--chat-density-scale, 1));
+}
+[data-slot='composer-context-rail']
+  :is(
+    [data-slot='composer-project-rail'],
+    [data-slot='composer-file-selector'],
+    [data-slot='composer-resource-selector']
+  ) {
+  height: max(2rem, calc(2.5rem * var(--chat-density-scale, 1)));
+}
+
+.chatkit-file-change-card {
+  container-type: inline-size;
+  border-radius: var(--chat-panel-radius, 0.625rem);
+}
+.chatkit-file-change-header {
+  padding: calc(1rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+}
+.chatkit-change-review-button {
+  border-radius: var(--chat-item-radius, 0.5rem);
+  padding: calc(0.375rem * var(--chat-density-scale, 1)) calc(0.625rem * var(--chat-density-scale, 1));
+}
+.chatkit-change-file-row {
+  padding: calc(0.625rem * var(--chat-density-scale, 1)) calc(1rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+  font-size: 0.875rem;
+}
+.chatkit-change-file-path { display: flex; gap: 0.25rem; align-items: baseline; }
+.chatkit-change-directory { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatkit-change-basename { flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatkit-change-footer { padding: calc(0.625rem * var(--chat-density-scale, 1)) calc(1rem * var(--chat-density-scale, 1)); }
+.chatkit-change-line-stats [data-lines-added] { color: var(--chat-change-added, var(--color-green-600)); }
+.chatkit-change-line-stats [data-lines-removed] { color: var(--chat-change-removed, var(--color-red-600)); }
+.dark .chatkit-change-line-stats [data-lines-added] { color: var(--chat-change-added, var(--color-green-400)); }
+.dark .chatkit-change-line-stats [data-lines-removed] { color: var(--chat-change-removed, var(--color-red-400)); }
+@container (max-width: 28rem) {
+  .chatkit-change-file-path { flex-direction: column; gap: 0; }
+  .chatkit-change-directory { max-width: 100%; font-size: 0.75rem; }
+  .chatkit-change-directory:empty { display: none; }
+}

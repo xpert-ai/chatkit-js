@@ -1,3 +1,4 @@
+import type { TMessageContentFileActivity } from './file-activity-receipt.js';
 import type { ToolCall } from '@langchain/core/messages/tool';
 import type { Types } from '@a2ui/lit/0.8';
 import type { FollowUpBehavior } from './options';
@@ -258,6 +259,7 @@ export type TMessageContentComplex = (
   | TMessageContentReasoning
   | MessageContentImageUrl
   | TMessageContentComponent
+  | TMessageContentFileActivity
   | TMessageContentMemory
   | (Record<string, any> & {
       type?: 'text' | 'image_url' | string;
