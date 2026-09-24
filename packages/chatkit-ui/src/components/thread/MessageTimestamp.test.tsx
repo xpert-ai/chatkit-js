@@ -1,7 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { fireEvent, render as renderUI, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from './MessageList';
 import { MessageTimestamp } from './MessageTimestamp';
+import { ThemeProvider } from '../../providers/Theme';
+
+const render = (ui: ReactElement) => renderUI(ui, { wrapper: ThemeProvider });
 
 const locale = vi.hoisted(() => ({ language: 'en-US' }));
 vi.mock('../../i18n/useChatkitTranslation', () => ({
