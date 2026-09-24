@@ -108,6 +108,7 @@ import {
   useWorkbench,
 } from './WorkbenchShell';
 import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './SideChatCloseDialog';
+import { workbenchLayoutKey, writeWorkbenchLayout } from './layout-storage';
 import { AssistantMessage } from '../components/thread/messages/ai';
 import { toWorkbenchMessages } from './external-assistant-runs';
 import { ThemeProvider } from '../providers/Theme';
@@ -186,9 +187,11 @@ describe('WorkbenchShell', () => {
     mocks.sideChatUnmounts = 0;
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
+    mocks.stream.assistantId = 'agent-1';
+    mocks.stream.organizationId = 'organization-1';
     mocks.stream.messages = [];
     mocks.stream.threadId = 'thread-1';
-    window.localStorage.removeItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY);
+    window.localStorage.clear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
 
@@ -447,6 +450,81 @@ describe('WorkbenchShell', () => {
     fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
     expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '400');
     vi.unstubAllGlobals();
+  });
+
+  it('restores each assistant layout after remount, preserving chat width when the window changes', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const onContext = vi.fn();
+    const tree = () => <WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={onContext}><WorkbenchToggleButton /><input aria-label="Draft message" /></WorkbenchShell>;
+    const first = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    first.unmount();
+
+    const second = render(tree());
+    setObservedWidth(1400);
+    await screen.findByLabelText('Restore panel');
+    expect(screen.getByLabelText('Draft message')).not.toBeVisible();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+
+    mocks.stream.assistantId = 'agent-2';
+    second.rerender(tree());
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'End' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '920');
+    mocks.stream.assistantId = 'agent-1';
+    second.rerender(tree());
+    await waitFor(() => expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556'));
+    mocks.stream.threadId = 'another-thread';
+    second.rerender(tree());
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    second.unmount();
+    render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+  });
+
+  it('keeps desktop preferences while narrow drawers use a temporary layout', async () => {
+    const key = workbenchLayoutKey('/api/ai', 'organization-1', 'agent-1');
+    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 600 });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    setObservedWidth(800);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    setObservedWidth(1400);
+    await screen.findByLabelText('Restore panel');
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '600');
+    setObservedWidth(1000);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '520');
+    setObservedWidth(1400);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '600');
+  });
+
+  it('does not hide chat before saved workbench views become available', async () => {
+    const key = workbenchLayoutKey('/api/ai', 'organization-1', 'agent-1');
+    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 500 });
+    let resolveViews!: (views: XpertExtensionViewManifest[]) => void;
+    mocks.listSlotViews.mockReturnValue(new Promise<XpertExtensionViewManifest[]>((resolve) => { resolveViews = resolve; }));
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Draft message" /></WorkbenchShell>);
+    setObservedWidth(1200);
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
+    await act(async () => resolveViews([]));
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
+    expect(screen.queryByLabelText('Restore panel')).not.toBeInTheDocument();
   });
 
   it('cancels a resize on lost focus and ignores later pointer movement', async () => {

@@ -53,6 +53,8 @@ import {
 } from './WorkbenchPanel';
 
 import { useWorkbenchResize } from './useWorkbenchResize';
+import { useWorkbenchLayout } from './useWorkbenchLayout';
+import { workbenchLayoutKey } from './layout-storage';
 import { CHAT_MIN_WIDTH, WORKBENCH_MIN_WIDTH, clampPanelWidth } from './split-resize';
 
 const WORKBENCH_SLOT = 'agent.workbench.fixed';
@@ -105,14 +107,12 @@ export function WorkbenchShell({
   const viewHosts = stream.client.viewHosts;
   const rootRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState(0);
-  const [open, setOpen] = React.useState(false);
-  const [expanded, setExpanded] = React.useState(false);
   const [views, setViews] = React.useState<XpertExtensionViewManifest[]>([]);
+  const [viewsScope, setViewsScope] = React.useState<string | null>(null);
   const [activeViewKey, setActiveViewKey] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = React.useState(0);
-  const [panelWidth, setPanelWidth] = React.useState<number | null>(null);
   const [notification, setNotification] = React.useState<{
     level: 'success' | 'error';
     message: string;
@@ -134,7 +134,17 @@ export function WorkbenchShell({
     new Map<string, WorkbenchAssistantContext>(),
   );
   const isNarrow = containerWidth > 0 && containerWidth < NARROW_BREAKPOINT;
-  const previousNarrowRef = React.useRef<boolean | null>(null);
+  const layoutKey = workbenchLayoutKey(
+    stream.apiUrl, stream.organizationId, stream.assistantId,
+  );
+  const {
+    requestedOpen, expanded, restoring, resolvedPanelWidth,
+    setOpen, setExpanded, setPanelWidth, dismiss,
+  } = useWorkbenchLayout(layoutKey, containerWidth, isNarrow);
+  const open = requestedOpen && enabled && authenticated && (
+    !restoring || (containerWidth >= NARROW_BREAKPOINT &&
+      viewsScope === layoutKey && views.length > 0 && !loading)
+  );
 
   React.useEffect(() => {
     const element = rootRef.current;
@@ -148,26 +158,12 @@ export function WorkbenchShell({
   }, []);
 
   React.useEffect(() => {
-    if (previousNarrowRef.current === null) {
-      previousNarrowRef.current = isNarrow;
-      return;
-    }
-    if (previousNarrowRef.current !== isNarrow) {
-      setOpen(false);
-      setExpanded(false);
-    }
-    previousNarrowRef.current = isNarrow;
-  }, [isNarrow]);
-
-  React.useEffect(() => {
     if (!remoteViewsEnabled || !authenticated || !stream.assistantId.trim()) {
       setViews([]);
       setError(null);
       setLoading(false);
       if (!sideChatEnabled && !externalAssistantsEnabled) {
         setActiveViewKey(null);
-        setOpen(false);
-        setExpanded(false);
       }
       contextsRef.current.clear();
       onRequestContextChange({});
@@ -176,6 +172,7 @@ export function WorkbenchShell({
 
     const controller = new AbortController();
     setViews([]);
+    setViewsScope(null);
     setActiveViewKey((current) => (isNativeView(current) ? current : null));
     setLoading(true);
     setError(null);
@@ -193,6 +190,7 @@ export function WorkbenchShell({
           .filter(isSupportedWorkbenchView)
           .sort(compareWorkbenchViews);
         setViews(supported);
+        setViewsScope(layoutKey);
         setActiveViewKey((current) =>
           isNativeView(current) ||
           (current && supported.some((view) => view.key === current))
@@ -222,6 +220,7 @@ export function WorkbenchShell({
     stream.assistantId,
     t,
     viewHosts,
+    layoutKey,
   ]);
 
   React.useEffect(() => {
@@ -249,8 +248,7 @@ export function WorkbenchShell({
           sideChat ? SIDE_CHAT_VIEW_KEY : (views[0]?.key ?? null),
         );
         if (!sideChat && !views.length) {
-          setOpen(false);
-          setExpanded(false);
+          dismiss();
         }
       }
     }
@@ -261,6 +259,7 @@ export function WorkbenchShell({
     activeViewKey,
     sideChat,
     views,
+    dismiss,
   ]);
 
   const openExternalAssistant = React.useCallback(
@@ -274,7 +273,7 @@ export function WorkbenchShell({
       setActiveViewKey(EXTERNAL_ASSISTANTS_VIEW_KEY);
       setOpen(true);
     },
-    [externalAssistantsEnabled, externalRuns, externalScope],
+    [externalAssistantsEnabled, externalRuns, externalScope, setOpen],
   );
 
   const activeView =
@@ -322,7 +321,7 @@ export function WorkbenchShell({
         setSideChatOpening(false);
       }
     },
-    [sideChatEnabled, stream.client.threads, stream.threadId, t],
+    [sideChatEnabled, stream.client.threads, stream.threadId, t, setOpen],
   );
 
   const publishContexts = React.useCallback(() => {
@@ -506,7 +505,7 @@ export function WorkbenchShell({
   const closeWorkbench = React.useCallback(() => {
     setOpen(false);
     setExpanded(false);
-  }, []);
+  }, [setOpen, setExpanded]);
   const closeSideChat = React.useCallback(() => {
     if (sideChat?.sourceThreadId) {
       sideThreadBySourceRef.current.delete(sideChat.sourceThreadId);
@@ -576,12 +575,8 @@ export function WorkbenchShell({
       loading,
       open,
       sideChatEnabled,
+      setOpen,
     ],
-  );
-
-  const resolvedPanelWidth = clampPanelWidth(
-    panelWidth ?? containerWidth * 0.55,
-    containerWidth,
   );
 
   const { resizing, startResize } = useWorkbenchResize({
