@@ -1,8 +1,17 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import {
+  fireEvent,
+  render as renderUI,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatSkillUsage } from '@xpert-ai/chatkit-types';
 import { MessageActions } from './MessageActions';
 import { MessageList } from './MessageList';
+import { ThemeProvider } from '../../providers/Theme';
+
+const render = (ui: ReactElement) => renderUI(ui, { wrapper: ThemeProvider });
 
 vi.mock('../../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({

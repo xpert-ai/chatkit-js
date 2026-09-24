@@ -2,7 +2,7 @@ import * as React from 'react';
 import {
   act,
   fireEvent,
-  render,
+  render as renderUI,
   screen,
   waitFor,
   within,
@@ -62,7 +62,8 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../providers/Stream', () => ({
+vi.mock('../providers/Stream', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../providers/Stream')>()),
   useStreamContext: () => mocks.stream,
   StreamProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -110,6 +111,9 @@ import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './SideChatCloseDialog'
 import { AssistantMessage } from '../components/thread/messages/ai';
 import { toWorkbenchMessages } from './external-assistant-runs';
 import { ThemeProvider } from '../providers/Theme';
+
+const render = (ui: React.ReactElement) =>
+  renderUI(ui, { wrapper: ThemeProvider });
 
 function ExternalTranscript() {
   return <>{toWorkbenchMessages(mocks.stream.messages).map((message) =>

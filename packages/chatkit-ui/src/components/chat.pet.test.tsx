@@ -82,7 +82,8 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../providers/Stream', () => ({
+vi.mock('../providers/Stream', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../providers/Stream')>()),
   useStreamContext: () => mocks.stream,
 }));
 

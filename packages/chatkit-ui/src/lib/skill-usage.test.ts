@@ -84,7 +84,7 @@ describe('message skill observations', () => {
     ).toEqual([]);
     expect(
       normalizeTaskSummaryContribution({ version: 1, sources: [] }),
-    ).toEqual({ version: 1 });
+    ).toEqual({ version: 1, fileChanges: [] });
   });
 
   it('allowlists public metadata and does not expose paths or raw output', () => {
