@@ -633,7 +633,7 @@ describe('WorkbenchShell', () => {
     ).toBeInTheDocument();
   });
 
-  it('closes when becoming narrow and reopens in a right-side drawer', async () => {
+  it('maximizes the narrow drawer across the frame, hides chat and restores both without remounting', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(
       <WorkbenchShell
@@ -645,6 +645,7 @@ describe('WorkbenchShell', () => {
         onRequestContextChange={vi.fn()}
       >
         <WorkbenchToggleButton />
+        <input aria-label="Draft message" defaultValue="Keep my draft" />
       </WorkbenchShell>,
     );
     setObservedWidth(1200);
@@ -663,13 +664,28 @@ describe('WorkbenchShell', () => {
     expect(dialog).toBeInTheDocument();
     expect(screen.getByTestId('remote-view')).toBeInTheDocument();
     expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    const draft = screen.getByLabelText('Draft message');
+    const remoteView = screen.getByTestId('remote-view');
+    expect(draft).toBeVisible();
 
     fireEvent.click(screen.getByLabelText('Expand panel'));
-    expect(dialog).toHaveClass('w-screen');
+    expect(dialog).toHaveClass('inset-0', 'w-full', 'max-w-none', 'sm:max-w-none');
+    expect(dialog).not.toHaveClass('sm:max-w-sm');
+    expect(draft).not.toBeVisible();
+    expect(screen.getByTestId('remote-view')).toBe(remoteView);
     expect(screen.getByLabelText('Restore panel')).toHaveAttribute(
       'aria-pressed',
       'true',
     );
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(dialog).toHaveClass('w-[min(92vw,720px)]');
+    expect(draft).toBeVisible();
+    expect(draft).toHaveValue('Keep my draft');
+    expect(screen.getByTestId('remote-view')).toBe(remoteView);
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(draft).toBeVisible();
   });
 
   it('merges view context and sends messages through the active stream', async () => {

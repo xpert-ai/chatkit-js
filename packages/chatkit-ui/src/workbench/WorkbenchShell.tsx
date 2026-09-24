@@ -643,10 +643,10 @@ export function WorkbenchShell({
         {resizing && <div aria-hidden="true" className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
         <div
           data-chatkit-chat-panel=""
-          hidden={open && expanded && !isNarrow}
+          hidden={open && expanded}
           className={cn(
             'flex min-w-0 flex-1',
-            open && expanded && !isNarrow && 'hidden',
+            open && expanded && 'hidden',
           )}
         >
           {children}
@@ -712,7 +712,9 @@ export function WorkbenchShell({
             className={cn(
               'flex h-full max-w-none flex-col gap-0 p-0',
               (sideChat || externalViewOpen) && 'data-[state=closed]:hidden',
-              expanded ? 'w-screen' : 'w-[min(92vw,720px)]',
+              expanded
+                ? 'inset-0 w-full max-w-none border-0 shadow-none sm:max-w-none'
+                : 'w-[min(92vw,720px)]',
             )}
           >
             <SheetTitle className="sr-only">{t('workbench.title')}</SheetTitle>
