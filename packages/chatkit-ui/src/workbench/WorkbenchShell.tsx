@@ -52,12 +52,13 @@ import {
   type SideChatSession,
 } from './WorkbenchPanel';
 
+import { useWorkbenchResize } from './useWorkbenchResize';
+import { CHAT_MIN_WIDTH, WORKBENCH_MIN_WIDTH, clampPanelWidth } from './split-resize';
+
 const WORKBENCH_SLOT = 'agent.workbench.fixed';
 const isNativeView = (key: string | null) =>
   key === SIDE_CHAT_VIEW_KEY || key === EXTERNAL_ASSISTANTS_VIEW_KEY;
 const NARROW_BREAKPOINT = 960;
-const CHAT_MIN_WIDTH = 384;
-const WORKBENCH_MIN_WIDTH = 480;
 export type WorkbenchAssistantContext = {
   env?: Record<string, string>;
   context?: Record<string, unknown>;
@@ -583,30 +584,9 @@ export function WorkbenchShell({
     containerWidth,
   );
 
-  const startResize = React.useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (isNarrow) return;
-      event.preventDefault();
-      const root = rootRef.current;
-      if (!root) return;
-      const rect = root.getBoundingClientRect();
-
-      const handleMove = (moveEvent: PointerEvent) => {
-        setPanelWidth(
-          clampPanelWidth(rect.right - moveEvent.clientX, rect.width),
-        );
-      };
-      const stop = () => {
-        window.removeEventListener('pointermove', handleMove);
-        window.removeEventListener('pointerup', stop);
-        window.removeEventListener('pointercancel', stop);
-      };
-      window.addEventListener('pointermove', handleMove);
-      window.addEventListener('pointerup', stop);
-      window.addEventListener('pointercancel', stop);
-    },
-    [isNarrow],
-  );
+  const { resizing, startResize } = useWorkbenchResize({
+    rootRef, isNarrow, resolvedPanelWidth, open, expanded, setPanelWidth, setExpanded,
+  });
 
   const panel = (
     <WorkbenchPanel
@@ -665,7 +645,9 @@ export function WorkbenchShell({
         className="relative flex h-full min-h-0 w-full overflow-hidden bg-background"
         data-chatkit-workbench-root=""
       >
+        {resizing && <div aria-hidden="true" className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
         <div
+          data-chatkit-chat-panel=""
           hidden={open && expanded && !isNarrow}
           className={cn(
             'flex min-w-0 flex-1',
@@ -682,8 +664,21 @@ export function WorkbenchShell({
                 role="separator"
                 aria-orientation="vertical"
                 aria-label={t('workbench.resize')}
+                tabIndex={0}
+                aria-valuemin={CHAT_MIN_WIDTH}
+                aria-valuemax={Math.max(CHAT_MIN_WIDTH, containerWidth - WORKBENCH_MIN_WIDTH)}
+                aria-valuenow={Math.round(containerWidth - resolvedPanelWidth)}
                 onPointerDown={startResize}
-                className="group relative z-20 w-0.5 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/50"
+                onKeyDown={(event) => {
+                  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter'].includes(event.key)) return;
+                  event.preventDefault();
+                  if (event.key === 'Enter') { setExpanded(true); return; }
+                  const width = event.key === 'Home' ? containerWidth - CHAT_MIN_WIDTH
+                    : event.key === 'End' ? WORKBENCH_MIN_WIDTH
+                    : resolvedPanelWidth + (event.key === 'ArrowLeft' ? 16 : -16);
+                  setPanelWidth(clampPanelWidth(width, containerWidth));
+                }}
+                className="group relative z-20 w-0.5 shrink-0 cursor-col-resize touch-none bg-border outline-none transition-colors hover:bg-primary/50 focus-visible:bg-primary"
               >
                 <div className="absolute inset-y-0 -left-1 -right-1" />
               </div>
@@ -775,12 +770,6 @@ function compareWorkbenchViews(
     left.key.localeCompare(right.key)
   );
 }
-
-function clampPanelWidth(value: number, containerWidth: number) {
-  const max = Math.max(WORKBENCH_MIN_WIDTH, containerWidth - CHAT_MIN_WIDTH);
-  return Math.min(max, Math.max(WORKBENCH_MIN_WIDTH, Math.round(value)));
-}
-
 function parseContextSetPayload(payload: unknown): {
   key: string;
   clear: boolean;

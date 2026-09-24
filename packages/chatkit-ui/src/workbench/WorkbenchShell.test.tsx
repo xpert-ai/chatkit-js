@@ -417,6 +417,62 @@ describe('WorkbenchShell', () => {
     expect(screen.queryByTestId('remote-view')).not.toBeInTheDocument();
   });
 
+  it('keeps the chat minimum until the pointer passes half of it, then restores the chat without remounting it', async () => {
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+    });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const { container } = render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Draft message" defaultValue="Keep my draft" /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await screen.findByTestId('remote-view');
+    const root = container.querySelector('[data-chatkit-workbench-root]');
+    if (!root) throw new Error('Missing workbench root');
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
+    const separator = screen.getByRole('separator');
+    fireEvent.pointerDown(separator, { button: 0, clientX: 540, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 200, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
+    fireEvent.pointerMove(window, { clientX: 191, pointerId: 1 });
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Draft message')).not.toBeVisible();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByLabelText('Draft message')).toHaveValue('Keep my draft');
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    fireEvent.pointerMove(window, { clientX: 800, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '400');
+    vi.unstubAllGlobals();
+  });
+
+  it('cancels a resize on lost focus and ignores later pointer movement', async () => {
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+    });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const { container } = render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await screen.findByTestId('remote-view');
+    const root = container.querySelector('[data-chatkit-workbench-root]');
+    if (!root) throw new Error('Missing root');
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
+    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 540, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 650, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '650');
+    fireEvent.blur(window);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    fireEvent.pointerMove(window, { clientX: 100, pointerId: 1 });
+    expect(screen.getByRole('separator')).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
   it('expands, restores, and hides the workbench from its action buttons', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(
