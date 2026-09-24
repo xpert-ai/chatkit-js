@@ -34,7 +34,7 @@ import {
   resolveLocalizedText,
 } from '../../../i18n/localized-text';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
-import { isThreadContextUsageRenderArtifact } from '../../../lib/thread-context-usage';
+import { isInternalMessageContent } from '../../../lib/internal-message-content';
 import { parseToolOutputPresentation } from '../../../lib/tool-output-attachments';
 import { cn } from '../../../lib/utils';
 import {
@@ -323,7 +323,7 @@ function isGroupableStepComponent(
   content: TMessageContentComplex | string | undefined,
 ): content is TMessageContentComponent {
   if (!content || typeof content === 'string') return false;
-  if (isThreadContextUsageRenderArtifact(content)) return false;
+  if (isInternalMessageContent(content)) return false;
   if (!isComponentContent(content) || isWidgetComponent(content)) return false;
 
   const data = getToolStepData(content);
@@ -476,7 +476,7 @@ export function buildToolComponentRenderUnits(
   const pendingTools: PendingToolComponent[] = [];
 
   content.forEach((item, index) => {
-    if (isThreadContextUsageRenderArtifact(item)) {
+    if (isInternalMessageContent(item)) {
       return;
     }
 

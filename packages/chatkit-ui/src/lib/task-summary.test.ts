@@ -273,20 +273,8 @@ describe('task summary aggregation', () => {
       ],
     });
 
-    expect(live.outputs).toEqual([
-      {
-        id: 'workspace-file:reports/AI_Industry_Trends_Report_2026.md',
-        kind: 'document',
-        title: 'AI_Industry_Trends_Report_2026.md',
-        status: 'success',
-        resource: {
-          type: 'workspace_file',
-          workspacePath: 'reports/AI_Industry_Trends_Report_2026.md',
-        },
-        messageId: 'message-1',
-        updatedAt: '2026-07-13T01:00:00.000Z',
-      },
-    ]);
+    expect(live.outputs).toEqual([]);
+    expect(live.fileChanges).toEqual([expect.objectContaining({ workspacePath: 'reports/AI_Industry_Trends_Report_2026.md', coverage: 'legacy', operation: 'unknown' })]);
     expect(live.sources).toEqual([
       {
         id: 'web:https://hai.stanford.edu/ai-index/2026-ai-index-report',
@@ -540,6 +528,7 @@ function snapshot(partial: Partial<TaskSummarySnapshot>): TaskSummarySnapshot {
 function emptyLive(partial: Partial<TaskSummaryLiveData>): TaskSummaryLiveData {
   return {
     outputs: [],
+    fileChanges: [],
     sources: [],
     agents: [],
     pending: [],

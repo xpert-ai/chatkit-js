@@ -1,3 +1,5 @@
+import { parseFileActivityContent } from '@xpert-ai/chatkit-types';
+import { applyFileActivityReceipt } from '../lib/stream-file-activity';
 import React, {
   createContext,
   useCallback,
@@ -1782,6 +1784,13 @@ export function applyStreamEvent(
   const payload = parsed as ChatEventEnvelope<TMessageContentComponent<any>>;
 
   const payloadType: ChatMessageTypeEnum = payload.type;
+
+  const fileActivity = parseFileActivityContent(payload.data);
+  if (fileActivity && (payloadType === ChatMessageTypeEnum.MESSAGE ||
+    (payloadType === ChatMessageTypeEnum.EVENT && payload.event === ChatMessageEventTypeEnum.ON_CHAT_EVENT))) {
+    setValues((prev) => ({ ...prev, messages: applyFileActivityReceipt(prev.messages, fileActivity) }));
+    return;
+  }
 
   if (payloadType === ChatMessageTypeEnum.MESSAGE) {
     if (typeof payload.data === 'string') {

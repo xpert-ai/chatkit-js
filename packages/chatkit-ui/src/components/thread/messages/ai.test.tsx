@@ -1,3 +1,4 @@
+import { ThemeProvider } from '../../../providers/Theme';
 import React from 'react';
 import {
   REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
@@ -9,7 +10,7 @@ import {
 import {
   act,
   fireEvent,
-  render,
+  render as renderUI,
   screen,
   waitFor,
 } from '@testing-library/react';
@@ -205,6 +206,8 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
 }));
 
 import { AssistantMessage, type AssistantMessageProps } from './ai';
+
+function render(ui: React.ReactElement) { return renderUI(ui, { wrapper: ThemeProvider }); }
 
 type AssistantChatkitMessage = ChatkitMessage & { type: 'assistant' };
 

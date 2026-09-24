@@ -11,7 +11,7 @@ import type {
 
 import { resolveLocalizedText } from '../i18n/localized-text';
 import { getReferenceLabel, normalizeReferences } from './references';
-import { isThreadContextUsageRenderArtifact } from './thread-context-usage';
+import { isInternalMessageContent } from './internal-message-content';
 import {
   getToolActivityLabel,
   getToolStepData,
@@ -262,7 +262,7 @@ function collectContentItem(
   language: string,
   options: CollectContentOptions,
 ) {
-  if (item === undefined || isThreadContextUsageRenderArtifact(item)) return;
+  if (item === undefined || isInternalMessageContent(item)) return;
   if (typeof item === 'string') {
     pushText(draft, item);
     return;

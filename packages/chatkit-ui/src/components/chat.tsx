@@ -1,3 +1,4 @@
+import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import { useRuntimeResources } from './chat/useRuntimeResources';
 import { RuntimeResourceSelector } from './composer/RuntimeResourceSelector';
 import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
@@ -4229,6 +4230,7 @@ export function Chat({
           <form className="flex items-end" onSubmit={handleSubmit}>
             <div
               data-slot="composer-input-shell"
+              style={getSurfaceThemeStyle(theme)}
               data-layout="stacked"
               className={cn(
                 'relative flex min-w-0 flex-1 flex-col overflow-visible',

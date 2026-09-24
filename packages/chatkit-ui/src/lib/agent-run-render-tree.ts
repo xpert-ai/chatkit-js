@@ -14,7 +14,7 @@ import {
   readContentParentExecutionId,
   type AgentRunInfo,
 } from './agent-runs';
-import { isThreadContextUsageRenderArtifact } from './thread-context-usage';
+import { isInternalMessageContent } from './internal-message-content';
 
 export type AssistantMessageWithAgentRuns = ChatkitMessage & {
   executionId?: string;
@@ -170,7 +170,7 @@ export function getAgentRunCounts(node: AgentRunRenderNode) {
       continue;
     }
 
-    if (isThreadContextUsageRenderArtifact(item)) {
+    if (isInternalMessageContent(item)) {
       continue;
     }
 
@@ -331,7 +331,7 @@ function normalizeAssistantEntries(message: AssistantMessageWithAgentRuns) {
     }
   } else if (Array.isArray(message.content)) {
     message.content.forEach((item, index) => {
-      if (isThreadContextUsageRenderArtifact(item)) return;
+      if (isInternalMessageContent(item)) return;
 
       entries.push({
         item,

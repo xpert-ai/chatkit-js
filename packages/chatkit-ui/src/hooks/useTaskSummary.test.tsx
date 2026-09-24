@@ -6,8 +6,107 @@ import type {
   TaskSummarySnapshot,
 } from '../lib/task-summary';
 import { useTaskSummary } from './useTaskSummary';
+import { collectLiveTaskSummary } from '../lib/task-summary';
+import { changesReceipt } from '../test/file-activity-fixtures';
 
 describe('useTaskSummary', () => {
+  it('refreshes persisted net changes and preserves the baseline when a later refresh fails', async () => {
+    const live = collectLiveTaskSummary({
+      messages: [{ id: 'message', content: [changesReceipt] }],
+    });
+    const initial = snapshot('conversation-1', 'Plan');
+    initial.fileChanges = { items: live.fileChanges, total: 1 };
+    const canceled = snapshot('conversation-1', 'Plan');
+    canceled.fileChanges = { items: [], total: 0 };
+    const getTaskSummary = vi
+      .fn()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(canceled)
+      .mockRejectedValueOnce(new Error('offline'));
+    const client = {
+      conversations: { getTaskSummary, listTaskSummaryItems: vi.fn() },
+    } as unknown as Client;
+    const { result, rerender } = renderHook(
+      ({ refreshVersion }) =>
+        useTaskSummary({
+          enabled: true,
+          conversationId: 'conversation-1',
+          client,
+          live,
+          refreshVersion,
+        }),
+      { initialProps: { refreshVersion: 0 } },
+    );
+    await waitFor(() =>
+      expect(result.current.summary.plan?.title).toBe('Plan'),
+    );
+    expect(result.current.summary.totals.fileChanges).toBe(1);
+    rerender({ refreshVersion: 1 });
+    await waitFor(() =>
+      expect(result.current.summary.totals.fileChanges).toBe(0),
+    );
+    expect(result.current.summary.fileChanges).toEqual([]);
+    rerender({ refreshVersion: 2 });
+    await waitFor(() => expect(result.current.historyError).toBeTruthy());
+    expect(result.current.summary.fileChanges).toEqual([]);
+    expect(result.current.summary.totals.fileChanges).toBe(0);
+  });
+
+  it('ignores a stale section page that resolves after a same-conversation refresh', async () => {
+    type Page = Awaited<
+      ReturnType<Client['conversations']['listTaskSummaryItems']>
+    >;
+    const page = deferred<Page>();
+    const changes = collectLiveTaskSummary({
+      messages: [{ content: [changesReceipt] }],
+    }).fileChanges;
+    const initial = snapshot('conversation-1', 'Plan');
+    initial.fileChanges = { items: changes, total: 1 };
+    const canceled = snapshot('conversation-1', 'Plan');
+    canceled.fileChanges = { items: [], total: 0 };
+    const client = {
+      conversations: {
+        getTaskSummary: vi
+          .fn()
+          .mockResolvedValueOnce(initial)
+          .mockResolvedValueOnce(canceled),
+        listTaskSummaryItems: vi.fn().mockReturnValue(page.promise),
+      },
+    } as unknown as Client;
+    const { result, rerender } = renderHook(
+      ({ refreshVersion }) =>
+        useTaskSummary({
+          enabled: true,
+          conversationId: 'conversation-1',
+          client,
+          live: emptyLive(),
+          refreshVersion,
+        }),
+      { initialProps: { refreshVersion: 0 } },
+    );
+    await waitFor(() =>
+      expect(result.current.summary.totals.fileChanges).toBe(1),
+    );
+    act(() => {
+      void result.current.loadSection('fileChanges');
+    });
+    rerender({ refreshVersion: 1 });
+    await waitFor(() =>
+      expect(result.current.summary.totals.fileChanges).toBe(0),
+    );
+    await act(async () => {
+      page.resolve({
+        section: 'fileChanges',
+        items: changes,
+        total: 1,
+        offset: 0,
+        limit: 50,
+      });
+      await Promise.resolve();
+    });
+    expect(result.current.summary.fileChanges).toEqual([]);
+    expect(result.current.summary.totals.fileChanges).toBe(0);
+  });
   it('clears stale history and ignores the old request when the conversation changes', async () => {
     const first = deferred<TaskSummarySnapshot>();
     const second = deferred<TaskSummarySnapshot>();
@@ -185,6 +284,7 @@ function emptyLive(
 ): TaskSummaryLiveData {
   return {
     outputs: [],
+    fileChanges: [],
     sources: [],
     agents: [],
     pending: [],

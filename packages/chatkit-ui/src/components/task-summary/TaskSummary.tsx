@@ -1,3 +1,7 @@
+import { useTheme } from '../../providers/Theme';
+import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
+import { FileChangeList } from './FileActivity';
+import { FileTypeIcon } from './FileTypeIcon';
 import * as React from 'react';
 import {
   Bot,
@@ -5,7 +9,6 @@ import {
   CheckCircle2,
   CircleEllipsis,
   ExternalLink,
-  FileOutput,
   ListChecks,
   Loader2,
   PlayCircle,
@@ -53,6 +56,7 @@ export function TaskSummaryTrigger({
   ...props
 }: TaskSummaryTriggerProps) {
   const { t } = useChatkitTranslation();
+  const { theme } = useTheme();
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
   const setOpen = React.useCallback(
@@ -67,7 +71,8 @@ export function TaskSummaryTrigger({
   const triggerButton = (
     <button
       type="button"
-      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
+      style={getSurfaceThemeStyle(theme)}
+      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
       aria-label={t('taskSummary.open')}
       aria-expanded={open}
       onClick={displayMode === 'docked' ? () => setOpen(!open) : undefined}
@@ -94,9 +99,11 @@ export function TaskSummaryTrigger({
         <TooltipContent side="bottom">{t('taskSummary.open')}</TooltipContent>
       </Tooltip>
       <PopoverContent
+        data-slot="task-summary-popover"
+        style={getSurfaceThemeStyle(theme)}
         align="end"
         sideOffset={8}
-        className="w-[min(20rem,calc(100vw-2rem))] max-h-[min(44rem,calc(100vh-5rem))] overflow-y-auto rounded-2xl border-border/70 bg-popover p-0 shadow-lg"
+        className="w-[min(20rem,calc(100vw-2rem))] max-h-[min(44rem,calc(100vh-5rem))] overflow-y-auto rounded-[var(--chat-panel-radius)] border-border/70 bg-popover p-0 shadow-lg"
         aria-label={t('taskSummary.title')}
       >
         <TaskSummaryContent {...props} />
@@ -110,13 +117,15 @@ export function TaskSummaryPanel({
   ...props
 }: TaskSummaryProps & { className?: string }) {
   const { t } = useChatkitTranslation();
+  const { theme } = useTheme();
 
   return (
     <aside
       data-slot="task-summary-panel"
+      style={getSurfaceThemeStyle(theme)}
       aria-label={t('taskSummary.title')}
       className={cn(
-        'h-fit max-h-full overflow-y-auto rounded-2xl border border-border/70 bg-popover text-popover-foreground shadow-lg',
+        'h-fit max-h-full overflow-y-auto rounded-[var(--chat-panel-radius)] border border-border/70 bg-popover text-popover-foreground shadow-lg',
         className,
       )}
     >
@@ -129,7 +138,13 @@ function TaskSummaryContent({
   summary,
   historyError,
   loadingSections = {},
-  loadedSectionCounts = { outputs: 0, sources: 0, agents: 0, pending: 0 },
+  loadedSectionCounts = {
+    fileChanges: 0,
+    outputs: 0,
+    sources: 0,
+    agents: 0,
+    pending: 0,
+  },
   onRetryHistory,
   onLoadSection,
   onNavigateMessage,
@@ -199,7 +214,7 @@ function TaskSummaryContent({
     return (
       <button
         type="button"
-        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        className="chatkit-summary-action mt-1 flex w-full items-center text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         disabled={loading}
         onClick={() =>
           canLoadMore ? void onLoadSection(section) : toggleSection(section)
@@ -222,7 +237,7 @@ function TaskSummaryContent({
     return (
       <button
         type="button"
-        className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        className="chatkit-summary-action mt-1 flex w-full items-center text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
         onClick={() =>
           setExpandedLocal((state) => ({
             ...state,
@@ -241,7 +256,7 @@ function TaskSummaryContent({
   return (
     <div className="divide-y divide-border/70">
       {Boolean(historyError) && (
-        <div className="m-3 flex items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <div className="chatkit-summary-error flex items-start justify-between border border-destructive/30 bg-destructive/5 text-xs text-destructive">
           <span>{t('taskSummary.historyError')}</span>
           <button
             type="button"
@@ -264,9 +279,13 @@ function TaskSummaryContent({
             <SummaryButton
               key={item.id}
               title={item.title}
-              metadata={localizedStatus(item.status)}
+              metadata={
+                item.origin === 'legacy'
+                  ? t('fileActivity.legacyOutput')
+                  : localizedStatus(item.status)
+              }
               description={item.description}
-              leading={<FileOutput className="size-4" />}
+              leading={<FileTypeIcon output={item} />}
               trailing={
                 item.resource && item.resource.type !== 'message' ? (
                   <ExternalLink className="size-3.5" />
@@ -280,6 +299,16 @@ function TaskSummaryContent({
         )}
         {sectionAction('outputs', summary.totals.outputs)}
       </SummarySection>
+
+      {(summary.fileChanges?.length ?? 0) > 0 && (
+        <SummarySection title={t('taskSummary.sections.fileChanges')}>
+          <FileChangeList
+            changes={sectionItems('fileChanges', summary.fileChanges)}
+            onOpenResource={onOpenResource}
+          />
+          {sectionAction('fileChanges', summary.totals.fileChanges)}
+        </SummarySection>
+      )}
 
       <SummarySection title={t('taskSummary.sections.sources')}>
         {sectionItems('sources', summary.sources).map((item) => (
@@ -427,11 +456,11 @@ function SummarySection({
   children: React.ReactNode;
 }) {
   return (
-    <section aria-label={title} className="px-4 py-3">
-      <div className="flex min-h-7 items-center justify-between gap-3">
+    <section aria-label={title} className="chatkit-summary-section">
+      <div className="chatkit-summary-heading flex items-center justify-between">
         <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
       </div>
-      <div className="mt-1 space-y-0.5">{children}</div>
+      <div className="chatkit-summary-items">{children}</div>
     </section>
   );
 }
@@ -446,7 +475,7 @@ function SummaryPrompt({
   return (
     <button
       type="button"
-      className="block rounded-md py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="chatkit-summary-prompt block text-left text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onClick}
     >
       {children}
@@ -478,7 +507,7 @@ function SummaryButton({
       tabIndex={onClick ? 0 : -1}
       onClick={onClick}
       className={cn(
-        'flex w-full min-w-0 items-start gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors',
+        'chatkit-summary-row flex w-full min-w-0 items-start text-left transition-colors',
         onClick &&
           'hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         !onClick && 'cursor-default',

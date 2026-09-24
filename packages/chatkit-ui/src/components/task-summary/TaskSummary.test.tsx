@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { ThemeProvider } from '../../providers/Theme';
+import { fireEvent, render as renderUI, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLanguage } from '../../i18n';
 import type { MergedTaskSummary } from '../../lib/task-summary';
@@ -8,7 +10,20 @@ afterEach(() => {
   setLanguage('en-US');
 });
 
+const render = (ui: ReactElement) => renderUI(ui, { wrapper: ThemeProvider });
+
 describe('TaskSummaryTrigger', () => {
+  it('updates radius and density for a portal outside the themed DOM tree', () => {
+    const content = <TaskSummaryTrigger open summary={summary()} onRetryHistory={vi.fn()} onLoadSection={vi.fn()} onNavigateMessage={vi.fn()} onFocusComposer={vi.fn()} onOpenResource={vi.fn()} />;
+    const { rerender } = render(<ThemeProvider theme={{ radius: 'sharp', density: 'compact' }}>{content}</ThemeProvider>);
+    const portal = screen.getByRole('dialog');
+    expect(portal.closest('[data-density]')).toBeNull();
+    expect(portal).toHaveStyle('--chat-panel-radius: 0px; --chat-density-scale: 0.75');
+    rerender(<ThemeProvider theme={{ radius: 'pill', density: 'spacious' }}>{content}</ThemeProvider>);
+    expect(portal).toHaveStyle('--chat-panel-radius: calc(var(--radius, 0.625rem) + 12px); --chat-density-scale: 1.25');
+    expect(portal).not.toHaveClass('rounded-2xl');
+  });
+
   it('renders the six sections in fixed order and emits resource opens', async () => {
     const onOpenResource = vi.fn();
     const onNavigateMessage = vi.fn();
@@ -104,7 +119,7 @@ describe('TaskSummaryTrigger', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('complementary', { name: 'Task summary' }),
-    ).toHaveClass('rounded-2xl', 'shadow-lg');
+    ).toHaveClass('rounded-[var(--chat-panel-radius)]', 'shadow-lg');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open task summary' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -273,6 +288,7 @@ function summary(): MergedTaskSummary {
     pending: [
       { id: 'pending-1', kind: 'approval', title: 'Approval required' },
     ],
-    totals: { outputs: 4, sources: 1, agents: 1, pending: 1 },
+    fileChanges: [],
+    totals: { fileChanges: 0, outputs: 4, sources: 1, agents: 1, pending: 1 },
   };
 }

@@ -1,3 +1,4 @@
+import { getDensitySpacing } from '../lib/theme-surfaces';
 import * as React from 'react';
 import type { ChatKitTheme, ColorScheme, GrayscaleOptions } from '@xpert-ai/chatkit-types';
 
@@ -184,26 +185,6 @@ function rgbToOklch(r: number, g: number, b: number): string {
 function hslToOklch(h: number, s: number, l: number): string {
   const rgb = hslToRgb(h, s, l);
   return rgbToOklch(rgb.r, rgb.g, rgb.b);
-}
-
-/**
- * Get density spacing multiplier
- * compact: 0.75, normal: 1, spacious: 1.25
- */
-function getDensitySpacing(density: 'compact' | 'normal' | 'spacious'): {
-  spacing: number;
-  padding: string;
-  gap: string;
-} {
-  switch (density) {
-    case 'compact':
-      return { spacing: 0.75, padding: '0.5rem', gap: '0.25rem' };
-    case 'spacious':
-      return { spacing: 1.25, padding: '1.5rem', gap: '1rem' };
-    case 'normal':
-    default:
-      return { spacing: 1, padding: '1rem', gap: '0.5rem' };
-  }
 }
 
 /**
