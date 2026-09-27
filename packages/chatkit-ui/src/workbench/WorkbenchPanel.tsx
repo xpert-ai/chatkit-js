@@ -37,6 +37,7 @@ import {
 } from '../components/ui/tooltip';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
+import { WorkbenchTabs } from './WorkbenchTabs';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
 
@@ -168,11 +169,7 @@ export function WorkbenchPanel({
         sideChat ||
         sideChatOpening ||
         externalViewOpen ? (
-          <div
-            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-            role="tablist"
-            aria-label={t('workbench.views')}
-          >
+          <WorkbenchTabs activeKey={activeViewKey}>
             {externalViewOpen && (
               <div
                 className={cn(
@@ -297,7 +294,7 @@ export function WorkbenchPanel({
                 </div>
               );
             })}
-          </div>
+          </WorkbenchTabs>
         ) : (
           <div className="min-w-0 flex-1" />
         )}

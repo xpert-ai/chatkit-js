@@ -3,6 +3,8 @@
     "title": "Views",
     "description": "Remote workbench views",
     "views": "Available views",
+    "scrollViewsLeft": "Scroll views left",
+    "scrollViewsRight": "Scroll views right",
     "open": "Open views",
     "close": "Close views",
     "expandPanel": "Expand panel",

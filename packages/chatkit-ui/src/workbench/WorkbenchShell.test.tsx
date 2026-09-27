@@ -171,10 +171,12 @@ const baseOptions = {
 } satisfies ChatKitOptions;
 
 class ResizeObserverMock {
-  constructor(callback: ResizeObserverCallback) {
-    mocks.resizeCallback = callback;
+  constructor(private callback: ResizeObserverCallback) {}
+  observe(element: Element) {
+    if (element.hasAttribute('data-chatkit-workbench-root')) {
+      mocks.resizeCallback = this.callback;
+    }
   }
-  observe() {}
   disconnect() {}
   unobserve() {}
 }
