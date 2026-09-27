@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-js
 
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+  - @xpert-ai/chatkit-types@0.6.0
+  - @xpert-ai/chatkit-web-component@0.6.0
+
 ## 0.4.2
 
 ### Patch Changes

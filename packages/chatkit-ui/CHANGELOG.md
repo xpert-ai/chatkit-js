@@ -1,5 +1,67 @@
 # @xpert-ai/chatkit-ui
 
+## 0.6.3
+
+### Patch Changes
+
+- 614b5c0: Separate delivered files from workspace file changes using typed file-activity receipts and versioned artifact references. Display delivery cards, file-type icons, and file-change summaries with review actions while keeping internal activity out of tool-call lists. Apply theme radius and density settings to the related surfaces, and use the published Xpert SDK 0.4.2 for file-change statistics.
+- Updated dependencies [614b5c0]
+  - @xpert-ai/chatkit-types@0.6.3
+
+## 0.6.2
+
+### Patch Changes
+
+- 0cffd76: Add typed conversation references and inline @ title search. Persist thread locators for an Xpert built-in read_thread middleware, with atomic composer chips and submission recovery. Upgrade the Xpert SDK dependency to ^0.4.1 for cancellation on conversations.search. Requires the companion Xpert backend.
+- fdc0a44: Persist skill load observations and display the skills used by each assistant
+  message in an accessible footer popover, including skill origins.
+- Updated dependencies [0cffd76]
+- Updated dependencies [fdc0a44]
+  - @xpert-ai/chatkit-types@0.6.2
+
+## 0.6.1
+
+### Patch Changes
+
+- 8ee52f7: Add a direct Branch in new chat action and tooltips for message action buttons to completed assistant messages that advertise a sealed server checkpoint. Requires Xpert SDK 0.4.0 and the conversation branching backend migration. Preserve source drafts on failure, deduplicate retries, and ignore responses after navigation. Historical app results are displayed without reconnecting to source executions.
+- 56407c3: Add opt-in `messagePresentation.collapseProcess` to group assistant progress and tool history above the final reply, preserving interactive content and original message identities.
+- 191610f: Place tool-group disclosure arrows next to their summaries and show them on hover, keyboard focus, or while expanded.
+- 8ee52f7: Render copied main-assistant replies as normal messages after branching, while preserving child-agent and external-assistant groups.
+- bea041a: Allow renaming the conversation title inline in the chat header without changing its height, with keyboard controls, save feedback, and synchronized history titles.
+- ee6fc28: Show persisted root execution duration in process disclosures and localized updatedAt timestamps beneath assistant and human messages on message hover or focus. Keep the latest assistant reply's action buttons visible. Preserve server timestamps across streaming and history hydration, including root timing in branched history snapshots.
+
+  Include a localized relative day for recent past messages and a calendar date for older messages, while keeping today's timestamps compact.
+
+- 539ab69: Display a theme-aware message skeleton while thread history loads, with an accessible loading status and reduced-motion support.
+- 8df6fa6: Upgrade the Xpert SDK dependency to the published 0.4.0 release with conversation branching and root execution summaries.
+- Updated dependencies [8ee52f7]
+- Updated dependencies [56407c3]
+- Updated dependencies [ee6fc28]
+  - @xpert-ai/chatkit-types@0.6.1
+
+## 0.6.0
+
+### Minor Changes
+
+- 54f4adf: Resolve Agent Plugin dependencies through workspace-owned Connector settings and cancellable readiness polling. Only workspace administrators configure or reconnect services; chat users select capabilities through their Assistant access. Legacy personal credentials are never reused as shared credentials. Keep credential-only Connectors out of the standalone middleware selector. Requires the SDK release with typed resource authorization and browser callback credentials.
+- 54f4adf: Add opt-in composer.resources with plugin, middleware and published expert selection, revisioned conversation persistence, workspace connections and searchable responsive resource details. Requires @xpert-ai/xpert-sdk ^0.3.0 for runtime resource methods.
+- 54f4adf: Unify executable Connector capabilities and Agent Plugins under Connect plugins, retaining separate binding identities and conversation persistence. Cache catalogs by client, Assistant and project; use workspace management links and readiness without individual OAuth. Keep the legacy Connector picker for hosts without runtime resources enabled.
+
+### Patch Changes
+
+- 54f4adf: Read workspace connection readiness through the Assistant-scoped SDK runtime API so ChatKit session credentials work without access to administrator OAuth endpoints.
+- b0515d3: fix: append the AI response after newer messages instead of reusing a stale empty placeholder left by a failed run
+- 54f4adf: Keep conversation resource selections through first-message creation and failed-send rollback. Persist the initial selection before starting execution and send its committed revision in both input and injected state. Coordinate resource info cards with one active card and cancellable hover/focus timers.
+- 54f4adf: Support I18nObject resource descriptions in information cards, details, and cached resource search. Render translations using the current locale and shared fallback rules, including legacy expert descriptions stored as JSON strings. Keep ordinary descriptions as plain text.
+- 54f4adf: Use the published Xpert SDK 0.3.0. Block resource edits after failed conversation reads until a successful retry restores the server revision. Resolve selected resource versions independently of catalog search and pagination, revalidate older selections without upgrading them, and distinguish checking, temporary failures and unavailable resources. Invalidate availability caches when returning from workspace management.
+- 54f4adf: Add composer.resources.onConnect to open workspace Connector configuration directly in the host. Forward Assistant and binding identities through the iframe bridge, show the action only with workspace configuration permission, and verify connection readiness before adding capabilities. Credentials and OAuth remain in the host; cancellation leaves the selection unchanged.
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+- Updated dependencies [54f4adf]
+  - @xpert-ai/chatkit-types@0.6.0
+  - @xpert-ai/chatkit-web-shared@0.4.5
+
 ## 0.5.17
 
 ### Patch Changes
