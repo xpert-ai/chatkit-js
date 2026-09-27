@@ -103,6 +103,10 @@ function Panel() {
       stream={main}
       options={options}
       hostId={main.assistantId}
+      runtimeScope={{
+        projectId: main.projectId ?? null,
+        conversationId: main.conversationId ?? null,
+      }}
       locale="en-US"
       visible
       previews={[]}

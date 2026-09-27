@@ -8,6 +8,7 @@ import { ThemeProvider } from './providers/Theme';
 import { getLanguage, setLanguage } from './i18n';
 import { useParentMessenger } from './hooks/useParentMessenger';
 import { useWorkbenchNavigation } from './workbench/useWorkbenchNavigation';
+import { useWindowDragRegions } from './hooks/useWindowDragRegions';
 import { WorkbenchShell } from './workbench/WorkbenchShell';
 
 export type AppProps = {
@@ -26,6 +27,7 @@ export function App({
   isClientSecretInitializing = false,
 }: AppProps) {
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
+  useWindowDragRegions(options?.header?.windowDrag === true);
   const navigation = useWorkbenchNavigation(options, organizationId);
   const apiKey =
     navigation.session?.secret ||

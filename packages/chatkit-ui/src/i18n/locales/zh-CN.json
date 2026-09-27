@@ -3,6 +3,8 @@
     "title": "视图",
     "description": "远程工作台视图",
     "views": "可用视图",
+    "scrollViewsLeft": "向左滚动视图",
+    "scrollViewsRight": "向右滚动视图",
     "open": "打开视图",
     "close": "关闭视图",
     "expandPanel": "展开面板",

@@ -6,6 +6,7 @@ import type {
   XpertViewQuery,
   XpertExtensionViewManifest,
   XpertRemoteViewHostEventMessage,
+  XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { StreamProvider, useStreamContext } from '../providers/Stream';
@@ -36,6 +37,7 @@ import {
 } from '../components/ui/tooltip';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
+import { WorkbenchTabs } from './WorkbenchTabs';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
 
@@ -68,6 +70,7 @@ type WorkbenchPanelProps = {
   options?: ChatKitOptions | null;
   stream: ReturnType<typeof useStreamContext>;
   hostId: string;
+  runtimeScope: XpertViewRuntimeScopeInput;
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
   viewHosts: WorkbenchViewHostsClient;
@@ -107,6 +110,7 @@ export function WorkbenchPanel({
   options,
   stream,
   hostId,
+  runtimeScope,
   locale,
   hostEvent,
   viewHosts,
@@ -124,27 +128,48 @@ export function WorkbenchPanel({
 }: WorkbenchPanelProps) {
   const { t } = useChatkitTranslation();
   const externalTabId = React.useId();
-  const [visited, setVisited] = React.useState<string[]>([]);
+  const frameScope = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    hostId,
+    runtimeScope.projectId,
+    runtimeScope.conversationId,
+  ]);
+  const [visited, setVisited] = React.useState<{
+    scope: string;
+    keys: string[];
+  }>({
+    scope: frameScope,
+    keys: [],
+  });
   React.useEffect(() => {
-    if (activeViewKey)
-      setVisited((current) =>
-        current.includes(activeViewKey) ? current : [...current, activeViewKey],
-      );
-  }, [activeViewKey]);
+    setVisited((current) => {
+      const keys = current.scope === frameScope ? current.keys : [];
+      if (
+        activeViewKey &&
+        views.some((view) => view.key === activeViewKey) &&
+        !keys.includes(activeViewKey)
+      ) {
+        return { scope: frameScope, keys: [...keys, activeViewKey] };
+      }
+      return current.scope === frameScope
+        ? current
+        : { scope: frameScope, keys };
+    });
+  }, [activeViewKey, frameScope, views]);
   const activePreview = previews.find((item) => item.key === activeViewKey);
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2">
+      <div
+        data-slot="chatkit-workbench-header"
+        className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2"
+      >
         {views.length > 0 ||
         previews.length > 0 ||
         sideChat ||
         sideChatOpening ||
         externalViewOpen ? (
-          <div
-            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-            role="tablist"
-            aria-label={t('workbench.views')}
-          >
+          <WorkbenchTabs activeKey={activeViewKey}>
             {externalViewOpen && (
               <div
                 className={cn(
@@ -269,7 +294,7 @@ export function WorkbenchPanel({
                 </div>
               );
             })}
-          </div>
+          </WorkbenchTabs>
         ) : (
           <div className="min-w-0 flex-1" />
         )}
@@ -382,17 +407,21 @@ export function WorkbenchPanel({
         ))}
         {views
           .filter(
-            (view) => visited.includes(view.key) || view.key === activeViewKey,
+            (view) =>
+              (visited.scope === frameScope &&
+                visited.keys.includes(view.key)) ||
+              view.key === activeViewKey,
           )
           .map((view) => (
             <div
-              key={view.key}
+              key={JSON.stringify([frameScope, view.key])}
               hidden={view.key !== activeViewKey}
               className="h-full min-h-0"
             >
               <RemoteViewFrame
                 manifest={view}
                 hostId={hostId}
+                runtimeScope={runtimeScope}
                 locale={locale}
                 title={resolveManifestText(view.title, view.key, locale)}
                 hostEvent={hostEvent}

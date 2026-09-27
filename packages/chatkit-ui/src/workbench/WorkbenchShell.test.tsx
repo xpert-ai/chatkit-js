@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   },
   sideChatMounts: 0,
   sideChatUnmounts: 0,
+  remoteUnmounts: 0,
   resizeCallback: null as ResizeObserverCallback | null,
   remoteViewProps: null as {
     onClientCommand: (
@@ -56,6 +57,7 @@ const mocks = vi.hoisted(() => ({
     projectId: 'project-1',
     organizationId: 'organization-1',
     threadId: 'thread-1',
+    conversationId: 'conversation-1',
     isLoading: false,
     messages: [] as StateType['messages'],
     submit: vi.fn(),
@@ -98,6 +100,12 @@ vi.mock('./RemoteViewFrame', () => ({
       manifest: XpertExtensionViewManifest,
     ) => Promise<unknown>;
   }) => {
+    React.useEffect(
+      () => () => {
+        mocks.remoteUnmounts += 1;
+      },
+      [],
+    );
     mocks.remoteViewProps = props;
     return <div data-testid="remote-view">{props.title}</div>;
   },
@@ -164,8 +172,8 @@ const baseOptions = {
 
 class ResizeObserverMock {
   constructor(private callback: ResizeObserverCallback) {}
-  observe(target: Element) {
-    if (target.hasAttribute('data-chatkit-workbench-root')) {
+  observe(element: Element) {
+    if (element.hasAttribute('data-chatkit-workbench-root')) {
       mocks.resizeCallback = this.callback;
     }
   }
@@ -188,13 +196,17 @@ describe('WorkbenchShell', () => {
     mocks.sideChatProps = null;
     mocks.sideChatMounts = 0;
     mocks.sideChatUnmounts = 0;
+    mocks.remoteUnmounts = 0;
     mocks.stream.reset.mockReset();
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
+    mocks.stream.apiUrl = '/api/ai';
     mocks.stream.assistantId = 'agent-1';
+    mocks.stream.projectId = 'project-1';
     mocks.stream.organizationId = 'organization-1';
     mocks.stream.messages = [];
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.conversationId = 'conversation-1';
     window.localStorage.clear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
@@ -490,6 +502,124 @@ describe('WorkbenchShell', () => {
 
     fireEvent.click(screen.getByLabelText('Close views: Documents'));
     expect(screen.queryByTestId('remote-view')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['conversationId', 'conversation-2'],
+    ['projectId', 'project-2'],
+    ['assistantId', 'agent-2'],
+    ['organizationId', 'organization-2'],
+    ['apiUrl', '/other-api/ai'],
+  ] as const)('retains visited views only until %s changes', async (field, value) => {
+    const secondManifest = {
+      ...manifest,
+      key: 'provider__browser',
+      title: { en_US: 'Browser' },
+    };
+    mocks.listSlotViews.mockResolvedValue([manifest, secondManifest]);
+    const onContext = vi.fn();
+    const tree = () => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
+    const view = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const original = await screen.findByTestId('remote-view');
+    const otherTab = original.textContent === 'Documents' ? 'Browser' : 'Documents';
+    fireEvent.click(screen.getByRole('tab', { name: otherTab }));
+    expect(screen.getAllByTestId('remote-view')).toHaveLength(2);
+    expect(original).toBeInTheDocument();
+    expect(original).not.toBeVisible();
+    expect(mocks.remoteUnmounts).toBe(0);
+    const previousFrames = screen.getAllByTestId('remote-view');
+
+    mocks.stream[field] = value;
+    view.rerender(tree());
+    await waitFor(() => expect(mocks.listSlotViews).toHaveBeenLastCalledWith(
+      'agent', mocks.stream.assistantId, 'agent.workbench.fixed', expect.objectContaining({
+        runtimeScope: {
+          projectId: mocks.stream.projectId,
+          conversationId: mocks.stream.conversationId,
+        },
+      }),
+    ));
+    const openButton = screen.queryByLabelText('Open views');
+    if (openButton) {
+      await waitFor(() => expect(openButton).toBeEnabled());
+      fireEvent.click(openButton);
+    }
+    await waitFor(() => expect(screen.getAllByTestId('remote-view')).toHaveLength(1));
+    for (const frame of previousFrames) expect(frame).not.toBeInTheDocument();
+    expect(mocks.remoteUnmounts).toBeGreaterThanOrEqual(2);
+    expect(mocks.remoteViewProps).toEqual(expect.objectContaining({
+      hostId: mocks.stream.assistantId,
+      runtimeScope: {
+        projectId: mocks.stream.projectId,
+        conversationId: mocks.stream.conversationId,
+      },
+    }));
+  });
+
+  it('releases the old remote frame and reloads the scope when switching conversations', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const onContext = vi.fn();
+    const tree = () => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
+    const view = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByLabelText('Open views'));
+    expect(await screen.findByTestId('remote-view')).toBeInTheDocument();
+    expect(mocks.remoteViewProps).toEqual(
+      expect.objectContaining({
+        runtimeScope: {
+          projectId: 'project-1',
+          conversationId: 'conversation-1',
+        },
+      }),
+    );
+    mocks.stream.conversationId = 'conversation-2';
+    view.rerender(tree());
+    await waitFor(() =>
+      expect(mocks.listSlotViews).toHaveBeenLastCalledWith(
+        'agent',
+        'agent-1',
+        'agent.workbench.fixed',
+        expect.objectContaining({
+          runtimeScope: {
+            projectId: 'project-1',
+            conversationId: 'conversation-2',
+          },
+        }),
+      ),
+    );
+    expect(mocks.remoteUnmounts).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(mocks.remoteViewProps).toEqual(
+        expect.objectContaining({
+          runtimeScope: {
+            projectId: 'project-1',
+            conversationId: 'conversation-2',
+          },
+        }),
+      ),
+    );
   });
 
   it('keeps the chat minimum until the pointer passes half of it, then restores the chat without remounting it', async () => {

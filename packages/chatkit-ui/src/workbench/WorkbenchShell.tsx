@@ -6,6 +6,7 @@ import {
   type XpertExtensionViewManifest,
   type XpertViewQuery,
   type XpertRemoteViewHostEventMessage,
+  type XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitOptions,
@@ -123,6 +124,13 @@ export function WorkbenchShell({
     externalAssistantsEnabled && externalSession?.scope === externalScope;
   const authenticated = Boolean(stream.apiKey.trim());
   const viewHosts = stream.client.viewHosts;
+  const runtimeScope = React.useMemo<XpertViewRuntimeScopeInput>(
+    () => ({
+      projectId: stream.projectId ?? null,
+      conversationId: stream.conversationId ?? null,
+    }),
+    [stream.projectId, stream.conversationId],
+  );
   const rootRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState(0);
   const [views, setViews] = React.useState<XpertExtensionViewManifest[]>([]);
@@ -161,6 +169,15 @@ export function WorkbenchShell({
     stream.organizationId,
     stream.assistantId,
   );
+  const viewScopeKey = JSON.stringify([
+    layoutKey,
+    runtimeScope.projectId,
+    runtimeScope.conversationId,
+  ]);
+  const scopedViews = React.useMemo(
+    () => (viewsScope === viewScopeKey ? views : []),
+    [views, viewsScope, viewScopeKey],
+  );
   const {
     requestedOpen,
     expanded,
@@ -179,7 +196,7 @@ export function WorkbenchShell({
       (containerWidth >= NARROW_BREAKPOINT &&
         (externalViewOpen ||
           Boolean(sideChat) ||
-          (viewsScope === layoutKey && views.length > 0 && !loading))));
+          (viewsScope === viewScopeKey && views.length > 0 && !loading))));
 
   React.useEffect(() => {
     const element = rootRef.current;
@@ -220,6 +237,7 @@ export function WorkbenchShell({
     void viewHosts
       .listSlotViews('agent', stream.assistantId, WORKBENCH_SLOT, {
         signal: controller.signal,
+        runtimeScope,
       })
       .then((manifests) => {
         if (controller.signal.aborted) return;
@@ -227,7 +245,7 @@ export function WorkbenchShell({
           .filter(isSupportedWorkbenchView)
           .sort(compareWorkbenchViews);
         setViews(supported);
-        setViewsScope(layoutKey);
+        setViewsScope(viewScopeKey);
         setActiveViewKey((current) =>
           isNativeView(current) ||
           (current && supported.some((view) => view.key === current))
@@ -254,10 +272,11 @@ export function WorkbenchShell({
     locale,
     onRequestContextChange,
     reloadVersion,
+    runtimeScope,
     stream.assistantId,
     t,
     viewHosts,
-    layoutKey,
+    viewScopeKey,
   ]);
 
   React.useEffect(() => {
@@ -314,7 +333,9 @@ export function WorkbenchShell({
   );
 
   const activeView =
-    views.find((view) => view.key === activeViewKey) ?? views[0] ?? null;
+    scopedViews.find((view) => view.key === activeViewKey) ??
+    scopedViews[0] ??
+    null;
 
   const askInSideChat = React.useCallback(
     async (reference: ChatKitReference) => {
@@ -537,8 +558,9 @@ export function WorkbenchShell({
         },
         navigate: onNavigate,
         forward: async (request) => {
-          if (typeof options?.workbench?.onClientCommand === 'function')
-            return options.workbench.onClientCommand(request);
+          const onClientCommand = options?.workbench?.onClientCommand;
+          if (typeof onClientCommand === 'function')
+            return onClientCommand(request);
           if (parentMessenger.isParentAvailable)
             return parentMessenger.sendCommand(
               'onWorkbenchClientCommand',
@@ -564,28 +586,26 @@ export function WorkbenchShell({
   );
 
   React.useEffect(() => {
-    if (!initialNavigation || loading || viewsScope !== layoutKey) return;
+    if (!initialNavigation || loading || viewsScope !== viewScopeKey) return;
     const navigation = parseNavigation(initialNavigation.payload);
     if (navigation.target === 'assistant.conversation') {
       setExpanded(false);
       setOpen(false);
     }
-    if (
-      navigation.viewKey &&
-      views.some((view) => view.key === navigation.viewKey)
-    ) {
+    const viewKey = navigation.viewKey;
+    if (viewKey && views.some((view) => view.key === viewKey)) {
       setViewQueries((current) => ({
         ...current,
-        [navigation.viewKey!]: navigation.query,
+        [viewKey]: navigation.query,
       }));
-      setActiveViewKey(navigation.viewKey);
+      setActiveViewKey(viewKey);
       setOpen(true);
     }
   }, [
     initialNavigation,
     loading,
     viewsScope,
-    layoutKey,
+    viewScopeKey,
     views,
     setOpen,
     setExpanded,
@@ -707,7 +727,7 @@ export function WorkbenchShell({
         setPreviews((current) => current.filter((item) => item.key !== key));
         if (activeViewKey === key) setActiveViewKey(views[0]?.key ?? null);
       }}
-      views={views}
+      views={scopedViews}
       activeView={activeView}
       activeViewKey={activeViewKey}
       sideChat={sideChat}
@@ -730,6 +750,7 @@ export function WorkbenchShell({
       options={options}
       stream={stream}
       hostId={stream.assistantId}
+      runtimeScope={runtimeScope}
       locale={locale}
       hostEvent={hostEvent}
       viewHosts={viewHosts}
