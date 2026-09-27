@@ -19,6 +19,7 @@ import {
 import {
   isTrustedChatKitMessageEvent,
   type Capability,
+  type WindowDragRegions,
 } from '@xpert-ai/chatkit-web-shared';
 import type { Message } from '@xpert-ai/xpert-sdk';
 import { useStreamManager } from '../hooks/useStream';
@@ -79,6 +80,7 @@ type ParentResponseMessage = {
 };
 
 type ParentEventPayloadMap = {
+  window_drag_regions: WindowDragRegions;
   public_event: [Capability.Event, unknown];
   chat_minimize_change: { minimized: boolean };
   pet_options_change: { pet: ChatKitOptions['pet'] | null };

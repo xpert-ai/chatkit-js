@@ -159,7 +159,10 @@ export function WorkbenchPanel({
   const activePreview = previews.find((item) => item.key === activeViewKey);
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2">
+      <div
+        data-slot="chatkit-workbench-header"
+        className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2"
+      >
         {views.length > 0 ||
         previews.length > 0 ||
         sideChat ||

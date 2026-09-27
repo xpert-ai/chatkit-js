@@ -698,6 +698,8 @@ export type ChatKitOptions = {
    */
   header?: {
     enabled?: boolean;
+    /** Enable native Electron dragging/OS double-click behavior on unused chat and Workbench header space. Defaults to false. */
+    windowDrag?: boolean;
 
     /**
      * Configuration for header title display, which defaults to showing thread titles.

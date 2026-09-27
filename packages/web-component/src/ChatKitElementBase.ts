@@ -5,6 +5,7 @@ import {
   encodeBase64,
 } from '@xpert-ai/chatkit-web-shared';
 
+import { WindowDragOverlay } from './WindowDragOverlay';
 import { ChatFrameMessenger } from './ChatFrameMessenger';
 import type {
   Card,
@@ -98,6 +99,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #frameUrl?: string;
   #frame?: HTMLIFrameElement;
   #wrapper?: HTMLDivElement;
+  #windowDrag?: WindowDragOverlay;
   #launcherCloseButton?: HTMLButtonElement;
   #launcherOpen = false;
   #chatMinimizedToPet = false;
@@ -739,6 +741,13 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     closeButton.addEventListener('click', this.#handleLauncherClose);
     wrapper.appendChild(closeButton);
     this.#launcherCloseButton = closeButton;
+    this.#windowDrag = new WindowDragOverlay(
+      wrapper,
+      () => this.#opts?.header?.windowDrag === true,
+    );
+    this.#messenger.on('window_drag_regions', (data: unknown) =>
+      this.#windowDrag?.update(data),
+    );
 
     this.#shadow.append(style);
 
@@ -816,6 +825,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       }
     });
     this.#messenger.on('unmount', () => {
+      this.#windowDrag?.destroy();
       // Remove the iframe and wrapper from the shadow DOM if they exist
       if (this.#wrapper && this.#shadow.contains(this.#wrapper)) {
         this.#shadow.removeChild(this.#wrapper);
@@ -868,6 +878,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.#windowDrag?.destroy();
     this.#frame?.removeEventListener('load', this.#handleFrameLoad);
     this.#launcherCloseButton?.removeEventListener(
       'click',
@@ -879,6 +890,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
     this.#opts = newOptions;
+    if (!newOptions.header?.windowDrag) this.#windowDrag?.clear();
     this.#petClosedByContextMenu = false;
     this.#petOverlay.setLocale(newOptions.locale);
     this.#syncPetOverlayOptions();
