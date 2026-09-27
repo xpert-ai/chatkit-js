@@ -61,6 +61,7 @@ const mocks = vi.hoisted(() => ({
     isLoading: false,
     messages: [] as StateType['messages'],
     submit: vi.fn(),
+    reset: vi.fn(),
   },
 }));
 
@@ -116,6 +117,7 @@ import {
   useWorkbench,
 } from './WorkbenchShell';
 import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './SideChatCloseDialog';
+import { workbenchLayoutKey, writeWorkbenchLayout } from './layout-storage';
 import { AssistantMessage } from '../components/thread/messages/ai';
 import { toWorkbenchMessages } from './external-assistant-runs';
 import { ThemeProvider } from '../providers/Theme';
@@ -193,13 +195,51 @@ describe('WorkbenchShell', () => {
     mocks.sideChatMounts = 0;
     mocks.sideChatUnmounts = 0;
     mocks.remoteUnmounts = 0;
+    mocks.stream.reset.mockReset();
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
+    mocks.stream.apiUrl = '/api/ai';
+    mocks.stream.assistantId = 'agent-1';
+    mocks.stream.projectId = 'project-1';
+    mocks.stream.organizationId = 'organization-1';
     mocks.stream.messages = [];
     mocks.stream.threadId = 'thread-1';
     mocks.stream.conversationId = 'conversation-1';
-    window.localStorage.removeItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY);
+    window.localStorage.clear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+  });
+
+  it('opens a preview without unmounting its source view and closes back to the source', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
+    const source = screen.getByTestId('remote-view');
+    await act(async () => { await mocks.remoteViewProps?.onClientCommand('workbench.file.open', { name: 'Report', url: 'https://example.org/report', mimeType: 'image/png' }, manifest); });
+    expect(screen.getByRole('tab', { name: 'Report' })).toHaveAttribute('aria-selected', 'true');
+    expect(source).toBeInTheDocument();
+    expect(source).not.toBeVisible();
+    expect(screen.getByAltText('Report')).toHaveAttribute('src', 'https://example.org/report');
+    fireEvent.click(screen.getByRole('button', { name: 'Close views: Report' }));
+    expect(source).toBeVisible();
+  });
+
+  it('starts a new thread during a run instead of queueing to the previous thread', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    mocks.stream.isLoading = true;
+    mocks.submit.mockResolvedValue(undefined);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
+    let result: unknown;
+    await act(async () => { result = await mocks.remoteViewProps?.onClientCommand('assistant.chat.send_message', { text: 'New task', newThread: true }, manifest); });
+    expect(mocks.stream.reset).toHaveBeenCalledWith(null);
+    expect(mocks.submit.mock.calls[0][1]).toMatchObject({ newThread: true });
+    expect(mocks.submit.mock.calls[0][1].followUpMode).toBeUndefined();
+    expect(result).toMatchObject({ success: true, status: 'sent' });
+    expect(result).not.toHaveProperty('threadId');
   });
 
   it('moves only external output into a live native tab and reopens it without creating a thread', () => {
@@ -427,6 +467,69 @@ describe('WorkbenchShell', () => {
     expect(screen.queryByTestId('remote-view')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['conversationId', 'conversation-2'],
+    ['projectId', 'project-2'],
+    ['assistantId', 'agent-2'],
+    ['organizationId', 'organization-2'],
+    ['apiUrl', '/other-api/ai'],
+  ] as const)('retains visited views only until %s changes', async (field, value) => {
+    const secondManifest = {
+      ...manifest,
+      key: 'provider__browser',
+      title: { en_US: 'Browser' },
+    };
+    mocks.listSlotViews.mockResolvedValue([manifest, secondManifest]);
+    const onContext = vi.fn();
+    const tree = () => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
+    const view = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const original = await screen.findByTestId('remote-view');
+    const otherTab = original.textContent === 'Documents' ? 'Browser' : 'Documents';
+    fireEvent.click(screen.getByRole('tab', { name: otherTab }));
+    expect(screen.getAllByTestId('remote-view')).toHaveLength(2);
+    expect(original).toBeInTheDocument();
+    expect(original).not.toBeVisible();
+    expect(mocks.remoteUnmounts).toBe(0);
+    const previousFrames = screen.getAllByTestId('remote-view');
+
+    mocks.stream[field] = value;
+    view.rerender(tree());
+    await waitFor(() => expect(mocks.listSlotViews).toHaveBeenLastCalledWith(
+      'agent', mocks.stream.assistantId, 'agent.workbench.fixed', expect.objectContaining({
+        runtimeScope: {
+          projectId: mocks.stream.projectId,
+          conversationId: mocks.stream.conversationId,
+        },
+      }),
+    ));
+    const openButton = screen.queryByLabelText('Open views');
+    if (openButton) {
+      await waitFor(() => expect(openButton).toBeEnabled());
+      fireEvent.click(openButton);
+    }
+    await waitFor(() => expect(screen.getAllByTestId('remote-view')).toHaveLength(1));
+    for (const frame of previousFrames) expect(frame).not.toBeInTheDocument();
+    expect(mocks.remoteUnmounts).toBeGreaterThanOrEqual(2);
+    expect(mocks.remoteViewProps).toEqual(expect.objectContaining({
+      hostId: mocks.stream.assistantId,
+      runtimeScope: {
+        projectId: mocks.stream.projectId,
+        conversationId: mocks.stream.conversationId,
+      },
+    }));
+  });
+
   it('releases the old remote frame and reloads the scope when switching conversations', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     const onContext = vi.fn();
@@ -480,6 +583,137 @@ describe('WorkbenchShell', () => {
         }),
       ),
     );
+  });
+
+  it('keeps the chat minimum until the pointer passes half of it, then restores the chat without remounting it', async () => {
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+    });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const { container } = render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Draft message" defaultValue="Keep my draft" /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await screen.findByTestId('remote-view');
+    const root = container.querySelector('[data-chatkit-workbench-root]');
+    if (!root) throw new Error('Missing workbench root');
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
+    const separator = screen.getByRole('separator');
+    fireEvent.pointerDown(separator, { button: 0, clientX: 540, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 200, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
+    fireEvent.pointerMove(window, { clientX: 191, pointerId: 1 });
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Draft message')).not.toBeVisible();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByLabelText('Draft message')).toHaveValue('Keep my draft');
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    fireEvent.pointerMove(window, { clientX: 800, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '400');
+    vi.unstubAllGlobals();
+  });
+
+  it('restores each assistant layout after remount, preserving chat width when the window changes', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const onContext = vi.fn();
+    const tree = () => <WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={onContext}><WorkbenchToggleButton /><input aria-label="Draft message" /></WorkbenchShell>;
+    const first = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    first.unmount();
+
+    const second = render(tree());
+    setObservedWidth(1400);
+    await screen.findByLabelText('Restore panel');
+    expect(screen.getByLabelText('Draft message')).not.toBeVisible();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+
+    mocks.stream.assistantId = 'agent-2';
+    second.rerender(tree());
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'End' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '920');
+    mocks.stream.assistantId = 'agent-1';
+    second.rerender(tree());
+    await waitFor(() => expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556'));
+    mocks.stream.threadId = 'another-thread';
+    second.rerender(tree());
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    second.unmount();
+    render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+  });
+
+  it('keeps desktop preferences while narrow drawers use a temporary layout', async () => {
+    const key = workbenchLayoutKey('/api/ai', 'organization-1', 'agent-1');
+    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 600 });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    setObservedWidth(800);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    setObservedWidth(1400);
+    await screen.findByLabelText('Restore panel');
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '600');
+    setObservedWidth(1000);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '520');
+    setObservedWidth(1400);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '600');
+  });
+
+  it('does not hide chat before saved workbench views become available', async () => {
+    const key = workbenchLayoutKey('/api/ai', 'organization-1', 'agent-1');
+    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 500 });
+    let resolveViews!: (views: XpertExtensionViewManifest[]) => void;
+    mocks.listSlotViews.mockReturnValue(new Promise<XpertExtensionViewManifest[]>((resolve) => { resolveViews = resolve; }));
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Draft message" /></WorkbenchShell>);
+    setObservedWidth(1200);
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
+    await act(async () => resolveViews([]));
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
+    expect(screen.queryByLabelText('Restore panel')).not.toBeInTheDocument();
+  });
+
+  it('cancels a resize on lost focus and ignores later pointer movement', async () => {
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+    });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const { container } = render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await screen.findByTestId('remote-view');
+    const root = container.querySelector('[data-chatkit-workbench-root]');
+    if (!root) throw new Error('Missing root');
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
+    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 540, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 650, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '650');
+    fireEvent.blur(window);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    fireEvent.pointerMove(window, { clientX: 100, pointerId: 1 });
+    expect(screen.getByRole('separator')).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 
   it('expands, restores, and hides the workbench from its action buttons', async () => {
@@ -564,7 +798,7 @@ describe('WorkbenchShell', () => {
     ).toBeInTheDocument();
   });
 
-  it('closes when becoming narrow and reopens in a right-side drawer', async () => {
+  it('maximizes the narrow drawer across the frame, hides chat and restores both without remounting', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(
       <WorkbenchShell
@@ -576,6 +810,7 @@ describe('WorkbenchShell', () => {
         onRequestContextChange={vi.fn()}
       >
         <WorkbenchToggleButton />
+        <input aria-label="Draft message" defaultValue="Keep my draft" />
       </WorkbenchShell>,
     );
     setObservedWidth(1200);
@@ -594,13 +829,28 @@ describe('WorkbenchShell', () => {
     expect(dialog).toBeInTheDocument();
     expect(screen.getByTestId('remote-view')).toBeInTheDocument();
     expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    const draft = screen.getByLabelText('Draft message');
+    const remoteView = screen.getByTestId('remote-view');
+    expect(draft).toBeVisible();
 
     fireEvent.click(screen.getByLabelText('Expand panel'));
-    expect(dialog).toHaveClass('w-screen');
+    expect(dialog).toHaveClass('inset-0', 'w-full', 'max-w-none', 'sm:max-w-none');
+    expect(dialog).not.toHaveClass('sm:max-w-sm');
+    expect(draft).not.toBeVisible();
+    expect(screen.getByTestId('remote-view')).toBe(remoteView);
     expect(screen.getByLabelText('Restore panel')).toHaveAttribute(
       'aria-pressed',
       'true',
     );
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(dialog).toHaveClass('w-[min(92vw,720px)]');
+    expect(draft).toBeVisible();
+    expect(draft).toHaveValue('Keep my draft');
+    expect(screen.getByTestId('remote-view')).toBe(remoteView);
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(draft).toBeVisible();
   });
 
   it('merges view context and sends messages through the active stream', async () => {
@@ -708,13 +958,13 @@ describe('WorkbenchShell', () => {
 
     await expect(
       mocks.remoteViewProps?.onClientCommand(
-        'workbench.file.open',
+        'platform.custom.open',
         { url: '/file.pdf' },
         manifest,
       ),
     ).resolves.toEqual({ opened: true });
     expect(onClientCommand).toHaveBeenCalledWith({
-      commandKey: 'workbench.file.open',
+      commandKey: 'platform.custom.open',
       payload: { url: '/file.pdf' },
       hostType: 'agent',
       hostId: 'agent-1',

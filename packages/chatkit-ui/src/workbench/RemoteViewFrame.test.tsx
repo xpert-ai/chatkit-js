@@ -112,6 +112,18 @@ describe('RemoteViewFrame', () => {
     );
   });
 
+  it('sends updated navigation selection and parameters to a retained view', async () => {
+    const props = { manifest, hostId: 'agent-1', locale: 'en-US', title: 'Documents', hostEvent: null, viewHosts: mocks.client.viewHosts, onNotify: vi.fn(), onClientCommand: vi.fn() };
+    const { rerender } = render(<RemoteViewFrame {...props} initialQuery={{ selectionId: 'first' }} />, { wrapper: ThemeProvider });
+    const iframe = await screen.findByTitle('Documents');
+    const postMessage = vi.spyOn(getContentWindow(iframe as HTMLIFrameElement), 'postMessage');
+    fireEvent.load(iframe);
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'init', initialQuery: { page: 1, pageSize: 20, selectionId: 'first' } }), '*');
+    rerender(<RemoteViewFrame {...props} initialQuery={{ selectionId: 'second', parameters: { tab: 'review' } }} />);
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'init', initialQuery: { page: 1, pageSize: 20, selectionId: 'second', parameters: { tab: 'review' } } }), '*');
+    expect(screen.getByTitle('Documents')).toBe(iframe);
+  });
+
   it('forwards options.theme tokens and resends init after the theme changes', async () => {
     const lightTheme: ChatKitTheme = {
       colorScheme: 'light',

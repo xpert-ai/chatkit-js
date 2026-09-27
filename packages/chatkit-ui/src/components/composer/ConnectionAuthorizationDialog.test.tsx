@@ -51,6 +51,8 @@ function setup(canManage = true, strict = false, useBridge = false) {
     <ParentMessengerContext.Provider
       value={{
         isParentAvailable: true,
+    updateComposer: vi.fn().mockResolvedValue(undefined),
+    focusComposer: vi.fn().mockResolvedValue(undefined),
         sendCommand,
         sendEvent: vi.fn(),
         registerOnSetOptions: register,

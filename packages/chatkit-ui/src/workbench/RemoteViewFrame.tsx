@@ -1,6 +1,7 @@
 import * as React from 'react';
 import type {
   Client,
+  XpertViewQuery,
   XpertExtensionViewManifest,
   XpertRemoteViewHostEventMessage,
   XpertViewFileAccessSessionResult,
@@ -37,6 +38,7 @@ export type RemoteViewHostsClient = Pick<
 >;
 
 type RemoteViewFrameProps = {
+  initialQuery?: XpertViewQuery;
   manifest: XpertExtensionViewManifest;
   hostId: string;
   runtimeScope?: XpertViewRuntimeScopeInput;
@@ -61,6 +63,7 @@ const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function RemoteViewFrame({
   manifest,
+  initialQuery,
   hostId,
   runtimeScope,
   locale,
@@ -177,7 +180,7 @@ export function RemoteViewFrame({
     sendToFrame('init', {
       manifest,
       payload: {},
-      initialQuery: createInitialQuery(manifest),
+      initialQuery: { ...createInitialQuery(manifest), ...initialQuery },
       locale,
       theme: remoteTheme,
       debug: {
@@ -186,7 +189,7 @@ export function RemoteViewFrame({
       },
     });
     workbenchDebug.debug('bridge.init.sent', { viewKey: manifest.key });
-  }, [html, locale, manifest, remoteTheme, sendToFrame]);
+  }, [html, locale, manifest, remoteTheme, sendToFrame, initialQuery]);
 
   const ensureFileAccessSession = React.useCallback(
     async (signal: AbortSignal) => {

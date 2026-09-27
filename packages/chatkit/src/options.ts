@@ -505,6 +505,16 @@ export type ChatKitWorkbenchClientCommandRequest = {
   viewKey: string;
 };
 
+/** Authenticated host response consumed only by ChatKit, never forwarded to a plugin. */
+export type ChatKitWorkbenchNavigationSession = {
+  assistantId: string;
+  projectId: string | null;
+  threadId: string | null;
+  conversationId?: string;
+  secret: string;
+  organizationId?: string;
+};
+
 export type ChatKitWorkbenchOptions = {
   /** Show external Assistant executions in a native workbench tab. Enabled by default. */
   externalAssistants?: { enabled?: boolean };
@@ -523,6 +533,13 @@ export type ChatKitWorkbenchOptions = {
   /**
    * Handles manifest-declared client commands that are not implemented by
    * ChatKit itself.
+   * For assistant.conversation/project navigation, resolve and authorize the
+   * requested resource on the server, then return
+   * `{ success: true, session: ChatKitWorkbenchNavigationSession }`.
+   * ChatKit switches its runtime scope and uses the same callback to refresh
+   * this scoped session. Credentials are stripped from the remote-view reply.
+   * Hosts that perform navigation themselves may return
+   * `{ success: true, status: 'opened' }` without a session.
    */
   onClientCommand?: (
     request: ChatKitWorkbenchClientCommandRequest,

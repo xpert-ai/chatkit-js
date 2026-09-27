@@ -1,4 +1,4 @@
-import { isInternalMessageContent } from './internal-message-content'
+import { isNonTranscriptMessageContent } from './message-content-presentation'
 import { parseFileActivityContent, projectMessageFileActivity, upsertFileActivityContent } from '@xpert-ai/chatkit-types'
 import type {
   ChatkitMessage,
@@ -26,7 +26,7 @@ export function isRenderableMessageContentItem(
 ): item is TMessageContentComplex | string {
   if (item === undefined) return false
   if (typeof item === 'string') return true
-  return !isInternalMessageContent(item)
+  return !isNonTranscriptMessageContent(item)
 }
 
 export function filterInternalMessageContentArtifacts<T>(content: T): T {

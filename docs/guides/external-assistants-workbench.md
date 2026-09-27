@@ -50,3 +50,21 @@ avatar is configured.
 Legacy executions without an explicit invocation kind retain inline rendering.
 ChatKit does not classify them by name, agent key, or category. Side chat retains
 inline rendering within its separate conversation.
+
+### Dispatch and execution correlation
+
+Tool-invoked executions also carry `metadata.sourceToolCallId` in live events and
+`sourceToolCallId` in history summaries. Together with `parentId`, it identifies
+the parent Tool component (`component.id` is the tool call ID). Workflow-driven
+executions omit this field; it must not be inferred from a provider or tool name.
+
+ChatKit merges a running or successful dispatch row into its execution card only
+when a renderable child with an explicit `invocationKind` and this association
+exists in the message. It anchors the card at the dispatch position and uses the
+same projection for tool counts and message navigation. Failures, unrecognized
+statuses, calls without an execution, and legacy records without the association
+retain the ordinary tool display. Original message content is never deleted.
+
+File-activity receipts are separately projected into the file activity UI.
+Context-usage events update thread state. Neither mechanism classifies Agent
+dispatch calls as internal messages.
