@@ -261,6 +261,41 @@ describe('Chat pet integration', () => {
     ).toBeNull();
   });
 
+  it('honors explicit host disable over saved preferences and hides pet controls', async () => {
+    const saved = JSON.stringify({
+      enabled: true,
+      characterType: 'builtin',
+      builtinId: 'boba',
+    });
+    window.localStorage.setItem('chatkit:pet:settings:v1', saved);
+    const { rerender } = render(<Chat options={baseOptions} />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'chat.minimizeToPet' }),
+      ).toBeTruthy(),
+    );
+
+    rerender(<Chat options={{ ...baseOptions, pet: false }} />);
+    await waitFor(() =>
+      expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
+        'pet_options_change',
+        { pet: false },
+      ),
+    );
+    expect(
+      screen.queryByRole('button', { name: 'chat.minimizeToPet' }),
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: 'settings.open' })).toBeNull();
+    expect(window.localStorage.getItem('chatkit:pet:settings:v1')).toBe(saved);
+
+    rerender(<Chat options={{ ...baseOptions, pet: true }} />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'chat.minimizeToPet' }),
+      ).toBeTruthy(),
+    );
+  });
+
   it('sends the default pet state when enabled', async () => {
     render(<Chat options={{ ...baseOptions, pet: true }} />);
 
@@ -281,9 +316,7 @@ describe('Chat pet integration', () => {
     await waitFor(() =>
       expect(mocks.stream.client.assistants.get).toHaveBeenCalled(),
     );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'chat.minimizeToPet' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'chat.minimizeToPet' }));
 
     expect(mocks.parentMessengerSendEvent).toHaveBeenCalledWith(
       'chat_minimize_change',

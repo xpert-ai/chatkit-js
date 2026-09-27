@@ -775,6 +775,7 @@ export function Chat({
   const resolvedPlaceholder = placeholder ?? t('chat.placeholder');
   const assistantTitle = assistantName || resolvedTitle;
   const petRequired = options?.displayMode === 'pet';
+  const petDisabled = options?.pet === false && !petRequired;
   const basePetSettings = React.useMemo(
     () => derivePetLocalSettings(options?.pet),
     [options?.pet],
@@ -787,24 +788,33 @@ export function Chat({
     [basePetSettings, petLocalSettings, petRequired],
   );
   const effectivePet = React.useMemo(() => {
+    if (petDisabled) return false;
     if (petRequired || petLocalSettings) {
       return buildPetOptionsFromLocalSettings(displayedPetSettings);
     }
 
     return options?.pet ?? null;
-  }, [displayedPetSettings, options?.pet, petLocalSettings, petRequired]);
+  }, [
+    displayedPetSettings,
+    options?.pet,
+    petDisabled,
+    petLocalSettings,
+    petRequired,
+  ]);
   const savePetLocalSettings = React.useCallback(
     (settings: PetLocalSettings) => {
+      if (petDisabled) return;
       const nextSettings = petRequired
         ? { ...settings, enabled: true }
         : settings;
       setPetLocalSettings(nextSettings);
       writePetLocalSettings(nextSettings);
     },
-    [petRequired],
+    [petDisabled, petRequired],
   );
   const handlePetCommand = React.useCallback(
     (mode: PetCommandMode) => {
+      if (petDisabled) return;
       if (mode === 'settings') {
         setPetSettingsOpen(true);
         return;
@@ -825,7 +835,13 @@ export function Chat({
         enabled,
       });
     },
-    [displayedPetSettings, effectivePet, petRequired, savePetLocalSettings],
+    [
+      displayedPetSettings,
+      effectivePet,
+      petDisabled,
+      petRequired,
+      savePetLocalSettings,
+    ],
   );
 
   // Use placeholder from composer options or fallback to prop/i18n
@@ -2475,6 +2491,7 @@ export function Chat({
     setPlanModeEnabled,
     setGoalPanelOpen: setIsGoalPanelOpen,
     onPetCommand: handlePetCommand,
+    petDisabled,
     onGoalCommand: handleGoalCommand,
     addRunRuntimeCapabilities,
     setRunRuntimeCapabilities,
@@ -3664,27 +3681,29 @@ export function Chat({
                 </Tooltip>
               )}
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex h-8 w-8">
-                    <button
-                      type="button"
-                      onClick={() => setPetSettingsOpen(true)}
-                      className={cn(
-                        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                        'text-muted-foreground hover:text-foreground hover:bg-muted',
-                        'transition-colors duration-150',
-                      )}
-                      aria-label={t('settings.open')}
-                    >
-                      <Settings size={16} />
-                    </button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {t('settings.open')}
-                </TooltipContent>
-              </Tooltip>
+              {!petDisabled && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex h-8 w-8">
+                      <button
+                        type="button"
+                        onClick={() => setPetSettingsOpen(true)}
+                        className={cn(
+                          'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                          'text-muted-foreground hover:text-foreground hover:bg-muted',
+                          'transition-colors duration-150',
+                        )}
+                        aria-label={t('settings.open')}
+                      >
+                        <Settings size={16} />
+                      </button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {t('settings.open')}
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
               {/* History controls - only shown when history.enabled is true (default) */}
               {history?.enabled !== false && (
@@ -4568,7 +4587,7 @@ export function Chat({
           )}
         </div>
         <SettingsSheet
-          open={petSettingsOpen}
+          open={!petDisabled && petSettingsOpen}
           settings={displayedPetSettings}
           petRequired={petRequired}
           onOpenChange={setPetSettingsOpen}

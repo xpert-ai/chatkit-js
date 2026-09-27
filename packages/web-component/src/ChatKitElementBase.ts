@@ -383,7 +383,10 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
-    if (this.#petClosedByContextMenu) {
+    if (
+      this.#petClosedByContextMenu ||
+      (this.#opts?.pet === false && this.#getDisplayMode() !== 'pet')
+    ) {
       return null;
     }
 

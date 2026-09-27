@@ -647,6 +647,8 @@ export type ChatKitOptions = {
    * Optional animated pet companion rendered by the ChatKit web component over
    * the host page viewport.
    * Passing `true` enables the default built-in pet.
+   * Explicit `false` disables pets and local pet controls in chat mode,
+   * overriding saved user preferences. Pet display mode still requires a pet.
    *
    * @default false
    */
