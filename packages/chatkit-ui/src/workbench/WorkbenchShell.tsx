@@ -4,6 +4,7 @@ import {
   ASSISTANT_CONTEXT_SET_COMMAND,
   type XpertExtensionViewManifest,
   type XpertRemoteViewHostEventMessage,
+  type XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitOptions,
@@ -102,6 +103,13 @@ export function WorkbenchShell({
     externalAssistantsEnabled && externalSession?.scope === externalScope;
   const authenticated = Boolean(stream.apiKey.trim());
   const viewHosts = stream.client.viewHosts;
+  const runtimeScope = React.useMemo<XpertViewRuntimeScopeInput>(
+    () => ({
+      projectId: stream.projectId ?? null,
+      conversationId: stream.conversationId ?? null,
+    }),
+    [stream.projectId, stream.conversationId],
+  );
   const rootRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState(0);
   const [open, setOpen] = React.useState(false);
@@ -185,6 +193,7 @@ export function WorkbenchShell({
     void viewHosts
       .listSlotViews('agent', stream.assistantId, WORKBENCH_SLOT, {
         signal: controller.signal,
+        runtimeScope,
       })
       .then((manifests) => {
         if (controller.signal.aborted) return;
@@ -218,6 +227,7 @@ export function WorkbenchShell({
     locale,
     onRequestContextChange,
     reloadVersion,
+    runtimeScope,
     stream.assistantId,
     t,
     viewHosts,
@@ -307,8 +317,12 @@ export function WorkbenchShell({
           title:
             current?.sourceThreadId === sourceThreadId
               ? current.title
-              : (reference.type === 'thread' ? reference.label || reference.threadId : reference.text).trim().slice(0, 32) ||
-                t('workbench.sideChat.title'),
+              : (reference.type === 'thread'
+                  ? reference.label || reference.threadId
+                  : reference.text
+                )
+                  .trim()
+                  .slice(0, 32) || t('workbench.sideChat.title'),
           referenceRequest: {
             id: `${Date.now()}-${(reference.type === 'thread' ? reference.threadId : reference.text).slice(0, 24)}`,
             reference,
@@ -634,6 +648,7 @@ export function WorkbenchShell({
       options={options}
       stream={stream}
       hostId={stream.assistantId}
+      runtimeScope={runtimeScope}
       locale={locale}
       hostEvent={hostEvent}
       viewHosts={viewHosts}

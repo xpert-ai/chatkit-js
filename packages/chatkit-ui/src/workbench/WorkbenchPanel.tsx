@@ -3,6 +3,7 @@ import type {
   Client,
   XpertExtensionViewManifest,
   XpertRemoteViewHostEventMessage,
+  XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { StreamProvider, useStreamContext } from '../providers/Stream';
@@ -62,6 +63,7 @@ type WorkbenchPanelProps = {
   options?: ChatKitOptions | null;
   stream: ReturnType<typeof useStreamContext>;
   hostId: string;
+  runtimeScope: XpertViewRuntimeScopeInput;
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
   viewHosts: WorkbenchViewHostsClient;
@@ -98,6 +100,7 @@ export function WorkbenchPanel({
   options,
   stream,
   hostId,
+  runtimeScope,
   locale,
   hostEvent,
   viewHosts,
@@ -372,9 +375,15 @@ export function WorkbenchPanel({
           </div>
         ) : activeView ? (
           <RemoteViewFrame
-            key={activeView.key}
+            key={JSON.stringify([
+              hostId,
+              activeView.key,
+              runtimeScope.projectId,
+              runtimeScope.conversationId,
+            ])}
             manifest={activeView}
             hostId={hostId}
+            runtimeScope={runtimeScope}
             locale={locale}
             title={resolveManifestText(
               activeView.title,

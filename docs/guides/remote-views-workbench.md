@@ -31,6 +31,12 @@ When enabled, ChatKit preloads manifests from the
 visible `remote_component` views whose component isolation is `iframe`.
 Remote HTML is fetched only after the user opens the workbench.
 
+View discovery, entry loading, data, actions and file access sessions carry the
+active `projectId` and `conversationId` through the SDK's `runtimeScope` option.
+The scope comes from the host stream, never from iframe messages. The conversation
+record ID is distinct from its execution thread ID. Changing the Assistant,
+project or conversation disposes the old remote frame and its pending requests.
+
 On wide containers the workbench is a resizable split panel. Below 960px it
 opens as a right-side drawer. The active view and split size are kept only for
 the current ChatKit mount.
@@ -69,3 +75,8 @@ allow-downloads allow-forms allow-modals allow-popups allow-scripts
 `allow-same-origin` is intentionally excluded. API calls, actions, and
 workspace-file grants are performed by `@xpert-ai/xpert-sdk` in the ChatKit
 host; credentials and API URLs are never sent to the remote iframe.
+
+Direct WebSocket connections from this iframe send `Origin: null`. A remote
+service must explicitly support credential-isolated frames with an authorized,
+short-lived capability; never remove the iframe sandbox to make a connection
+work or treat the null Origin as authentication.

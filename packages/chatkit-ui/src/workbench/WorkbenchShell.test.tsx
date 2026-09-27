@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   },
   sideChatMounts: 0,
   sideChatUnmounts: 0,
+  remoteUnmounts: 0,
   resizeCallback: null as ResizeObserverCallback | null,
   remoteViewProps: null as {
     onClientCommand: (
@@ -56,6 +57,7 @@ const mocks = vi.hoisted(() => ({
     projectId: 'project-1',
     organizationId: 'organization-1',
     threadId: 'thread-1',
+    conversationId: 'conversation-1',
     isLoading: false,
     messages: [] as StateType['messages'],
     submit: vi.fn(),
@@ -97,6 +99,12 @@ vi.mock('./RemoteViewFrame', () => ({
       manifest: XpertExtensionViewManifest,
     ) => Promise<unknown>;
   }) => {
+    React.useEffect(
+      () => () => {
+        mocks.remoteUnmounts += 1;
+      },
+      [],
+    );
     mocks.remoteViewProps = props;
     return <div data-testid="remote-view">{props.title}</div>;
   },
@@ -184,10 +192,12 @@ describe('WorkbenchShell', () => {
     mocks.sideChatProps = null;
     mocks.sideChatMounts = 0;
     mocks.sideChatUnmounts = 0;
+    mocks.remoteUnmounts = 0;
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
     mocks.stream.messages = [];
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.conversationId = 'conversation-1';
     window.localStorage.removeItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY);
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
@@ -415,6 +425,61 @@ describe('WorkbenchShell', () => {
 
     fireEvent.click(screen.getByLabelText('Close views: Documents'));
     expect(screen.queryByTestId('remote-view')).not.toBeInTheDocument();
+  });
+
+  it('releases the old remote frame and reloads the scope when switching conversations', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const onContext = vi.fn();
+    const tree = () => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
+    const view = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByLabelText('Open views'));
+    expect(await screen.findByTestId('remote-view')).toBeInTheDocument();
+    expect(mocks.remoteViewProps).toEqual(
+      expect.objectContaining({
+        runtimeScope: {
+          projectId: 'project-1',
+          conversationId: 'conversation-1',
+        },
+      }),
+    );
+    mocks.stream.conversationId = 'conversation-2';
+    view.rerender(tree());
+    await waitFor(() =>
+      expect(mocks.listSlotViews).toHaveBeenLastCalledWith(
+        'agent',
+        'agent-1',
+        'agent.workbench.fixed',
+        expect.objectContaining({
+          runtimeScope: {
+            projectId: 'project-1',
+            conversationId: 'conversation-2',
+          },
+        }),
+      ),
+    );
+    expect(mocks.remoteUnmounts).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(mocks.remoteViewProps).toEqual(
+        expect.objectContaining({
+          runtimeScope: {
+            projectId: 'project-1',
+            conversationId: 'conversation-2',
+          },
+        }),
+      ),
+    );
   });
 
   it('expands, restores, and hides the workbench from its action buttons', async () => {
