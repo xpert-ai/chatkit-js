@@ -20,7 +20,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '../ui/sheet';
-import type { ThreadItem } from '../../hooks/useThreads';
+import type { ThreadHistoryScope, ThreadItem } from '../../hooks/useThreads';
 
 type ThreadTimeFormatters = {
   time: Intl.DateTimeFormat;
@@ -63,6 +63,9 @@ export type HistorySidebarProps = {
   isRefreshing?: boolean;
   showDelete?: boolean;
   disabled?: boolean;
+  scope?: ThreadHistoryScope;
+  onScopeChange?: (scope: ThreadHistoryScope) => void;
+  hasCurrentProject?: boolean;
 };
 
 export function HistorySidebar({
@@ -76,6 +79,9 @@ export function HistorySidebar({
   isRefreshing = false,
   showDelete = true,
   disabled = false,
+  scope = 'all',
+  onScopeChange,
+  hasCurrentProject = false,
 }: HistorySidebarProps) {
   const { t, i18n } = useChatkitTranslation();
   const [open, setOpen] = React.useState(false);
@@ -138,7 +144,7 @@ export function HistorySidebar({
       </Tooltip>
       <SheetContent
         side="right"
-        className="w-80 p-0"
+        className="flex w-80 flex-col p-0"
         showCloseButton={false}
         aria-describedby={undefined}
       >
@@ -185,7 +191,7 @@ export function HistorySidebar({
           </div>
         </SheetHeader>
 
-        <div className="p-4">
+        <div className="space-y-3 p-4">
           <Button
             onClick={handleNewThread}
             className="w-full justify-start gap-2"
@@ -194,9 +200,32 @@ export function HistorySidebar({
             <PlusCircle size={16} />
             {newThreadLabel ?? t('history.newThread')}
           </Button>
+          {onScopeChange && (
+            <select
+              aria-label={t('history.scope.label')}
+              value={scope}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              onChange={(event) => {
+                const value = event.target.value;
+                if (
+                  value === 'all' ||
+                  value === 'current-project' ||
+                  value === 'no-project'
+                ) {
+                  onScopeChange(value);
+                }
+              }}
+            >
+              <option value="all">{t('history.scope.all')}</option>
+              <option value="current-project" disabled={!hasCurrentProject}>
+                {t('history.scope.currentProject')}
+              </option>
+              <option value="no-project">{t('history.scope.noProject')}</option>
+            </select>
+          )}
         </div>
 
-        <ScrollArea className="h-[calc(100vh-140px)]">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="px-4 pb-4">
             {threads.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">

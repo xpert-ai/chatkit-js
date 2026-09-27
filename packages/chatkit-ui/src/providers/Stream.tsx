@@ -2228,13 +2228,6 @@ const StreamSession = ({
     setPausedDisplayState(next);
   }, []);
   const [historyMessageLoadVersion, setHistoryMessageLoadVersion] = useState(0);
-  const {
-    state: historyLoad,
-    load: loadHistory,
-    reset: resetHistory,
-    markLoaded: markHistoryLoaded,
-    captureRequest: captureHistoryRequest,
-  } = useThreadHistory();
   const [historyMessagePagination, setHistoryMessagePagination] =
     useState<HistoryMessagePaginationState>(() =>
       createEmptyHistoryMessagePagination(),
@@ -2311,6 +2304,20 @@ const StreamSession = ({
     },
     [hostIntegration, sendEvent],
   );
+  const {
+    state: historyLoad,
+    load: loadHistory,
+    reset: resetHistory,
+    markLoaded: markHistoryLoaded,
+    captureRequest: captureHistoryRequest,
+  } = useThreadHistory({
+    onLoadStart: (threadId) => {
+      streamSendEvent('public_event', ['thread.load.start', { threadId }]);
+    },
+    onLoadEnd: (threadId) => {
+      streamSendEvent('public_event', ['thread.load.end', { threadId }]);
+    },
+  });
   const getRuntimeOrganizationId = useCallback(
     () => runtimeOrganizationIdRef.current,
     [],

@@ -168,6 +168,29 @@ describe('thread history restoration', () => {
     expect(mocks.searchMessages).toHaveBeenCalledTimes(1);
   });
 
+  it('notifies the host after history and its persisted Project have loaded', async () => {
+    mocks.getConversation.mockImplementation(async (id: string) => ({ id, projectId: 'project-b', status: 'idle' }));
+    const messages = deferred<ReturnType<typeof history>>();
+    mocks.searchMessages.mockReturnValue(messages.promise);
+    render(provider('thread-1'));
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledOnce());
+    expect(mocks.sendEvent).toHaveBeenCalledWith('public_event', ['thread.load.start', { threadId: 'thread-1' }], undefined);
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'thread-1' }], undefined);
+    await act(async () => messages.resolve(history('thread-1')));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(mocks.sendEvent.mock.calls.filter(([, data]) => data?.[0] === 'thread.load.end')).toEqual([
+      ['public_event', ['thread.load.end', { threadId: 'thread-1' }], undefined],
+    ]);
+    expect(stream.projectId).toBe('project-b');
+  });
+
+  it('does not notify successful history completion on a failed load', async () => {
+    mocks.searchMessages.mockRejectedValue(new Error('History unavailable'));
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('error'));
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'thread-1' }], undefined);
+  });
+
   it('does not treat a completed history execution as the active run on an idle thread', async () => {
     mocks.getThread.mockResolvedValue({
       metadata: { id: 'conversation-thread-1' },
@@ -380,6 +403,8 @@ describe('thread history restoration', () => {
     expect(mocks.getThread.mock.calls).toEqual([['new']]);
     expect(stream.threadId).toBe('new');
     expect(stream.messages[1].id).toBe('new-ai');
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'old' }], undefined);
+    expect(mocks.sendEvent).toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'new' }], undefined);
   });
 
   it('does not reopen history after starting fresh while credentials are pending', async () => {

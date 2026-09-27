@@ -42,6 +42,26 @@ function openSidebar(props: React.ComponentProps<typeof HistorySidebar> = {}) {
 }
 
 describe('HistorySidebar', () => {
+  it('defaults to all conversations and offers explicit Project filters', () => {
+    const onScopeChange = vi.fn();
+    openSidebar({ onScopeChange, hasCurrentProject: true });
+    const select = screen.getByRole('combobox', {
+      name: 'history.scope.label',
+    });
+    expect(select).toHaveValue('all');
+    fireEvent.change(select, { target: { value: 'current-project' } });
+    expect(onScopeChange).toHaveBeenLastCalledWith('current-project');
+    fireEvent.change(select, { target: { value: 'no-project' } });
+    expect(onScopeChange).toHaveBeenLastCalledWith('no-project');
+  });
+
+  it('disables the current Project filter when no Project is selected', () => {
+    openSidebar({ onScopeChange: vi.fn() });
+    expect(
+      screen.getByRole('option', { name: 'history.scope.currentProject' }),
+    ).toBeDisabled();
+  });
+
   it('manually refreshes the thread list from the panel header', () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
 

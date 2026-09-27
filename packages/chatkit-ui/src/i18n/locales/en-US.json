@@ -164,6 +164,12 @@
     "deleteThread": "Delete {{title}}",
     "newThread": "New Thread",
     "newThreadInProject": "New conversation in this project",
+    "scope": {
+      "label": "Conversation scope",
+      "all": "All conversations",
+      "currentProject": "Current project",
+      "noProject": "No project"
+    },
     "empty": "No threads yet",
     "newThreadTitle": "New thread",
     "threadWithId": "Thread {{id}}",

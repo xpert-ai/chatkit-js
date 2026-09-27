@@ -95,7 +95,7 @@ import {
   extractAssistantAvatar,
 } from './ui/chatkit-avatar';
 import { useStreamManager } from '../hooks/useStream';
-import { useThreads } from '../hooks/useThreads';
+import { useThreads, type ThreadHistoryScope } from '../hooks/useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
@@ -708,13 +708,16 @@ export function Chat({
   const [sideChatError, setSideChatError] = React.useState<string | null>(null);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
   const [hasUpdatesBelow, setHasUpdatesBelow] = React.useState(false);
+  const [historyScope, setHistoryScope] = React.useState<ThreadHistoryScope>('all');
+  const effectiveHistoryScope = historyScope === 'current-project' && !activeProjectId
+    ? 'all' : historyScope;
   const {
     threads,
     updateThread,
     deleteThread,
     refreshThreads,
     isLoading: isThreadsLoading,
-  } = useThreads(undefined, surface === 'main' && history?.enabled !== false);
+  } = useThreads(undefined, surface === 'main' && history?.enabled !== false, effectiveHistoryScope);
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const chatColumnRef = React.useRef<HTMLDivElement>(null);
   const messageNavigationAnchorsRef = React.useRef(
@@ -3716,6 +3719,9 @@ export function Chat({
                   </Tooltip>
                   <HistorySidebar
                     threads={threads}
+                    scope={effectiveHistoryScope}
+                    onScopeChange={setHistoryScope}
+                    hasCurrentProject={Boolean(activeProjectId)}
                     currentThreadId={stream.threadId ?? undefined}
                     onNewThread={handleNewThread}
                     newThreadLabel={t(

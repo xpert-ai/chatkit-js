@@ -164,6 +164,12 @@
     "deleteThread": "删除 {{title}}",
     "newThread": "新线程",
     "newThreadInProject": "在当前项目中新建对话",
+    "scope": {
+      "label": "会话范围",
+      "all": "全部会话",
+      "currentProject": "当前项目",
+      "noProject": "无项目"
+    },
     "empty": "暂无线程",
     "newThreadTitle": "新线程",
     "threadWithId": "线程 {{id}}",
