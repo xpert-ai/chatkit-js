@@ -236,7 +236,10 @@ export type ChatKitEvents = {
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
 
   /** Emitted when the user changes the active Xpert project in the composer. */
-  'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
+  'chatkit.project.change': CustomEvent<{
+    projectId: string | null;
+    selection?: import('./project-selection').ProjectSelection;
+  }>;
 
   /** Emitted when the user changes the Connector bindings selected for the conversation. */
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;

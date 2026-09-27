@@ -1,6 +1,6 @@
 import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
-import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import { A2UIProvider } from '@xpert-ai/a2ui-react';
 import { Chat } from './components/chat';
 import { StreamProvider } from './providers/Stream';
@@ -59,21 +59,28 @@ export function App({
   const hostedApi =
     options?.api && 'getClientSecret' in options.api ? options.api : null;
   const configuredProjectId = hostedApi?.projectId ?? null;
+  const configuredSelection: ProjectSelection | undefined =
+    options?.composer?.projects?.selection ??
+    (configuredProjectId
+      ? { mode: 'existing', projectId: configuredProjectId }
+      : options?.composer?.projects?.autoNewEnabled
+        ? { mode: 'auto-new' }
+        : undefined);
+  const configuredSelectionKey = JSON.stringify(configuredSelection);
   const projectsEnabled =
     Boolean(hostedApi) && options?.composer?.projects?.enabled === true;
   const projectCreationEnabled =
     projectsEnabled && options?.composer?.projects?.createEnabled !== false;
   const connectorsEnabled =
     Boolean(hostedApi) && options?.composer?.connectors?.enabled === true;
-  const [activeProjectId, setActiveProjectId] = React.useState<string | null>(
-    configuredProjectId,
-  );
+  const [projectSelection, setProjectSelection] =
+    React.useState(configuredSelection);
+  const activeProjectId =
+    projectSelection?.mode === 'existing' ? projectSelection.projectId : null;
   const [scopedInitialThread, setScopedInitialThread] = React.useState<
     string | null
   >(options?.initialThread ?? null);
-  const lastConfiguredProjectIdRef = React.useRef<string | null>(
-    configuredProjectId,
-  );
+  const lastConfiguredSelectionRef = React.useRef(configuredSelectionKey);
   const lastConfiguredInitialThreadRef = React.useRef<string | null>(
     options?.initialThread ?? null,
   );
@@ -93,11 +100,11 @@ export function App({
   }, [locale]);
 
   React.useEffect(() => {
-    if (configuredProjectId === lastConfiguredProjectIdRef.current) return;
-    lastConfiguredProjectIdRef.current = configuredProjectId;
-    setActiveProjectId(configuredProjectId);
+    if (configuredSelectionKey === lastConfiguredSelectionRef.current) return;
+    lastConfiguredSelectionRef.current = configuredSelectionKey;
+    setProjectSelection(configuredSelection);
     setScopedInitialThread(options?.initialThread ?? null);
-  }, [configuredProjectId, options?.initialThread]);
+  }, [configuredSelectionKey, configuredSelection, options?.initialThread]);
 
   React.useEffect(() => {
     const nextInitialThread = options?.initialThread ?? null;
@@ -107,17 +114,22 @@ export function App({
   }, [options?.initialThread]);
 
   const handleProjectChange = React.useCallback(
-    (projectId: string | null) => {
+    (projectId: string | null, selection?: ProjectSelection) => {
       const nextProjectId = projectId?.trim() || null;
-      if (nextProjectId === activeProjectId) return;
-      setActiveProjectId(nextProjectId);
+      const nextSelection =
+        selection ??
+        (nextProjectId
+          ? { mode: 'existing' as const, projectId: nextProjectId }
+          : { mode: 'none' as const });
+      setProjectSelection(nextSelection);
       setScopedInitialThread(null);
+      setWorkbenchRequestContext({});
       sendEvent('public_event', [
         'project.change',
-        { projectId: nextProjectId },
+        { projectId: nextProjectId, selection: nextSelection },
       ]);
     },
-    [activeProjectId, sendEvent],
+    [sendEvent],
   );
   const handleProjectCreate = React.useCallback(
     (name: string, projectType?: XpertProjectTypeRef) => {
@@ -154,6 +166,7 @@ export function App({
       clientSecret={apiKey}
       options={activeOptions}
       isClientSecretInitializing={isClientSecretInitializing}
+      projectSelection={navigation.session ? undefined : projectSelection}
       activeProjectId={
         navigation.session
           ? (navigation.session.projectId ?? undefined)
@@ -214,6 +227,7 @@ export function App({
                 ? (navigation.session.projectId ?? undefined)
                 : (activeProjectId ?? undefined)
             }
+            projectSelection={navigation.session ? undefined : projectSelection}
             initialThread={
               navigation.session
                 ? navigation.session.threadId

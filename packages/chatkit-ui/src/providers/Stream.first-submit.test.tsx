@@ -1,5 +1,11 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sdkMocks = vi.hoisted(() => ({
@@ -9,8 +15,16 @@ const sdkMocks = vi.hoisted(() => ({
   conversationsGet: vi.fn(),
   conversationsSearchMessages: vi.fn(),
   runsStream: vi.fn(),
+  getProject: vi.fn(),
+  listProjectFiles: vi.fn(),
+  listAssistantFiles: vi.fn(),
 }));
 const queryState = vi.hoisted(() => ({ value: null as string | null }));
+const parentMessenger = vi.hoisted(() => ({
+  isParentAvailable: false,
+  sendCommand: vi.fn(),
+  sendEvent: vi.fn(),
+}));
 
 vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xpert-ai/xpert-sdk')>();
@@ -30,6 +44,11 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
     runs = {
       stream: sdkMocks.runsStream,
     };
+    projects = {
+      listFiles: sdkMocks.listProjectFiles,
+      get: sdkMocks.getProject,
+    };
+    xperts = { listWorkspaceFiles: sdkMocks.listAssistantFiles };
   }
 
   return { ...actual, Client };
@@ -50,11 +69,7 @@ vi.mock('nuqs', async () => {
 });
 
 vi.mock('../hooks/useParentMessenger', () => ({
-  useParentMessenger: () => ({
-    isParentAvailable: false,
-    sendCommand: vi.fn(),
-    sendEvent: vi.fn(),
-  }),
+  useParentMessenger: () => parentMessenger,
 }));
 
 vi.mock('./runtime-activities', () => ({
@@ -68,11 +83,15 @@ vi.mock('./runtime-activities', () => ({
   }),
 }));
 
+vi.mock('./Theme', () => ({ useTheme: () => ({ theme: { radius: 'soft' } }) }));
+
 import {
   StreamProvider,
   useStreamContext,
   type StreamContextType,
 } from './Stream';
+import { WorkspaceFileMentionPalette } from '../components/composer/WorkspaceFileMentionPalette';
+import { ProjectSelector } from '../components/composer/ProjectSelector';
 
 let latestStream: StreamContextType | null = null;
 
@@ -128,6 +147,7 @@ describe('first submission setup', () => {
     sdkMocks.conversationsGet.mockReset();
     sdkMocks.conversationsSearchMessages.mockReset();
     sdkMocks.runsStream.mockReset();
+    sdkMocks.getProject.mockReset();
     sdkMocks.threadsDelete.mockResolvedValue(undefined);
     sdkMocks.conversationsGet.mockResolvedValue({
       id: 'conversation-1',
@@ -140,6 +160,141 @@ describe('first submission setup', () => {
     });
     sdkMocks.runsStream.mockImplementation(async function* () {
       yield* [];
+    });
+  });
+
+  it('shows the auto-created Project name and files during a live run without remounting the composer', async () => {
+    sdkMocks.getProject.mockResolvedValue({
+      id: 'created-project',
+      name: 'New tender project',
+      status: 'active',
+    });
+    sdkMocks.threadsCreate.mockResolvedValue({
+      thread_id: 'thread-1',
+      metadata: { id: 'conversation-1' },
+    });
+    sdkMocks.conversationsCreate.mockResolvedValue({
+      id: 'conversation-1',
+      threadId: 'thread-1',
+    });
+    sdkMocks.listAssistantFiles.mockResolvedValue([]);
+    sdkMocks.listProjectFiles.mockResolvedValue([
+      { filePath: 'outline.md', fullPath: 'outline.md', fileType: 'md' },
+    ]);
+    let runSignal!: AbortSignal;
+    let finish!: () => void;
+    let start!: () => void;
+    const started = new Promise<void>((resolve) => {
+      start = resolve;
+    });
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    sdkMocks.runsStream.mockImplementation(
+      (_threadId, _assistantId, options) => {
+        runSignal = options.signal;
+        return (async function* () {
+          await started;
+          yield {
+            event: 'messages',
+            data: {
+              type: 'event',
+              event: 'on_conversation_start',
+              data: { id: 'conversation-1' },
+            },
+          };
+          await finished;
+        })();
+      },
+    );
+    const mounted = vi.fn();
+    function ComposerProbe() {
+      const stream = useStreamContext();
+      latestStream = stream;
+      const [draft, setDraft] = React.useState('');
+      React.useEffect(() => {
+        mounted();
+      }, []);
+      return (
+        <>
+          <input
+            aria-label="Draft"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <WorkspaceFileMentionPalette
+            client={stream.client}
+            assistantId={stream.assistantId}
+            projectId={stream.projectId ?? null}
+            query=""
+            selectedFilePaths={new Set()}
+            onSelect={vi.fn()}
+          />
+          <ProjectSelector
+            client={stream.client}
+            xpertId={stream.assistantId}
+            activeProjectId={stream.projectId}
+            locked
+          />
+        </>
+      );
+    }
+    render(
+      <StreamProvider
+        apiKey="cs-x-test"
+        apiUrl="https://api.example.test/api/ai"
+        xpertId="xpert-1"
+        projectSelection={{ mode: 'auto-new' }}
+      >
+        <ComposerProbe />
+      </StreamProvider>,
+    );
+    let submission!: Promise<void>;
+    act(() => {
+      submission = getStream().submit(
+        { input: { input: 'Outline only' } },
+        optimisticFirstMessage(),
+      );
+    });
+    await waitFor(() => expect(getStream().isLoading).toBe(true));
+    await waitFor(() => expect(sdkMocks.conversationsGet).toHaveBeenCalled());
+    fireEvent.change(screen.getByRole('textbox', { name: 'Draft' }), {
+      target: { value: 'Follow-up draft' },
+    });
+    sdkMocks.conversationsGet.mockResolvedValue({
+      id: 'conversation-1',
+      threadId: 'thread-1',
+      projectId: 'created-project',
+    });
+    act(() => start());
+    await screen.findByRole('button', { name: 'outline.md' });
+    const projectName = await screen.findByText('New tender project');
+    expect(
+      projectName.closest('[data-slot="composer-project-locked"]'),
+    ).not.toBeNull();
+    expect(sdkMocks.listProjectFiles).toHaveBeenCalledWith(
+      'created-project',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(getStream().isLoading).toBe(true);
+    expect(runSignal.aborted).toBe(false);
+    expect(sdkMocks.runsStream).toHaveBeenCalledWith(
+      'thread-1',
+      'xpert-1',
+      expect.objectContaining({
+        input: expect.objectContaining({
+          projectSelection: { mode: 'auto-new' },
+        }),
+      }),
+    );
+    expect(getStream().messages).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveValue(
+      'Follow-up draft',
+    );
+    expect(mounted).toHaveBeenCalledOnce();
+    await act(async () => {
+      finish();
+      await submission;
     });
   });
 
@@ -164,6 +319,46 @@ describe('first submission setup', () => {
     });
     expect(queryState.value).toBeNull();
   });
+
+  it.each(['none', 'auto-new'] as const)(
+    'sends explicit %s intent without inheriting an old Project id',
+    async (mode) => {
+      sdkMocks.threadsCreate.mockResolvedValue({
+        thread_id: 'thread-1',
+        metadata: { id: 'conversation-1' },
+      });
+      sdkMocks.conversationsCreate.mockResolvedValue({
+        id: 'conversation-1',
+        threadId: 'thread-1',
+      });
+      render(
+        <StreamProvider
+          apiKey="cs-x-test"
+          apiUrl="https://api.example.test/api/ai"
+          xpertId="xpert-1"
+          projectSelection={{ mode }}
+        >
+          <StreamProbe />
+        </StreamProvider>,
+      );
+      await act(async () => {
+        await getStream().submit(
+          { projectId: 'stale-project', input: { input: 'Outline only' } },
+          optimisticFirstMessage(),
+        );
+      });
+      expect(sdkMocks.runsStream).toHaveBeenCalledWith(
+        'thread-1',
+        'xpert-1',
+        expect.objectContaining({
+          input: expect.objectContaining({
+            projectId: undefined,
+            projectSelection: { mode },
+          }),
+        }),
+      );
+    },
+  );
 
   it('aborts an active run before replacing its assistant and Project scope', async () => {
     sdkMocks.threadsCreate.mockResolvedValue({

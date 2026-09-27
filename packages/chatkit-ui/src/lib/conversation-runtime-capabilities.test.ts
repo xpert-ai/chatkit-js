@@ -10,6 +10,12 @@ import {
 import type { RuntimeCapabilitiesSelection } from './runtime-capabilities';
 
 describe('conversation runtime capabilities', () => {
+  it('does not filter Project scope when looking up global Assistant history', () => {
+    expect(
+      createConversationThreadSearchWhere('thread-1', { xpertId: 'xpert-1' }),
+    ).toEqual({ threadId: 'thread-1', xpertId: 'xpert-1' });
+  });
+
   it('scopes direct thread lookup to the Xpert and explicit Project boundary', () => {
     expect(
       createConversationThreadSearchWhere(' thread-1 ', {

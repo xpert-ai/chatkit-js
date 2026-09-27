@@ -157,6 +157,7 @@ import {
   type PendingHITLRequest,
 } from '../lib/hitl';
 import { logRuntimeActivity, useRuntimeActivities } from './runtime-activities';
+import { useConversationProject } from './useConversationProject';
 import { normalizeTaskSummaryContribution } from '../lib/task-summary';
 import {
   getConversationConnectorBindingIds,
@@ -223,11 +224,13 @@ type ChatKitMessageContentPart = NonNullable<
 export type StateType = { messages: ChatKitAIMessage[] };
 
 type StreamRunInput = TChatRequest | TXpertChatResumeRequest;
+type ProjectSelection = import('@xpert-ai/chatkit-types').ProjectSelection;
 
 export function withConversationScope(
   input: StreamRunInput | null | undefined,
   projectId?: string,
   connectorBindingIds: readonly string[] = [],
+  projectSelection?: ProjectSelection,
 ): StreamRunInput | null | undefined {
   if (!input || 'action' in input) {
     return input;
@@ -258,6 +261,7 @@ export function withConversationScope(
   return {
     ...input,
     projectId,
+    ...(projectSelection ? { projectSelection } : {}),
     input: {
       ...input.input,
       ...(nextRuntimeCapabilities
@@ -349,7 +353,10 @@ export type StreamContextType = {
   refreshClientSecret: () => Promise<ResolvedClientSecret>;
   apiUrl: string;
   assistantId: string;
+  /** Persisted conversation scope; may differ from the initial session mount scope. */
   projectId?: string;
+  /** True when a saved scope (including no Project) overrides the mount defaults. */
+  projectScopeResolved?: boolean;
   apiKey: string;
   organizationId?: string;
   threadId: string | null;
@@ -2165,6 +2172,7 @@ const StreamSession = ({
   apiUrl,
   assistantId,
   projectId,
+  projectSelection,
   initialThread,
   locale,
   additionalContext,
@@ -2179,6 +2187,7 @@ const StreamSession = ({
   apiUrl: string;
   assistantId: string;
   projectId?: string;
+  projectSelection?: ProjectSelection;
   initialThread?: string | null;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
@@ -2458,7 +2467,6 @@ const StreamSession = ({
           const conversationResult = await activeClient.conversations.search({
             where: createConversationThreadSearchWhere(activeThreadId, {
               xpertId: assistantId,
-              projectId,
             }),
             limit: 1,
           });
@@ -2690,6 +2698,18 @@ const StreamSession = ({
     [apiUrl, fetchWithClientSecretRefresh, locale],
   );
   clientRef.current = client;
+  const conversationProject = useConversationProject({
+    client,
+    projectId,
+    conversationId,
+    threadId: threadId ?? null,
+    isLoading,
+    historyReady:
+      historyLoad.status !== 'loading' && historyLoad.status !== 'error',
+    historyMessageLoadVersion,
+  });
+  const refreshConversationProject = conversationProject.refresh;
+  const hydrateConversationProject = conversationProject.hydrate;
   const hydrateResumedRootExecutions = useMemo(
     () =>
       createResumedRootExecutionHydrator((thread, run) => client.runs.get(thread, run)),
@@ -3416,7 +3436,6 @@ const StreamSession = ({
       const conversationResult = await client.conversations.search({
         where: createConversationThreadSearchWhere(nextThreadId, {
           xpertId: assistantId,
-          projectId,
         }),
         limit: 1,
       });
@@ -3702,8 +3721,11 @@ const StreamSession = ({
         });
         const scopedInput = withConversationScope(
           input,
-          projectId,
+          conversationProject.projectId,
           connectorBindingIdsRef.current,
+          conversationProject.projectId
+            ? { mode: 'existing', projectId: conversationProject.projectId }
+            : conversationProject.fromHistory ? { mode: 'none' } : projectSelection,
         );
         const stream =
           options?.joinExistingThread && runId
@@ -3811,7 +3833,10 @@ const StreamSession = ({
               });
             },
             preservedMessages,
-            updateConversationId,
+            (id) => {
+              updateConversationId(id);
+              refreshConversationProject();
+            },
             (status) => {
               pauseRequestedRef.current =
                 status === 'pausing' || status === 'paused';
@@ -3871,7 +3896,10 @@ const StreamSession = ({
       client,
       streamSendEvent,
       projectId,
+      conversationProject.projectId,
+      conversationProject.fromHistory,
       handleInterrupt,
+      projectSelection,
       flushSteerFollowUps,
       markPendingFollowUpsAsQueued,
       removePendingFollowUps,
@@ -3879,6 +3907,7 @@ const StreamSession = ({
       handleRuntimeActivityTrigger,
       updateConversationId,
       reconcileLatestAssistantMessage,
+      refreshConversationProject,
       rememberActiveRunId,
     ],
   );
@@ -3939,7 +3968,6 @@ const StreamSession = ({
           : await client.conversations.search({
               where: createConversationThreadSearchWhere(threadId, {
                 xpertId: assistantId,
-                projectId,
               }),
               limit: 1,
             });
@@ -3977,6 +4005,7 @@ const StreamSession = ({
 
         if (!request.isCurrent()) return;
         updateConversationId(conversation.id);
+        hydrateConversationProject(conversationDetail, threadId);
         updateConnectorBindingIdsState(
           getConversationConnectorBindingIds(conversationDetail),
         );
@@ -4068,6 +4097,7 @@ const StreamSession = ({
       assistantId,
       client,
       ensureHistoryCredentials,
+      hydrateConversationProject,
       projectId,
       runStream,
       disconnect,
@@ -4479,7 +4509,8 @@ const StreamSession = ({
     refreshClientSecret,
     apiUrl,
     assistantId,
-    projectId,
+    projectId: conversationProject.projectId,
+    projectScopeResolved: conversationProject.resolved,
     apiKey: runtimeClientSecret,
     organizationId: runtimeOrganizationId,
     threadId: threadId ?? null,
@@ -4537,6 +4568,7 @@ export const StreamProvider: React.FC<{
   apiUrl?: string;
   xpertId?: string;
   projectId?: string;
+  projectSelection?: ProjectSelection;
   initialThread?: string | null;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
@@ -4550,6 +4582,7 @@ export const StreamProvider: React.FC<{
   apiUrl,
   xpertId,
   projectId,
+  projectSelection,
   initialThread,
   locale,
   additionalContext,
@@ -4559,7 +4592,7 @@ export const StreamProvider: React.FC<{
 }) => {
   const assistantId = xpertId?.trim() || 'your-xpert-id';
   const normalizedProjectId = projectId?.trim() || undefined;
-  const streamScopeKey = `${assistantId}\u0000${normalizedProjectId ?? ''}`;
+  const streamScopeKey = `${assistantId}\u0000${normalizedProjectId ?? ''}\u0000${projectSelection?.mode ?? ''}`;
   const previousStreamScopeKeyRef = useRef(streamScopeKey);
   const resetThreadOnMount =
     previousStreamScopeKeyRef.current !== streamScopeKey;
@@ -4576,6 +4609,7 @@ export const StreamProvider: React.FC<{
       apiUrl={apiUrl ?? defaultApiUrl}
       assistantId={assistantId}
       projectId={normalizedProjectId}
+      projectSelection={projectSelection}
       initialThread={initialThread}
       locale={locale}
       additionalContext={additionalContext}

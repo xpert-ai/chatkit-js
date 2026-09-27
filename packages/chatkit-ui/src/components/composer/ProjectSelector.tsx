@@ -1,6 +1,7 @@
 import { SELECTOR_SEARCH_CLASS } from './selector-styles';
 import { resolveLocalizedText } from '../../i18n/localized-text';
 import * as React from 'react';
+import type { ProjectSelection } from '@xpert-ai/chatkit-types';
 import {
   Check,
   ChevronDown,
@@ -34,11 +35,17 @@ export type ProjectSelectorProps = {
   client: Client | null;
   xpertId?: string;
   activeProjectId?: string | null;
+  selection?: ProjectSelection;
+  autoNewEnabled?: boolean;
+  allowNone?: boolean;
   disabled?: boolean;
   locked?: boolean;
   label?: string;
   onAvailabilityChange?: (available: boolean) => void;
-  onProjectChange?: (projectId: string | null) => void;
+  onProjectChange?: (
+    projectId: string | null,
+    selection?: ProjectSelection,
+  ) => void;
   onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
   onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
 };
@@ -49,6 +56,9 @@ export function ProjectSelector({
   client,
   xpertId,
   activeProjectId,
+  selection,
+  autoNewEnabled = false,
+  allowNone = true,
   disabled = false,
   locked = false,
   label,
@@ -82,7 +92,11 @@ export function ProjectSelector({
   const [showFilters, setShowFilters] = React.useState(false);
   const [catalogReady, setCatalogReady] = React.useState(false);
   const [catalogFailed, setCatalogFailed] = React.useState(false);
-  const [activeLabel, setActiveLabel] = React.useState(label);
+  const [resolvedProject, setResolvedProject] = React.useState<{
+    client: Client;
+    id: string;
+    name: string;
+  } | null>(null);
   const [loadFailed, setLoadFailed] = React.useState(false);
   const [loadedFor, setLoadedFor] = React.useState<{
     client: Client;
@@ -91,11 +105,15 @@ export function ProjectSelector({
   const panelRoundedClass = getPanelRoundedClass(theme.radius);
   const menuItemRoundedClass = getMenuItemRoundedClass(theme.radius);
 
-  const lockedProjectLabel = label?.trim();
+  const activeLabel =
+    resolvedProject?.client === client && resolvedProject.id === activeProjectId
+      ? resolvedProject.name
+      : label;
+  const lockedProjectLabel = label?.trim() || activeLabel || activeProjectId || undefined;
 
   React.useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
+    if (disabled || locked) setOpen(false);
+  }, [disabled, locked]);
 
   React.useEffect(() => {
     // Retain data for filter changes, but never carry choices into another client or Assistant scope.
@@ -140,19 +158,23 @@ export function ProjectSelector({
   }, [client, xpertId, locked]);
 
   React.useEffect(() => {
-    if (locked || !activeProjectId || !client?.projects?.get) {
-      setActiveLabel(label);
+    if (
+      !activeProjectId ||
+      !client?.projects?.get ||
+      (locked && label?.trim())
+    ) {
       return;
     }
     const controller = new AbortController();
     client.projects
       .get(activeProjectId, { signal: controller.signal })
       .then((project) => {
-        if (!controller.signal.aborted) setActiveLabel(project.name);
+        if (!controller.signal.aborted && project.id === activeProjectId) {
+          setResolvedProject({ client, id: project.id, name: project.name });
+        }
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setActiveLabel(label);
-      });
+      // Keep the id fallback if the name is temporarily unavailable.
+      .catch(() => undefined);
     return () => controller.abort();
   }, [client, activeProjectId, label, locked]);
 
@@ -311,6 +333,7 @@ export function ProjectSelector({
       loadedFor.xpertId === xpertId &&
       hasDiscoveredProjects;
   const projectRailAvailable =
+    autoNewEnabled ||
     hasAvailableProjects ||
     Boolean(onProjectCreate) ||
     types.length > 0 ||
@@ -370,12 +393,10 @@ export function ProjectSelector({
         <div
           data-slot="composer-project-locked"
           className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground"
-          title={lockedProjectLabel || activeProjectId}
+          title={lockedProjectLabel}
         >
           <FolderLock className="size-3.5 shrink-0" />
-          <span className="truncate">
-            {lockedProjectLabel || activeProjectId}
-          </span>
+          <span className="truncate">{lockedProjectLabel}</span>
         </div>
       </div>
     );
@@ -411,6 +432,11 @@ export function ProjectSelector({
             <span className="truncate">
               {activeProject?.name ??
                 activeLabel ??
+                (selection?.mode === 'auto-new'
+                  ? t('composer.projects.autoNew')
+                  : selection?.mode === 'none'
+                    ? t('composer.projects.none')
+                    : undefined) ??
                 t('composer.projects.select')}
             </span>
             <ChevronDown className="size-3.5 shrink-0" />
@@ -654,7 +680,29 @@ export function ProjectSelector({
                     data-slot="composer-project-list"
                     className="flex flex-col"
                   >
-                    {activeProjectId && !query.trim() ? (
+                    {!query.trim() && autoNewEnabled ? (
+                      <button
+                        type="button"
+                        data-slot="composer-project-auto-new"
+                        className={cn(
+                          'flex items-center gap-3 px-1.5 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground',
+                          menuItemRoundedClass,
+                        )}
+                        disabled={disabled}
+                        onClick={() => {
+                          onProjectChange?.(null, { mode: 'auto-new' });
+                          setOpen(false);
+                        }}
+                      >
+                        <span className="flex-1">
+                          {t('composer.projects.autoNew')}
+                        </span>
+                        {!activeProjectId && selection?.mode === 'auto-new' ? (
+                          <Check className="size-4 shrink-0" />
+                        ) : null}
+                      </button>
+                    ) : null}
+                    {allowNone && !query.trim() ? (
                       <button
                         type="button"
                         data-slot="composer-project-clear"
@@ -664,13 +712,16 @@ export function ProjectSelector({
                         )}
                         onClick={() => {
                           if (disabled) return;
-                          onProjectChange?.(null);
+                          onProjectChange?.(null, { mode: 'none' });
                           setOpen(false);
                         }}
                       >
                         <span className="min-w-0 flex-1 truncate font-normal">
                           {t('composer.projects.none')}
                         </span>
+                        {!activeProjectId && selection?.mode === 'none' ? (
+                          <Check className="size-4 shrink-0" />
+                        ) : null}
                       </button>
                     ) : null}
 

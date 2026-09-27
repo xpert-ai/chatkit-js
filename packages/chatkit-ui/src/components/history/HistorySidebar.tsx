@@ -56,6 +56,7 @@ export type HistorySidebarProps = {
   threads?: ThreadItem[];
   currentThreadId?: string;
   onNewThread?: () => void;
+  newThreadLabel?: string;
   onRefresh?: () => void | Promise<void>;
   onSelectThread?: (id: string) => void;
   onDeleteThread?: (id: string) => void;
@@ -68,6 +69,7 @@ export function HistorySidebar({
   threads = [],
   currentThreadId,
   onNewThread,
+  newThreadLabel,
   onRefresh,
   onSelectThread,
   onDeleteThread,
@@ -190,7 +192,7 @@ export function HistorySidebar({
             variant="secondary"
           >
             <PlusCircle size={16} />
-            {t('history.newThread')}
+            {newThreadLabel ?? t('history.newThread')}
           </Button>
         </div>
 

@@ -22,6 +22,7 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
       ({
         'composer.projects.select': 'Select project',
         'composer.projects.none': 'No project',
+        'composer.projects.autoNew': 'New project · Create on send',
         'composer.projects.search': 'Search projects',
         'composer.projects.new': 'New project',
         'composer.projects.create': 'Create',
@@ -106,6 +107,68 @@ describe('ProjectSelector', () => {
       screen.queryByRole('button', { name: 'Select project' }),
     ).not.toBeInTheDocument();
     expect(client.projects.list).not.toHaveBeenCalled();
+    expect(client.projects.get).not.toHaveBeenCalled();
+  });
+
+  it('resolves the bound Project name without exposing switching or loading choices', async () => {
+    const client = createClient([
+      { id: 'bound-project', name: 'Bound project', status: 'active' },
+    ]);
+    const onProjectChange = vi.fn();
+    render(
+      <ProjectSelector
+        client={client}
+        xpertId="xpert-1"
+        activeProjectId="bound-project"
+        locked
+        onProjectChange={onProjectChange}
+      />,
+    );
+    const name = await screen.findByText('Bound project');
+    expect(
+      name.closest('[data-slot="composer-project-locked"]'),
+    ).toHaveAttribute('title', 'Bound project');
+    fireEvent.click(name);
+    expect(onProjectChange).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: 'Select project' }),
+    ).not.toBeInTheDocument();
+    expect(client.projects.list).not.toHaveBeenCalled();
+  });
+
+  it('does not show the previous Project name while a new locked scope is loading', async () => {
+    const client = createClient([
+      { id: 'first', name: 'First project', status: 'active' },
+    ]);
+    const { rerender } = render(
+      <ProjectSelector
+        client={client}
+        xpertId="xpert-1"
+        activeProjectId="first"
+        locked
+      />,
+    );
+    await screen.findByText('First project');
+    let resolveName!: (project: XpertProject) => void;
+    vi.mocked(client.projects.get).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveName = resolve;
+      }),
+    );
+    rerender(
+      <ProjectSelector
+        client={client}
+        xpertId="xpert-1"
+        activeProjectId="second"
+        locked
+      />,
+    );
+    expect(screen.queryByText('First project')).not.toBeInTheDocument();
+    expect(screen.getByText('second')).toBeInTheDocument();
+    await act(async () => {
+      resolveName({ id: 'second', name: 'Second project', status: 'active' });
+    });
+    expect(screen.getByText('Second project')).toBeInTheDocument();
   });
 
   it('loads the active project and changes project from a searchable popover', async () => {
@@ -408,7 +471,7 @@ describe('ProjectSelector', () => {
     fireEvent.click(screen.getByRole('button', { name: 'No project' }));
 
     expect(onProjectChange).toHaveBeenCalledOnce();
-    expect(onProjectChange).toHaveBeenCalledWith(null);
+    expect(onProjectChange).toHaveBeenCalledWith(null, { mode: 'none' });
   });
 
   it('closes and cannot change projects after the selector becomes disabled', async () => {
@@ -457,6 +520,56 @@ describe('ProjectSelector', () => {
       screen.getByRole('button', { name: 'Select project' }),
     ).toBeDisabled();
     expect(onProjectChange).not.toHaveBeenCalled();
+  });
+
+  it('offers automatic creation for a required Project without selecting the latest result', async () => {
+    const client = createClient([
+      { id: 'recent', name: 'Recent project', status: 'active' },
+    ]);
+    const onProjectChange = vi.fn();
+    render(
+      <ProjectSelector
+        client={client}
+        xpertId="xpert-1"
+        selection={{ mode: 'auto-new' }}
+        autoNewEnabled
+        allowNone={false}
+        onProjectChange={onProjectChange}
+      />,
+    );
+    await waitFor(() => expect(client.projects.list).toHaveBeenCalled());
+    expect(onProjectChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('New project · Create on send'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Select project' }));
+    expect(
+      screen.queryByRole('button', { name: 'No project' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Recent project/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'New project · Create on send' }),
+    );
+    expect(onProjectChange).toHaveBeenCalledWith(null, { mode: 'auto-new' });
+  });
+
+  it('offers automatic creation when there are no existing Projects', async () => {
+    const client = createClient([]);
+    render(
+      <ProjectSelector
+        client={client}
+        xpertId="xpert-1"
+        selection={{ mode: 'auto-new' }}
+        autoNewEnabled
+      />,
+    );
+    await waitFor(() => expect(client.projects.list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Select project' }));
+    expect(
+      screen.getByRole('button', { name: 'New project · Create on send' }),
+    ).toBeInTheDocument();
   });
 });
 

@@ -54,6 +54,7 @@ const mocks = vi.hoisted(() => {
       organizationId: undefined,
       threadId: null as string | null,
       conversationId: null as string | null,
+      projectId: undefined as string | undefined,
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [] as Array<{
@@ -107,6 +108,14 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../providers/Stream', () => ({
   useStreamContext: () => mocks.stream,
+}));
+
+vi.mock('./composer/WorkspaceFileSelector', () => ({
+  WorkspaceFileSelector: ({ projectId }: { projectId: string | null }) => (
+    <div data-testid="file-selector-project">
+      {projectId ?? 'assistant-workspace'}
+    </div>
+  ),
 }));
 
 vi.mock('../hooks/useStream', () => ({
@@ -316,6 +325,7 @@ describe('Chat start screen prompts', () => {
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
     mocks.stream.conversationId = null;
+    mocks.stream.projectId = undefined;
     mocks.stream.historyLoad = { threadId: null, status: 'idle' };
     mocks.stream.loadThread.mockReset();
     mocks.stream.loadThread.mockResolvedValue(undefined);
@@ -338,6 +348,24 @@ describe('Chat start screen prompts', () => {
       ).toBeNull();
       expect(screen.queryByText('Powered by Xpert AI')).not.toBeInTheDocument();
     });
+  });
+
+  it('uses the persisted Project for file selection without clearing the draft', async () => {
+    const { rerender } = renderChat();
+    setComposerText(screen.getByRole('textbox'), 'Keep this follow-up');
+    expect(screen.getByTestId('file-selector-project')).toHaveTextContent(
+      'assistant-workspace',
+    );
+    mocks.stream.projectId = 'created-project';
+    await act(async () => {
+      rerender(<Chat clientSecret="secret" options={baseOptions} />);
+    });
+    expect(screen.getByTestId('file-selector-project')).toHaveTextContent(
+      'created-project',
+    );
+    expect(screen.getByRole('textbox')).toHaveTextContent(
+      'Keep this follow-up',
+    );
   });
 
   it('shows loading history instead of the new-conversation greeting', async () => {

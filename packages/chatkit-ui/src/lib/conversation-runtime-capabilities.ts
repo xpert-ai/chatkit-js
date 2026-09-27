@@ -57,7 +57,9 @@ export function createConversationThreadSearchWhere(
   return {
     threadId: threadId.trim(),
     xpertId: scope.xpertId.trim(),
-    projectId: scope.projectId?.trim() || null,
+    ...(scope.projectId === undefined
+      ? {}
+      : { projectId: scope.projectId?.trim() || null }),
   };
 }
 

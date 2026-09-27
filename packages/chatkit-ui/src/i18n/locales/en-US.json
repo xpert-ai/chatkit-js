@@ -163,6 +163,7 @@
     "updatedAt": "Updated {{time}}",
     "deleteThread": "Delete {{title}}",
     "newThread": "New Thread",
+    "newThreadInProject": "New conversation in this project",
     "empty": "No threads yet",
     "newThreadTitle": "New thread",
     "threadWithId": "Thread {{id}}",
@@ -223,6 +224,7 @@
     "projects": {
       "select": "Select project",
       "none": "No project",
+      "autoNew": "New project · Create on send",
       "search": "Search projects",
       "new": "New project",
       "create": "Create",

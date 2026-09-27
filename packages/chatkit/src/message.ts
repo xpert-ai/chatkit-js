@@ -632,6 +632,7 @@ export type TChatRequest = {
   state?: TXpertChatState;
   agentKey?: string;
   projectId?: string;
+  projectSelection?: import('./project-selection').ProjectSelection;
   conversationId?: string;
   environmentId?: string;
   id?: string;

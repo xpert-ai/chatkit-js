@@ -830,6 +830,12 @@ export type ChatKitOptions = {
      */
     projects?: {
       enabled?: boolean;
+      /** Initial conversation intent. Binding a running conversation does not change this option. */
+      selection?: import('./project-selection').ProjectSelection;
+      /** Offer automatic creation on first send when the Assistant supports it. */
+      autoNewEnabled?: boolean;
+      /** Hide the no-Project choice for Assistants requiring a Project workspace. */
+      allowNone?: boolean;
 
       /**
        * Allow the user to request Project creation from the selector.
@@ -1045,7 +1051,10 @@ export interface ChatKitElementEventMap {
   'chatkit.response.start': CustomEvent<void>;
   'chatkit.response.end': CustomEvent<void>;
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
-  'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
+  'chatkit.project.change': CustomEvent<{
+    projectId: string | null;
+    selection?: import('./project-selection').ProjectSelection;
+  }>;
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
   'chatkit.log': CustomEvent<{
     name: string;

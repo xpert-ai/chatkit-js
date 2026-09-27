@@ -28,6 +28,7 @@ import type {
   ChatKitThreadReference,
   ChatKitImageReference,
   ChatKitOptions,
+  ProjectSelection,
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   ChatKitCommandSource,
@@ -198,9 +199,10 @@ export type ChatProps = {
   surface?: 'main' | 'side';
   referenceRequest?: ChatReferenceRequest | null;
   activeProjectId?: string;
+  projectSelection?: ProjectSelection;
   projectsEnabled?: boolean;
   connectorsEnabled?: boolean;
-  onProjectChange?: (projectId: string | null) => void;
+  onProjectChange?: (projectId: string | null, selection?: ProjectSelection) => void;
   onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
   onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
   onConnectorsChange?: (connectorBindingIds: string[]) => void;
@@ -446,7 +448,8 @@ export function Chat({
   isClientSecretInitializing = false,
   surface = 'main',
   referenceRequest,
-  activeProjectId,
+  activeProjectId: configuredProjectId,
+  projectSelection,
   projectsEnabled = false,
   connectorsEnabled = false,
   onProjectChange,
@@ -464,6 +467,9 @@ export function Chat({
     options?.messageNavigation?.enabled !== false;
   const { setStream } = useStreamManager();
   const stream = useStreamContext();
+  const activeProjectId = stream.projectScopeResolved
+    ? stream.projectId
+    : stream.projectId ?? configuredProjectId;
   const branchState = useThreadBranches(
     stream.client,
     stream.conversationId,
@@ -909,12 +915,13 @@ export function Chat({
     Boolean(stream.threadId || stream.conversationId) ||
     messages.length > 0 ||
     canLoadMoreMessages;
-  const isConfiguredProjectLocked =
-    options?.composer?.projects?.locked === true && Boolean(activeProjectId);
+  const isProjectScopeLocked =
+    Boolean(activeProjectId) &&
+    (isProjectSelectionLocked || options?.composer?.projects?.locked === true);
   const isFileSelectorVisible = Boolean(xpertPlatformClient && (activeProjectId || stream.assistantId));
   const isProjectSelectorVisible =
     projectsEnabled &&
-    (isConfiguredProjectLocked ||
+    (isProjectScopeLocked ||
       (!isProjectSelectionLocked && hasSelectableProjects));
   const hasPendingTodos = Boolean(stream.todos?.items.length);
   const goalAdapter = React.useMemo<ChatKitGoalAdapter | null>(() => {
@@ -1005,7 +1012,7 @@ export function Chat({
   );
 
   const handleProjectSelectionChange = React.useCallback(
-    (projectId: string | null) => {
+    (projectId: string | null, selection?: ProjectSelection) => {
       const textParts = composerPartsRef.current.filter(
         (part) => part.type === 'text',
       );
@@ -1026,7 +1033,7 @@ export function Chat({
         );
       });
       onConnectorsChange?.([]);
-      onProjectChange?.(projectId);
+      onProjectChange?.(projectId, selection);
     },
     [
       commitComposerParts,
@@ -3143,12 +3150,17 @@ export function Chat({
     if (missingConfig || isHistoryLoading) return;
     setHistoryError(null);
     try {
-      // const created = await createThread({ title: t('history.newThreadTitle') });
-      // setActiveThreadId(created.id);
       const hadSelectedConnectors = stream.connectorBindingIds.length > 0;
+      if (activeProjectId) {
+        onProjectChange?.(activeProjectId, {
+          mode: 'existing',
+          projectId: activeProjectId,
+        });
+      } else if (configuredProjectId && stream.projectScopeResolved) {
+        onProjectChange?.(null, { mode: 'none' });
+      }
       stream.reset(null, []);
       if (hadSelectedConnectors) onConnectorsChange?.([]);
-      // await refreshThreads();
     } catch (err) {
       console.warn('Failed to create thread', err);
       setHistoryError(
@@ -3688,20 +3700,27 @@ export function Chat({
                             'transition-colors duration-150',
                             'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
                           )}
-                          aria-label={t('history.newThread')}
+                          aria-label={t(
+                            activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                          )}
                         >
                           <Pencil size={16} />
                         </button>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      {t('history.newThread')}
+                      {t(
+                        activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                      )}
                     </TooltipContent>
                   </Tooltip>
                   <HistorySidebar
                     threads={threads}
                     currentThreadId={stream.threadId ?? undefined}
                     onNewThread={handleNewThread}
+                    newThreadLabel={t(
+                      activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                    )}
                     onRefresh={refreshThreads}
                     onSelectThread={handleSelectThread}
                     onDeleteThread={handleDeleteThread}
@@ -4478,12 +4497,15 @@ export function Chat({
               <div data-slot="composer-context-rail" className="flex min-w-0 flex-wrap items-center">
                 <div className="min-w-0 max-w-full">
                   {projectsEnabled &&
-                  (isConfiguredProjectLocked || !isProjectSelectionLocked) ? (
+                  (isProjectScopeLocked || !isProjectSelectionLocked) ? (
                     <ProjectSelector
                       client={xpertPlatformClient}
                       xpertId={stream.assistantId}
                       activeProjectId={activeProjectId}
-                      locked={isConfiguredProjectLocked}
+                      selection={projectSelection}
+                      autoNewEnabled={options?.composer?.projects?.autoNewEnabled}
+                      allowNone={options?.composer?.projects?.allowNone}
+                      locked={isProjectScopeLocked}
                       label={options?.composer?.projects?.label}
                       disabled={
                         missingConfig ||

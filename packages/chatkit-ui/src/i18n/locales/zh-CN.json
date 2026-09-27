@@ -163,6 +163,7 @@
     "updatedAt": "更新于 {{time}}",
     "deleteThread": "删除 {{title}}",
     "newThread": "新线程",
+    "newThreadInProject": "在当前项目中新建对话",
     "empty": "暂无线程",
     "newThreadTitle": "新线程",
     "threadWithId": "线程 {{id}}",
@@ -222,7 +223,8 @@
     },
     "projects": {
       "select": "选择项目",
-      "none": "不选择项目",
+      "none": "不使用项目",
+      "autoNew": "新项目 · 发送后自动创建",
       "search": "搜索项目",
       "new": "新建项目",
       "create": "创建",
