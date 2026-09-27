@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import {
   ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
   ASSISTANT_CONTEXT_SET_COMMAND,
@@ -53,6 +54,7 @@ import {
 } from './WorkbenchPanel';
 
 import { useWorkbenchResize } from './useWorkbenchResize';
+import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
 import { executeWorkbenchCommand, unsupportedCommand } from './client-commands';
 import {
   parseNavigation,
@@ -192,9 +194,9 @@ export function WorkbenchShell({
     authenticated &&
     (!restoring ||
       (containerWidth >= NARROW_BREAKPOINT &&
-        viewsScope === viewScopeKey &&
-        views.length > 0 &&
-        !loading));
+        (externalViewOpen ||
+          Boolean(sideChat) ||
+          (viewsScope === viewScopeKey && views.length > 0 && !loading))));
 
   React.useEffect(() => {
     const element = rootRef.current;
@@ -715,6 +717,7 @@ export function WorkbenchShell({
     setExpanded,
   });
 
+  const panelHost = useWorkbenchPanelHost();
   const panel = (
     <WorkbenchPanel
       visible={open}
@@ -848,7 +851,7 @@ export function WorkbenchShell({
               style={expanded ? undefined : { width: resolvedPanelWidth }}
               aria-label={t('workbench.title')}
             >
-              {panel}
+              <div ref={panelHost.attach} className="contents" />
             </aside>
           </>
         )}
@@ -864,14 +867,10 @@ export function WorkbenchShell({
           }}
         >
           <SheetContent
-            forceMount={
-              isNarrow && (sideChat || externalViewOpen) ? true : undefined
-            }
             side="right"
             showCloseButton={false}
             className={cn(
               'flex h-full max-w-none flex-col gap-0 p-0',
-              (sideChat || externalViewOpen) && 'data-[state=closed]:hidden',
               expanded
                 ? 'inset-0 w-full max-w-none border-0 shadow-none sm:max-w-none'
                 : 'w-[min(92vw,720px)]',
@@ -881,9 +880,12 @@ export function WorkbenchShell({
             <SheetDescription className="sr-only">
               {t('workbench.description')}
             </SheetDescription>
-            {panel}
+            <div ref={panelHost.attach} className="contents" />
           </SheetContent>
         </Sheet>
+        {panelHost.container &&
+          (open || Boolean(sideChat) || externalViewOpen) &&
+          createPortal(panel, panelHost.container)}
         <SideChatCloseDialog
           open={sideChatCloseDialogOpen}
           onOpenChange={setSideChatCloseDialogOpen}

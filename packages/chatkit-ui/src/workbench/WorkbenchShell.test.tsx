@@ -365,6 +365,41 @@ describe('WorkbenchShell', () => {
     expect(within(screen.getByRole('dialog')).getByText('External response')).toBeInTheDocument();
   });
 
+  it('releases modal locks when external details close or cross the narrow breakpoint', async () => {
+    mocks.stream.messages = externalMessages();
+    render(<WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}>
+      <ExternalTranscript />
+      <WorkbenchToggleButton />
+      <input aria-label="Draft message" defaultValue="Keep my draft" />
+    </WorkbenchShell>);
+    setObservedWidth(1200);
+    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    const details = screen.getByText('External response');
+    const draft = screen.getByLabelText('Draft message');
+
+    setObservedWidth(720);
+    expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument();
+    expect(document.body.style.pointerEvents).not.toBe('none');
+    expect(draft.closest('[aria-hidden="true"]')).toBeNull();
+    draft.focus();
+    expect(draft).toHaveFocus();
+
+    fireEvent.click(screen.getByLabelText('Open views'));
+    expect(within(await screen.findByRole('dialog')).getByText('External response')).toBe(details);
+    expect(document.body.style.pointerEvents).toBe('none');
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument());
+    expect(document.body.style.pointerEvents).not.toBe('none');
+    expect(draft.closest('[aria-hidden="true"]')).toBeNull();
+    expect(draft).toHaveValue('Keep my draft');
+
+    fireEvent.click(screen.getByLabelText('Open views'));
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument());
+    expect(document.body.style.pointerEvents).not.toBe('none');
+    expect(screen.getByText('External response')).toBe(details);
+  });
+
   it('does not load or render controls when the option is disabled', () => {
     render(
       <WorkbenchShell
@@ -1035,6 +1070,22 @@ describe('WorkbenchShell', () => {
         'second selection',
       ),
     );
+    expect(mocks.copyThread).toHaveBeenCalledTimes(1);
+
+    // Collapsing the modal and moving between hosts must keep the running
+    // side chat mounted, without retaining a hidden modal pointer lock.
+    setObservedWidth(720);
+    expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument();
+    expect(document.body.style.pointerEvents).not.toBe('none');
+    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(mocks.sideChatMounts).toBe(1);
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument());
+    expect(document.body.style.pointerEvents).not.toBe('none');
+    expect(mocks.sideChatUnmounts).toBe(0);
+    setObservedWidth(1200);
+    expect(screen.getByTestId('side-chat')).toBeInTheDocument();
     expect(mocks.copyThread).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByLabelText('Close views: Side chat'));
