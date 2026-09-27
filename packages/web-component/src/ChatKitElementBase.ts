@@ -214,11 +214,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       }) => {
         const onClientCommand = this.#opts?.workbench?.onClientCommand;
         if (!onClientCommand) {
-          this.#emitAndThrow(
-            new IntegrationError(
-              `No handler for workbench client command "${commandKey}". Add workbench.onClientCommand to your ChatKit options.`,
-            ),
-          );
+          return { success: false, code: 'unsupported', commandKey };
         }
         return onClientCommand({
           commandKey,

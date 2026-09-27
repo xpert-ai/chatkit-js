@@ -78,6 +78,8 @@ describe('message file activity', () => {
         value={{
           sendEvent,
           isParentAvailable: true,
+    updateComposer: vi.fn().mockResolvedValue(undefined),
+    focusComposer: vi.fn().mockResolvedValue(undefined),
           sendCommand: vi.fn(),
           registerOnSetOptions: vi.fn(),
           registerOnSetPetEnabled: vi.fn(),

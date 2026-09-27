@@ -7,6 +7,7 @@ import { StreamProvider } from './providers/Stream';
 import { ThemeProvider } from './providers/Theme';
 import { getLanguage, setLanguage } from './i18n';
 import { useParentMessenger } from './hooks/useParentMessenger';
+import { useWorkbenchNavigation } from './workbench/useWorkbenchNavigation';
 import { WorkbenchShell } from './workbench/WorkbenchShell';
 
 export type AppProps = {
@@ -25,7 +26,25 @@ export function App({
   isClientSecretInitializing = false,
 }: AppProps) {
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
-  const apiKey = clientSecret.trim() ? clientSecret : undefined;
+  const navigation = useWorkbenchNavigation(options, organizationId);
+  const apiKey =
+    navigation.session?.secret ||
+    (clientSecret.trim() ? clientSecret : undefined);
+  const activeOptions = navigation.session
+    ? {
+        ...options!,
+        initialThread: navigation.session.threadId,
+        api: {
+          ...options!.api,
+          xpertId: navigation.session.assistantId,
+          projectId: navigation.session.projectId ?? undefined,
+        },
+        header: {
+          ...options?.header,
+          title: { ...options?.header?.title, text: undefined },
+        },
+      }
+    : options;
   const xpertId = import.meta.env.VITE_XPERTAI_XPERT_ID as string | undefined;
   const apiUrl = import.meta.env.VITE_XPERTAI_API_URL as string | undefined;
 
@@ -104,7 +123,20 @@ export function App({
     (name: string, projectType?: XpertProjectTypeRef) => {
       sendEvent('public_event', [
         'effect',
-        { name: 'project.create', data: { name, ...(projectType ? { projectType: { applicationKey: projectType.applicationKey, projectTypeKey: projectType.projectTypeKey } } : {}) } },
+        {
+          name: 'project.create',
+          data: {
+            name,
+            ...(projectType
+              ? {
+                  projectType: {
+                    applicationKey: projectType.applicationKey,
+                    projectTypeKey: projectType.projectTypeKey,
+                  },
+                }
+              : {}),
+          },
+        },
       ]);
     },
     [sendEvent],
@@ -120,16 +152,32 @@ export function App({
     <Chat
       className="flex-1"
       clientSecret={apiKey}
-      options={options}
+      options={activeOptions}
       isClientSecretInitializing={isClientSecretInitializing}
-      activeProjectId={activeProjectId ?? undefined}
-      projectsEnabled={projectsEnabled}
+      activeProjectId={
+        navigation.session
+          ? (navigation.session.projectId ?? undefined)
+          : (activeProjectId ?? undefined)
+      }
+      projectsEnabled={projectsEnabled && !navigation.session}
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
       onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
-      onProjectTypeCreate={projectCreationEnabled ? (projectType) => sendEvent('public_event', ['effect', {
-        name: 'project.create-entry', data: { applicationKey: projectType.applicationKey, projectTypeKey: projectType.projectTypeKey }
-      }]) : undefined}
+      onProjectTypeCreate={
+        projectCreationEnabled
+          ? (projectType) =>
+              sendEvent('public_event', [
+                'effect',
+                {
+                  name: 'project.create-entry',
+                  data: {
+                    applicationKey: projectType.applicationKey,
+                    projectTypeKey: projectType.projectTypeKey,
+                  },
+                },
+              ])
+          : undefined
+      }
       onConnectorsChange={handleConnectorsChange}
     />
   );
@@ -147,12 +195,30 @@ export function App({
           }}
         >
           <StreamProvider
+            key={navigation.revision ?? 'host'}
+            threadStateMode={navigation.session ? 'memory' : 'url'}
             apiKey={apiKey}
-            organizationId={organizationId}
+            organizationId={
+              navigation.session?.organizationId ?? organizationId
+            }
+            getClientSecret={navigation.refresh}
             apiUrl={options?.api.apiUrl || apiUrl}
-            xpertId={options?.api.xpertId || resolvedXpertId || xpertId}
-            projectId={activeProjectId ?? undefined}
-            initialThread={scopedInitialThread}
+            xpertId={
+              navigation.session?.assistantId ||
+              options?.api.xpertId ||
+              resolvedXpertId ||
+              xpertId
+            }
+            projectId={
+              navigation.session
+                ? (navigation.session.projectId ?? undefined)
+                : (activeProjectId ?? undefined)
+            }
+            initialThread={
+              navigation.session
+                ? navigation.session.threadId
+                : scopedInitialThread
+            }
             locale={requestLocale}
             additionalContext={
               workbenchEnabled ? workbenchRequestContext : undefined
@@ -160,9 +226,11 @@ export function App({
           >
             {workbenchEnabled ? (
               <WorkbenchShell
-                options={options}
+                options={activeOptions}
                 locale={requestLocale}
                 onRequestContextChange={handleWorkbenchRequestContextChange}
+                onNavigate={navigation.navigate}
+                initialNavigation={navigation.request}
               >
                 {chat}
               </WorkbenchShell>

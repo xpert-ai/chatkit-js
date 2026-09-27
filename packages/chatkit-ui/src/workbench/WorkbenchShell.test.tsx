@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => ({
     isLoading: false,
     messages: [] as StateType['messages'],
     submit: vi.fn(),
+    reset: vi.fn(),
   },
 }));
 
@@ -185,6 +186,7 @@ describe('WorkbenchShell', () => {
     mocks.sideChatProps = null;
     mocks.sideChatMounts = 0;
     mocks.sideChatUnmounts = 0;
+    mocks.stream.reset.mockReset();
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
     mocks.stream.assistantId = 'agent-1';
@@ -193,6 +195,39 @@ describe('WorkbenchShell', () => {
     mocks.stream.threadId = 'thread-1';
     window.localStorage.clear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+  });
+
+  it('opens a preview without unmounting its source view and closes back to the source', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
+    const source = screen.getByTestId('remote-view');
+    await act(async () => { await mocks.remoteViewProps?.onClientCommand('workbench.file.open', { name: 'Report', url: 'https://example.org/report', mimeType: 'image/png' }, manifest); });
+    expect(screen.getByRole('tab', { name: 'Report' })).toHaveAttribute('aria-selected', 'true');
+    expect(source).toBeInTheDocument();
+    expect(source).not.toBeVisible();
+    expect(screen.getByAltText('Report')).toHaveAttribute('src', 'https://example.org/report');
+    fireEvent.click(screen.getByRole('button', { name: 'Close views: Report' }));
+    expect(source).toBeVisible();
+  });
+
+  it('starts a new thread during a run instead of queueing to the previous thread', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    mocks.stream.isLoading = true;
+    mocks.submit.mockResolvedValue(undefined);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
+    let result: unknown;
+    await act(async () => { result = await mocks.remoteViewProps?.onClientCommand('assistant.chat.send_message', { text: 'New task', newThread: true }, manifest); });
+    expect(mocks.stream.reset).toHaveBeenCalledWith(null);
+    expect(mocks.submit.mock.calls[0][1]).toMatchObject({ newThread: true });
+    expect(mocks.submit.mock.calls[0][1].followUpMode).toBeUndefined();
+    expect(result).toMatchObject({ success: true, status: 'sent' });
+    expect(result).not.toHaveProperty('threadId');
   });
 
   it('moves only external output into a live native tab and reopens it without creating a thread', () => {
@@ -793,13 +828,13 @@ describe('WorkbenchShell', () => {
 
     await expect(
       mocks.remoteViewProps?.onClientCommand(
-        'workbench.file.open',
+        'platform.custom.open',
         { url: '/file.pdf' },
         manifest,
       ),
     ).resolves.toEqual({ opened: true });
     expect(onClientCommand).toHaveBeenCalledWith({
-      commandKey: 'workbench.file.open',
+      commandKey: 'platform.custom.open',
       payload: { url: '/file.pdf' },
       hostType: 'agent',
       hostId: 'agent-1',

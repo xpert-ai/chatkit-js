@@ -155,6 +155,8 @@ type OnSetRuntimeCapabilitiesHandler = (
 type OnFocusComposerHandler = () => void | Promise<void>;
 
 type ParentMessengerContextValue = ParentMessenger & {
+  updateComposer: (payload: ComposerValuePayload) => Promise<void>;
+  focusComposer: () => Promise<void>;
   registerOnSetOptions: (handler: OnSetOptionsHandler) => () => void;
   registerOnSetPetEnabled: (handler: OnSetPetEnabledHandler) => () => void;
   registerOnSetComposerValue: (
@@ -251,6 +253,14 @@ export function ParentMessengerProvider({
     },
     [],
   );
+
+  const updateComposer = useCallback(async (payload: ComposerValuePayload) => {
+    if (!onSetComposerValueHandlersRef.current.size) throw new Error('Composer is not ready.');
+    await Promise.all([...onSetComposerValueHandlersRef.current].map((handler) => handler(payload)));
+  }, []);
+  const focusComposer = useCallback(async () => {
+    await Promise.all([...onFocusComposerHandlersRef.current].map((handler) => handler()));
+  }, []);
 
   useEffect(() => {
     if (!isParentAvailable) return;
@@ -622,6 +632,8 @@ export function ParentMessengerProvider({
 
   const value = useMemo(
     () => ({
+      updateComposer,
+      focusComposer,
       isParentAvailable,
       sendCommand,
       sendEvent,
@@ -632,6 +644,8 @@ export function ParentMessengerProvider({
       registerOnFocusComposer,
     }),
     [
+      updateComposer,
+      focusComposer,
       isParentAvailable,
       sendCommand,
       sendEvent,

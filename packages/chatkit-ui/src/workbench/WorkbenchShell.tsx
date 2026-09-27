@@ -3,23 +3,22 @@ import {
   ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
   ASSISTANT_CONTEXT_SET_COMMAND,
   type XpertExtensionViewManifest,
+  type XpertViewQuery,
   type XpertRemoteViewHostEventMessage,
 } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitOptions,
   ChatKitReference,
-  ChatKitReferenceCompositionMode,
-  ChatRequestFile,
-  FollowUpBehavior,
+  ChatKitWorkbenchClientCommandRequest,
 } from '@xpert-ai/chatkit-types';
 import { useStreamContext } from '../providers/Stream';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { buildInjectedRequestOptions } from '../lib/request-options';
-import { isRuntimeCapabilitiesSelection } from '../lib/message-metadata';
+import { buildHumanMessageInputPayload } from '../lib/references';
 import {
-  buildHumanMessageInputPayload,
-  normalizeReferences,
-} from '../lib/references';
+  parseContextSetPayload,
+  parseChatMessagePayload,
+} from './message-command-payload';
 import { createMessageId } from '../lib/utils';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { cn } from '../lib/utils';
@@ -53,9 +52,19 @@ import {
 } from './WorkbenchPanel';
 
 import { useWorkbenchResize } from './useWorkbenchResize';
+import { executeWorkbenchCommand, unsupportedCommand } from './client-commands';
+import {
+  parseNavigation,
+  type NavigationSession,
+  type WorkbenchPreview,
+} from './client-command-payload';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import { workbenchLayoutKey } from './layout-storage';
-import { CHAT_MIN_WIDTH, WORKBENCH_MIN_WIDTH, clampPanelWidth } from './split-resize';
+import {
+  CHAT_MIN_WIDTH,
+  WORKBENCH_MIN_WIDTH,
+  clampPanelWidth,
+} from './split-resize';
 
 const WORKBENCH_SLOT = 'agent.workbench.fixed';
 const isNativeView = (key: string | null) =>
@@ -71,6 +80,11 @@ type WorkbenchShellProps = {
   locale: string;
   children: React.ReactNode;
   onRequestContextChange: (context: Record<string, unknown>) => void;
+  onNavigate?: (
+    session: NavigationSession,
+    request: ChatKitWorkbenchClientCommandRequest,
+  ) => void;
+  initialNavigation?: ChatKitWorkbenchClientCommandRequest;
 };
 
 export function WorkbenchShell({
@@ -78,6 +92,8 @@ export function WorkbenchShell({
   locale,
   children,
   onRequestContextChange,
+  onNavigate,
+  initialNavigation,
 }: WorkbenchShellProps) {
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
@@ -110,6 +126,10 @@ export function WorkbenchShell({
   const [views, setViews] = React.useState<XpertExtensionViewManifest[]>([]);
   const [viewsScope, setViewsScope] = React.useState<string | null>(null);
   const [activeViewKey, setActiveViewKey] = React.useState<string | null>(null);
+  const [previews, setPreviews] = React.useState<WorkbenchPreview[]>([]);
+  const [viewQueries, setViewQueries] = React.useState<
+    Record<string, XpertViewQuery>
+  >({});
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = React.useState(0);
@@ -135,16 +155,29 @@ export function WorkbenchShell({
   );
   const isNarrow = containerWidth > 0 && containerWidth < NARROW_BREAKPOINT;
   const layoutKey = workbenchLayoutKey(
-    stream.apiUrl, stream.organizationId, stream.assistantId,
+    stream.apiUrl,
+    stream.organizationId,
+    stream.assistantId,
   );
   const {
-    requestedOpen, expanded, restoring, resolvedPanelWidth,
-    setOpen, setExpanded, setPanelWidth, dismiss,
+    requestedOpen,
+    expanded,
+    restoring,
+    resolvedPanelWidth,
+    setOpen,
+    setExpanded,
+    setPanelWidth,
+    dismiss,
   } = useWorkbenchLayout(layoutKey, containerWidth, isNarrow);
-  const open = requestedOpen && enabled && authenticated && (
-    !restoring || (containerWidth >= NARROW_BREAKPOINT &&
-      viewsScope === layoutKey && views.length > 0 && !loading)
-  );
+  const open =
+    requestedOpen &&
+    enabled &&
+    authenticated &&
+    (!restoring ||
+      (containerWidth >= NARROW_BREAKPOINT &&
+        viewsScope === layoutKey &&
+        views.length > 0 &&
+        !loading));
 
   React.useEffect(() => {
     const element = rootRef.current;
@@ -173,6 +206,8 @@ export function WorkbenchShell({
     const controller = new AbortController();
     setViews([]);
     setViewsScope(null);
+    setPreviews([]);
+    setViewQueries({});
     setActiveViewKey((current) => (isNativeView(current) ? current : null));
     setLoading(true);
     setError(null);
@@ -307,8 +342,12 @@ export function WorkbenchShell({
           title:
             current?.sourceThreadId === sourceThreadId
               ? current.title
-              : (reference.type === 'thread' ? reference.label || reference.threadId : reference.text).trim().slice(0, 32) ||
-                t('workbench.sideChat.title'),
+              : (reference.type === 'thread'
+                  ? reference.label || reference.threadId
+                  : reference.text
+                )
+                  .trim()
+                  .slice(0, 32) || t('workbench.sideChat.title'),
           referenceRequest: {
             id: `${Date.now()}-${(reference.type === 'thread' ? reference.threadId : reference.text).slice(0, 24)}`,
             reference,
@@ -379,9 +418,11 @@ export function WorkbenchShell({
           humanInput: input,
         });
         const messageId = message.clientMessageId ?? createMessageId();
-        const followUpMode = stream.isLoading
-          ? (message.followUpMode ?? 'queue')
-          : undefined;
+        if (message.newThread) stream.reset(null);
+        const followUpMode =
+          stream.isLoading && !message.newThread
+            ? (message.followUpMode ?? 'queue')
+            : undefined;
         void stream
           .submit(
             {
@@ -447,11 +488,13 @@ export function WorkbenchShell({
           });
         return {
           success: true,
-          status: 'sent',
+          status: followUpMode === 'queue' ? 'queued' : 'sent',
           ...(message.clientMessageId
             ? { clientMessageId: message.clientMessageId }
             : {}),
-          ...(stream.threadId ? { threadId: stream.threadId } : {}),
+          ...(!message.newThread && stream.threadId
+            ? { threadId: stream.threadId }
+            : {}),
         };
       }
 
@@ -462,19 +505,54 @@ export function WorkbenchShell({
         hostId: stream.assistantId,
         viewKey: manifest.key,
       };
-      const directHandler = options?.workbench?.onClientCommand;
-      if (typeof directHandler === 'function') {
-        return directHandler(request);
-      }
-      if (parentMessenger.isParentAvailable) {
-        return parentMessenger.sendCommand('onWorkbenchClientCommand', request);
-      }
-      throw new Error(
-        t('workbench.errors.clientCommandUnavailable', { commandKey }),
-      );
+      return executeWorkbenchCommand(request, {
+        apiUrl: stream.apiUrl,
+        openView: (key, query) => {
+          if (!views.some((view) => view.key === key)) return false;
+          setViewQueries((current) => ({ ...current, [key]: query }));
+          setActiveViewKey(key);
+          setOpen(true);
+          return true;
+        },
+        openPreview: (preview) => {
+          setPreviews((current) => [
+            ...current.filter((item) => item.key !== preview.key),
+            preview,
+          ]);
+          setActiveViewKey(preview.key);
+          setOpen(true);
+        },
+        revealChat: () => {
+          setExpanded(false);
+          if (isNarrow) setOpen(false);
+        },
+        updateComposer: parentMessenger.updateComposer,
+        focusComposer: async () => {
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
+          await parentMessenger.focusComposer();
+        },
+        navigate: onNavigate,
+        forward: async (request) => {
+          if (typeof options?.workbench?.onClientCommand === 'function')
+            return options.workbench.onClientCommand(request);
+          if (parentMessenger.isParentAvailable)
+            return parentMessenger.sendCommand(
+              'onWorkbenchClientCommand',
+              request,
+            );
+          return unsupportedCommand(request.commandKey);
+        },
+      });
     },
     [
       options?.request,
+      views,
+      setOpen,
+      setExpanded,
+      isNarrow,
+      onNavigate,
       options?.workbench?.onClientCommand,
       parentMessenger,
       publishContexts,
@@ -482,6 +560,34 @@ export function WorkbenchShell({
       t,
     ],
   );
+
+  React.useEffect(() => {
+    if (!initialNavigation || loading || viewsScope !== layoutKey) return;
+    const navigation = parseNavigation(initialNavigation.payload);
+    if (navigation.target === 'assistant.conversation') {
+      setExpanded(false);
+      setOpen(false);
+    }
+    if (
+      navigation.viewKey &&
+      views.some((view) => view.key === navigation.viewKey)
+    ) {
+      setViewQueries((current) => ({
+        ...current,
+        [navigation.viewKey!]: navigation.query,
+      }));
+      setActiveViewKey(navigation.viewKey);
+      setOpen(true);
+    }
+  }, [
+    initialNavigation,
+    loading,
+    viewsScope,
+    layoutKey,
+    views,
+    setOpen,
+    setExpanded,
+  ]);
 
   const available =
     hasExternalRuns ||
@@ -580,12 +686,24 @@ export function WorkbenchShell({
   );
 
   const { resizing, startResize } = useWorkbenchResize({
-    rootRef, isNarrow, resolvedPanelWidth, open, expanded, setPanelWidth, setExpanded,
+    rootRef,
+    isNarrow,
+    resolvedPanelWidth,
+    open,
+    expanded,
+    setPanelWidth,
+    setExpanded,
   });
 
   const panel = (
     <WorkbenchPanel
       visible={open}
+      previews={previews}
+      viewQueries={viewQueries}
+      onClosePreview={(key) => {
+        setPreviews((current) => current.filter((item) => item.key !== key));
+        if (activeViewKey === key) setActiveViewKey(views[0]?.key ?? null);
+      }}
       views={views}
       activeView={activeView}
       activeViewKey={activeViewKey}
@@ -640,14 +758,16 @@ export function WorkbenchShell({
         className="relative flex h-full min-h-0 w-full overflow-hidden bg-background"
         data-chatkit-workbench-root=""
       >
-        {resizing && <div aria-hidden="true" className="fixed inset-0 z-[100] cursor-col-resize select-none" />}
+        {resizing && (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-[100] cursor-col-resize select-none"
+          />
+        )}
         <div
           data-chatkit-chat-panel=""
           hidden={open && expanded}
-          className={cn(
-            'flex min-w-0 flex-1',
-            open && expanded && 'hidden',
-          )}
+          className={cn('flex min-w-0 flex-1', open && expanded && 'hidden')}
         >
           {children}
         </div>
@@ -661,16 +781,35 @@ export function WorkbenchShell({
                 aria-label={t('workbench.resize')}
                 tabIndex={0}
                 aria-valuemin={CHAT_MIN_WIDTH}
-                aria-valuemax={Math.max(CHAT_MIN_WIDTH, containerWidth - WORKBENCH_MIN_WIDTH)}
+                aria-valuemax={Math.max(
+                  CHAT_MIN_WIDTH,
+                  containerWidth - WORKBENCH_MIN_WIDTH,
+                )}
                 aria-valuenow={Math.round(containerWidth - resolvedPanelWidth)}
                 onPointerDown={startResize}
                 onKeyDown={(event) => {
-                  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter'].includes(event.key)) return;
+                  if (
+                    ![
+                      'ArrowLeft',
+                      'ArrowRight',
+                      'Home',
+                      'End',
+                      'Enter',
+                    ].includes(event.key)
+                  )
+                    return;
                   event.preventDefault();
-                  if (event.key === 'Enter') { setExpanded(true); return; }
-                  const width = event.key === 'Home' ? containerWidth - CHAT_MIN_WIDTH
-                    : event.key === 'End' ? WORKBENCH_MIN_WIDTH
-                    : resolvedPanelWidth + (event.key === 'ArrowLeft' ? 16 : -16);
+                  if (event.key === 'Enter') {
+                    setExpanded(true);
+                    return;
+                  }
+                  const width =
+                    event.key === 'Home'
+                      ? containerWidth - CHAT_MIN_WIDTH
+                      : event.key === 'End'
+                        ? WORKBENCH_MIN_WIDTH
+                        : resolvedPanelWidth +
+                          (event.key === 'ArrowLeft' ? 16 : -16);
                   setPanelWidth(clampPanelWidth(width, containerWidth));
                 }}
                 className="group relative z-20 w-0.5 shrink-0 cursor-col-resize touch-none bg-border outline-none transition-colors hover:bg-primary/50 focus-visible:bg-primary"
@@ -767,182 +906,6 @@ function compareWorkbenchViews(
     left.key.localeCompare(right.key)
   );
 }
-function parseContextSetPayload(payload: unknown): {
-  key: string;
-  clear: boolean;
-  env?: Record<string, string>;
-  context?: Record<string, unknown>;
-} {
-  if (!isObject(payload)) return { key: '', clear: false };
-  const key = readString(payload, 'key') ?? '';
-  const clear = Reflect.get(payload, 'clear') === true;
-  const env = copyStringFields(Reflect.get(payload, 'env'));
-  const contextValue = Reflect.get(payload, 'context');
-  const context = isObject(contextValue)
-    ? Object.fromEntries(Object.entries(contextValue))
-    : undefined;
-  return {
-    key,
-    clear,
-    ...(Object.keys(env).length > 0 ? { env } : {}),
-    ...(context ? { context } : {}),
-  };
-}
-
-function isObject(value: unknown): value is object {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function readString(value: object, key: string) {
-  const field = Reflect.get(value, key);
-  return typeof field === 'string' && field.trim() ? field.trim() : undefined;
-}
-
-function copyStringFields(value: unknown): Record<string, string> {
-  if (!isObject(value)) return {};
-  const result: Record<string, string> = {};
-  for (const [key, field] of Object.entries(value)) {
-    if (typeof field === 'string') result[key] = field;
-  }
-  return result;
-}
-
-function parseChatMessagePayload(payload: unknown) {
-  const value = isObject(payload) ? payload : null;
-  const references = normalizeReferences(
-    value ? Reflect.get(value, 'references') : undefined,
-  );
-  const referenceCompositionValue = value
-    ? Reflect.get(value, 'referenceComposition')
-    : undefined;
-  const referenceComposition: ChatKitReferenceCompositionMode | undefined =
-    referenceCompositionValue === 'compose' ||
-    referenceCompositionValue === 'preserve'
-      ? referenceCompositionValue
-      : undefined;
-  const runtimeCapabilitiesValue = value
-    ? Reflect.get(value, 'runtimeCapabilities')
-    : undefined;
-  const followUpModeValue = value
-    ? Reflect.get(value, 'followUpMode')
-    : undefined;
-  const followUpMode: FollowUpBehavior | undefined =
-    followUpModeValue === 'queue' || followUpModeValue === 'steer'
-      ? followUpModeValue
-      : undefined;
-  const stateValue = value ? Reflect.get(value, 'state') : undefined;
-
-  return {
-    text: value
-      ? (readString(value, 'text') ?? readString(value, 'input') ?? '')
-      : '',
-    files: value
-      ? [
-          ...parseChatRequestFiles(Reflect.get(value, 'files')),
-          ...parseChatAttachments(Reflect.get(value, 'attachments')),
-        ]
-      : [],
-    references,
-    referenceComposition,
-    followUpMode,
-    state: isObject(stateValue)
-      ? Object.fromEntries(Object.entries(stateValue))
-      : undefined,
-    planMode: value ? Reflect.get(value, 'planMode') === true : false,
-    newThread: value ? Reflect.get(value, 'newThread') === true : false,
-    clientMessageId: value ? readString(value, 'clientMessageId') : undefined,
-    runtimeCapabilities: isRuntimeCapabilitiesSelection(
-      runtimeCapabilitiesValue,
-    )
-      ? runtimeCapabilitiesValue
-      : undefined,
-  };
-}
-
-function parseChatAttachments(value: unknown): ChatRequestFile[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((candidate) => {
-    if (!isObject(candidate)) return [];
-    const id = readString(candidate, 'id');
-    const name =
-      readString(candidate, 'name') ?? readString(candidate, 'originalName');
-    const mimeType =
-      readString(candidate, 'mime_type') ??
-      readString(candidate, 'mimeType') ??
-      readString(candidate, 'mimetype');
-    if (!id) return [];
-    return [
-      {
-        id,
-        ...(name ? { name, originalName: name } : {}),
-        ...(mimeType ? { mimeType } : {}),
-        ...(readString(candidate, 'preview_url')
-          ? { thumbUrl: readString(candidate, 'preview_url') }
-          : {}),
-      },
-    ];
-  });
-}
-
-function parseChatRequestFiles(value: unknown): ChatRequestFile[] {
-  if (!Array.isArray(value)) return [];
-  const files: ChatRequestFile[] = [];
-  for (const candidate of value) {
-    if (!isObject(candidate)) continue;
-    const fileAssetId = readString(candidate, 'fileAssetId');
-    const id = readString(candidate, 'id');
-    const fileId = readString(candidate, 'fileId');
-    const storageFileId = readString(candidate, 'storageFileId');
-    const metadata = readChatFileMetadata(candidate);
-
-    if (fileAssetId) {
-      files.push({
-        fileAssetId,
-        ...(fileId ? { fileId } : {}),
-        ...(storageFileId ? { storageFileId } : {}),
-        ...metadata,
-      });
-      continue;
-    }
-    if (id && fileId && storageFileId) {
-      files.push({ id, fileId, storageFileId, ...metadata });
-      continue;
-    }
-    if (storageFileId) {
-      files.push({ storageFileId, ...metadata });
-      continue;
-    }
-    if (id) {
-      files.push({ id, ...metadata });
-    }
-  }
-  return files;
-}
-
-function readChatFileMetadata(value: object) {
-  const name =
-    readString(value, 'name') ??
-    readString(value, 'originalName') ??
-    readString(value, 'fileName');
-  const mimeType =
-    readString(value, 'mimeType') ?? readString(value, 'mimetype');
-  const url = readString(value, 'url');
-  const fileUrl = readString(value, 'fileUrl');
-  const thumbUrl =
-    readString(value, 'thumbUrl') ?? readString(value, 'previewUrl');
-  const sizeValue = Reflect.get(value, 'size');
-  return {
-    ...(name ? { name, originalName: name } : {}),
-    ...(mimeType ? { mimeType } : {}),
-    ...(url ? { url } : {}),
-    ...(fileUrl ? { fileUrl } : {}),
-    ...(thumbUrl ? { thumbUrl } : {}),
-    ...(typeof sizeValue === 'number' && Number.isFinite(sizeValue)
-      ? { size: sizeValue }
-      : {}),
-  };
-}
-
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message;
   return typeof error === 'string' && error.trim() ? error.trim() : fallback;

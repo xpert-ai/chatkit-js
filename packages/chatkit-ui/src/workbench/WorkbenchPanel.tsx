@@ -1,6 +1,9 @@
 import * as React from 'react';
+import type { WorkbenchPreview } from './client-command-payload';
+import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
 import type {
   Client,
+  XpertViewQuery,
   XpertExtensionViewManifest,
   XpertRemoteViewHostEventMessage,
 } from '@xpert-ai/xpert-sdk';
@@ -47,6 +50,9 @@ type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
 
 type WorkbenchPanelProps = {
+  previews: WorkbenchPreview[];
+  viewQueries: Record<string, XpertViewQuery>;
+  onClosePreview: (key: string) => void;
   visible: boolean;
   views: XpertExtensionViewManifest[];
   activeView: XpertExtensionViewManifest | null;
@@ -84,6 +90,9 @@ type WorkbenchPanelProps = {
 
 export function WorkbenchPanel({
   visible,
+  previews,
+  viewQueries,
+  onClosePreview,
   views,
   activeView,
   activeViewKey,
@@ -115,10 +124,22 @@ export function WorkbenchPanel({
 }: WorkbenchPanelProps) {
   const { t } = useChatkitTranslation();
   const externalTabId = React.useId();
+  const [visited, setVisited] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    if (activeViewKey)
+      setVisited((current) =>
+        current.includes(activeViewKey) ? current : [...current, activeViewKey],
+      );
+  }, [activeViewKey]);
+  const activePreview = previews.find((item) => item.key === activeViewKey);
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2">
-        {views.length > 0 || sideChat || sideChatOpening || externalViewOpen ? (
+        {views.length > 0 ||
+        previews.length > 0 ||
+        sideChat ||
+        sideChatOpening ||
+        externalViewOpen ? (
           <div
             className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
             role="tablist"
@@ -190,6 +211,12 @@ export function WorkbenchPanel({
                 )}
               </div>
             )}
+            <PreviewTabs
+              previews={previews}
+              activeKey={activeViewKey}
+              onSelect={onSelect}
+              onClose={onClosePreview}
+            />
             {views.map((view) => {
               const selected = view.key === activeViewKey;
               const label = resolveManifestText(
@@ -344,8 +371,40 @@ export function WorkbenchPanel({
             />
           </div>
         )}
-        {activeViewKey ===
-        EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===
+        {previews.map((preview) => (
+          <div
+            key={preview.key}
+            hidden={activeViewKey !== preview.key}
+            className="h-full min-h-0"
+          >
+            <WorkbenchPreviewContent preview={preview} />
+          </div>
+        ))}
+        {views
+          .filter(
+            (view) => visited.includes(view.key) || view.key === activeViewKey,
+          )
+          .map((view) => (
+            <div
+              key={view.key}
+              hidden={view.key !== activeViewKey}
+              className="h-full min-h-0"
+            >
+              <RemoteViewFrame
+                manifest={view}
+                hostId={hostId}
+                locale={locale}
+                title={resolveManifestText(view.title, view.key, locale)}
+                hostEvent={hostEvent}
+                viewHosts={viewHosts}
+                onNotify={onNotify}
+                onClientCommand={onClientCommand}
+                initialQuery={viewQueries[view.key]}
+              />
+            </div>
+          ))}
+        {activePreview ? null : activeViewKey ===
+          EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===
           SIDE_CHAT_VIEW_KEY ? (
           !sideChat && sideChatOpening ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -370,23 +429,7 @@ export function WorkbenchPanel({
               {t('workbench.retry')}
             </button>
           </div>
-        ) : activeView ? (
-          <RemoteViewFrame
-            key={activeView.key}
-            manifest={activeView}
-            hostId={hostId}
-            locale={locale}
-            title={resolveManifestText(
-              activeView.title,
-              activeView.key,
-              locale,
-            )}
-            hostEvent={hostEvent}
-            viewHosts={viewHosts}
-            onNotify={onNotify}
-            onClientCommand={onClientCommand}
-          />
-        ) : (
+        ) : activeView ? null : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
             {t('workbench.empty')}
           </div>
@@ -427,6 +470,7 @@ function SideChatView({
     <WorkbenchContext.Provider value={disabledWorkbenchContext}>
       <StreamProvider
         apiKey={stream.apiKey}
+        getClientSecret={stream.refreshClientSecret}
         organizationId={stream.organizationId}
         apiUrl={stream.apiUrl}
         xpertId={stream.assistantId}

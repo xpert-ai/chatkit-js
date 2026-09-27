@@ -16,11 +16,8 @@ const options: ChatKitOptions = {
   workbench: {
     enabled: true,
     async onClientCommand(request) {
-      if (request.commandKey === 'workbench.file.open') {
-        openFile(request.payload);
-        return { success: true };
-      }
-      throw new Error(`Unsupported client command: ${request.commandKey}`);
+      // Only platform-specific operations need a host callback.
+      return { success: false, code: 'unsupported', commandKey: request.commandKey };
     },
   },
 };
@@ -32,8 +29,9 @@ visible `remote_component` views whose component isolation is `iframe`.
 Remote HTML is fetched only after the user opens the workbench.
 
 On wide containers the workbench is a resizable split panel. Below 960px it
-opens as a right-side drawer. The active view and split size are kept only for
-the current ChatKit mount.
+opens as a right-side drawer. Maximizing hides chat at every width. Chat width
+and maximized state are saved per API / organization / Assistant in local
+storage; the active view remains local to the current mount.
 
 ## Theme
 
@@ -53,9 +51,83 @@ ChatKit handles these manifest-declared commands directly:
   preserves request injection, references, uploaded attachment handles,
   follow-up behavior, and thread state.
 
+- `assistant.composer.append_references` validates and appends references without
+  replacing text or existing attachments, reveals chat, and focuses the composer.
+- `workbench.file.open` opens a native preview tab from an HTTP(S) URL. It accepts
+  file metadata and evidence text/page anchors; repeated opens reuse the tab.
+- `workbench.browser.open` opens a sandboxed browser preview tab.
+- `workbench.navigation.open` with `target: 'workbench.view'` selects an available
+  view and passes `selectionId` and scalar `parameters` in its `init.initialQuery`.
+  Already opened views remain mounted so command replies and local state survive
+  tab switches. Unknown views return `view_unavailable`.
+
+File previews display images, or use the browser's embedded document viewer.
+PDF page anchors and evidence text are supported; OCR rectangle highlighting is
+not implemented. Sites that forbid embedding must be opened with the preview's
+external link. URLs with executable/local schemes or embedded credentials are
+rejected. Preview frames receive no ChatKit session credentials.
+
+`assistant.chat.send_message` with `newThread: true` resets the current local
+stream before submitting, even while another run is active; it is not queued on
+the previous thread.
+
 Other manifest-declared commands are forwarded to
 `workbench.onClientCommand`. The callback stays in the host-side options and is
-bridged internally when ChatKit is hosted through the Web Component.
+bridged internally when ChatKit is hosted through the Web Component. Missing
+handlers return `{ success: false, code: 'unsupported' }`, without emitting a
+global `chatkit.error`.
+
+### Authorized conversation and project navigation
+
+For `assistant.conversation` and `assistant.project`, ChatKit owns the runtime
+switch and UI. The authenticated host owns authorization:
+
+1. For a conversation, resolve its canonical Assistant, Project and thread via
+   the platform Workbench navigation endpoint. Do not trust `payload.xpertId`.
+2. Create a short-lived ChatKit session for that authorized scope. Include the
+   original requesting Assistant when creating a delegated conversation session.
+3. Return the following from `workbench.onClientCommand`:
+
+```ts
+import type { ChatKitWorkbenchNavigationSession } from '@xpert-ai/chatkit-types';
+
+const session: ChatKitWorkbenchNavigationSession = {
+  assistantId: 'server-resolved-assistant',
+  projectId: null,
+  threadId: 'server-resolved-thread', // null for a new Project conversation
+  conversationId: 'requested-conversation', // required for conversation navigation
+  secret: 'short-lived-scoped-secret',
+  organizationId: 'current-organization',
+};
+return { success: true, session };
+```
+
+ChatKit validates the requested resource against the result, replies to the
+source view without credentials, then remounts its stream in the new scope.
+Project navigation also restores the requested `viewKey`, `selectionId`, and
+`parameters`. Session refresh invokes the same host callback and rejects scope
+changes. Theme updates preserve navigation; explicit parent thread / Assistant /
+organization changes clear it. Hosts that already navigate their own pages may
+return `{ success: true, status: 'opened' }` without a session.
+
+Project navigation must use the host's current authorized Assistant after a
+conversation switch, rather than the initial Bot or an ID supplied by a plugin.
+The session endpoint still checks the selected Project's Assistant binding.
+Native Side Chat shares the main stream's scoped credential renewal, including
+in-flight refresh deduplication; it must not fall back to the initial Bot's secret.
+
+### Platform-owned commands
+
+`knowledgebase.documents`, `agent-evolution.target`, and
+`platform.data-source.create` remain host callbacks because they depend on Xpert
+platform pages and account permissions. A host may return `created` with only a
+`dataSourceId`, or `cancelled`, after its creation dialog finishes. Merely opening
+platform management must return `opened`, never `created`. Never return data
+source credentials/options to the remote view. Desktop opens these platform
+pages in the system browser; data-source creation still completes there and does
+not currently return a newly created ID to the original plugin. Knowledge page,
+chunk, and block URL anchors are preserved; transient evidence excerpts are
+not put in browser URLs.
 
 ## Isolation
 

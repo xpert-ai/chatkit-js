@@ -43,6 +43,11 @@
       "empty": "No external assistant executions in this conversation.",
       "noMessages": "No messages yet.",
       "unavailable": "This execution is no longer available in the current conversation."
+    },
+    "preview": {
+      "openExternal": "Open in browser",
+      "evidence": "Source evidence",
+      "page": "Page {{page}}"
     }
   },
   "chat": {
@@ -750,7 +755,6 @@
     "showAllFiles": "Show all {{count}} files",
     "showFiles": "Show files",
     "hideFiles": "Hide files",
-
     "open": "Open",
     "review": "Review",
     "savedVersion": "Saved version",

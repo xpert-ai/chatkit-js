@@ -41,6 +41,8 @@ function parentMessengerValue(
   const unregister = () => () => undefined;
   return {
     isParentAvailable: true,
+    updateComposer: vi.fn().mockResolvedValue(undefined),
+    focusComposer: vi.fn().mockResolvedValue(undefined),
     sendCommand,
     sendEvent: vi.fn(),
     registerOnSetOptions: unregister,

@@ -345,6 +345,8 @@ function readStringFields(value: unknown): Record<string, string> {
 export type StreamContextType = {
   client: Client<StateType>;
   authenticatedFetch: typeof fetch;
+  /** Share this scope's credential refresh with nested chat surfaces. */
+  refreshClientSecret: () => Promise<ResolvedClientSecret>;
   apiUrl: string;
   assistantId: string;
   projectId?: string;
@@ -2169,6 +2171,7 @@ const StreamSession = ({
   threadStateMode,
   hostIntegration,
   resetThreadOnMount = false,
+  getClientSecret,
 }: {
   children: ReactNode;
   apiKey: string;
@@ -2182,6 +2185,7 @@ const StreamSession = ({
   threadStateMode: 'url' | 'memory';
   hostIntegration: boolean;
   resetThreadOnMount?: boolean;
+  getClientSecret?: () => Promise<{ secret: string; organizationId?: string }>;
 }) => {
   const [queryThreadId, setQueryThreadId] = useQueryState('threadId');
   const [memoryThreadId, setMemoryThreadId] = useState<string | null>(
@@ -2579,7 +2583,7 @@ const StreamSession = ({
 
   const refreshClientSecret =
     useCallback(async (): Promise<ResolvedClientSecret> => {
-      if (!isParentAvailable) {
+      if (!isParentAvailable && !getClientSecret) {
         throw new Error(
           '[chatkit-ui] Parent window is not available for client secret refresh.',
         );
@@ -2590,10 +2594,9 @@ const StreamSession = ({
 
       const refreshPromise = (async () => {
         const currentSecret = runtimeClientSecretRef.current.trim();
-        const response = await sendCommand(
-          'onGetClientSecret',
-          currentSecret || null,
-        );
+        const response = getClientSecret
+          ? await getClientSecret()
+          : await sendCommand('onGetClientSecret', currentSecret || null);
         const nextClientSecret = normalizeClientSecretResult(
           response,
           runtimeOrganizationIdRef.current,
@@ -2614,7 +2617,7 @@ const StreamSession = ({
           refreshClientSecretPromiseRef.current = null;
         }
       }
-    }, [isParentAvailable, sendCommand]);
+    }, [isParentAvailable, sendCommand, getClientSecret]);
 
   const ensureHistoryCredentials = useCallback(async () => {
     if (
@@ -4473,6 +4476,7 @@ const StreamSession = ({
   const value: StreamContextType = {
     client,
     authenticatedFetch: fetchWithClientSecretRefresh,
+    refreshClientSecret,
     apiUrl,
     assistantId,
     projectId,
@@ -4538,6 +4542,7 @@ export const StreamProvider: React.FC<{
   additionalContext?: Record<string, unknown>;
   threadStateMode?: 'url' | 'memory';
   hostIntegration?: boolean;
+  getClientSecret?: () => Promise<{ secret: string; organizationId?: string }>;
 }> = ({
   children,
   apiKey,
@@ -4550,6 +4555,7 @@ export const StreamProvider: React.FC<{
   additionalContext,
   threadStateMode = 'url',
   hostIntegration = true,
+  getClientSecret,
 }) => {
   const assistantId = xpertId?.trim() || 'your-xpert-id';
   const normalizedProjectId = projectId?.trim() || undefined;
@@ -4576,6 +4582,7 @@ export const StreamProvider: React.FC<{
       threadStateMode={threadStateMode}
       hostIntegration={hostIntegration}
       resetThreadOnMount={resetThreadOnMount}
+      getClientSecret={getClientSecret}
     >
       {children}
     </StreamSession>
