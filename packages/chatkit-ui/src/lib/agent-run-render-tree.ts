@@ -14,7 +14,8 @@ import {
   readContentParentExecutionId,
   type AgentRunInfo,
 } from './agent-runs';
-import { isInternalMessageContent } from './internal-message-content';
+import { isNonTranscriptMessageContent } from './message-content-presentation';
+import { mergeAgentInvocationEntries } from './agent-invocation-presentation';
 
 export type AssistantMessageWithAgentRuns = ChatkitMessage & {
   executionId?: string;
@@ -170,7 +171,7 @@ export function getAgentRunCounts(node: AgentRunRenderNode) {
       continue;
     }
 
-    if (isInternalMessageContent(item)) {
+    if (isNonTranscriptMessageContent(item)) {
       continue;
     }
 
@@ -331,7 +332,7 @@ function normalizeAssistantEntries(message: AssistantMessageWithAgentRuns) {
     }
   } else if (Array.isArray(message.content)) {
     message.content.forEach((item, index) => {
-      if (isInternalMessageContent(item)) return;
+      if (isNonTranscriptMessageContent(item)) return;
 
       entries.push({
         item,
@@ -488,6 +489,7 @@ export function buildAssistantRenderTree(
     roots.push(node);
   }
 
+  const visibleRootEntries = mergeAgentInvocationEntries(roots, rootEntries);
   roots.forEach(refreshAgentNodeOrder);
   if (normalizeRunStatus(message.status) === 'success') {
     roots.forEach(markIncompleteAgentRunStatusSuccess);
@@ -495,7 +497,7 @@ export function buildAssistantRenderTree(
   roots.sort((a, b) => a.firstOrder - b.firstOrder);
 
   const units: AssistantRenderUnit[] = [
-    ...rootEntries.map((entry) => ({
+    ...visibleRootEntries.map((entry) => ({
       type: 'entry' as const,
       entry,
       order: entry.order,

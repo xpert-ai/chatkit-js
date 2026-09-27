@@ -18,6 +18,8 @@ export type AgentRunInfo = {
   category?: string;
   agentKey?: string;
   invocationKind?: 'external_assistant' | 'sub_agent';
+  /** Parent execution's Tool component id, supplied by the invocation boundary. */
+  sourceToolCallId?: string;
   xpertId?: string;
   model?: string;
   xpertName?: string;
@@ -176,6 +178,9 @@ export function normalizeAgentRunInfo(
   const endedAt = readTrimmedString(value.endedAt);
   const metadata = isRecord(value.metadata) ? value.metadata : undefined;
   const invocationKind = value.invocationKind ?? metadata?.invocationKind;
+  const sourceToolCallId =
+    readTrimmedString(value.sourceToolCallId) ??
+    readTrimmedString(metadata?.sourceToolCallId);
   const xpertId =
     readTrimmedString(value.xpertId) ??
     (isRecord(value.xpert) ? readTrimmedString(value.xpert.id) : null);
@@ -190,6 +195,7 @@ export function normalizeAgentRunInfo(
   return {
     id,
     ...(value.isRoot === true ? { isRoot: true } : {}),
+    ...(sourceToolCallId ? { sourceToolCallId } : {}),
     ...(invocationKind === 'external_assistant' ||
     invocationKind === 'sub_agent'
       ? { invocationKind }
@@ -229,6 +235,8 @@ export function mergeAgentRunInfo(
     parentExecutionId: incoming.parentExecutionId ?? previous.parentExecutionId,
     nodeType: incoming.nodeType ?? previous.nodeType,
     category: incoming.category ?? previous.category,
+    invocationKind: incoming.invocationKind ?? previous.invocationKind,
+    sourceToolCallId: incoming.sourceToolCallId ?? previous.sourceToolCallId,
     agentKey: incoming.agentKey ?? previous.agentKey,
     xpertName: incoming.xpertName ?? previous.xpertName,
     avatar: incoming.avatar ?? previous.avatar,

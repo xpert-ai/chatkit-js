@@ -31,7 +31,7 @@ import {
   hasRenderableReasoning,
 } from '../../../lib/message';
 import { isAgentEventContent } from '../../../lib/agent-runs';
-import { isInternalMessageContent } from '../../../lib/internal-message-content';
+import { isNonTranscriptMessageContent } from '../../../lib/message-content-presentation';
 import {
   buildAssistantRenderTree,
   type AssistantContentEntry,
@@ -508,7 +508,7 @@ function renderContentItem(
     );
   }
 
-  if (isInternalMessageContent(content)) {
+  if (isNonTranscriptMessageContent(content)) {
     return null;
   }
 
