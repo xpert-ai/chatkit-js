@@ -1,3 +1,4 @@
+import type { ChatKitApprovalsOptions } from './approvals.js';
 import type { ClientToolMessageInput } from './interrupt';
 import type { ChatKitSlashCommand } from './commands';
 import type {
@@ -525,6 +526,13 @@ export type ChatKitWorkbenchOptions = {
    */
   enabled?: boolean;
 
+  /**
+   * Show a vertical strip of available remote-view icons at the right edge of
+   * chat while the workbench is closed. Clicking an icon opens that view.
+   * Requires `workbench.enabled`. Disabled by default.
+   */
+  viewRail?: { enabled?: boolean };
+
   /** Native side chat branched from the current thread. Disabled by default. */
   sideChat?: {
     enabled?: boolean;
@@ -647,6 +655,8 @@ export type ChatKitOptions = {
    * Optional animated pet companion rendered by the ChatKit web component over
    * the host page viewport.
    * Passing `true` enables the default built-in pet.
+   * Explicit `false` disables pets and local pet controls in chat mode,
+   * overriding saved user preferences. Pet display mode still requires a pet.
    *
    * @default false
    */
@@ -659,6 +669,9 @@ export type ChatKitOptions = {
    * @default null
    */
   initialThread?: null | string;
+
+  /** Generic approval placement and host decision callbacks. */
+  approvals?: ChatKitApprovalsOptions;
 
   /**
    * A map of handlers for the client tools configured on your server. The keys

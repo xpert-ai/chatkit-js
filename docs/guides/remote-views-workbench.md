@@ -15,6 +15,7 @@ const options: ChatKitOptions = {
   },
   workbench: {
     enabled: true,
+    viewRail: { enabled: true },
     async onClientCommand(request) {
       // Only platform-specific operations need a host callback.
       return { success: false, code: 'unsupported', commandKey: request.commandKey };
@@ -22,6 +23,24 @@ const options: ChatKitOptions = {
   },
 };
 ```
+
+`workbench.viewRail.enabled` optionally displays a compact vertical strip of view
+icons at the right edge of chat when the workbench is closed. It defaults to
+`false` and requires `workbench.enabled: true`. Hover or keyboard focus reveals
+the localized view name and description; clicking an icon opens that view
+directly, using the existing drawer on narrow screens. The rail disappears while
+the workbench is open and returns when it is closed. It uses the same authorized
+remote views, ordering, menu icons and labels as the workbench tabs. It does not
+reserve space when no views are available, and switching Assistant or runtime
+scope clears stale entries while loading the new views.
+
+When restoring an existing thread, view discovery waits for its conversation and
+Project scope to finish loading, including conversations without a Project.
+ChatKit shows an initial loading state until that scope and its views are ready;
+the Web Component's `chatkit.ready` event still only reports iframe document load.
+Refreshing within the same scope preserves the rail, active view, previews and
+injected context. Transient refresh errors retain loaded views; denied access or
+a changed scope clears them. Background refreshes do not cover the chat again.
 
 When enabled, ChatKit preloads manifests from the
 `agent.workbench.fixed` slot for the configured `xpertId`. It displays only

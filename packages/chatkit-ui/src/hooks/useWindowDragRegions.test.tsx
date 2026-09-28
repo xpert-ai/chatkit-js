@@ -43,7 +43,7 @@ beforeEach(() => {
     },
   );
   document.body.innerHTML =
-    '<header data-slot="chatkit-chat-header"><button>Settings</button></header>';
+    '<header data-slot="chatkit-chat-header-container"><button>Settings</button></header>';
   box(document.querySelector('header')!, 0, 0, 500, 56);
   box(document.querySelector('button')!, 450, 8, 32, 32);
 });
@@ -54,6 +54,40 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('frame header hit regions', () => {
+  it('includes both gutters around a centered chat column without covering controls or another pane', async () => {
+    document.body.innerHTML = `
+      <header data-slot="chatkit-chat-header-container">
+        <div data-slot="chatkit-chat-header"><button>Settings</button></div>
+      </header>`;
+    box(document.querySelector('header')!, 100, 0, 800, 56);
+    box(
+      document.querySelector('[data-slot="chatkit-chat-header"]')!,
+      300,
+      0,
+      400,
+      56,
+    );
+    box(document.querySelector('button')!, 660, 8, 32, 32);
+    renderHook(() => useWindowDragRegions(true));
+    await act(() => vi.advanceTimersByTimeAsync(32));
+    const regions = sendEvent.mock.calls.at(-1)![1].regions;
+    const draggable = (x: number, y: number) =>
+      regions.some(
+        (rect: { x: number; y: number; width: number; height: number }) =>
+          x >= rect.x &&
+          x < rect.x + rect.width &&
+          y >= rect.y &&
+          y < rect.y + rect.height,
+      );
+    expect(draggable(150, 24)).toBe(true);
+    expect(draggable(850, 24)).toBe(true);
+    expect(draggable(450, 24)).toBe(true);
+    expect(draggable(676, 24)).toBe(false);
+    expect(draggable(50, 24)).toBe(false);
+    expect(draggable(950, 24)).toBe(false);
+    expect(draggable(450, 80)).toBe(false);
+  });
+
   it('leaves interactive controls usable and suspends native hit regions while a menu is open', async () => {
     renderHook(() => useWindowDragRegions(true));
     await act(() => vi.advanceTimersByTimeAsync(32));

@@ -38,6 +38,7 @@ import {
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
 import { WorkbenchTabs } from './WorkbenchTabs';
+import { resolveManifestText } from './manifest-text';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
 
@@ -358,6 +359,15 @@ export function WorkbenchPanel({
         </div>
       )}
 
+      {error && activeView && (
+        <div role="alert" className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive">
+          <span className="flex-1">{error}</span>
+          <button type="button" onClick={onReload} className="rounded-md px-2 py-1 hover:bg-muted">
+            {t('workbench.retry')}
+          </button>
+        </div>
+      )}
+
       <div className="relative min-h-0 flex-1">
         {sideChat && (
           <div
@@ -441,7 +451,7 @@ export function WorkbenchPanel({
               {t('workbench.loading')}
             </div>
           ) : null
-        ) : loading ? (
+        ) : activeView ? null : loading ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" />
             {t('workbench.loading')}
@@ -458,7 +468,7 @@ export function WorkbenchPanel({
               {t('workbench.retry')}
             </button>
           </div>
-        ) : activeView ? null : (
+        ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
             {t('workbench.empty')}
           </div>
@@ -517,22 +527,5 @@ function SideChatView({
         />
       </StreamProvider>
     </WorkbenchContext.Provider>
-  );
-}
-
-function resolveManifestText(
-  value: string | { en_US: string; zh_Hans?: string } | undefined,
-  fallback: string,
-  locale: string,
-) {
-  if (typeof value === 'string') return value.trim() || fallback;
-  if (!value) return fallback;
-  const simplifiedChinese =
-    locale === 'zh-CN' || locale === 'zh-Hans' || locale === 'zh';
-  return (
-    (simplifiedChinese ? value.zh_Hans : value.en_US)?.trim() ||
-    value.en_US.trim() ||
-    value.zh_Hans?.trim() ||
-    fallback
   );
 }
