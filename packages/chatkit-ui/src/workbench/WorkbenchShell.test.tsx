@@ -211,6 +211,160 @@ describe('WorkbenchShell', () => {
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
 
+  it('opens the selected rail view, preserves the draft and restores the rail on close', async () => {
+    const second = { ...manifest, key: 'second', title: 'Second view' };
+    mocks.listSlotViews.mockResolvedValue([
+      { ...manifest, key: 'hidden', visible: false },
+      { ...manifest, key: 'no-menu', workbench: { menu: { enabled: false } } },
+      second,
+      manifest,
+    ]);
+    render(
+      <WorkbenchShell
+        options={{
+          ...baseOptions,
+          workbench: { enabled: true, viewRail: { enabled: true } },
+        }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <input aria-label="Draft" defaultValue="Keep this message" />
+      </WorkbenchShell>,
+    );
+    const rail = await screen.findByRole('navigation', {
+      name: 'Available views',
+    });
+    expect(
+      within(rail)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Documents', 'Second view']);
+    fireEvent.click(within(rail).getByRole('button', { name: 'Second view' }));
+    expect(
+      screen.queryByRole('navigation', { name: 'Available views' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Second view' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByLabelText('Draft')).toHaveValue('Keep this message');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close views: Second view' }),
+    );
+    expect(
+      screen.getByRole('navigation', { name: 'Available views' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Draft')).toHaveValue('Keep this message');
+  });
+
+  it.each([
+    { enabled: true },
+    { enabled: true, viewRail: { enabled: false } },
+    { enabled: false, viewRail: { enabled: true } },
+  ])(
+    'does not show a rail unless both options opt in: %j',
+    async (workbench) => {
+      mocks.listSlotViews.mockResolvedValue([manifest]);
+      render(
+        <WorkbenchShell
+          options={{ ...baseOptions, workbench }}
+          locale="en-US"
+          onRequestContextChange={vi.fn()}
+        >
+          <WorkbenchToggleButton />
+        </WorkbenchShell>,
+      );
+      if (workbench.enabled) {
+        await waitFor(() =>
+          expect(screen.getByLabelText('Open views')).toBeEnabled(),
+        );
+      }
+      expect(
+        screen.queryByRole('navigation', { name: 'Available views' }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it('clears stale rail entries on scope changes and reserves no space for empty or unauthenticated scopes', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const onContext = vi.fn();
+    const tree = () => (
+      <WorkbenchShell
+        options={{
+          ...baseOptions,
+          workbench: { enabled: true, viewRail: { enabled: true } },
+        }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
+    const { rerender } = render(tree());
+    await screen.findByRole('navigation', { name: 'Available views' });
+    let resolveViews: (views: XpertExtensionViewManifest[]) => void = () =>
+      undefined;
+    mocks.listSlotViews.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveViews = resolve;
+        }),
+    );
+    mocks.stream.conversationId = 'conversation-2';
+    rerender(tree());
+    expect(
+      screen.queryByRole('navigation', { name: 'Available views' }),
+    ).not.toBeInTheDocument();
+    await act(async () => {
+      resolveViews([]);
+    });
+    expect(
+      screen.queryByRole('navigation', { name: 'Available views' }),
+    ).not.toBeInTheDocument();
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    mocks.stream.assistantId = 'agent-2';
+    rerender(tree());
+    await screen.findByRole('navigation', { name: 'Available views' });
+    mocks.stream.apiKey = '';
+    rerender(tree());
+    expect(
+      screen.queryByRole('navigation', { name: 'Available views' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens a rail view in the narrow drawer', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(
+      <WorkbenchShell
+        options={{
+          ...baseOptions,
+          workbench: { enabled: true, viewRail: { enabled: true } },
+        }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <span>Chat</span>
+      </WorkbenchShell>,
+    );
+    await screen.findByRole('navigation', { name: 'Available views' });
+    act(() =>
+      mocks.resizeCallback?.(
+        [{ contentRect: { width: 600 } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Documents' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close views: Documents' }),
+    );
+    await screen.findByRole('navigation', { name: 'Available views' });
+  });
+
   it('opens a preview without unmounting its source view and closes back to the source', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);

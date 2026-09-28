@@ -525,6 +525,13 @@ export type ChatKitWorkbenchOptions = {
    */
   enabled?: boolean;
 
+  /**
+   * Show a vertical strip of available remote-view icons at the right edge of
+   * chat while the workbench is closed. Clicking an icon opens that view.
+   * Requires `workbench.enabled`. Disabled by default.
+   */
+  viewRail?: { enabled?: boolean };
+
   /** Native side chat branched from the current thread. Disabled by default. */
   sideChat?: {
     enabled?: boolean;

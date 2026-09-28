@@ -38,6 +38,7 @@ import {
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
 import { WorkbenchTabs } from './WorkbenchTabs';
+import { resolveManifestText } from './manifest-text';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
 
@@ -517,22 +518,5 @@ function SideChatView({
         />
       </StreamProvider>
     </WorkbenchContext.Provider>
-  );
-}
-
-function resolveManifestText(
-  value: string | { en_US: string; zh_Hans?: string } | undefined,
-  fallback: string,
-  locale: string,
-) {
-  if (typeof value === 'string') return value.trim() || fallback;
-  if (!value) return fallback;
-  const simplifiedChinese =
-    locale === 'zh-CN' || locale === 'zh-Hans' || locale === 'zh';
-  return (
-    (simplifiedChinese ? value.zh_Hans : value.en_US)?.trim() ||
-    value.en_US.trim() ||
-    value.zh_Hans?.trim() ||
-    fallback
   );
 }

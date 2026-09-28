@@ -62,6 +62,7 @@ import {
   type WorkbenchPreview,
 } from './client-command-payload';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
+import { WorkbenchViewRail } from './WorkbenchViewRail';
 import { workbenchLayoutKey } from './layout-storage';
 import {
   CHAT_MIN_WIDTH,
@@ -795,6 +796,24 @@ export function WorkbenchShell({
         >
           {children}
         </div>
+
+        {options?.workbench?.viewRail?.enabled === true &&
+          remoteViewsEnabled &&
+          authenticated &&
+          !open &&
+          !loading &&
+          !error &&
+          scopedViews.length > 0 && (
+            <WorkbenchViewRail
+              views={scopedViews}
+              locale={locale}
+              onSelect={(key) => {
+                setActiveViewKey(key);
+                setExpanded(false);
+                setOpen(true);
+              }}
+            />
+          )}
 
         {(open || Boolean(sideChat) || externalViewOpen) && !isNarrow && (
           <>
