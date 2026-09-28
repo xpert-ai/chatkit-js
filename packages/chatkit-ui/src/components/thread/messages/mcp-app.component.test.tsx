@@ -111,6 +111,15 @@ describe('McpAppMessage host controls', () => {
     mocks.teardown.mockResolvedValue(undefined);
   });
 
+  it('preserves the iframe session when streamed component data is unchanged', async () => {
+    const { rerender } = render(<McpAppMessage data={data} messageId="message-1" />);
+    const iframe = await screen.findByTitle('Example App');
+    await act(async () => { rerender(<McpAppMessage data={structuredClone(data)} messageId="message-1" />); });
+    expect(await screen.findByTitle('Example App')).toBe(iframe);
+    expect(mocks.getResource).toHaveBeenCalledTimes(1);
+    expect(mocks.teardown).not.toHaveBeenCalled();
+  });
+
   it('requires visible approval and retries the exact tool call with approvalId', async () => {
     const expiresAt = Date.now() + 60_000;
     mocks.rpc

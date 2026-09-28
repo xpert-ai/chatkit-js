@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { isEqual } from 'lodash-es';
 
 import {
   resolveLocalizedText,
@@ -1052,7 +1053,7 @@ export function isMcpAppComponentData(
 }
 
 export function McpAppMessage({
-  data,
+  data: incomingData,
   messageId,
   className,
   mcpApps,
@@ -1062,6 +1063,11 @@ export function McpAppMessage({
   className?: string;
   mcpApps?: ChatKitMcpAppsOptions;
 }) {
+  // Message streaming recreates equal component data. Do not remount an active
+  // form or tear down its RPC session merely because the parent rerendered.
+  const dataRef = React.useRef(incomingData);
+  if (!isEqual(dataRef.current, incomingData)) dataRef.current = incomingData;
+  const data = dataRef.current;
   const { i18n } = useChatkitTranslation();
   const { client, isLoading: streamIsLoading, submit } = useStreamContext();
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
