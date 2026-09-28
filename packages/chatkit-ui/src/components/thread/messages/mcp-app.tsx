@@ -32,6 +32,7 @@ import {
   type McpAppJsonRpcRequest as JsonRpcRequest,
   type McpAppPendingApproval,
 } from './mcp-app/host';
+import { standardMcpAppStyles } from './mcp-app/theme';
 
 type JsonObject = Record<string, unknown>;
 
@@ -531,7 +532,7 @@ function injectMcpAppTheme(html: string, theme: McpAppTheme) {
   const declarations = Object.entries(theme.cssVariables)
     .map(([name, value]) => `${name}: ${sanitizeCssValue(value)};`)
     .join('');
-  const style = `<style id="mcp-app-host-theme">:root{color-scheme:${theme.mode};${declarations}}</style>`;
+  const style = `<style id="mcp-app-host-theme">:root{font-size:14px;color-scheme:${theme.mode};${declarations}}</style>`;
 
   return injectHeadContent(html, style);
 }
@@ -1615,7 +1616,7 @@ export function McpAppMessage({
               toolInfo,
               theme: theme.mode,
               styles: {
-                variables: theme.cssVariables,
+                variables: standardMcpAppStyles(theme.cssVariables),
               },
               themeCssVariables: theme.cssVariables,
               locale: hostLocale,
@@ -1840,9 +1841,11 @@ export function McpAppMessage({
             ) : null}
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">{displayTitle}</div>
-              <div className="truncate text-[11px] text-muted-foreground">
-                {displayDescription ?? data.resourceUri}
-              </div>
+              {displayDescription ? (
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {displayDescription}
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -1882,9 +1885,6 @@ export function McpAppMessage({
                 <Minimize2 />
               </Button>
             ) : null}
-            <Badge variant="secondary" className="ml-1 rounded-md">
-              MCP App
-            </Badge>
           </div>
         </div>
 
