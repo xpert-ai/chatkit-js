@@ -34,6 +34,14 @@ remote views, ordering, menu icons and labels as the workbench tabs. It does not
 reserve space when no views are available, and switching Assistant or runtime
 scope clears stale entries while loading the new views.
 
+When restoring an existing thread, view discovery waits for its conversation and
+Project scope to finish loading, including conversations without a Project.
+ChatKit shows an initial loading state until that scope and its views are ready;
+the Web Component's `chatkit.ready` event still only reports iframe document load.
+Refreshing within the same scope preserves the rail, active view, previews and
+injected context. Transient refresh errors retain loaded views; denied access or
+a changed scope clears them. Background refreshes do not cover the chat again.
+
 When enabled, ChatKit preloads manifests from the
 `agent.workbench.fixed` slot for the configured `xpertId`. It displays only
 visible `remote_component` views whose component isolation is `iframe`.

@@ -357,6 +357,8 @@ export type StreamContextType = {
   projectId?: string;
   /** True when a saved scope (including no Project) overrides the mount defaults. */
   projectScopeResolved?: boolean;
+  /** False while restoring a thread's conversation and Project scope. */
+  runtimeScopeReady: boolean;
   apiKey: string;
   organizationId?: string;
   threadId: string | null;
@@ -4510,6 +4512,9 @@ const StreamSession = ({
   const isDisplayPaused = pausedDisplay?.threadId === threadId;
   const displayValues =
     isDisplayPaused && pausedDisplay ? pausedDisplay.values : values;
+  const initialHistoryThread = normalizeThreadIdentifier(
+    initialThread ?? initialSelectedThreadRef.current,
+  );
   const value: StreamContextType = {
     client,
     authenticatedFetch: fetchWithClientSecretRefresh,
@@ -4518,6 +4523,10 @@ const StreamSession = ({
     assistantId,
     projectId: conversationProject.projectId,
     projectScopeResolved: conversationProject.resolved,
+    runtimeScopeReady:
+      historyLoad.status !== 'loading' &&
+      historyLoad.status !== 'error' &&
+      (!initialHistoryThread || consumedInitialThreadRef.current === initialHistoryThread),
     apiKey: runtimeClientSecret,
     organizationId: runtimeOrganizationId,
     threadId: threadId ?? null,

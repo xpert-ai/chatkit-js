@@ -84,11 +84,9 @@ export function useConversationProject({
     resolved?.scope === scope && resolved.client === client;
   const loadingHistory = Boolean(threadId && !historyReady);
   return {
-    projectId: loadingHistory
-      ? undefined
-      : hasResolvedScope
-        ? resolved.projectId
-        : projectId,
+    projectId: hasResolvedScope
+      ? resolved.projectId
+      : loadingHistory ? undefined : projectId,
     resolved: loadingHistory || hasResolvedScope,
     fromHistory: hasResolvedScope && resolved.fromHistory === true,
     refresh,

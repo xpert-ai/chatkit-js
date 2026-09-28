@@ -1044,6 +1044,48 @@ describe('WorkbenchShell', () => {
     expect(draft).toBeVisible();
   });
 
+  it('retains the frame during refresh but clears its context when access is revoked', async () => {
+    mocks.listSlotViews.mockResolvedValueOnce([manifest]);
+    const onRequestContextChange = vi.fn();
+    const shell = (locale: string) => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale={locale}
+        onRequestContextChange={onRequestContextChange}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
+    const { rerender } = render(shell('en-US'));
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const frame = await screen.findByTestId('remote-view');
+    await act(async () => {
+      await mocks.remoteViewProps?.onClientCommand('assistant.context.set', {
+        key: 'documents',
+        context: { collectionId: 'collection-1' },
+      }, manifest);
+    });
+    const context = { documents: { collectionId: 'collection-1' } };
+    expect(onRequestContextChange).toHaveBeenLastCalledWith(context);
+
+    let rejectRefresh: (error: Error) => void = () => {};
+    mocks.listSlotViews.mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectRefresh = reject;
+    }));
+    rerender(shell('zh-CN'));
+    await waitFor(() => expect(mocks.listSlotViews).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('remote-view')).toBe(frame);
+    expect(onRequestContextChange).toHaveBeenLastCalledWith(context);
+
+    await act(async () => {
+      rejectRefresh(Object.assign(new Error('Forbidden'), { status: 403 }));
+    });
+    expect(screen.queryByTestId('remote-view')).not.toBeInTheDocument();
+    expect(onRequestContextChange).toHaveBeenLastCalledWith({});
+  });
+
   it('merges view context and sends messages through the active stream', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     mocks.submit.mockResolvedValue(undefined);

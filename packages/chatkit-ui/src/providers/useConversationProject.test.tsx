@@ -22,6 +22,16 @@ function setup(projectId?: string) {
 }
 
 describe('persisted conversation Project scope', () => {
+  it('preserves a known Project while reloading the same conversation history', async () => {
+    const { get, props } = setup();
+    get.mockResolvedValue({ id: 'conversation-1', projectId: 'project-1' });
+    const { result, rerender } = renderHook(useConversationProject, { initialProps: props });
+    await waitFor(() => expect(result.current.projectId).toBe('project-1'));
+    rerender({ ...props, historyReady: false });
+    expect(result.current.projectId).toBe('project-1');
+    rerender({ ...props, threadId: 'thread-2', historyReady: false });
+    expect(result.current.projectId).toBeUndefined();
+  });
   it('refreshes a first-send binding without changing the configured mount scope', async () => {
     const { get, props } = setup();
     const { result } = renderHook(useConversationProject, {

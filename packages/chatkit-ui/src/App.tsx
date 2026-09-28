@@ -247,6 +247,7 @@ export function App({
                 onRequestContextChange={handleWorkbenchRequestContextChange}
                 onNavigate={navigation.navigate}
                 initialNavigation={navigation.request}
+                initializing={isClientSecretInitializing}
               >
                 {chat}
               </WorkbenchShell>

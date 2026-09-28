@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { Loader2 } from 'lucide-react';
 import {
   ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
   ASSISTANT_CONTEXT_SET_COMMAND,
@@ -63,6 +64,8 @@ import {
 } from './client-command-payload';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import { WorkbenchViewRail } from './WorkbenchViewRail';
+import { useWorkbenchViews } from './useWorkbenchViews';
+import { useInitialLoading } from './useInitialLoading';
 import { workbenchLayoutKey } from './layout-storage';
 import {
   CHAT_MIN_WIDTH,
@@ -70,7 +73,6 @@ import {
   clampPanelWidth,
 } from './split-resize';
 
-const WORKBENCH_SLOT = 'agent.workbench.fixed';
 const isNativeView = (key: string | null) =>
   key === SIDE_CHAT_VIEW_KEY || key === EXTERNAL_ASSISTANTS_VIEW_KEY;
 const NARROW_BREAKPOINT = 960;
@@ -89,6 +91,7 @@ type WorkbenchShellProps = {
     request: ChatKitWorkbenchClientCommandRequest,
   ) => void;
   initialNavigation?: ChatKitWorkbenchClientCommandRequest;
+  initializing?: boolean;
 };
 
 export function WorkbenchShell({
@@ -98,6 +101,7 @@ export function WorkbenchShell({
   onRequestContextChange,
   onNavigate,
   initialNavigation,
+  initializing = false,
 }: WorkbenchShellProps) {
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
@@ -134,15 +138,11 @@ export function WorkbenchShell({
   );
   const rootRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState(0);
-  const [views, setViews] = React.useState<XpertExtensionViewManifest[]>([]);
-  const [viewsScope, setViewsScope] = React.useState<string | null>(null);
   const [activeViewKey, setActiveViewKey] = React.useState<string | null>(null);
   const [previews, setPreviews] = React.useState<WorkbenchPreview[]>([]);
   const [viewQueries, setViewQueries] = React.useState<
     Record<string, XpertViewQuery>
   >({});
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = React.useState(0);
   const [notification, setNotification] = React.useState<{
     level: 'success' | 'error';
@@ -175,9 +175,26 @@ export function WorkbenchShell({
     runtimeScope.projectId,
     runtimeScope.conversationId,
   ]);
-  const scopedViews = React.useMemo(
-    () => (viewsScope === viewScopeKey ? views : []),
-    [views, viewsScope, viewScopeKey],
+  const { views, viewsScope, loading, error } = useWorkbenchViews({
+    client: viewHosts,
+    hostId: stream.assistantId,
+    scopeKey: viewScopeKey,
+    runtimeScope,
+    enabled:
+      remoteViewsEnabled && authenticated && Boolean(stream.assistantId.trim()),
+    ready: stream.runtimeScopeReady !== false,
+    locale,
+    revision: reloadVersion,
+  });
+  const scopedViews = views;
+  const initialLoading = useInitialLoading(
+    layoutKey,
+    initializing ||
+      (authenticated &&
+        Boolean(stream.assistantId.trim()) &&
+        stream.historyLoad?.status !== 'error' &&
+        (stream.runtimeScopeReady === false ||
+          (remoteViewsEnabled && !hasExternalRuns && viewsScope !== viewScopeKey && !error))),
   );
   const {
     requestedOpen,
@@ -197,7 +214,7 @@ export function WorkbenchShell({
       (containerWidth >= NARROW_BREAKPOINT &&
         (externalViewOpen ||
           Boolean(sideChat) ||
-          (viewsScope === viewScopeKey && views.length > 0 && !loading))));
+          (viewsScope === viewScopeKey && views.length > 0))));
 
   React.useEffect(() => {
     const element = rootRef.current;
@@ -211,74 +228,31 @@ export function WorkbenchShell({
   }, []);
 
   React.useEffect(() => {
-    if (!remoteViewsEnabled || !authenticated || !stream.assistantId.trim()) {
-      setViews([]);
-      setError(null);
-      setLoading(false);
-      if (!sideChatEnabled && !externalAssistantsEnabled) {
-        setActiveViewKey(null);
-      }
-      contextsRef.current.clear();
-      onRequestContextChange({});
-      return;
-    }
-
-    const controller = new AbortController();
-    setViews([]);
-    setViewsScope(null);
     setPreviews([]);
     setViewQueries({});
     setActiveViewKey((current) => (isNativeView(current) ? current : null));
-    setLoading(true);
-    setError(null);
     setNotification(null);
     setHostEvent(null);
     contextsRef.current.clear();
     onRequestContextChange({});
-    void viewHosts
-      .listSlotViews('agent', stream.assistantId, WORKBENCH_SLOT, {
-        signal: controller.signal,
-        runtimeScope,
-      })
-      .then((manifests) => {
-        if (controller.signal.aborted) return;
-        const supported = manifests
-          .filter(isSupportedWorkbenchView)
-          .sort(compareWorkbenchViews);
-        setViews(supported);
-        setViewsScope(viewScopeKey);
-        setActiveViewKey((current) =>
-          isNativeView(current) ||
-          (current && supported.some((view) => view.key === current))
-            ? current
-            : (supported[0]?.key ?? null),
-        );
-      })
-      .catch((loadError: unknown) => {
-        if (controller.signal.aborted) return;
-        setViews([]);
-        setActiveViewKey((current) => (isNativeView(current) ? current : null));
-        setError(getErrorMessage(loadError, t('workbench.loadFailed')));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+  }, [viewScopeKey, authenticated, remoteViewsEnabled, onRequestContextChange]);
 
-    return () => controller.abort();
-  }, [
-    externalAssistantsEnabled,
-    sideChatEnabled,
-    remoteViewsEnabled,
-    authenticated,
-    locale,
-    onRequestContextChange,
-    reloadVersion,
-    runtimeScope,
-    stream.assistantId,
-    t,
-    viewHosts,
-    viewScopeKey,
-  ]);
+  React.useEffect(() => {
+    if (views.length === 0) {
+      setPreviews([]);
+      setViewQueries({});
+      setActiveViewKey((current) => (isNativeView(current) ? current : null));
+      contextsRef.current.clear();
+      onRequestContextChange({});
+      return;
+    }
+    if (viewsScope !== viewScopeKey) return;
+    setActiveViewKey((current) =>
+      isNativeView(current) || (current && views.some((view) => view.key === current))
+        ? current
+        : (views[0]?.key ?? null),
+    );
+  }, [views, viewsScope, viewScopeKey, onRequestContextChange]);
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -617,14 +591,14 @@ export function WorkbenchShell({
     (enabled &&
       authenticated &&
       Boolean(stream.assistantId.trim()) &&
-      (Boolean(sideChat) || (remoteViewsEnabled && !loading)));
+      (Boolean(sideChat) || (remoteViewsEnabled && (!loading || views.length > 0))));
   const disabledReason = hasExternalRuns
     ? undefined
     : !stream.assistantId.trim()
       ? t('workbench.missingAssistant')
       : !authenticated
         ? t('workbench.loading')
-        : loading
+        : loading && views.length === 0
           ? t('workbench.loading')
           : error
             ? t('workbench.loadFailed')
@@ -782,7 +756,17 @@ export function WorkbenchShell({
         ref={rootRef}
         className="relative flex h-full min-h-0 w-full overflow-hidden bg-background"
         data-chatkit-workbench-root=""
+        aria-busy={initialLoading}
       >
+        {initialLoading && (
+          <div
+            role="status"
+            className="absolute inset-0 z-50 flex items-center justify-center gap-2 bg-background text-sm text-muted-foreground"
+          >
+            <Loader2 size={16} className="animate-spin" />
+            {t('message.loading')}
+          </div>
+        )}
         {resizing && (
           <div
             aria-hidden="true"
@@ -792,6 +776,8 @@ export function WorkbenchShell({
         <div
           data-chatkit-chat-panel=""
           hidden={open && expanded}
+          inert={initialLoading}
+          aria-hidden={initialLoading || undefined}
           className={cn('flex min-w-0 flex-1', open && expanded && 'hidden')}
         >
           {children}
@@ -801,8 +787,6 @@ export function WorkbenchShell({
           remoteViewsEnabled &&
           authenticated &&
           !open &&
-          !loading &&
-          !error &&
           scopedViews.length > 0 && (
             <WorkbenchViewRail
               views={scopedViews}
@@ -928,26 +912,6 @@ export function buildWorkbenchRequestContext(
   return requestContext;
 }
 
-function isSupportedWorkbenchView(manifest: XpertExtensionViewManifest) {
-  return (
-    manifest.visible !== false &&
-    manifest.workbench?.fixed !== false &&
-    manifest.workbench?.menu?.enabled !== false &&
-    manifest.view.type === 'remote_component' &&
-    manifest.view.component.isolation === 'iframe'
-  );
-}
-
-function compareWorkbenchViews(
-  left: XpertExtensionViewManifest,
-  right: XpertExtensionViewManifest,
-) {
-  return (
-    (left.workbench?.menu?.order ?? left.order ?? 0) -
-      (right.workbench?.menu?.order ?? right.order ?? 0) ||
-    left.key.localeCompare(right.key)
-  );
-}
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message;
   return typeof error === 'string' && error.trim() ? error.trim() : fallback;

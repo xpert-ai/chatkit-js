@@ -161,6 +161,31 @@ describe('thread history restoration', () => {
   });
   afterEach(cleanup);
 
+  it('exposes a stable runtime scope only after initial history restoration', async () => {
+    const snapshots: { ready: boolean; conversation: string | null; project?: string }[] = [];
+    function ScopeProbe() {
+      stream = useStreamContext();
+      snapshots.push({ ready: stream.runtimeScopeReady, conversation: stream.conversationId, project: stream.projectId });
+      return null;
+    }
+    mocks.getConversation.mockImplementation(async (id: string) => ({ id, projectId: 'saved-project', status: 'idle' }));
+    const messages = deferred<ReturnType<typeof history>>();
+    mocks.searchMessages.mockReturnValue(messages.promise);
+    render(<StreamProvider apiKey="cs-x-test" apiUrl="https://api.example.test/api/ai" xpertId="assistant-1" initialThread="thread-1" threadStateMode="memory"><ScopeProbe /></StreamProvider>);
+    expect(snapshots[0].ready).toBe(false);
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledOnce());
+    expect(stream.runtimeScopeReady).toBe(false);
+    await act(async () => messages.resolve(history('thread-1')));
+    await waitFor(() => expect(stream.runtimeScopeReady).toBe(true));
+    expect(snapshots.filter((snapshot) => snapshot.ready)).not.toHaveLength(0);
+    expect(snapshots.filter((snapshot) => snapshot.ready).every((snapshot) =>
+      snapshot.conversation === 'conversation-thread-1' && snapshot.project === 'saved-project',
+    )).toBe(true);
+    act(() => stream.reset(null));
+    expect(stream.runtimeScopeReady).toBe(true);
+    expect(stream.conversationId).toBeNull();
+  });
+
   it('loads a preselected initial thread instead of treating its ID as loaded history', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.messages).toHaveLength(2));
