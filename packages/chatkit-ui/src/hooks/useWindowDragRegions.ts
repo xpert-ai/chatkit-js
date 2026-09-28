@@ -6,7 +6,7 @@ import {
 import { useParentMessenger } from './useParentMessenger';
 
 const headers =
-  '[data-slot="chatkit-chat-header"], [data-slot="chatkit-workbench-header"]';
+  '[data-slot="chatkit-chat-header-container"], [data-slot="chatkit-workbench-header"]';
 const controls =
   'button, a, input, textarea, select, [role="button"], [role="tab"], [tabindex], [contenteditable="true"], [data-window-no-drag]';
 const overlays =

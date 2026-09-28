@@ -3609,154 +3609,159 @@ export function Chat({
       >
         {surface === 'main' && options?.header?.enabled !== false && (
           <div
-            ref={chatColumnRef}
-            data-slot="chatkit-chat-header"
-            className="mx-auto flex w-full items-center justify-between border-b p-2 sticky top-0 z-10 bg-background"
-            style={chatColumnStyle}
+            data-slot="chatkit-chat-header-container"
+            className="sticky top-0 z-10 w-full shrink-0 bg-background"
           >
-            <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-              <div className="relative shrink-0">
-                <ChatkitAvatar
-                  avatar={assistantAvatar}
-                  className="h-9 w-9 border border-border/60"
-                  label={assistantTitle}
-                />
-                <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
+            <div
+              ref={chatColumnRef}
+              data-slot="chatkit-chat-header"
+              className="mx-auto flex w-full items-center justify-between border-b p-2"
+              style={chatColumnStyle}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+                <div className="relative shrink-0">
+                  <ChatkitAvatar
+                    avatar={assistantAvatar}
+                    className="h-9 w-9 border border-border/60"
+                    label={assistantTitle}
+                  />
+                  <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background bg-green-500" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2
+                    className="text-lg font-semibold truncate"
+                    title={assistantTitle}
+                  >
+                    {assistantTitle}
+                  </h2>
+                  <ConversationTitle
+                    key={stream.conversationId ?? stream.threadId ?? 'new'}
+                    title={assistantStatusText}
+                    onSave={
+                      currentThread && stream.threadId && stream.isReady &&
+                      !isHistoryLoading && !isChangingBranch
+                        ? async (nextTitle) => {
+                            await updateThread(currentThread.recordId, {
+                              title: nextTitle,
+                            });
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h2
-                  className="text-lg font-semibold truncate"
-                  title={assistantTitle}
-                >
-                  {assistantTitle}
-                </h2>
-                <ConversationTitle
-                  key={stream.conversationId ?? stream.threadId ?? 'new'}
-                  title={assistantStatusText}
-                  onSave={
-                    currentThread && stream.threadId && stream.isReady &&
-                    !isHistoryLoading && !isChangingBranch
-                      ? async (nextTitle) => {
-                          await updateThread(currentThread.recordId, {
-                            title: nextTitle,
-                          });
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {taskSummaryAvailable && (
-                <TaskSummaryTrigger
-                  {...taskSummaryProps}
-                  displayMode={taskSummaryDocked ? 'docked' : 'popover'}
-                  open={taskSummaryOpen}
-                  onOpenChange={handleTaskSummaryOpenChange}
-                />
-              )}
-              <WorkbenchToggleButton />
+              <div className="flex shrink-0 items-center gap-1">
+                {taskSummaryAvailable && (
+                  <TaskSummaryTrigger
+                    {...taskSummaryProps}
+                    displayMode={taskSummaryDocked ? 'docked' : 'popover'}
+                    open={taskSummaryOpen}
+                    onOpenChange={handleTaskSummaryOpenChange}
+                  />
+                )}
+                <WorkbenchToggleButton />
 
-              {canMinimizeToPet && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex h-8 w-8">
-                      <button
-                        type="button"
-                        onClick={handleMinimizeToPet}
-                        className={cn(
-                          'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                          'text-muted-foreground hover:text-foreground hover:bg-muted',
-                          'transition-colors duration-150',
-                        )}
-                        aria-label={t('chat.minimizeToPet')}
-                      >
-                        <Minus size={16} />
-                      </button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {t('chat.minimizeToPet')}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-
-              {!petDisabled && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex h-8 w-8">
-                      <button
-                        type="button"
-                        onClick={() => setPetSettingsOpen(true)}
-                        className={cn(
-                          'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                          'text-muted-foreground hover:text-foreground hover:bg-muted',
-                          'transition-colors duration-150',
-                        )}
-                        aria-label={t('settings.open')}
-                      >
-                        <Settings size={16} />
-                      </button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {t('settings.open')}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-
-              {/* History controls - only shown when history.enabled is true (default) */}
-              {history?.enabled !== false && (
-                <>
-                  {/* New thread button */}
+                {canMinimizeToPet && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex h-8 w-8">
                         <button
                           type="button"
-                          onClick={handleNewThread}
-                          disabled={missingConfig || isHistoryLoading}
+                          onClick={handleMinimizeToPet}
                           className={cn(
                             'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
                             'text-muted-foreground hover:text-foreground hover:bg-muted',
                             'transition-colors duration-150',
-                            'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
                           )}
-                          aria-label={t(
-                            activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
-                          )}
+                          aria-label={t('chat.minimizeToPet')}
                         >
-                          <Pencil size={16} />
+                          <Minus size={16} />
                         </button>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      {t(
-                        activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
-                      )}
+                      {t('chat.minimizeToPet')}
                     </TooltipContent>
                   </Tooltip>
-                  <HistorySidebar
-                    threads={threads}
-                    scope={effectiveHistoryScope}
-                    onScopeChange={setHistoryScope}
-                    hasCurrentProject={Boolean(activeProjectId)}
-                    currentThreadId={stream.threadId ?? undefined}
-                    onNewThread={handleNewThread}
-                    newThreadLabel={t(
-                      activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
-                    )}
-                    onRefresh={refreshThreads}
-                    onSelectThread={handleSelectThread}
-                    onDeleteThread={handleDeleteThread}
-                    isRefreshing={isThreadsLoading}
-                    showDelete={history?.showDelete !== false}
-                    disabled={
-                      missingConfig || isThreadsLoading || isHistoryLoading
-                    }
-                  />
-                </>
-              )}
+                )}
+
+                {!petDisabled && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex h-8 w-8">
+                        <button
+                          type="button"
+                          onClick={() => setPetSettingsOpen(true)}
+                          className={cn(
+                            'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                            'text-muted-foreground hover:text-foreground hover:bg-muted',
+                            'transition-colors duration-150',
+                          )}
+                          aria-label={t('settings.open')}
+                        >
+                          <Settings size={16} />
+                        </button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {t('settings.open')}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+
+                {/* History controls - only shown when history.enabled is true (default) */}
+                {history?.enabled !== false && (
+                  <>
+                    {/* New thread button */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex h-8 w-8">
+                          <button
+                            type="button"
+                            onClick={handleNewThread}
+                            disabled={missingConfig || isHistoryLoading}
+                            className={cn(
+                              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                              'text-muted-foreground hover:text-foreground hover:bg-muted',
+                              'transition-colors duration-150',
+                              'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
+                            )}
+                            aria-label={t(
+                              activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                            )}
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {t(
+                          activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                    <HistorySidebar
+                      threads={threads}
+                      scope={effectiveHistoryScope}
+                      onScopeChange={setHistoryScope}
+                      hasCurrentProject={Boolean(activeProjectId)}
+                      currentThreadId={stream.threadId ?? undefined}
+                      onNewThread={handleNewThread}
+                      newThreadLabel={t(
+                        activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                      )}
+                      onRefresh={refreshThreads}
+                      onSelectThread={handleSelectThread}
+                      onDeleteThread={handleDeleteThread}
+                      isRefreshing={isThreadsLoading}
+                      showDelete={history?.showDelete !== false}
+                      disabled={
+                        missingConfig || isThreadsLoading || isHistoryLoading
+                      }
+                    />
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

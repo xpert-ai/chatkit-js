@@ -533,6 +533,14 @@ describe('Chat start screen prompts', () => {
         expect(element).toHaveClass('mx-auto', 'w-full');
       }
     });
+    const headerContainer = container.querySelector<HTMLElement>(
+      '[data-slot="chatkit-chat-header-container"]',
+    );
+    expect(headerContainer).toHaveClass('sticky', 'w-full', 'shrink-0');
+    expect(headerContainer?.style.maxWidth).toBe('');
+    expect(headerContainer).toContainElement(
+      container.querySelector('[data-slot="chatkit-chat-header"]'),
+    );
   });
 
   it('keeps horizontal overflow inside responsive composer panels', async () => {
