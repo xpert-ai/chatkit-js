@@ -1,4 +1,11 @@
-import { isHITLReviewDisplay, type HITLReviewDisplay } from './review-display.js';
+import {
+  isApprovalHostReference,
+  type ApprovalHostReference,
+} from './approvals.js';
+import {
+  isHITLReviewDisplay,
+  type HITLReviewDisplay,
+} from './review-display.js';
 export * from './review-display.js';
 import { type ToolCall } from '@langchain/core/messages/tool';
 
@@ -103,6 +110,8 @@ export interface HITLMCPElicitation {
 }
 
 export interface HITLRequest {
+  host?: ApprovalHostReference;
+  toolCallId?: string;
   actionRequests: HITLActionRequest[];
   reviewConfigs: HITLReviewConfig[];
   elicitation?: HITLMCPElicitation;
@@ -285,18 +294,14 @@ function readStringField(
   return null;
 }
 
-export function isHITLDecisionType(
-  value: unknown,
-): value is HITLDecisionType {
+export function isHITLDecisionType(value: unknown): value is HITLDecisionType {
   return (
     typeof value === 'string' &&
     (HITL_DECISION_TYPES as readonly string[]).includes(value)
   );
 }
 
-function normalizeHITLActionRequest(
-  value: unknown,
-): HITLActionRequest | null {
+function normalizeHITLActionRequest(value: unknown): HITLActionRequest | null {
   if (!isRecord(value)) return null;
 
   const name = readStringField(value, 'name');
@@ -314,9 +319,7 @@ function normalizeHITLActionRequest(
   };
 }
 
-function normalizeHITLReviewConfig(
-  value: unknown,
-): HITLReviewConfig | null {
+function normalizeHITLReviewConfig(value: unknown): HITLReviewConfig | null {
   if (!isRecord(value)) return null;
 
   const actionName = readStringField(value, 'actionName', 'action_name');
@@ -394,9 +397,7 @@ export function normalizeHITLRequest(value: unknown): HITLRequest | null {
   const normalizedActionRequests = actionRequests.map(
     normalizeHITLActionRequest,
   );
-  const normalizedReviewConfigs = reviewConfigs.map(
-    normalizeHITLReviewConfig,
-  );
+  const normalizedReviewConfigs = reviewConfigs.map(normalizeHITLReviewConfig);
   if (
     normalizedActionRequests.some((request) => request === null) ||
     normalizedReviewConfigs.some((config) => config === null)
@@ -408,6 +409,12 @@ export function normalizeHITLRequest(value: unknown): HITLRequest | null {
     actionRequests: normalizedActionRequests as HITLActionRequest[],
     reviewConfigs: normalizedReviewConfigs as HITLReviewConfig[],
   };
+  if (value.host !== undefined) {
+    if (!isApprovalHostReference(value.host)) return null;
+    normalizedRequest.host = value.host;
+  }
+  if (typeof value.toolCallId === 'string')
+    normalizedRequest.toolCallId = value.toolCallId;
   const elicitation = normalizeHITLMCPElicitation(value.elicitation);
   if (!elicitation || normalizedRequest.actionRequests.length !== 1) {
     return normalizedRequest;

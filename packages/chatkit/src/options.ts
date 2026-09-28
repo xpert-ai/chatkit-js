@@ -1,3 +1,4 @@
+import type { ChatKitApprovalsOptions } from './approvals.js';
 import type { ClientToolMessageInput } from './interrupt';
 import type { ChatKitSlashCommand } from './commands';
 import type {
@@ -668,6 +669,9 @@ export type ChatKitOptions = {
    * @default null
    */
   initialThread?: null | string;
+
+  /** Generic approval placement and host decision callbacks. */
+  approvals?: ChatKitApprovalsOptions;
 
   /**
    * A map of handlers for the client tools configured on your server. The keys

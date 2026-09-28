@@ -784,5 +784,14 @@
     },
     "incomplete": "File change records are incomplete; some files could not be observed or saved.",
     "legacyOutput": "Historical output · unclassified"
+  },
+  "approvals": {
+    "hostRejected": "The host did not accept this approval.",
+    "label": "Action approval",
+    "failed": "Could not submit the decision. Try again.",
+    "expired": "This request has expired. Ask for a new operation.",
+    "settings": "Permission settings",
+    "reject": "Deny",
+    "approveOnce": "Allow once"
   }
 }

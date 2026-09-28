@@ -784,5 +784,14 @@
     },
     "incomplete": "本次文件变更记录不完整，部分文件未能采集或保存。",
     "legacyOutput": "历史产出 · 未分类"
+  },
+  "approvals": {
+    "hostRejected": "宿主未确认此授权，请检查连接后重试。",
+    "label": "操作授权",
+    "failed": "提交失败，请重试。",
+    "expired": "此请求已过期，请发起新的操作。",
+    "settings": "权限设置",
+    "reject": "拒绝",
+    "approveOnce": "允许一次"
   }
 }

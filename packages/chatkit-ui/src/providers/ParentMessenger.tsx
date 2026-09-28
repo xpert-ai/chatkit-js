@@ -34,6 +34,8 @@ import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { createMessageId } from '../lib/utils';
 
 type CommandMessageMap = {
+  onApprovalDecision: import('@xpert-ai/chatkit-types').ApprovalDecisionRequest;
+  onApprovalAction: import('@xpert-ai/chatkit-types').ApprovalActionRequest;
   onConnectWorkspaceConnector: WorkspaceConnectorConnectRequest;
   onSendUserMessage: SendUserMessageParams;
   onSetComposerValue: ComposerValuePayload | null;
@@ -257,11 +259,18 @@ export function ParentMessengerProvider({
   );
 
   const updateComposer = useCallback(async (payload: ComposerValuePayload) => {
-    if (!onSetComposerValueHandlersRef.current.size) throw new Error('Composer is not ready.');
-    await Promise.all([...onSetComposerValueHandlersRef.current].map((handler) => handler(payload)));
+    if (!onSetComposerValueHandlersRef.current.size)
+      throw new Error('Composer is not ready.');
+    await Promise.all(
+      [...onSetComposerValueHandlersRef.current].map((handler) =>
+        handler(payload),
+      ),
+    );
   }, []);
   const focusComposer = useCallback(async () => {
-    await Promise.all([...onFocusComposerHandlersRef.current].map((handler) => handler()));
+    await Promise.all(
+      [...onFocusComposerHandlersRef.current].map((handler) => handler()),
+    );
   }, []);
 
   useEffect(() => {

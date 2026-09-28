@@ -1,3 +1,4 @@
+import { useInlineApproval } from './approvals/use-inline-approval';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import { useRuntimeResources } from './chat/useRuntimeResources';
 import { RuntimeResourceSelector } from './composer/RuntimeResourceSelector';
@@ -1192,6 +1193,13 @@ export function Chat({
       : {},
   );
   const sendParentEvent = parentMessenger?.sendEvent;
+  const inlineApproval = useInlineApproval({
+    request: stream.pendingHITLRequest,
+    options: options?.approvals,
+    messenger: parentMessenger,
+    submit: stream.submitHITLDecision,
+    threadId: stream.threadId,
+  });
 
   React.useEffect(() => {
     if (modelAssistantIdRef.current !== modelAssistantId) {
@@ -3830,6 +3838,8 @@ export function Chat({
             />
           ) : (
             <MessageList
+              approval={inlineApproval.card}
+              approvalToolCallId={stream.pendingHITLRequest?.request.toolCallId}
               collapseProcess={options?.messagePresentation?.collapseProcess === true}
               messages={messages}
               assistantTitle={assistantTitle}
@@ -4166,12 +4176,14 @@ export function Chat({
             attachToComposer
           />
 
-          <HITLApprovalPanel
-            request={stream.pendingHITLRequest}
-            onSubmit={stream.submitHITLDecision}
-            onDismiss={stream.stop}
-            attachToComposer
-          />
+          {!inlineApproval.enabled && (
+            <HITLApprovalPanel
+              request={stream.pendingHITLRequest}
+              onSubmit={stream.submitHITLDecision}
+              onDismiss={stream.stop}
+              attachToComposer
+            />
+          )}
 
           {isInitialComposer && (
             <PromptWorkflowShortcuts

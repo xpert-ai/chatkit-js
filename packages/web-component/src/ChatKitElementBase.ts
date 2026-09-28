@@ -153,6 +153,26 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
           input.click();
         });
       },
+      onApprovalDecision: async (
+        input: import('@xpert-ai/chatkit-types').ApprovalDecisionRequest,
+      ) => {
+        const handler = this.#opts?.approvals?.onDecision;
+        if (!handler)
+          throw new IntegrationError(
+            'Add approvals.onDecision to handle host approvals.',
+          );
+        return handler(input);
+      },
+      onApprovalAction: async (
+        input: import('@xpert-ai/chatkit-types').ApprovalActionRequest,
+      ) => {
+        const handler = this.#opts?.approvals?.onAction;
+        if (!handler)
+          throw new IntegrationError(
+            'Add approvals.onAction to handle approval actions.',
+          );
+        return handler(input);
+      },
       onClientToolCall: async ({
         name,
         params,
