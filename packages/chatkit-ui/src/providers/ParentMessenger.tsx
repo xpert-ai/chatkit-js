@@ -19,6 +19,7 @@ import {
 import {
   isTrustedChatKitMessageEvent,
   type Capability,
+  type WindowDragRegions,
 } from '@xpert-ai/chatkit-web-shared';
 import type { Message } from '@xpert-ai/xpert-sdk';
 import { useStreamManager } from '../hooks/useStream';
@@ -33,6 +34,8 @@ import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { createMessageId } from '../lib/utils';
 
 type CommandMessageMap = {
+  onApprovalDecision: import('@xpert-ai/chatkit-types').ApprovalDecisionRequest;
+  onApprovalAction: import('@xpert-ai/chatkit-types').ApprovalActionRequest;
   onConnectWorkspaceConnector: WorkspaceConnectorConnectRequest;
   onSendUserMessage: SendUserMessageParams;
   onSetComposerValue: ComposerValuePayload | null;
@@ -79,6 +82,7 @@ type ParentResponseMessage = {
 };
 
 type ParentEventPayloadMap = {
+  window_drag_regions: WindowDragRegions;
   public_event: [Capability.Event, unknown];
   chat_minimize_change: { minimized: boolean };
   pet_options_change: { pet: ChatKitOptions['pet'] | null };
@@ -155,6 +159,8 @@ type OnSetRuntimeCapabilitiesHandler = (
 type OnFocusComposerHandler = () => void | Promise<void>;
 
 type ParentMessengerContextValue = ParentMessenger & {
+  updateComposer: (payload: ComposerValuePayload) => Promise<void>;
+  focusComposer: () => Promise<void>;
   registerOnSetOptions: (handler: OnSetOptionsHandler) => () => void;
   registerOnSetPetEnabled: (handler: OnSetPetEnabledHandler) => () => void;
   registerOnSetComposerValue: (
@@ -251,6 +257,21 @@ export function ParentMessengerProvider({
     },
     [],
   );
+
+  const updateComposer = useCallback(async (payload: ComposerValuePayload) => {
+    if (!onSetComposerValueHandlersRef.current.size)
+      throw new Error('Composer is not ready.');
+    await Promise.all(
+      [...onSetComposerValueHandlersRef.current].map((handler) =>
+        handler(payload),
+      ),
+    );
+  }, []);
+  const focusComposer = useCallback(async () => {
+    await Promise.all(
+      [...onFocusComposerHandlersRef.current].map((handler) => handler()),
+    );
+  }, []);
 
   useEffect(() => {
     if (!isParentAvailable) return;
@@ -622,6 +643,8 @@ export function ParentMessengerProvider({
 
   const value = useMemo(
     () => ({
+      updateComposer,
+      focusComposer,
       isParentAvailable,
       sendCommand,
       sendEvent,
@@ -632,6 +655,8 @@ export function ParentMessengerProvider({
       registerOnFocusComposer,
     }),
     [
+      updateComposer,
+      focusComposer,
       isParentAvailable,
       sendCommand,
       sendEvent,

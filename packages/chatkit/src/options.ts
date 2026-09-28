@@ -1,3 +1,4 @@
+import type { ChatKitApprovalsOptions } from './approvals.js';
 import type { ClientToolMessageInput } from './interrupt';
 import type { ChatKitSlashCommand } from './commands';
 import type {
@@ -505,6 +506,16 @@ export type ChatKitWorkbenchClientCommandRequest = {
   viewKey: string;
 };
 
+/** Authenticated host response consumed only by ChatKit, never forwarded to a plugin. */
+export type ChatKitWorkbenchNavigationSession = {
+  assistantId: string;
+  projectId: string | null;
+  threadId: string | null;
+  conversationId?: string;
+  secret: string;
+  organizationId?: string;
+};
+
 export type ChatKitWorkbenchOptions = {
   /** Show external Assistant executions in a native workbench tab. Enabled by default. */
   externalAssistants?: { enabled?: boolean };
@@ -515,6 +526,13 @@ export type ChatKitWorkbenchOptions = {
    */
   enabled?: boolean;
 
+  /**
+   * Show a vertical strip of available remote-view icons at the right edge of
+   * chat while the workbench is closed. Clicking an icon opens that view.
+   * Requires `workbench.enabled`. Disabled by default.
+   */
+  viewRail?: { enabled?: boolean };
+
   /** Native side chat branched from the current thread. Disabled by default. */
   sideChat?: {
     enabled?: boolean;
@@ -523,6 +541,13 @@ export type ChatKitWorkbenchOptions = {
   /**
    * Handles manifest-declared client commands that are not implemented by
    * ChatKit itself.
+   * For assistant.conversation/project navigation, resolve and authorize the
+   * requested resource on the server, then return
+   * `{ success: true, session: ChatKitWorkbenchNavigationSession }`.
+   * ChatKit switches its runtime scope and uses the same callback to refresh
+   * this scoped session. Credentials are stripped from the remote-view reply.
+   * Hosts that perform navigation themselves may return
+   * `{ success: true, status: 'opened' }` without a session.
    */
   onClientCommand?: (
     request: ChatKitWorkbenchClientCommandRequest,
@@ -630,6 +655,8 @@ export type ChatKitOptions = {
    * Optional animated pet companion rendered by the ChatKit web component over
    * the host page viewport.
    * Passing `true` enables the default built-in pet.
+   * Explicit `false` disables pets and local pet controls in chat mode,
+   * overriding saved user preferences. Pet display mode still requires a pet.
    *
    * @default false
    */
@@ -642,6 +669,9 @@ export type ChatKitOptions = {
    * @default null
    */
   initialThread?: null | string;
+
+  /** Generic approval placement and host decision callbacks. */
+  approvals?: ChatKitApprovalsOptions;
 
   /**
    * A map of handlers for the client tools configured on your server. The keys
@@ -681,6 +711,8 @@ export type ChatKitOptions = {
    */
   header?: {
     enabled?: boolean;
+    /** Enable native Electron dragging/OS double-click behavior on unused chat and Workbench header space. Defaults to false. */
+    windowDrag?: boolean;
 
     /**
      * Configuration for header title display, which defaults to showing thread titles.
@@ -813,6 +845,12 @@ export type ChatKitOptions = {
      */
     projects?: {
       enabled?: boolean;
+      /** Initial conversation intent. Binding a running conversation does not change this option. */
+      selection?: import('./project-selection').ProjectSelection;
+      /** Offer automatic creation on first send when the Assistant supports it. */
+      autoNewEnabled?: boolean;
+      /** Hide the no-Project choice for Assistants requiring a Project workspace. */
+      allowNone?: boolean;
 
       /**
        * Allow the user to request Project creation from the selector.
@@ -1028,7 +1066,10 @@ export interface ChatKitElementEventMap {
   'chatkit.response.start': CustomEvent<void>;
   'chatkit.response.end': CustomEvent<void>;
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
-  'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
+  'chatkit.project.change': CustomEvent<{
+    projectId: string | null;
+    selection?: import('./project-selection').ProjectSelection;
+  }>;
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
   'chatkit.log': CustomEvent<{
     name: string;

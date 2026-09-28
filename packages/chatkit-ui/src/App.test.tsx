@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 
 import App from './App';
 import { Chat } from './components/chat';
@@ -25,7 +25,10 @@ vi.mock('./components/chat', () => ({
       onProjectCreate,
       onConnectorsChange,
     }: {
-      onProjectChange?: (projectId: string | null) => void;
+      onProjectChange?: (
+        projectId: string | null,
+        selection?: ProjectSelection,
+      ) => void;
       onProjectCreate?: (name: string) => void;
       onConnectorsChange?: (connectorBindingIds: string[]) => void;
     }) => {
@@ -36,6 +39,11 @@ vi.mock('./components/chat', () => ({
             data-testid="chat-draft"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            data-testid="auto-new-project"
+            onClick={() => onProjectChange?.(null, { mode: 'auto-new' })}
           />
           <button
             type="button"
@@ -163,9 +171,19 @@ describe('App', () => {
   });
 
   it('mounts the workbench shell for native external assistants by default', () => {
-    const { rerender } = render(<App clientSecret="secret" options={options} />);
+    const { rerender } = render(
+      <App clientSecret="secret" options={options} />,
+    );
     expect(screen.getByTestId('workbench-shell')).toBeInTheDocument();
-    rerender(<App clientSecret="secret" options={{ ...options, workbench: { externalAssistants: { enabled: false } } }} />);
+    rerender(
+      <App
+        clientSecret="secret"
+        options={{
+          ...options,
+          workbench: { externalAssistants: { enabled: false } },
+        }}
+      />,
+    );
     expect(screen.queryByTestId('workbench-shell')).not.toBeInTheDocument();
     expect(screen.getByTestId('chat')).toBeInTheDocument();
   });
@@ -236,7 +254,13 @@ describe('App', () => {
     expect(parentMessengerMocks.sendEvent).toHaveBeenCalledTimes(1);
     expect(parentMessengerMocks.sendEvent).toHaveBeenCalledWith(
       'public_event',
-      ['project.change', { projectId: 'project-2' }],
+      [
+        'project.change',
+        {
+          projectId: 'project-2',
+          selection: { mode: 'existing', projectId: 'project-2' },
+        },
+      ],
     );
 
     rerender(
@@ -326,7 +350,72 @@ describe('App', () => {
     expect(parentMessengerMocks.sendEvent).toHaveBeenCalledOnce();
     expect(parentMessengerMocks.sendEvent).toHaveBeenCalledWith(
       'public_event',
-      ['project.change', { projectId: null }],
+      ['project.change', { projectId: null, selection: { mode: 'none' } }],
+    );
+  });
+
+  it('keeps explicit no-project across rerenders and distinguishes it from automatic creation', () => {
+    const autoOptions = {
+      ...options,
+      api: { ...options.api, projectId: undefined },
+      composer: { projects: { enabled: true, autoNewEnabled: true } },
+    } satisfies ChatKitOptions;
+    const { rerender } = render(
+      <App clientSecret="secret" options={autoOptions} />,
+    );
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: undefined,
+        projectSelection: { mode: 'auto-new' },
+      }),
+      undefined,
+    );
+    fireEvent.click(screen.getByTestId('clear-project'));
+    rerender(
+      <App clientSecret="secret" options={{ ...autoOptions, theme: 'dark' }} />,
+    );
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: undefined,
+        projectSelection: { mode: 'none' },
+        initialThread: null,
+      }),
+      undefined,
+    );
+    expect(parentMessengerMocks.sendEvent).toHaveBeenLastCalledWith(
+      'public_event',
+      ['project.change', { projectId: null, selection: { mode: 'none' } }],
+    );
+    fireEvent.click(screen.getByTestId('auto-new-project'));
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: undefined,
+        projectSelection: { mode: 'auto-new' },
+        initialThread: null,
+      }),
+      undefined,
+    );
+    expect(parentMessengerMocks.sendEvent).toHaveBeenLastCalledWith(
+      'public_event',
+      ['project.change', { projectId: null, selection: { mode: 'auto-new' } }],
+    );
+  });
+
+  it('clears the configured old Project when automatic creation is explicitly selected', () => {
+    const { rerender } = render(
+      <App clientSecret="secret" options={options} />,
+    );
+    fireEvent.click(screen.getByTestId('auto-new-project'));
+    rerender(
+      <App clientSecret="secret" options={{ ...options, theme: 'dark' }} />,
+    );
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: undefined,
+        projectSelection: { mode: 'auto-new' },
+        initialThread: null,
+      }),
+      undefined,
     );
   });
 

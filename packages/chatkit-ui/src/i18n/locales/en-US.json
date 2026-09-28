@@ -3,6 +3,8 @@
     "title": "Views",
     "description": "Remote workbench views",
     "views": "Available views",
+    "scrollViewsLeft": "Scroll views left",
+    "scrollViewsRight": "Scroll views right",
     "open": "Open views",
     "close": "Close views",
     "expandPanel": "Expand panel",
@@ -43,6 +45,11 @@
       "empty": "No external assistant executions in this conversation.",
       "noMessages": "No messages yet.",
       "unavailable": "This execution is no longer available in the current conversation."
+    },
+    "preview": {
+      "openExternal": "Open in browser",
+      "evidence": "Source evidence",
+      "page": "Page {{page}}"
     }
   },
   "chat": {
@@ -158,6 +165,13 @@
     "updatedAt": "Updated {{time}}",
     "deleteThread": "Delete {{title}}",
     "newThread": "New Thread",
+    "newThreadInProject": "New conversation in this project",
+    "scope": {
+      "label": "Conversation scope",
+      "all": "All conversations",
+      "currentProject": "Current project",
+      "noProject": "No project"
+    },
     "empty": "No threads yet",
     "newThreadTitle": "New thread",
     "threadWithId": "Thread {{id}}",
@@ -218,6 +232,7 @@
     "projects": {
       "select": "Select project",
       "none": "No project",
+      "autoNew": "New project · Create on send",
       "search": "Search projects",
       "new": "New project",
       "create": "Create",
@@ -750,7 +765,6 @@
     "showAllFiles": "Show all {{count}} files",
     "showFiles": "Show files",
     "hideFiles": "Hide files",
-
     "open": "Open",
     "review": "Review",
     "savedVersion": "Saved version",
@@ -770,5 +784,14 @@
     },
     "incomplete": "File change records are incomplete; some files could not be observed or saved.",
     "legacyOutput": "Historical output · unclassified"
+  },
+  "approvals": {
+    "hostRejected": "The host did not accept this approval.",
+    "label": "Action approval",
+    "failed": "Could not submit the decision. Try again.",
+    "expired": "This request has expired. Ask for a new operation.",
+    "settings": "Permission settings",
+    "reject": "Deny",
+    "approveOnce": "Allow once"
   }
 }

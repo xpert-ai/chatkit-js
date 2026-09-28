@@ -11,7 +11,13 @@ import type {
 
 import { resolveLocalizedText } from '../i18n/localized-text';
 import { getReferenceLabel, normalizeReferences } from './references';
-import { isInternalMessageContent } from './internal-message-content';
+import { isNonTranscriptMessageContent } from './message-content-presentation';
+import {
+  buildAssistantRenderTree,
+  getAgentRunTitle,
+  type AgentRunRenderNode,
+  type AssistantMessageWithAgentRuns,
+} from './agent-run-render-tree';
 import {
   getToolActivityLabel,
   getToolStepData,
@@ -56,7 +62,12 @@ export type MessageNavigationLabels = {
   reasoning: string;
 };
 
-export type MessageNavigationSourceMessage = {
+export type MessageNavigationSourceMessage = Partial<
+  Pick<
+    AssistantMessageWithAgentRuns,
+    'executionId' | 'rootExecutionIds' | 'agentRuns' | 'historical'
+  >
+> & {
   id?: unknown;
   type?: unknown;
   content?: unknown;
@@ -262,7 +273,7 @@ function collectContentItem(
   language: string,
   options: CollectContentOptions,
 ) {
-  if (item === undefined || isInternalMessageContent(item)) return;
+  if (item === undefined || isNonTranscriptMessageContent(item)) return;
   if (typeof item === 'string') {
     pushText(draft, item);
     return;
@@ -402,7 +413,36 @@ function buildMessageNavigationItemSummary(
     pushText(draft, message.submittedInput);
   }
 
-  collectContent(draft, message.content, labels, language, collectOptions);
+  if (role === 'assistant' && message.agentRuns?.length) {
+    const tree = buildAssistantRenderTree({
+      id: readString(message.id) ?? '',
+      type: 'assistant',
+      executionId: message.executionId,
+      rootExecutionIds: message.rootExecutionIds,
+      historical: message.historical,
+      agentRuns: message.agentRuns,
+      content:
+        typeof message.content === 'string' || Array.isArray(message.content)
+          ? message.content
+          : [],
+    });
+    const collectNode = (node: AgentRunRenderNode) => {
+      pushTag(draft, getAgentRunTitle(node.info));
+      node.entries.forEach(({ item }) =>
+        collectContentItem(draft, item, labels, language, collectOptions),
+      );
+      node.children.forEach(collectNode);
+    };
+    tree.units.forEach((unit) => {
+      if (unit.type === 'agent') {
+        collectNode(unit.node);
+      } else {
+        collectContentItem(draft, unit.entry.item, labels, language, collectOptions);
+      }
+    });
+  } else {
+    collectContent(draft, message.content, labels, language, collectOptions);
+  }
   collectReasoning(draft, message.reasoning, labels);
   collectFiles(draft, message.fileAssets, labels.attachment);
   collectFiles(draft, message.attachments, labels.attachment);

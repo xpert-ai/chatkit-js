@@ -161,11 +161,59 @@ describe('thread history restoration', () => {
   });
   afterEach(cleanup);
 
+  it('exposes a stable runtime scope only after initial history restoration', async () => {
+    const snapshots: { ready: boolean; conversation: string | null; project?: string }[] = [];
+    function ScopeProbe() {
+      stream = useStreamContext();
+      snapshots.push({ ready: stream.runtimeScopeReady, conversation: stream.conversationId, project: stream.projectId });
+      return null;
+    }
+    mocks.getConversation.mockImplementation(async (id: string) => ({ id, projectId: 'saved-project', status: 'idle' }));
+    const messages = deferred<ReturnType<typeof history>>();
+    mocks.searchMessages.mockReturnValue(messages.promise);
+    render(<StreamProvider apiKey="cs-x-test" apiUrl="https://api.example.test/api/ai" xpertId="assistant-1" initialThread="thread-1" threadStateMode="memory"><ScopeProbe /></StreamProvider>);
+    expect(snapshots[0].ready).toBe(false);
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledOnce());
+    expect(stream.runtimeScopeReady).toBe(false);
+    await act(async () => messages.resolve(history('thread-1')));
+    await waitFor(() => expect(stream.runtimeScopeReady).toBe(true));
+    expect(snapshots.filter((snapshot) => snapshot.ready)).not.toHaveLength(0);
+    expect(snapshots.filter((snapshot) => snapshot.ready).every((snapshot) =>
+      snapshot.conversation === 'conversation-thread-1' && snapshot.project === 'saved-project',
+    )).toBe(true);
+    act(() => stream.reset(null));
+    expect(stream.runtimeScopeReady).toBe(true);
+    expect(stream.conversationId).toBeNull();
+  });
+
   it('loads a preselected initial thread instead of treating its ID as loaded history', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.messages).toHaveLength(2));
     expect(stream.messages[1].content).toBe('Saved reply');
     expect(mocks.searchMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies the host after history and its persisted Project have loaded', async () => {
+    mocks.getConversation.mockImplementation(async (id: string) => ({ id, projectId: 'project-b', status: 'idle' }));
+    const messages = deferred<ReturnType<typeof history>>();
+    mocks.searchMessages.mockReturnValue(messages.promise);
+    render(provider('thread-1'));
+    await waitFor(() => expect(mocks.searchMessages).toHaveBeenCalledOnce());
+    expect(mocks.sendEvent).toHaveBeenCalledWith('public_event', ['thread.load.start', { threadId: 'thread-1' }], undefined);
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'thread-1' }], undefined);
+    await act(async () => messages.resolve(history('thread-1')));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(mocks.sendEvent.mock.calls.filter(([, data]) => data?.[0] === 'thread.load.end')).toEqual([
+      ['public_event', ['thread.load.end', { threadId: 'thread-1' }], undefined],
+    ]);
+    expect(stream.projectId).toBe('project-b');
+  });
+
+  it('does not notify successful history completion on a failed load', async () => {
+    mocks.searchMessages.mockRejectedValue(new Error('History unavailable'));
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('error'));
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'thread-1' }], undefined);
   });
 
   it('does not treat a completed history execution as the active run on an idle thread', async () => {
@@ -248,6 +296,45 @@ describe('thread history restoration', () => {
     mocks.queryThread = 'thread-1';
     render(provider());
     await waitFor(() => expect(stream.messages).toHaveLength(2));
+  });
+
+  it('uses the saved Project for a historical conversation opened from a no-Project entry', async () => {
+    mocks.getConversation.mockImplementation(async (id: string) => ({ id, status: 'idle', projectId: 'saved-project' }));
+    render(<StreamProvider apiKey="cs-x-test" apiUrl="https://api.example.test/api/ai" xpertId="assistant-1"
+      initialThread="thread-1" projectSelection={{ mode: 'none' }} threadStateMode="memory"><Probe /></StreamProvider>);
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(stream.projectId).toBe('saved-project');
+    await act(async () => { await stream.submit({ input: { input: 'Continue the outline' } }); });
+    expect(mocks.runStream).toHaveBeenCalledWith('thread-1', 'assistant-1', expect.objectContaining({
+      input: expect.objectContaining({ projectId: 'saved-project', projectSelection: { mode: 'existing', projectId: 'saved-project' } })
+    }));
+  });
+
+  it.each(['project-b', undefined])('continues history in its saved scope %s instead of the mounted Project', async (projectId) => {
+    mocks.getConversation.mockImplementation(async (id: string) => ({ id, status: 'idle', projectId }));
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(stream.projectId).toBe(projectId);
+    expect(stream.projectScopeResolved).toBe(true);
+    await act(async () => { await stream.submit({ input: { input: 'Continue the outline' } }); });
+    expect(mocks.runStream).toHaveBeenCalledWith('thread-1', 'assistant-1', expect.objectContaining({
+      input: expect.objectContaining({ projectId, projectSelection: projectId
+        ? { mode: 'existing', projectId } : { mode: 'none' } })
+    }));
+  });
+
+  it('finds cross-project history when protocol metadata is unavailable', async () => {
+    mocks.getThread.mockResolvedValue({ metadata: {} });
+    mocks.searchConversations.mockResolvedValue({ items: [{
+      id: 'conversation-thread-1', threadId: 'thread-1', status: 'idle', projectId: 'project-b',
+    }] });
+    mocks.getConversation.mockResolvedValue({ id: 'conversation-thread-1', projectId: 'project-b' });
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(mocks.searchConversations).toHaveBeenCalledWith({
+      where: { xpertId: 'assistant-1', threadId: 'thread-1' }, limit: 1,
+    });
+    expect(stream.projectId).toBe('project-b');
   });
 
   it('waits for credentials before loading the initial thread', async () => {
@@ -341,6 +428,8 @@ describe('thread history restoration', () => {
     expect(mocks.getThread.mock.calls).toEqual([['new']]);
     expect(stream.threadId).toBe('new');
     expect(stream.messages[1].id).toBe('new-ai');
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'old' }], undefined);
+    expect(mocks.sendEvent).toHaveBeenCalledWith('public_event', ['thread.load.end', { threadId: 'new' }], undefined);
   });
 
   it('does not reopen history after starting fresh while credentials are pending', async () => {

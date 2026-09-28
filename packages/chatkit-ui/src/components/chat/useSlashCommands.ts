@@ -87,6 +87,7 @@ export function useSlashCommands({
   setPlanModeEnabled,
   setGoalPanelOpen,
   onPetCommand,
+  petDisabled = false,
   onGoalCommand,
   addRunRuntimeCapabilities,
   setRunRuntimeCapabilities,
@@ -111,6 +112,7 @@ export function useSlashCommands({
   focusComposerAt: (offset: number) => void;
   setPlanModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   setGoalPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  petDisabled?: boolean;
   onPetCommand?: (mode: 'toggle' | 'on' | 'off' | 'settings') => void;
   onGoalCommand?: (options: GoalCommandOptions) => void | Promise<void>;
   addRunRuntimeCapabilities: (selection: RuntimeCapabilitiesSelection) => void;
@@ -130,8 +132,16 @@ export function useSlashCommands({
 }) {
   const { t, i18n } = useChatkitTranslation();
   const resolvedCommands = React.useMemo(
-    () => resolveSlashCommands(hostCommands, runtimeCapabilities?.commands),
-    [hostCommands, runtimeCapabilities?.commands],
+    () =>
+      resolveSlashCommands(hostCommands, runtimeCapabilities?.commands).filter(
+        (command) =>
+          !(
+            petDisabled &&
+            command.source === 'builtin' &&
+            command.name === 'pet'
+          ),
+      ),
+    [hostCommands, runtimeCapabilities?.commands, petDisabled],
   );
 
   const localizedResolvedCommands = React.useMemo(

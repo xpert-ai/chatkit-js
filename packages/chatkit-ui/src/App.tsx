@@ -1,12 +1,14 @@
 import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
-import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import { A2UIProvider } from '@xpert-ai/a2ui-react';
 import { Chat } from './components/chat';
 import { StreamProvider } from './providers/Stream';
 import { ThemeProvider } from './providers/Theme';
 import { getLanguage, setLanguage } from './i18n';
 import { useParentMessenger } from './hooks/useParentMessenger';
+import { useWorkbenchNavigation } from './workbench/useWorkbenchNavigation';
+import { useWindowDragRegions } from './hooks/useWindowDragRegions';
 import { WorkbenchShell } from './workbench/WorkbenchShell';
 
 export type AppProps = {
@@ -25,7 +27,26 @@ export function App({
   isClientSecretInitializing = false,
 }: AppProps) {
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
-  const apiKey = clientSecret.trim() ? clientSecret : undefined;
+  useWindowDragRegions(options?.header?.windowDrag === true);
+  const navigation = useWorkbenchNavigation(options, organizationId);
+  const apiKey =
+    navigation.session?.secret ||
+    (clientSecret.trim() ? clientSecret : undefined);
+  const activeOptions = navigation.session
+    ? {
+        ...options!,
+        initialThread: navigation.session.threadId,
+        api: {
+          ...options!.api,
+          xpertId: navigation.session.assistantId,
+          projectId: navigation.session.projectId ?? undefined,
+        },
+        header: {
+          ...options?.header,
+          title: { ...options?.header?.title, text: undefined },
+        },
+      }
+    : options;
   const xpertId = import.meta.env.VITE_XPERTAI_XPERT_ID as string | undefined;
   const apiUrl = import.meta.env.VITE_XPERTAI_API_URL as string | undefined;
 
@@ -40,21 +61,28 @@ export function App({
   const hostedApi =
     options?.api && 'getClientSecret' in options.api ? options.api : null;
   const configuredProjectId = hostedApi?.projectId ?? null;
+  const configuredSelection: ProjectSelection | undefined =
+    options?.composer?.projects?.selection ??
+    (configuredProjectId
+      ? { mode: 'existing', projectId: configuredProjectId }
+      : options?.composer?.projects?.autoNewEnabled
+        ? { mode: 'auto-new' }
+        : undefined);
+  const configuredSelectionKey = JSON.stringify(configuredSelection);
   const projectsEnabled =
     Boolean(hostedApi) && options?.composer?.projects?.enabled === true;
   const projectCreationEnabled =
     projectsEnabled && options?.composer?.projects?.createEnabled !== false;
   const connectorsEnabled =
     Boolean(hostedApi) && options?.composer?.connectors?.enabled === true;
-  const [activeProjectId, setActiveProjectId] = React.useState<string | null>(
-    configuredProjectId,
-  );
+  const [projectSelection, setProjectSelection] =
+    React.useState(configuredSelection);
+  const activeProjectId =
+    projectSelection?.mode === 'existing' ? projectSelection.projectId : null;
   const [scopedInitialThread, setScopedInitialThread] = React.useState<
     string | null
   >(options?.initialThread ?? null);
-  const lastConfiguredProjectIdRef = React.useRef<string | null>(
-    configuredProjectId,
-  );
+  const lastConfiguredSelectionRef = React.useRef(configuredSelectionKey);
   const lastConfiguredInitialThreadRef = React.useRef<string | null>(
     options?.initialThread ?? null,
   );
@@ -74,11 +102,11 @@ export function App({
   }, [locale]);
 
   React.useEffect(() => {
-    if (configuredProjectId === lastConfiguredProjectIdRef.current) return;
-    lastConfiguredProjectIdRef.current = configuredProjectId;
-    setActiveProjectId(configuredProjectId);
+    if (configuredSelectionKey === lastConfiguredSelectionRef.current) return;
+    lastConfiguredSelectionRef.current = configuredSelectionKey;
+    setProjectSelection(configuredSelection);
     setScopedInitialThread(options?.initialThread ?? null);
-  }, [configuredProjectId, options?.initialThread]);
+  }, [configuredSelectionKey, configuredSelection, options?.initialThread]);
 
   React.useEffect(() => {
     const nextInitialThread = options?.initialThread ?? null;
@@ -88,23 +116,41 @@ export function App({
   }, [options?.initialThread]);
 
   const handleProjectChange = React.useCallback(
-    (projectId: string | null) => {
+    (projectId: string | null, selection?: ProjectSelection) => {
       const nextProjectId = projectId?.trim() || null;
-      if (nextProjectId === activeProjectId) return;
-      setActiveProjectId(nextProjectId);
+      const nextSelection =
+        selection ??
+        (nextProjectId
+          ? { mode: 'existing' as const, projectId: nextProjectId }
+          : { mode: 'none' as const });
+      setProjectSelection(nextSelection);
       setScopedInitialThread(null);
+      setWorkbenchRequestContext({});
       sendEvent('public_event', [
         'project.change',
-        { projectId: nextProjectId },
+        { projectId: nextProjectId, selection: nextSelection },
       ]);
     },
-    [activeProjectId, sendEvent],
+    [sendEvent],
   );
   const handleProjectCreate = React.useCallback(
     (name: string, projectType?: XpertProjectTypeRef) => {
       sendEvent('public_event', [
         'effect',
-        { name: 'project.create', data: { name, ...(projectType ? { projectType: { applicationKey: projectType.applicationKey, projectTypeKey: projectType.projectTypeKey } } : {}) } },
+        {
+          name: 'project.create',
+          data: {
+            name,
+            ...(projectType
+              ? {
+                  projectType: {
+                    applicationKey: projectType.applicationKey,
+                    projectTypeKey: projectType.projectTypeKey,
+                  },
+                }
+              : {}),
+          },
+        },
       ]);
     },
     [sendEvent],
@@ -120,16 +166,33 @@ export function App({
     <Chat
       className="flex-1"
       clientSecret={apiKey}
-      options={options}
+      options={activeOptions}
       isClientSecretInitializing={isClientSecretInitializing}
-      activeProjectId={activeProjectId ?? undefined}
-      projectsEnabled={projectsEnabled}
+      projectSelection={navigation.session ? undefined : projectSelection}
+      activeProjectId={
+        navigation.session
+          ? (navigation.session.projectId ?? undefined)
+          : (activeProjectId ?? undefined)
+      }
+      projectsEnabled={projectsEnabled && !navigation.session}
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
       onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
-      onProjectTypeCreate={projectCreationEnabled ? (projectType) => sendEvent('public_event', ['effect', {
-        name: 'project.create-entry', data: { applicationKey: projectType.applicationKey, projectTypeKey: projectType.projectTypeKey }
-      }]) : undefined}
+      onProjectTypeCreate={
+        projectCreationEnabled
+          ? (projectType) =>
+              sendEvent('public_event', [
+                'effect',
+                {
+                  name: 'project.create-entry',
+                  data: {
+                    applicationKey: projectType.applicationKey,
+                    projectTypeKey: projectType.projectTypeKey,
+                  },
+                },
+              ])
+          : undefined
+      }
       onConnectorsChange={handleConnectorsChange}
     />
   );
@@ -147,12 +210,31 @@ export function App({
           }}
         >
           <StreamProvider
+            key={navigation.revision ?? 'host'}
+            threadStateMode={navigation.session ? 'memory' : 'url'}
             apiKey={apiKey}
-            organizationId={organizationId}
+            organizationId={
+              navigation.session?.organizationId ?? organizationId
+            }
+            getClientSecret={navigation.refresh}
             apiUrl={options?.api.apiUrl || apiUrl}
-            xpertId={options?.api.xpertId || resolvedXpertId || xpertId}
-            projectId={activeProjectId ?? undefined}
-            initialThread={scopedInitialThread}
+            xpertId={
+              navigation.session?.assistantId ||
+              options?.api.xpertId ||
+              resolvedXpertId ||
+              xpertId
+            }
+            projectId={
+              navigation.session
+                ? (navigation.session.projectId ?? undefined)
+                : (activeProjectId ?? undefined)
+            }
+            projectSelection={navigation.session ? undefined : projectSelection}
+            initialThread={
+              navigation.session
+                ? navigation.session.threadId
+                : scopedInitialThread
+            }
             locale={requestLocale}
             additionalContext={
               workbenchEnabled ? workbenchRequestContext : undefined
@@ -160,9 +242,12 @@ export function App({
           >
             {workbenchEnabled ? (
               <WorkbenchShell
-                options={options}
+                options={activeOptions}
                 locale={requestLocale}
                 onRequestContextChange={handleWorkbenchRequestContextChange}
+                onNavigate={navigation.navigate}
+                initialNavigation={navigation.request}
+                initializing={isClientSecretInitializing}
               >
                 {chat}
               </WorkbenchShell>

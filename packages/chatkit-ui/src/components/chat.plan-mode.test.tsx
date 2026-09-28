@@ -42,6 +42,8 @@ const mocks = vi.hoisted(() => {
       organizationId: undefined,
       threadId: null as string | null,
       conversationId: null as string | null,
+      projectId: undefined as string | undefined,
+      projectScopeResolved: false,
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [] as Array<{
@@ -268,11 +270,13 @@ vi.mock('./composer/SendButton', () => ({
 vi.mock('./composer/ProjectSelector', () => ({
   ProjectSelector: ({
     activeProjectId,
+    locked,
     disabled,
     onAvailabilityChange,
     onProjectChange,
   }: {
     activeProjectId?: string;
+    locked?: boolean;
     disabled?: boolean;
     onAvailabilityChange?: (available: boolean) => void;
     onProjectChange?: (projectId: string | null) => void;
@@ -286,14 +290,18 @@ vi.mock('./composer/ProjectSelector', () => ({
         data-slot="composer-project-rail"
         className="flex h-10 min-w-0 items-center px-1"
       >
-        <button
-          type="button"
-          data-testid="project-selector"
-          disabled={disabled}
-          onClick={() => onProjectChange?.('project-2')}
-        >
-          {activeProjectId ?? 'select project'}
-        </button>
+        {locked ? (
+          <span data-testid="project-locked">{activeProjectId}</span>
+        ) : (
+          <button
+            type="button"
+            data-testid="project-selector"
+            disabled={disabled}
+            onClick={() => onProjectChange?.('project-2')}
+          >
+            {activeProjectId ?? 'select project'}
+          </button>
+        )}
       </div>
     );
   },
@@ -564,6 +572,8 @@ describe('Chat plan mode payload', () => {
     });
     mocks.stream.threadId = null;
     mocks.stream.conversationId = null;
+    mocks.stream.projectId = undefined;
+    mocks.stream.projectScopeResolved = false;
     mocks.stream.messages = [];
     mocks.stream.historyMessagePagination = {
       conversationId: null,
@@ -683,10 +693,10 @@ describe('Chat plan mode payload', () => {
 
     fireEvent.click(screen.getByTestId('project-selector'));
     expect(onProjectChange).toHaveBeenCalledOnce();
-    expect(onProjectChange).toHaveBeenCalledWith('project-2');
+    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined);
   });
 
-  it('hides the project selector as soon as the conversation has started', async () => {
+  it('keeps the current Project visible and locked after the conversation starts', async () => {
     mocks.stream.threadId = 'thread-1';
     render(
       <Chat
@@ -705,10 +715,60 @@ describe('Chat plan mode payload', () => {
     expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-slot="composer-project-rail"]'),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('project-locked')).toHaveTextContent('project-1');
     expect(
       document.querySelector('[data-slot="composer-input-shell"]'),
     ).not.toHaveClass('pb-composer-inset');
+  });
+
+  it('does not show Project selection for an existing no-Project conversation', async () => {
+    mocks.stream.threadId = 'personal-thread';
+    render(<Chat clientSecret="secret" options={baseChatOptions} projectsEnabled />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('project-locked')).not.toBeInTheDocument();
+  });
+
+  it('labels a project-local new conversation and keeps the selected Project', async () => {
+    const onProjectChange = vi.fn();
+    render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-1"
+      onProjectChange={onProjectChange} />);
+    const button = screen.getByRole('button', { name: 'history.newThreadInProject' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(onProjectChange).toHaveBeenCalledWith('project-1', { mode: 'existing', projectId: 'project-1' });
+    expect(mocks.stream.reset).toHaveBeenCalledWith(null, []);
+  });
+
+  it('uses the historical Project for file browsing and subsequent new conversations', async () => {
+    mocks.stream.threadId = 'thread-b';
+    mocks.stream.projectScopeResolved = true;
+    mocks.stream.projectId = 'project-b';
+    const onProjectChange = vi.fn();
+    render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-a"
+      projectsEnabled onProjectChange={onProjectChange} />);
+    expect(screen.getByTestId('project-locked')).toHaveTextContent('project-b');
+    const button = screen.getByRole('button', { name: 'history.newThreadInProject' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(onProjectChange).toHaveBeenCalledWith('project-b', { mode: 'existing', projectId: 'project-b' });
+  });
+
+  it('clears the mounted Project when starting a new chat from personal history', async () => {
+    mocks.stream.threadId = 'personal-thread';
+    mocks.stream.projectScopeResolved = true;
+    const onProjectChange = vi.fn();
+    render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-a"
+      projectsEnabled onProjectChange={onProjectChange} />);
+    expect(screen.queryByTestId('project-locked')).not.toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'history.newThread' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(onProjectChange).toHaveBeenCalledWith(null, { mode: 'none' });
+    expect(mocks.stream.reset).toHaveBeenCalledWith(null, []);
   });
 
   it('preserves plain text and clears conversation-scoped Connectors when the Project changes', async () => {
@@ -737,10 +797,10 @@ describe('Chat plan mode payload', () => {
     expect(textbox.textContent).toBe('Keep me');
     expect(mocks.stream.setConnectorBindingIds).toHaveBeenCalledWith([]);
     expect(onConnectorsChange).toHaveBeenCalledWith([]);
-    expect(onProjectChange).toHaveBeenCalledWith('project-2');
+    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined);
   });
 
-  it('hides the project selector on the optimistic message before the thread id resolves', async () => {
+  it('locks the selected Project on the optimistic message before the thread id resolves', async () => {
     mocks.stream.messages = [
       {
         id: 'human-1',
@@ -763,6 +823,7 @@ describe('Chat plan mode payload', () => {
     });
 
     expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
+    expect(screen.getByTestId('project-locked')).toHaveTextContent('project-1');
   });
 
   it('keeps the file selector rail when the project selector is disabled', async () => {
@@ -2808,7 +2869,6 @@ describe('Chat plan mode payload', () => {
       where: {
         threadId: 'thread-1',
         xpertId: 'assistant-1',
-        projectId: null,
       },
       limit: 1,
     });

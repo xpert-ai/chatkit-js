@@ -63,6 +63,10 @@ const manifest: XpertExtensionViewManifest = {
   ],
   fileAccess: { purposes: ['preview'] },
 };
+const runtimeScope = {
+  projectId: 'project-1',
+  conversationId: 'conversation-1',
+};
 
 describe('RemoteViewFrame', () => {
   beforeEach(() => {
@@ -106,6 +110,18 @@ describe('RemoteViewFrame', () => {
       }),
       '*',
     );
+  });
+
+  it('sends updated navigation selection and parameters to a retained view', async () => {
+    const props = { manifest, hostId: 'agent-1', locale: 'en-US', title: 'Documents', hostEvent: null, viewHosts: mocks.client.viewHosts, onNotify: vi.fn(), onClientCommand: vi.fn() };
+    const { rerender } = render(<RemoteViewFrame {...props} initialQuery={{ selectionId: 'first' }} />, { wrapper: ThemeProvider });
+    const iframe = await screen.findByTitle('Documents');
+    const postMessage = vi.spyOn(getContentWindow(iframe as HTMLIFrameElement), 'postMessage');
+    fireEvent.load(iframe);
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'init', initialQuery: { page: 1, pageSize: 20, selectionId: 'first' } }), '*');
+    rerender(<RemoteViewFrame {...props} initialQuery={{ selectionId: 'second', parameters: { tab: 'review' } }} />);
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'init', initialQuery: { page: 1, pageSize: 20, selectionId: 'second', parameters: { tab: 'review' } } }), '*');
+    expect(screen.getByTitle('Documents')).toBe(iframe);
   });
 
   it('forwards options.theme tokens and resends init after the theme changes', async () => {
@@ -169,7 +185,7 @@ describe('RemoteViewFrame', () => {
     );
   });
 
-  it('accepts requests only from the active iframe and correlates responses', async () => {
+  it('scopes entry, data and actions to the host conversation, ignoring iframe scope overrides', async () => {
     renderFrame();
     const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
     const postMessage = vi.spyOn(getContentWindow(iframe), 'postMessage');
@@ -184,6 +200,12 @@ describe('RemoteViewFrame', () => {
         ? String(Reflect.get(initMessage, 'instanceId'))
         : '';
     expect(instanceId).toBeTruthy();
+    expect(mocks.client.viewHosts.getRemoteComponentEntry).toHaveBeenCalledWith(
+      'agent',
+      'agent-1',
+      manifest.key,
+      { signal: expect.any(AbortSignal), runtimeScope },
+    );
 
     dispatchFrameMessage(iframe, {
       channel: REMOTE_COMPONENT_CHANNEL,
@@ -192,6 +214,7 @@ describe('RemoteViewFrame', () => {
       type: 'requestData',
       requestId: 'request-1',
       query: { page: 2 },
+      runtimeScope: { conversationId: 'untrusted-conversation' },
     });
     await waitFor(() =>
       expect(mocks.client.viewHosts.getData).toHaveBeenCalledWith(
@@ -199,7 +222,29 @@ describe('RemoteViewFrame', () => {
         'agent-1',
         manifest.key,
         { page: 2 },
-        { signal: expect.any(AbortSignal) },
+        { signal: expect.any(AbortSignal), runtimeScope },
+      ),
+    );
+
+    mocks.client.viewHosts.executeAction.mockResolvedValue({ success: true });
+    dispatchFrameMessage(iframe, {
+      channel: REMOTE_COMPONENT_CHANNEL,
+      protocolVersion: 1,
+      instanceId,
+      type: 'executeAction',
+      requestId: 'action-1',
+      actionKey: 'approve',
+      input: {},
+      runtimeScope: { conversationId: 'untrusted-conversation' },
+    });
+    await waitFor(() =>
+      expect(mocks.client.viewHosts.executeAction).toHaveBeenCalledWith(
+        'agent',
+        'agent-1',
+        manifest.key,
+        'approve',
+        expect.any(Object),
+        { signal: expect.any(AbortSignal), runtimeScope },
       ),
     );
     await waitFor(() =>
@@ -238,6 +283,7 @@ function renderFrameElement(theme?: ChatKitTheme) {
       <RemoteViewFrame
         manifest={manifest}
         hostId="agent-1"
+        runtimeScope={runtimeScope}
         locale="en-US"
         title="Documents"
         hostEvent={null}

@@ -1,9 +1,6 @@
 import { useContext, useEffect, useRef } from 'react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import {
-  ParentMessengerContext,
-  type ParentMessenger,
-} from '../providers/ParentMessenger';
+import { ParentMessengerContext } from '../providers/ParentMessenger';
 import type { ComposerValuePayload } from '../lib/references';
 import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 
@@ -25,7 +22,7 @@ export function useParentMessenger({
   onSetComposerValue,
   onSetRuntimeCapabilities,
   onFocusComposer,
-}: ParentMessengerOptions = {}): ParentMessenger {
+}: ParentMessengerOptions = {}) {
   const context = useContext(ParentMessengerContext);
   if (!context) {
     throw new Error(

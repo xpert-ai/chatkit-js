@@ -1,8 +1,12 @@
 import * as React from 'react';
+import type { WorkbenchPreview } from './client-command-payload';
+import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
 import type {
   Client,
+  XpertViewQuery,
   XpertExtensionViewManifest,
   XpertRemoteViewHostEventMessage,
+  XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { StreamProvider, useStreamContext } from '../providers/Stream';
@@ -33,6 +37,8 @@ import {
 } from '../components/ui/tooltip';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
+import { WorkbenchTabs } from './WorkbenchTabs';
+import { resolveManifestText } from './manifest-text';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
 
@@ -47,6 +53,9 @@ type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
 
 type WorkbenchPanelProps = {
+  previews: WorkbenchPreview[];
+  viewQueries: Record<string, XpertViewQuery>;
+  onClosePreview: (key: string) => void;
   visible: boolean;
   views: XpertExtensionViewManifest[];
   activeView: XpertExtensionViewManifest | null;
@@ -62,6 +71,7 @@ type WorkbenchPanelProps = {
   options?: ChatKitOptions | null;
   stream: ReturnType<typeof useStreamContext>;
   hostId: string;
+  runtimeScope: XpertViewRuntimeScopeInput;
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
   viewHosts: WorkbenchViewHostsClient;
@@ -84,6 +94,9 @@ type WorkbenchPanelProps = {
 
 export function WorkbenchPanel({
   visible,
+  previews,
+  viewQueries,
+  onClosePreview,
   views,
   activeView,
   activeViewKey,
@@ -98,6 +111,7 @@ export function WorkbenchPanel({
   options,
   stream,
   hostId,
+  runtimeScope,
   locale,
   hostEvent,
   viewHosts,
@@ -115,15 +129,48 @@ export function WorkbenchPanel({
 }: WorkbenchPanelProps) {
   const { t } = useChatkitTranslation();
   const externalTabId = React.useId();
+  const frameScope = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    hostId,
+    runtimeScope.projectId,
+    runtimeScope.conversationId,
+  ]);
+  const [visited, setVisited] = React.useState<{
+    scope: string;
+    keys: string[];
+  }>({
+    scope: frameScope,
+    keys: [],
+  });
+  React.useEffect(() => {
+    setVisited((current) => {
+      const keys = current.scope === frameScope ? current.keys : [];
+      if (
+        activeViewKey &&
+        views.some((view) => view.key === activeViewKey) &&
+        !keys.includes(activeViewKey)
+      ) {
+        return { scope: frameScope, keys: [...keys, activeViewKey] };
+      }
+      return current.scope === frameScope
+        ? current
+        : { scope: frameScope, keys };
+    });
+  }, [activeViewKey, frameScope, views]);
+  const activePreview = previews.find((item) => item.key === activeViewKey);
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-10 shrink-0 items-center gap-2 px-2.5">
-        {views.length > 0 || sideChat || sideChatOpening || externalViewOpen ? (
-          <div
-            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-            role="tablist"
-            aria-label={t('workbench.views')}
-          >
+      <div
+        data-slot="chatkit-workbench-header"
+        className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2"
+      >
+        {views.length > 0 ||
+        previews.length > 0 ||
+        sideChat ||
+        sideChatOpening ||
+        externalViewOpen ? (
+          <WorkbenchTabs activeKey={activeViewKey}>
             {externalViewOpen && (
               <div
                 className={cn(
@@ -190,6 +237,12 @@ export function WorkbenchPanel({
                 )}
               </div>
             )}
+            <PreviewTabs
+              previews={previews}
+              activeKey={activeViewKey}
+              onSelect={onSelect}
+              onClose={onClosePreview}
+            />
             {views.map((view) => {
               const selected = view.key === activeViewKey;
               const label = resolveManifestText(
@@ -242,7 +295,7 @@ export function WorkbenchPanel({
                 </div>
               );
             })}
-          </div>
+          </WorkbenchTabs>
         ) : (
           <div className="min-w-0 flex-1" />
         )}
@@ -306,6 +359,15 @@ export function WorkbenchPanel({
         </div>
       )}
 
+      {error && activeView && (
+        <div role="alert" className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive">
+          <span className="flex-1">{error}</span>
+          <button type="button" onClick={onReload} className="rounded-md px-2 py-1 hover:bg-muted">
+            {t('workbench.retry')}
+          </button>
+        </div>
+      )}
+
       <div className="relative min-h-0 flex-1">
         {sideChat && (
           <div
@@ -344,8 +406,44 @@ export function WorkbenchPanel({
             />
           </div>
         )}
-        {activeViewKey ===
-        EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===
+        {previews.map((preview) => (
+          <div
+            key={preview.key}
+            hidden={activeViewKey !== preview.key}
+            className="h-full min-h-0"
+          >
+            <WorkbenchPreviewContent preview={preview} />
+          </div>
+        ))}
+        {views
+          .filter(
+            (view) =>
+              (visited.scope === frameScope &&
+                visited.keys.includes(view.key)) ||
+              view.key === activeViewKey,
+          )
+          .map((view) => (
+            <div
+              key={JSON.stringify([frameScope, view.key])}
+              hidden={view.key !== activeViewKey}
+              className="h-full min-h-0"
+            >
+              <RemoteViewFrame
+                manifest={view}
+                hostId={hostId}
+                runtimeScope={runtimeScope}
+                locale={locale}
+                title={resolveManifestText(view.title, view.key, locale)}
+                hostEvent={hostEvent}
+                viewHosts={viewHosts}
+                onNotify={onNotify}
+                onClientCommand={onClientCommand}
+                initialQuery={viewQueries[view.key]}
+              />
+            </div>
+          ))}
+        {activePreview ? null : activeViewKey ===
+          EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===
           SIDE_CHAT_VIEW_KEY ? (
           !sideChat && sideChatOpening ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -353,7 +451,7 @@ export function WorkbenchPanel({
               {t('workbench.loading')}
             </div>
           ) : null
-        ) : loading ? (
+        ) : activeView ? null : loading ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" />
             {t('workbench.loading')}
@@ -370,22 +468,6 @@ export function WorkbenchPanel({
               {t('workbench.retry')}
             </button>
           </div>
-        ) : activeView ? (
-          <RemoteViewFrame
-            key={activeView.key}
-            manifest={activeView}
-            hostId={hostId}
-            locale={locale}
-            title={resolveManifestText(
-              activeView.title,
-              activeView.key,
-              locale,
-            )}
-            hostEvent={hostEvent}
-            viewHosts={viewHosts}
-            onNotify={onNotify}
-            onClientCommand={onClientCommand}
-          />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
             {t('workbench.empty')}
@@ -427,6 +509,7 @@ function SideChatView({
     <WorkbenchContext.Provider value={disabledWorkbenchContext}>
       <StreamProvider
         apiKey={stream.apiKey}
+        getClientSecret={stream.refreshClientSecret}
         organizationId={stream.organizationId}
         apiUrl={stream.apiUrl}
         xpertId={stream.assistantId}
@@ -444,22 +527,5 @@ function SideChatView({
         />
       </StreamProvider>
     </WorkbenchContext.Provider>
-  );
-}
-
-function resolveManifestText(
-  value: string | { en_US: string; zh_Hans?: string } | undefined,
-  fallback: string,
-  locale: string,
-) {
-  if (typeof value === 'string') return value.trim() || fallback;
-  if (!value) return fallback;
-  const simplifiedChinese =
-    locale === 'zh-CN' || locale === 'zh-Hans' || locale === 'zh';
-  return (
-    (simplifiedChinese ? value.zh_Hans : value.en_US)?.trim() ||
-    value.en_US.trim() ||
-    value.zh_Hans?.trim() ||
-    fallback
   );
 }

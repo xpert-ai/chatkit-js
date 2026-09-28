@@ -12,6 +12,7 @@ export * from './skill-usage.js';
 export * from './tool-output.js';
 export * from './chatkit.js';
 export * from './commands.js';
+export * from './project-selection.js';
 
 export * from './runtime-resources.js';
 
@@ -20,3 +21,5 @@ export * from './file-activity.js';
 export * from './file-activity-receipt.js';
 
 export * from './file-change-lines.js';
+
+export * from './approvals.js';

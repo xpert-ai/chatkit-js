@@ -8,9 +8,16 @@ export type ThreadHistoryState = {
 
 export type HistoryRequest = { isCurrent: () => boolean };
 
+type ThreadHistoryLifecycle = {
+  onLoadStart?: (threadId: string) => void;
+  onLoadEnd?: (threadId: string) => void;
+};
+
 // A selected thread is not proof that its messages have been loaded. Each
 // request owns a generation, including branches sharing one conversation ID.
-export function useThreadHistory() {
+export function useThreadHistory(lifecycle: ThreadHistoryLifecycle = {}) {
+  const lifecycleRef = useRef(lifecycle);
+  lifecycleRef.current = lifecycle;
   const [state, setState] = useState<ThreadHistoryState>({
     threadId: null,
     status: 'idle',
@@ -53,10 +60,16 @@ export function useThreadHistory() {
       setState({ threadId, status: 'loading' });
       const promise = Promise.resolve()
         .then(() => {
-          if (isCurrent()) return read({ isCurrent });
+          if (isCurrent()) {
+            lifecycleRef.current.onLoadStart?.(threadId);
+            return read({ isCurrent });
+          }
         })
         .then(() => {
-          if (isCurrent()) setState({ threadId, status: 'loaded' });
+          if (isCurrent()) {
+            setState({ threadId, status: 'loaded' });
+            lifecycleRef.current.onLoadEnd?.(threadId);
+          }
         })
         .catch((error: unknown) => {
           if (!isCurrent()) return;

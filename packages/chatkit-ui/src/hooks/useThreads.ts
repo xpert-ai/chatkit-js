@@ -37,6 +37,7 @@ export type ThreadItem = {
    * Conversation record ID
    */
   recordId: string;
+  projectId?: string | null;
   title: string;
   status: ChatConversationStatus;
   error?: string;
@@ -44,6 +45,9 @@ export type ThreadItem = {
 };
 
 const DEFAULT_LIMIT = 50;
+
+/** History browsing is independent of the Project selected for the next run. */
+export type ThreadHistoryScope = 'all' | 'current-project' | 'no-project';
 
 const getThreadTitle = (threadRecord: ThreadRecord): string => {
   const title = threadRecord.title?.trim();
@@ -82,6 +86,7 @@ const getErrorMessage = (error: unknown): string | undefined => {
 const toThreadItem = (threadRecord: ThreadRecord): ThreadItem => ({
   id: threadRecord.threadId ?? threadRecord.id,
   recordId: threadRecord.id,
+  projectId: threadRecord.projectId ?? null,
   title: getThreadTitle(threadRecord),
   status: threadRecord.status || 'idle',
   error: threadRecord.error,
@@ -101,6 +106,7 @@ const sortThreadRecords = (threadRecords: ThreadRecord[]): ThreadRecord[] => {
 export function useThreads(
   limit: number = DEFAULT_LIMIT,
   enabled: boolean = true,
+  scope: ThreadHistoryScope = 'all',
 ): UseThreadsResult {
   const {
     client,
@@ -114,31 +120,64 @@ export function useThreads(
   const [threadRecords, setThreadRecords] = React.useState<ThreadRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<unknown>(null);
+  const filterProjectId =
+    scope === 'no-project'
+      ? null
+      : scope === 'current-project'
+        ? projectId
+        : undefined;
+  const searchRequest = React.useRef<AbortController | null>(null);
+  React.useEffect(() => {
+    setThreadRecords([]);
+    setIsLoading(false);
+    return () => searchRequest.current?.abort();
+  }, [client, assistantId, enabled, filterProjectId]);
 
-  const upsertThreadRecord = React.useCallback((threadRecord: ThreadRecord) => {
-    setThreadRecords((prev) => {
-      const next = prev.filter((item) => item.id !== threadRecord.id);
-      return sortThreadRecords([threadRecord, ...next]);
-    });
-  }, []);
+  const upsertThreadRecord = React.useCallback(
+    (threadRecord: ThreadRecord) => {
+      setThreadRecords((prev) => {
+        const next = prev.filter((item) => item.id !== threadRecord.id);
+        if (
+          filterProjectId !== undefined &&
+          (threadRecord.projectId ?? null) !== filterProjectId
+        ) {
+          return next;
+        }
+        return sortThreadRecords([threadRecord, ...next]);
+      });
+    },
+    [filterProjectId],
+  );
 
   const refreshThreads = React.useCallback(async () => {
     if (!enabled) return;
+    searchRequest.current?.abort();
+    const controller = new AbortController();
+    searchRequest.current = controller;
     setIsLoading(true);
     setError(null);
     try {
-      const { items } = await client.conversations.search({
-        where: { xpertId: assistantId, projectId: projectId ?? null },
-        limit,
-        order: { updatedAt: 'DESC' },
-      });
+      const { items } = await client.conversations.search(
+        {
+          where: {
+            xpertId: assistantId,
+            ...(filterProjectId === undefined
+              ? {}
+              : { projectId: filterProjectId }),
+          },
+          limit,
+          order: { updatedAt: 'DESC' },
+        },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted) return;
       setThreadRecords(items ?? []);
     } catch (err) {
-      setError(err);
+      if (!controller.signal.aborted) setError(err);
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) setIsLoading(false);
     }
-  }, [client, enabled, limit, assistantId, projectId]);
+  }, [client, enabled, limit, assistantId, filterProjectId]);
 
   const createThread = React.useCallback(
     async (input?: CreateThreadInput) => {
@@ -236,7 +275,7 @@ export function useThreads(
   }, [threadId, streamError]);
 
   React.useEffect(() => {
-    if (!isReady || !threadId || isStreamLoading) return;
+    if (!enabled || !isReady || !threadId || isStreamLoading) return;
 
     let cancelled = false;
 
@@ -244,7 +283,6 @@ export function useThreads(
       .search({
         where: createConversationThreadSearchWhere(threadId, {
           xpertId: assistantId,
-          projectId,
         }),
         limit: 1,
       })
@@ -261,6 +299,7 @@ export function useThreads(
       cancelled = true;
     };
   }, [
+    enabled,
     assistantId,
     client,
     isReady,

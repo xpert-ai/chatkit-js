@@ -3,6 +3,8 @@
     "title": "视图",
     "description": "远程工作台视图",
     "views": "可用视图",
+    "scrollViewsLeft": "向左滚动视图",
+    "scrollViewsRight": "向右滚动视图",
     "open": "打开视图",
     "close": "关闭视图",
     "expandPanel": "展开面板",
@@ -43,6 +45,11 @@
       "empty": "此会话暂无外部助手执行。",
       "noMessages": "暂无消息。",
       "unavailable": "当前会话中已无法找到此执行。"
+    },
+    "preview": {
+      "openExternal": "在浏览器中打开",
+      "evidence": "来源证据",
+      "page": "第 {{page}} 页"
     }
   },
   "chat": {
@@ -158,6 +165,13 @@
     "updatedAt": "更新于 {{time}}",
     "deleteThread": "删除 {{title}}",
     "newThread": "新线程",
+    "newThreadInProject": "在当前项目中新建对话",
+    "scope": {
+      "label": "会话范围",
+      "all": "全部会话",
+      "currentProject": "当前项目",
+      "noProject": "无项目"
+    },
     "empty": "暂无线程",
     "newThreadTitle": "新线程",
     "threadWithId": "线程 {{id}}",
@@ -217,7 +231,8 @@
     },
     "projects": {
       "select": "选择项目",
-      "none": "不选择项目",
+      "none": "不使用项目",
+      "autoNew": "新项目 · 发送后自动创建",
       "search": "搜索项目",
       "new": "新建项目",
       "create": "创建",
@@ -750,7 +765,6 @@
     "showAllFiles": "展开全部 {{count}} 个文件",
     "showFiles": "展开文件",
     "hideFiles": "收起文件",
-
     "open": "打开",
     "review": "审阅",
     "savedVersion": "已保存版本",
@@ -770,5 +784,14 @@
     },
     "incomplete": "本次文件变更记录不完整，部分文件未能采集或保存。",
     "legacyOutput": "历史产出 · 未分类"
+  },
+  "approvals": {
+    "hostRejected": "宿主未确认此授权，请检查连接后重试。",
+    "label": "操作授权",
+    "failed": "提交失败，请重试。",
+    "expired": "此请求已过期，请发起新的操作。",
+    "settings": "权限设置",
+    "reject": "拒绝",
+    "approveOnce": "允许一次"
   }
 }

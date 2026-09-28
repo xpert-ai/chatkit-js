@@ -25,6 +25,24 @@ const labels: MessageNavigationLabels = {
 };
 
 describe('message navigation extraction', () => {
+  it('summarizes the correlated execution instead of its dispatch, with a legacy fallback', () => {
+    const message = {
+      id: 'reply', type: 'assistant', executionId: 'root',
+      content: [{
+        id: 'call', type: 'component', executionId: 'root',
+        data: { category: 'Tool', status: 'success', title: 'Dispatch task' },
+      }],
+      agentRuns: [{
+        id: 'child', parentId: 'root', sourceToolCallId: 'call',
+        invocationKind: 'external_assistant' as const, xpertName: 'Reviewer',
+      }],
+    };
+    const item = buildMessageNavigationItem(message, 0, { labels });
+    expect(item?.tags).toEqual(['Reviewer']);
+    expect(item?.preview).not.toContain('Dispatch task');
+    const legacy = buildMessageNavigationItem({ ...message, agentRuns: [] }, 0, { labels });
+    expect(legacy?.preview).toContain('Dispatch task');
+  });
   it('excludes new and legacy file receipts from navigation text and tags', () => {
     const plain = { id: 'reply', type: 'ai', content: [{ type: 'text', text: 'Your report is ready.' }] };
     expect(buildMessageNavigationItem({ ...plain, content: [...plain.content, changesReceipt, deliveryReceipt, legacyReceipt] }, 0, { labels }))

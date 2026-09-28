@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ChatMessageInputCheckpoint, Message } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../../providers/Stream';
 import {
@@ -99,6 +100,8 @@ function formatMessageContent(
 }
 
 export type MessageListProps = {
+  approval?: ReactNode;
+  approvalToolCallId?: string;
   collapseProcess?: boolean;
   showActions?: boolean;
   /** Nested process entries reuse the parent answer's horizontal padding. */
@@ -141,6 +144,8 @@ export type MessageListProps = {
 
 /** Shared transcript presentation for main chat and read-only workbench views. */
 export function MessageList({
+  approval,
+  approvalToolCallId,
   collapseProcess = false,
   showActions = true,
   embedded = false,
@@ -182,6 +187,27 @@ export function MessageList({
         : lastIndex,
     -1,
   );
+  const toolAnchor = approvalToolCallId
+    ? messages.findIndex(
+        (message) =>
+          'tool_calls' in message &&
+          Array.isArray(message.tool_calls) &&
+          message.tool_calls.some(
+            (call: unknown) =>
+              !!call &&
+              typeof call === 'object' &&
+              'id' in call &&
+              call.id === approvalToolCallId,
+          ),
+      )
+    : -1;
+  const approvalIndex = foldedIndexes.has(toolAnchor)
+    ? ([...processGroups].find(([, indexes]) =>
+        indexes.includes(toolAnchor),
+      )?.[0] ?? lastAssistantIndex)
+    : toolAnchor >= 0
+      ? toolAnchor
+      : lastAssistantIndex;
   return (
     <div data-slot="chatkit-message-list" className="space-y-4">
       {canLoadMoreMessages && (
@@ -226,7 +252,8 @@ export function MessageList({
           isAssistantMessage &&
           !hasRenderableAssistantMessage(message as ChatkitMessage) &&
           !(message as AssistantMessageWithAgentRuns).agentRuns?.length &&
-          !streamingStatus
+          !streamingStatus &&
+          !(approval && index === approvalIndex)
         ) {
           return null;
         }
@@ -498,6 +525,7 @@ export function MessageList({
                       }
                     />
                   )}
+                  {index === approvalIndex && approval}
                   {!showActions &&
                     !isStreamingMessage &&
                     (isAssistantMessage || isHumanMessage) && (
@@ -509,6 +537,7 @@ export function MessageList({
           </div>
         );
       })}
+      {approvalIndex < 0 && approval}
       {/* Show loading indicator with minimum display time */}
       {showLoadingDots &&
         (() => {

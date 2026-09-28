@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isTrustedChatKitMessageEvent } from '@xpert-ai/chatkit-web-shared';
 
@@ -104,6 +104,23 @@ describe('ParentMessengerProvider', () => {
     Object.defineProperty(event, 'source', { value: parentWindow });
     window.dispatchEvent(event);
   }
+
+  it('dispatches local composer changes without requiring a parent window', async () => {
+    Object.defineProperty(window, 'parent', { configurable: true, value: window });
+    const onSetComposerValue = vi.fn();
+    const onFocusComposer = vi.fn();
+    let messenger: ReturnType<typeof useParentMessenger> | undefined;
+    function LocalComposer() {
+      messenger = useParentMessenger({ onSetComposerValue, onFocusComposer });
+      return null;
+    }
+    render(<ParentMessengerProvider><LocalComposer /></ParentMessengerProvider>);
+    const payload = { appendReferences: true, references: [{ id: 'quote', type: 'quote' as const, text: 'Evidence' }] };
+    await act(async () => { await messenger?.updateComposer(payload); await messenger?.focusComposer(); });
+    expect(onSetComposerValue).toHaveBeenCalledWith(payload);
+    expect(onFocusComposer).toHaveBeenCalledOnce();
+    expect(parentWindow.postMessage).not.toHaveBeenCalled();
+  });
 
   it('reloads the same thread and acknowledges only after its history is loaded', async () => {
     let finish!: () => void;

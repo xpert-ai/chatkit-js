@@ -1,9 +1,11 @@
 import * as React from 'react';
 import type {
   Client,
+  XpertViewQuery,
   XpertExtensionViewManifest,
   XpertRemoteViewHostEventMessage,
   XpertViewFileAccessSessionResult,
+  XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import { useTheme } from '../providers/Theme';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
@@ -36,8 +38,10 @@ export type RemoteViewHostsClient = Pick<
 >;
 
 type RemoteViewFrameProps = {
+  initialQuery?: XpertViewQuery;
   manifest: XpertExtensionViewManifest;
   hostId: string;
+  runtimeScope?: XpertViewRuntimeScopeInput;
   locale: string;
   title: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
@@ -59,7 +63,9 @@ const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function RemoteViewFrame({
   manifest,
+  initialQuery,
   hostId,
+  runtimeScope,
   locale,
   title,
   hostEvent,
@@ -137,6 +143,7 @@ export function RemoteViewFrame({
     void viewHosts
       .getRemoteComponentEntry('agent', hostId, manifest.key, {
         signal: controller.signal,
+        runtimeScope,
       })
       .then((entry) => {
         if (controller.signal.aborted) return;
@@ -165,7 +172,7 @@ export function RemoteViewFrame({
       controller.abort();
       revokeSession();
     };
-  }, [hostId, manifest.key, revokeSession, t, viewHosts]);
+  }, [hostId, manifest.key, revokeSession, runtimeScope, t, viewHosts]);
 
   const sendInit = React.useCallback(() => {
     if (!frameRef.current?.contentWindow || !html) return;
@@ -173,7 +180,7 @@ export function RemoteViewFrame({
     sendToFrame('init', {
       manifest,
       payload: {},
-      initialQuery: createInitialQuery(manifest),
+      initialQuery: { ...createInitialQuery(manifest), ...initialQuery },
       locale,
       theme: remoteTheme,
       debug: {
@@ -182,7 +189,7 @@ export function RemoteViewFrame({
       },
     });
     workbenchDebug.debug('bridge.init.sent', { viewKey: manifest.key });
-  }, [html, locale, manifest, remoteTheme, sendToFrame]);
+  }, [html, locale, manifest, remoteTheme, sendToFrame, initialQuery]);
 
   const ensureFileAccessSession = React.useCallback(
     async (signal: AbortSignal) => {
@@ -197,7 +204,10 @@ export function RemoteViewFrame({
 
       const epoch = sessionEpochRef.current;
       const promise = viewHosts
-        .createFileAccessSession('agent', hostId, manifest.key, { signal })
+        .createFileAccessSession('agent', hostId, manifest.key, {
+          signal,
+          runtimeScope,
+        })
         .then(async (session) => {
           if (epoch !== sessionEpochRef.current) {
             await viewHosts
@@ -219,7 +229,7 @@ export function RemoteViewFrame({
         }
       }
     },
-    [hostId, manifest.key, viewHosts],
+    [hostId, manifest.key, runtimeScope, viewHosts],
   );
 
   const runRequest = React.useCallback(
@@ -295,7 +305,7 @@ export function RemoteViewFrame({
               hostId,
               manifest.key,
               parseViewQuery(message.query),
-              { signal },
+              { signal, runtimeScope },
             ),
           );
           return;
@@ -316,7 +326,7 @@ export function RemoteViewFrame({
               manifest.key,
               parameterKey,
               parseParameterOptionsQuery(message),
-              { signal },
+              { signal, runtimeScope },
             );
           });
           return;
@@ -339,7 +349,7 @@ export function RemoteViewFrame({
               manifest.key,
               actionKey,
               parseActionRequest(message),
-              { signal },
+              { signal, runtimeScope },
             );
           });
           return;
@@ -370,7 +380,7 @@ export function RemoteViewFrame({
                 file: file.buffer,
                 fileName: file.name,
               },
-              { signal },
+              { signal, runtimeScope },
             );
           });
           return;
@@ -432,6 +442,7 @@ export function RemoteViewFrame({
     onClientCommand,
     onNotify,
     runRequest,
+    runtimeScope,
     sendInit,
     viewHosts,
   ]);
