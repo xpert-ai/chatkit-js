@@ -1,5 +1,25 @@
 # @xpert-ai/chatkit-types
 
+## 0.7.0
+
+### Minor Changes
+
+- 2fc0cd2: Add optional inline HITL approval cards anchored to the relevant Assistant tool
+  call. Expose generic host decision and settings callbacks through ChatKit options
+  and the Web Component bridge. Host-backed requests require acknowledgement before
+  resuming, with expiry, duplicate-submission and stale-thread protections. Preserve
+  the existing review panel for complex decisions and keep resource authorization
+  and native execution in the host.
+- 1159f04: Add opt-in `header.windowDrag` for Electron hosts. Chat and Workbench header whitespace supports native dragging and the OS title-bar double-click action. Interactive controls are excluded, and menus/dialogs suspend native hit regions.
+- eb210a6: Align all ChatKit workspace packages on a shared release version. Start from the
+  0.6.3 baseline and release 0.7.0 together, including framework adapters, widgets,
+  host automation, browser tooling, and Office/WPS add-ins. Keep future releases
+  synchronized through a fixed Changesets group; private packages remain private.
+
+### Patch Changes
+
+- 02959f7: Distinguish automatic project creation, no project, and an existing project in composer options, project change events, and chat requests. Respect explicit selections across rerenders and keep the bound conversation project visible and locked. Restore the saved project for historical conversations and synchronize project names and file browsing after automatic creation without interrupting an active run or clearing the draft.
+
 ## 0.6.3
 
 ### Patch Changes
