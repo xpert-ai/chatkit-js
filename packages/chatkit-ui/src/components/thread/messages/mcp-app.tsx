@@ -1,3 +1,4 @@
+import { readAppContinuation, resumeAfterTool } from '../../../lib/tool-after';
 import * as React from 'react';
 import { isEqual } from 'lodash-es';
 
@@ -1069,7 +1070,7 @@ export function McpAppMessage({
   if (!isEqual(dataRef.current, incomingData)) dataRef.current = incomingData;
   const data = dataRef.current;
   const { i18n } = useChatkitTranslation();
-  const { client, isLoading: streamIsLoading, submit } = useStreamContext();
+  const { client, isLoading: streamIsLoading, submit, threadId, conversationId } = useStreamContext();
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const appWindowRef = React.useRef<Window | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -1729,6 +1730,15 @@ export function McpAppMessage({
             return;
           }
 
+          const continuation = readAppContinuation(hostResponse);
+          if (continuation) {
+            if (continuation.toolCallId !== data.toolCallId) throw new Error('App continuation tool mismatch');
+            const messageInput = contentBlocksToChatInput(request.params.content);
+            await resumeAfterTool({ client, submit, threadId, conversationId }, continuation.toolCallId, continuation.executionId, messageInput.input, messageInput.files);
+            postToApp(hostResponse);
+            return;
+          }
+
           const messageInput = contentBlocksToChatInput(request.params.content);
 
           await submit(
@@ -1789,6 +1799,8 @@ export function McpAppMessage({
     sendInitialToolNotifications,
     srcDoc,
     streamIsLoading,
+    threadId,
+    conversationId,
     submit,
   ]);
 

@@ -302,6 +302,8 @@ export type StreamSubmitOptions = {
   newThread?: boolean;
   joinExistingThread?: boolean;
   followUpMode?: FollowUpBehavior;
+  /** Called only after the server accepts the run and returns its identity. */
+  onRunAccepted?: () => void;
   onThreadResolved?: (
     threadId: string,
     conversationId?: string | null,
@@ -3718,6 +3720,7 @@ const StreamSession = ({
       setIsLoading(true);
       isLoadingRef.current = true;
       let transportError: unknown = null;
+      let runAccepted = false;
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
           context: mergeStreamRequestContext(
@@ -3749,6 +3752,10 @@ const StreamSession = ({
                 streamResumable: options?.streamResumable,
                 signal: abortController.signal,
                 onDisconnect: 'continue',
+                onRunCreated: () => {
+                  runAccepted = true;
+                  options?.onRunAccepted?.();
+                },
               });
 
         const interrupts: unknown[] = [];
@@ -3895,6 +3902,9 @@ const StreamSession = ({
           setIsLoading(false);
           isLoadingRef.current = false;
         }
+      }
+      if (options?.onRunAccepted && !runAccepted) {
+        throw transportError ?? new Error('The server did not acknowledge the run.');
       }
     },
     [

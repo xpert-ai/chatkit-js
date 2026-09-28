@@ -1,4 +1,8 @@
 {
+  "ToolAfter": {
+    "Paused": "工具已执行完成，等待继续。",
+    "Continue": "继续"
+  },
   "workbench": {
     "title": "视图",
     "description": "远程工作台视图",

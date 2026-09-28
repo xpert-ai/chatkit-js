@@ -1,3 +1,4 @@
+import { ToolAfterPanel } from './composer/tool-after-panel';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import { useRuntimeResources } from './chat/useRuntimeResources';
 import { RuntimeResourceSelector } from './composer/RuntimeResourceSelector';
@@ -4141,6 +4142,8 @@ export function Chat({
             onDismiss={stream.stop}
             attachToComposer
           />
+
+          <ToolAfterPanel />
 
           <HITLApprovalPanel
             request={stream.pendingHITLRequest}

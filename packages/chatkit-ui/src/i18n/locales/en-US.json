@@ -1,4 +1,8 @@
 {
+  "ToolAfter": {
+    "Paused": "Tool completed. Waiting to continue.",
+    "Continue": "Continue"
+  },
   "workbench": {
     "title": "Views",
     "description": "Remote workbench views",

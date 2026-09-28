@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
     teardown,
     submit: vi.fn(),
     client: {
+      threads: { get: vi.fn() },
       mcp: {
         apps: { getResource, rpc, approve, reject, teardown },
       },
@@ -35,6 +36,8 @@ vi.mock('../../../providers/Stream', () => ({
     client: mocks.client,
     isLoading: false,
     submit: mocks.submit,
+    threadId: 'thread-1',
+    conversationId: 'conversation-1',
   }),
 }));
 
@@ -276,6 +279,41 @@ describe('McpAppMessage host controls', () => {
       }),
       '*',
     );
+  });
+
+  it('resumes with all App attachments and waits for server acceptance', async () => {
+    mocks.rpc.mockResolvedValueOnce({ jsonrpc: '2.0', id: 'resume-1', result: {
+      continuation: { type: 'tool_after', toolCallId: data.toolCallId, executionId: 'run-1' }
+    } });
+    mocks.client.threads.get.mockResolvedValue({ status: 'interrupted', operation: { tasks: [{ interrupts: [{ id: 'gate', value: {
+      type: 'tool_after', toolName: data.toolName, toolCallId: data.toolCallId, app: true
+    } }] }] } });
+    let accepted: (() => void) | undefined;
+    mocks.submit.mockImplementation((_input, options) => {
+      accepted = options.onRunAccepted;
+      return new Promise(() => {});
+    });
+    render(<McpAppMessage data={data} messageId="message-1" />);
+    const iframeWindow = getIframeWindow(asIframe(await screen.findByTitle('Example App')));
+    const post = vi.spyOn(iframeWindow, 'postMessage');
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', { source: iframeWindow, data: {
+        jsonrpc: '2.0', id: 'resume-1', method: 'ui/message', params: { role: 'user', content: [
+          { type: 'image', data: 'aW1hZ2U=', mimeType: 'image/png' },
+          { type: 'audio', data: 'YXVkaW8=', mimeType: 'audio/wav' },
+          { type: 'resource', resource: { uri: 'mcp://report', mimeType: 'application/pdf', blob: 'cGRm' } }
+        ] }
+      } }));
+    });
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledOnce());
+    expect(mocks.submit.mock.calls[0][0].decision.payload.gate.files).toEqual([
+      expect.objectContaining({ fileUrl: 'data:image/png;base64,aW1hZ2U=' }),
+      expect.objectContaining({ fileUrl: 'data:audio/wav;base64,YXVkaW8=' }),
+      expect.objectContaining({ fileUrl: 'data:application/pdf;base64,cGRm' })
+    ]);
+    expect(post.mock.calls.some(([message]) => message.id === 'resume-1')).toBe(false);
+    await act(async () => accepted?.());
+    expect(post.mock.calls.some(([message]) => message.id === 'resume-1' && message.result)).toBe(true);
   });
 
   it('preserves multimodal ui/message blocks as text and inline files', async () => {
