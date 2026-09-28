@@ -1,5 +1,35 @@
 # @xpert-ai/chatkit-ui
 
+## 0.7.0
+
+### Minor Changes
+
+- 2fc0cd2: Add optional inline HITL approval cards anchored to the relevant Assistant tool
+  call. Expose generic host decision and settings callbacks through ChatKit options
+  and the Web Component bridge. Host-backed requests require acknowledgement before
+  resuming, with expiry, duplicate-submission and stale-thread protections. Preserve
+  the existing review panel for complex decisions and keep resource authorization
+  and native execution in the host.
+- 1159f04: Add opt-in `header.windowDrag` for Electron hosts. Chat and Workbench header whitespace supports native dragging and the OS title-bar double-click action. Interactive controls are excluded, and menus/dialogs suspend native hit regions.
+- eb210a6: Align all ChatKit workspace packages on a shared release version. Start from the
+  0.6.3 baseline and release 0.7.0 together, including framework adapters, widgets,
+  host automation, browser tooling, and Office/WPS add-ins. Keep future releases
+  synchronized through a fixed Changesets group; private packages remain private.
+
+### Patch Changes
+
+- 9523288: Show all conversations for the current Assistant by default, with explicit filters for the current project and conversations without a project. Ignore stale history search responses after changing scope. Emit thread load lifecycle events so the host can synchronize the URL and project after a successful history load, without reporting failed or superseded loads as complete.
+- 02959f7: Distinguish automatic project creation, no project, and an existing project in composer options, project change events, and chat requests. Respect explicit selections across rerenders and keep the bound conversation project visible and locked. Restore the saved project for historical conversations and synchronize project names and file browsing after automatic creation without interrupting an active run or clearing the draft.
+- 00d275d: Replace the Workbench view-tab scrollbar with overflow-aware left/right buttons supporting press-and-hold scrolling. Preserve trackpad scrolling, keyboard activation, and visibility of newly selected tabs.
+- f7b00e6: Upgrade the Xpert SDK dependency to 0.4.3, including explicit project selection types and sandbox runtime requests through the AI API.
+- Updated dependencies [02959f7]
+- Updated dependencies [2fc0cd2]
+- Updated dependencies [1159f04]
+- Updated dependencies [eb210a6]
+  - @xpert-ai/chatkit-types@0.7.0
+  - @xpert-ai/chatkit-web-shared@0.7.0
+  - @xpert-ai/a2ui-react@0.7.0
+
 ## 0.6.3
 
 ### Patch Changes

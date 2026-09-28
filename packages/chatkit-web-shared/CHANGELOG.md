@@ -1,5 +1,23 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.7.0
+
+### Minor Changes
+
+- 1159f04: Add opt-in `header.windowDrag` for Electron hosts. Chat and Workbench header whitespace supports native dragging and the OS title-bar double-click action. Interactive controls are excluded, and menus/dialogs suspend native hit regions.
+- eb210a6: Align all ChatKit workspace packages on a shared release version. Start from the
+  0.6.3 baseline and release 0.7.0 together, including framework adapters, widgets,
+  host automation, browser tooling, and Office/WPS add-ins. Keep future releases
+  synchronized through a fixed Changesets group; private packages remain private.
+
+### Patch Changes
+
+- Updated dependencies [02959f7]
+- Updated dependencies [2fc0cd2]
+- Updated dependencies [1159f04]
+- Updated dependencies [eb210a6]
+  - @xpert-ai/chatkit-types@0.7.0
+
 ## 0.4.5
 
 ### Patch Changes
