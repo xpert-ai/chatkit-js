@@ -1,3 +1,4 @@
+import { parseWorkbenchViewOpenEvent } from '@xpert-ai/xpert-sdk';
 import { parseFileActivityContent } from '@xpert-ai/chatkit-types';
 import { applyFileActivityReceipt } from '../lib/stream-file-activity';
 import React, {
@@ -2105,6 +2106,8 @@ export function applyStreamEvent(
         break;
       }
       case ChatMessageEventTypeEnum.ON_CHAT_EVENT: {
+        // The live log already delivered this UI request; it is not conversation content.
+        if (parseWorkbenchViewOpenEvent(payload.data)) break;
         const contextUsageEvent = extractThreadContextUsageEvent(payload.data);
         if (contextUsageEvent) {
           onThreadContextUsage?.(contextUsageEvent);

@@ -190,6 +190,20 @@ service must explicitly support credential-isolated frames with an authorized,
 short-lived capability; never remove the iframe sandbox to make a connection
 work or treat the null Origin as authentication.
 
+### Workbench opening policy
+
+ChatKit Workbench views use the `agent.workbench.fixed` slot. `workbench.openMode`
+is `auto` (the default, initially opened) or `on-demand` (opened by a menu,
+navigation, or a scoped live Agent request). Both use the same view renderer,
+data/actions, parameters and runtime scope. `workbench.menu.enabled: false` hides
+manual entries only; it does not block an authorized view from opening through
+navigation or an Agent request. Feature activation and permissions control availability.
+
+The existing `agent.workbench.fixed` and `agent.workbench.main` APIs remain
+available. ChatKit continues to request the fixed slot; opening policy is
+independent of the slot name. `workbench.fixed: false` retains its disabled
+semantics and must not be interpreted as `on-demand`.
+
 ### Execution focus from the host
 
 To focus an execution, pass `threadId`, `executionId`, and a new

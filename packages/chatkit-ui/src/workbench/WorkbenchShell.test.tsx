@@ -1,3 +1,4 @@
+import { CHATKIT_INTERNAL_PARENT_EVENT } from './host-events';
 import * as React from 'react';
 import {
   act,
@@ -148,7 +149,7 @@ const manifest: XpertExtensionViewManifest = {
   slot: 'agent.workbench.fixed',
   order: 10,
   source: { provider: 'provider' },
-  workbench: { fixed: true, menu: { enabled: true, order: 10 } },
+  workbench: { openMode: 'auto', menu: { enabled: true, order: 10 } },
   view: {
     type: 'remote_component',
     runtime: 'react',
@@ -209,6 +210,79 @@ describe('WorkbenchShell', () => {
     mocks.stream.conversationId = 'conversation-1';
     window.localStorage.clear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+  });
+
+  it('opens on-demand views only on a scoped live request and allows close/reopen', async () => {
+    const timeline = {
+      ...manifest,
+      key: 'platform.project-tasks__timeline',
+      title: 'Tasks',
+      workbench: { openMode: 'on-demand' as const, menu: { enabled: false } },
+    };
+    mocks.listSlotViews.mockResolvedValue([manifest, timeline]);
+    render(
+      <WorkbenchShell
+        options={{
+          ...baseOptions,
+          workbench: { enabled: true, viewRail: { enabled: true } },
+        }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <input aria-label="Draft" />
+      </WorkbenchShell>,
+    );
+    const rail = await screen.findByRole('navigation', {
+      name: 'Available views',
+    });
+    fireEvent.click(within(rail).getByRole('button', { name: 'Documents' }));
+    await screen.findByRole('tab', { name: 'Documents' });
+    expect(
+      screen.queryByRole('tab', { name: 'Tasks' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(rail).queryByRole('button', { name: 'Tasks' }),
+    ).not.toBeInTheDocument();
+    const dispatch = (projectId: string, viewKey = timeline.key) =>
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent(CHATKIT_INTERNAL_PARENT_EVENT, {
+            detail: {
+              event: 'public_event',
+              data: [
+                'log',
+                {
+                  name: 'lg.chat.event',
+                  data: {
+                    type: 'workbench.view.open',
+                    projectId,
+                    conversationId: 'conversation-1',
+                    viewKey,
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      });
+    dispatch('foreign');
+    expect(
+      screen.queryByRole('tab', { name: 'Tasks' }),
+    ).not.toBeInTheDocument();
+    dispatch('project-1', 'unavailable');
+    expect(
+      screen.queryByRole('tab', { name: 'Tasks' }),
+    ).not.toBeInTheDocument();
+    dispatch('project-1');
+    await screen.findByRole('tab', { name: 'Tasks' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close views: Tasks' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('tab', { name: 'Tasks' }),
+      ).not.toBeInTheDocument(),
+    );
+    dispatch('project-1');
+    await screen.findByRole('tab', { name: 'Tasks' });
   });
 
   it('opens the selected rail view, preserves the draft and restores the rail on close', async () => {
