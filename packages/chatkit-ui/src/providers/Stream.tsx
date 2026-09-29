@@ -223,6 +223,11 @@ type ChatKitMessageContentPart = NonNullable<
 
 export type StateType = { messages: ChatKitAIMessage[] };
 
+type StreamEventState = LangGraphEventState & {
+  /** Message identity for deltas, including replay into already loaded history. */
+  activeMessageId?: string;
+};
+
 type StreamRunInput = TChatRequest | TXpertChatResumeRequest;
 type ProjectSelection = import('@xpert-ai/chatkit-types').ProjectSelection;
 
@@ -1197,14 +1202,15 @@ function appendStreamText(
   });
 }
 
-function appendStreamTextToLatest(
+function appendStreamTextToMessage(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   text: string,
+  messageId?: string,
 ) {
   if (!text) return;
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    const lastAssistantIndex = findAssistantMessageIndex(messages, messageId);
     if (lastAssistantIndex < 0) {
       const newMessage: ChatKitAIMessage = {
         id: createMessageId(),
@@ -1419,13 +1425,21 @@ function extractMessageMeta(raw: MessageMetadataContainer) {
   return meta;
 }
 
-function updateLatestMessage(
+function findAssistantMessageIndex(messages: ChatKitAIMessage[], messageId?: string) {
+  const matchingIndex = messageId
+    ? messages.findIndex((message) => isAssistantMessage(message) && message.id === messageId)
+    : -1;
+  return matchingIndex >= 0 ? matchingIndex : findLatestAssistantMessageIndex(messages);
+}
+
+function updateAssistantMessage(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   updater: (message: Message) => Message,
+  messageId?: string,
 ) {
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    const lastAssistantIndex = findAssistantMessageIndex(messages, messageId);
     if (lastAssistantIndex < 0) return prev;
     const nextMessages = [...messages];
     nextMessages[lastAssistantIndex] = updater(
@@ -1458,13 +1472,14 @@ function applyMessageData(
 }
 
 /**
- * Append a complex message content (e.g., with components) into the latest message
+ * Append complex content to the current stream message, or the latest legacy message.
  */
 function appendMessageComponent(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   content: TMessageContentComplex,
+  messageId?: string,
 ) {
-  updateLatestMessage(setValues, (lastM) => {
+  updateAssistantMessage(setValues, (lastM) => {
     // Deep clone the message to avoid mutation issues with React Strict Mode
     // React Strict Mode calls state updater twice, and appendMessageContent mutates the content array
     const lastMessage = lastM as unknown as Record<string, unknown>;
@@ -1483,7 +1498,7 @@ function appendMessageComponent(
     };
     appendMessageContent(clonedMessage as any, content);
     return clonedMessage as unknown as Message;
-  });
+  }, messageId);
 }
 
 function normalizeClientToolRequest(value: unknown): ClientToolRequest | null {
@@ -1728,7 +1743,7 @@ export function applyStreamEvent(
   setError: React.Dispatch<React.SetStateAction<unknown>>,
   sendEvent: ParentMessenger['sendEvent'],
   interrupts: unknown[],
-  langGraphEventState: LangGraphEventState,
+  langGraphEventState: StreamEventState,
   eventContext?: LangGraphEventContext,
   onExecutionId?: (executionId: string | undefined) => void,
   onThreadContextUsage?: (event: TThreadContextUsageEvent) => void,
@@ -1777,8 +1792,9 @@ export function applyStreamEvent(
 
   if (typeof parsed === 'string') {
     const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    if (shouldStartFreshAssistant) langGraphEventState.activeMessageId = undefined;
     startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
-    appendStreamTextToLatest(setValues, parsed);
+    appendStreamTextToMessage(setValues, parsed, langGraphEventState.activeMessageId);
     return;
   }
 
@@ -1806,8 +1822,9 @@ export function applyStreamEvent(
   if (payloadType === ChatMessageTypeEnum.MESSAGE) {
     if (typeof payload.data === 'string') {
       const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+      if (shouldStartFreshAssistant) langGraphEventState.activeMessageId = undefined;
       startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
-      appendStreamTextToLatest(setValues, payload.data);
+      appendStreamTextToMessage(setValues, payload.data, langGraphEventState.activeMessageId);
       return;
     }
 
@@ -1833,8 +1850,9 @@ export function applyStreamEvent(
       sendEvent('public_event', ['log', { ...message, name: 'component' }]);
     }
     const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    if (shouldStartFreshAssistant) langGraphEventState.activeMessageId = undefined;
     startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
-    appendMessageComponent(setValues, message);
+    appendMessageComponent(setValues, message, langGraphEventState.activeMessageId);
     return;
   }
 
@@ -1951,6 +1969,7 @@ export function applyStreamEvent(
         break;
       }
       case ChatMessageEventTypeEnum.ON_MESSAGE_START: {
+        langGraphEventState.activeMessageId = meta.id;
         if (executionId) {
           onExecutionId?.(executionId);
         }
@@ -1982,13 +2001,14 @@ export function applyStreamEvent(
           const messages = prev.messages ?? [];
           const shouldStartFreshAssistant =
             consumeFreshAssistantSplit?.() ?? false;
-          const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+          const lastAssistantIndex = findAssistantMessageIndex(messages, meta.id);
           const last =
             lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
           if (!shouldStartFreshAssistant && last && isAssistantMessage(last)) {
             if (
-              (executionId && last.executionId === executionId) ||
-              (meta.id && last.id === meta.id)
+              meta.id
+                ? last.id === meta.id
+                : executionId && last.executionId === executionId
             ) {
               const nextMessages = [...messages];
               const nextLast: ChatKitAIMessage = {
@@ -2031,6 +2051,7 @@ export function applyStreamEvent(
             // run; replacing it in place would insert the new response above
             // those items.
             if (
+              !last.executionId &&
               typeof last.content === 'string' &&
               last.content.length === 0 &&
               lastAssistantIndex === messages.length - 1
@@ -2058,7 +2079,7 @@ export function applyStreamEvent(
         ) {
           break;
         }
-        updateLatestMessage(setValues, (message) => {
+        updateAssistantMessage(setValues, (message) => {
           return {
             ...(message as ChatKitAIMessage),
             ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
@@ -2083,7 +2104,7 @@ export function applyStreamEvent(
               ? { clientToolCalls: meta.clientToolCalls }
               : {}),
           };
-        });
+        }, meta.id);
         break;
       }
       case ChatMessageEventTypeEnum.ON_INTERRUPT: {

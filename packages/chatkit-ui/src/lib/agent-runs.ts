@@ -46,6 +46,14 @@ export type AgentEventContent = TMessageContentComplex & {
   data?: unknown;
 };
 
+export function hasAgentRunError(error: unknown): boolean {
+  return (
+    error !== null &&
+    error !== undefined &&
+    (typeof error !== 'string' || error.trim().length > 0)
+  );
+}
+
 export function isAgentEventContent(
   content: TMessageContentComplex,
 ): content is AgentEventContent {
@@ -243,7 +251,8 @@ export function mergeAgentRunInfo(
     title: incoming.title ?? previous.title,
     status: incoming.status ?? previous.status,
     elapsedTime: incoming.elapsedTime ?? previous.elapsedTime,
-    error: incoming.error ?? previous.error,
+    // An omitted field is a partial update; null explicitly clears the error.
+    error: incoming.error !== undefined ? incoming.error : previous.error,
     inputs: incoming.inputs ?? previous.inputs,
   };
 }

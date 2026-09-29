@@ -16,7 +16,10 @@ import {
 } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
-import type { AgentEventContent } from '../../../lib/agent-runs';
+import {
+  hasAgentRunError,
+  type AgentEventContent,
+} from '../../../lib/agent-runs';
 import {
   getAgentRunCounts,
   getAgentRunDuration,
@@ -117,7 +120,7 @@ function MiddlewareEventRow({ content }: { content: AgentEventContent }) {
         })
       : fallbackMessage;
   const isError =
-    content.error !== undefined || isFailedRunStatus(content.status);
+    hasAgentRunError(content.error) || isFailedRunStatus(content.status);
   const isRunning = isRunningRunStatus(content.status);
   const statusIcon = getMiddlewareEventIcon(content.status);
   const StatusIcon = statusIcon.icon;
@@ -282,7 +285,7 @@ export function AgentEventRow({ content }: { content: AgentEventContent }) {
       ? content.message.trim()
       : null;
   const isError =
-    content.error !== undefined || isFailedRunStatus(content.status);
+    hasAgentRunError(content.error) || isFailedRunStatus(content.status);
 
   return (
     <div
@@ -297,7 +300,7 @@ export function AgentEventRow({ content }: { content: AgentEventContent }) {
       <div className="min-w-0 flex-1">
         <div className="truncate font-medium">{label}</div>
         {detail ? <div className="wrap-break-word">{detail}</div> : null}
-        {content.error !== undefined ? (
+        {hasAgentRunError(content.error) ? (
           <pre className="mt-1 whitespace-pre-wrap wrap-break-word">
             {formatDisplayValue(content.error)}
           </pre>
@@ -498,7 +501,7 @@ export function AgentRunGroup({
         <div id={detailsId} className="mt-2 space-y-3">
           {hasVisibleAgentRunDetails(node.info) ? (
             <div className="space-y-2 rounded-md bg-muted/30 px-2 py-2 text-xs text-muted-foreground">
-              {node.info.error !== undefined ? (
+              {hasAgentRunError(node.info.error) ? (
                 <div>
                   <div className="mb-1 font-medium text-destructive">
                     {t('message.agentRun.errorLabel')}
