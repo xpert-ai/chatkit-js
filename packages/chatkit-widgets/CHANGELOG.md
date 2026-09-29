@@ -1,5 +1,7 @@
 # @xpert-ai/a2ui-react
 
+## 0.8.0
+
 ## 0.7.0
 
 ### Minor Changes
