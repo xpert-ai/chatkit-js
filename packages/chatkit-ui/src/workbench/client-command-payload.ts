@@ -19,6 +19,7 @@ export type NavigationPayload = {
   target: string;
   conversationId?: string;
   threadId?: string;
+  executionId?: string;
   projectId?: string;
   xpertId?: string;
   viewKey?: string;
@@ -39,12 +40,24 @@ export function parseNavigation(value: unknown): NavigationPayload {
     target: text(field(value, 'target')) ?? '',
     conversationId: text(field(value, 'conversationId')),
     threadId: text(field(value, 'threadId')),
+    executionId: text(field(value, 'executionId')),
     projectId: text(field(value, 'projectId')),
     xpertId: text(field(value, 'xpertId')),
     viewKey: text(field(value, 'viewKey')),
     query: parseViewQuery(value),
   };
 }
+
+export type ExecutionNavigationRequest = {
+  conversationId: string;
+  executionId: string;
+  threadId?: string;
+  projectId?: string;
+};
+
+export type ExecutionNavigationResult =
+  | { success: true; status: 'opened' }
+  | { success: false; code: string; message?: string };
 
 // Session credentials are consumed by ChatKit and must never be returned to a remote view.
 export function parseNavigationSession(

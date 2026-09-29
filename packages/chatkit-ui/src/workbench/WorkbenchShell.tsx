@@ -1,3 +1,5 @@
+import { useExecutionFocus } from './useExecutionFocus';
+import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2 } from 'lucide-react';
@@ -312,6 +314,53 @@ export function WorkbenchShell({
     scopedViews[0] ??
     null;
 
+  const executionFocusOptions = {
+    threadId: stream.threadId,
+    scope: JSON.stringify([
+      stream.apiUrl,
+      stream.organizationId,
+      externalScope,
+    ]),
+    externalRuns: externalAssistantsEnabled ? externalRuns : [],
+    messages: workbenchMessages,
+    history: stream.historyMessagePagination,
+    historyReady:
+      stream.historyLoad?.threadId === stream.threadId &&
+      stream.historyLoad?.status === 'loaded',
+    loadMore: stream.loadMoreConversationMessages,
+    openExternal: openExternalAssistant,
+    rootRef,
+    unavailableMessage: t('workbench.executionUnavailable'),
+    revealMessage: () => {
+      setExpanded(false);
+      if (isNarrow) setOpen(false);
+    },
+  };
+  useExecutionFocus({
+    ...executionFocusOptions,
+    executionId: options?.request?.context?.env?.executionId,
+    requestId: options?.request?.context?.env?.executionFocusRequestId,
+    requestedThread: options?.request?.context?.env?.threadId,
+    onError: (message) => setNotification({ level: 'error', message }),
+  });
+  const openExecution = useLocalExecutionNavigation({
+    ...executionFocusOptions,
+    conversationId: stream.conversationId,
+    projectId: stream.projectId,
+    navigationKey: JSON.stringify([
+      options?.request?.context?.env?.executionId,
+      options?.request?.context?.env?.executionFocusRequestId,
+      options?.request?.context?.env?.threadId,
+    ]),
+    historyError:
+      stream.historyLoad?.status === 'error'
+        ? getErrorMessage(
+            stream.historyLoad.error,
+            t('workbench.executionUnavailable'),
+          )
+        : undefined,
+  });
+
   const askInSideChat = React.useCallback(
     async (reference: ChatKitReference) => {
       if (!sideChatEnabled) return;
@@ -532,6 +581,7 @@ export function WorkbenchShell({
           await parentMessenger.focusComposer();
         },
         navigate: onNavigate,
+        openExecution,
         forward: async (request) => {
           const onClientCommand = options?.workbench?.onClientCommand;
           if (typeof onClientCommand === 'function')
@@ -552,6 +602,7 @@ export function WorkbenchShell({
       setExpanded,
       isNarrow,
       onNavigate,
+      openExecution,
       options?.workbench?.onClientCommand,
       parentMessenger,
       publishContexts,
@@ -765,6 +816,22 @@ export function WorkbenchShell({
           >
             <Loader2 size={16} className="animate-spin" />
             {t('message.loading')}
+          </div>
+        )}
+        {notification && !open && (
+          <div
+            role="alert"
+            className="absolute inset-x-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border bg-background p-3 text-sm shadow-lg"
+          >
+            <span className="flex-1">{notification.message}</span>
+            <button
+              type="button"
+              aria-label={t('workbench.close')}
+              className="rounded px-2 hover:bg-muted"
+              onClick={() => setNotification(null)}
+            >
+              ×
+            </button>
           </div>
         )}
         {resizing && (

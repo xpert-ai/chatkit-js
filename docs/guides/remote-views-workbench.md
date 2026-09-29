@@ -107,6 +107,21 @@ global `chatkit.error`.
 
 ### Authorized conversation and project navigation
 
+Execution inspection is handled inside ChatKit first. Send `workbench.navigation.open`
+with `target: 'assistant.execution'`, `conversationId`, `executionId`, and optional
+`threadId` / `projectId` hints. The older `assistant.conversation` target with an
+`executionId` retains the same behavior. In the active conversation and branch,
+ChatKit opens the exact external execution panel (or scrolls to the root execution),
+loading older messages through the SDK only when necessary. It does not reset the
+thread, discard the composer draft, or ask the host to navigate.
+
+Only targets outside the current conversation/branch fall back to the host, using
+the compatible `assistant.conversation` payload. Missing records, rejected reads,
+and stale requests return an error without host fallback. Frame identity and
+manifest command declarations remain enforced; execution data is read with the
+current session's authorization. A new selection or scope change cancels the old
+selection. Each click can reopen a previously closed execution panel.
+
 For `assistant.conversation` and `assistant.project`, ChatKit owns the runtime
 switch and UI. The authenticated host owns authorization:
 
@@ -174,3 +189,10 @@ Direct WebSocket connections from this iframe send `Origin: null`. A remote
 service must explicitly support credential-isolated frames with an authorized,
 short-lived capability; never remove the iframe sandbox to make a connection
 work or treat the null Origin as authentication.
+
+### Execution focus from the host
+
+To focus an execution, pass `threadId`, `executionId`, and a new
+`executionFocusRequestId` in `request.context.env` for each explicit navigation.
+The request ID prevents ordinary rerenders from reopening the panel while allowing
+the user to open the same execution again after closing it.

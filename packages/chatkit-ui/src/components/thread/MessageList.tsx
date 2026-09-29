@@ -331,6 +331,9 @@ export function MessageList({
               );
             }}
             data-message-navigation-id={messageNavigationId}
+            data-execution-id={
+              'executionId' in message ? message.executionId : undefined
+            }
             className={cn(
               'group group/message flex gap-3',
               isHumanMessage

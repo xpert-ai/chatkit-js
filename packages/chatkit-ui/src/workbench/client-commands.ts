@@ -8,6 +8,8 @@ import {
   parsePreview,
   type NavigationSession,
   type WorkbenchPreview,
+  type ExecutionNavigationRequest,
+  type ExecutionNavigationResult,
 } from './client-command-payload';
 import type { ComposerValuePayload } from '../lib/references';
 
@@ -18,6 +20,9 @@ export type WorkbenchCommandHost = {
   revealChat: () => void;
   updateComposer: (value: ComposerValuePayload) => Promise<void>;
   focusComposer: () => Promise<void>;
+  openExecution?: (
+    request: ExecutionNavigationRequest,
+  ) => Promise<ExecutionNavigationResult>;
   navigate?: (
     session: NavigationSession,
     request: ChatKitWorkbenchClientCommandRequest,
@@ -71,6 +76,38 @@ export async function executeWorkbenchCommand(
   if (commandKey === 'workbench.navigation.open') {
     const navigation = parseNavigation(payload);
     if (!navigation.target) return invalid();
+    const executionTarget = navigation.target === 'assistant.execution';
+    if (
+      executionTarget &&
+      (!navigation.conversationId || !navigation.executionId)
+    )
+      return invalid();
+    if (
+      executionTarget ||
+      (navigation.target === 'assistant.conversation' && navigation.executionId)
+    ) {
+      if (!navigation.conversationId || !navigation.executionId)
+        return invalid();
+      const result = await host.openExecution?.({
+        conversationId: navigation.conversationId,
+        executionId: navigation.executionId,
+        threadId: navigation.threadId,
+        projectId: navigation.projectId,
+      });
+      // Only a context the embedded client cannot handle falls back to the host.
+      if (result && (result.success || result.code !== 'unsupported'))
+        return result;
+      if (executionTarget) {
+        // Older hosts understand conversation navigation with an execution anchor.
+        return executeWorkbenchCommand(
+          {
+            ...request,
+            payload: { ...navigation, target: 'assistant.conversation' },
+          },
+          { ...host, openExecution: undefined },
+        );
+      }
+    }
     if (navigation.target === 'workbench.view') {
       if (!navigation.viewKey) return invalid();
       return host.openView(navigation.viewKey, navigation.query)
@@ -107,12 +144,14 @@ export async function executeWorkbenchCommand(
           !field(result, 'session')
         )
           return { success: true, status: 'opened', target: navigation.target };
+        const message = field(result, 'message');
         return {
           success: false,
           code:
             field(result, 'success') === true
               ? 'invalid_session'
               : (field(result, 'code') ?? 'unsupported'),
+          ...(typeof message === 'string' ? { message } : {}),
         };
       }
       // An authorization result may canonicalize the Assistant, but cannot silently change the requested resource.

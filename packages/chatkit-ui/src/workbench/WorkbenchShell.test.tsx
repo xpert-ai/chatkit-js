@@ -440,6 +440,44 @@ describe('WorkbenchShell', () => {
     expect(screen.queryByText('Remote views failed')).not.toBeInTheDocument();
   });
 
+  it('reopens a closed execution panel when the host requests the same attempt again', async () => {
+    mocks.listSlotViews.mockResolvedValue([]);
+    mocks.stream.messages = externalMessages();
+    const tree = (requestId: string) => (
+      <WorkbenchShell
+        options={{
+          ...baseOptions,
+          request: {
+            context: {
+              env: {
+                threadId: 'thread-1',
+                executionId: 'external-1',
+                executionFocusRequestId: requestId,
+              },
+            },
+          },
+        }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <ExternalTranscript />
+      </WorkbenchShell>
+    );
+    const view = render(tree('navigation-1'));
+    await screen.findByRole('tabpanel', { name: 'External assistants' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close external assistants' }));
+    view.rerender(tree('navigation-1'));
+    expect(
+      screen.queryByRole('tabpanel', { name: 'External assistants' }),
+    ).not.toBeInTheDocument();
+    view.rerender(tree('navigation-2'));
+    const panel = await screen.findByRole('tabpanel', {
+      name: 'External assistants',
+    });
+    expect(within(panel).getByText('External response')).toBeInTheDocument();
+    expect(mocks.submit).not.toHaveBeenCalled();
+  });
+
   it('does not display a null execution error or null input from persisted history', () => {
     mocks.stream.messages = externalMessages();
     mocks.stream.messages[0].agentRuns![0] = {
@@ -1166,6 +1204,68 @@ describe('WorkbenchShell', () => {
       expect.objectContaining({ followUpMode: 'steer' }),
     );
   });
+
+  it.each(['assistant.execution', 'assistant.conversation'])(
+    'opens %s records from remote views without host navigation or resetting the chat',
+    async (target) => {
+      mocks.stream.messages = externalMessages();
+      mocks.listSlotViews.mockResolvedValue([manifest]);
+      const onClientCommand = vi.fn();
+      const onNavigate = vi.fn();
+      render(
+        <WorkbenchShell
+          options={{
+            ...baseOptions,
+            workbench: { enabled: true, onClientCommand },
+          }}
+          locale="en-US"
+          onRequestContextChange={vi.fn()}
+          onNavigate={onNavigate}
+        >
+          <WorkbenchToggleButton />
+          <input aria-label="Draft" defaultValue="Keep my draft" />
+        </WorkbenchShell>,
+      );
+      setObservedWidth(1200);
+      await waitFor(() =>
+        expect(screen.getByLabelText('Open views')).toBeEnabled(),
+      );
+      fireEvent.click(screen.getByLabelText('Open views'));
+      await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
+      for (let i = 0; i < 2; i++) {
+        let response!: Promise<unknown>;
+        act(() => {
+          response = mocks.remoteViewProps!.onClientCommand(
+            'workbench.navigation.open',
+            {
+              target,
+              conversationId: 'conversation-1',
+              threadId: 'thread-1',
+              projectId: 'project-1',
+              executionId: 'external-1',
+            },
+            manifest,
+          );
+        });
+        expect(await response).toMatchObject({
+          success: true,
+          status: 'opened',
+        });
+        expect(
+          await screen.findByText('External response'),
+        ).toBeInTheDocument();
+        if (i === 0)
+          fireEvent.click(
+            screen.getByLabelText('Close external assistants'),
+          );
+      }
+      expect(screen.getByLabelText('Draft')).toHaveValue('Keep my draft');
+      expect(onClientCommand).not.toHaveBeenCalled();
+      expect(onNavigate).not.toHaveBeenCalled();
+      expect(mocks.stream.reset).not.toHaveBeenCalled();
+      expect(mocks.listSlotViews).toHaveBeenCalledOnce();
+    },
+  );
 
   it('forwards manifest client commands to the configured callback', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);

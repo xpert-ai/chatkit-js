@@ -30,6 +30,93 @@ function fixture(result: unknown = { success: false, code: 'unsupported' }) {
   return { host, execute };
 }
 describe('Workbench built-in commands', () => {
+  it.each(['assistant.execution', 'assistant.conversation'])(
+    'opens %s execution anchors internally without a host navigator',
+    async (target) => {
+      const { host, execute } = fixture();
+      host.navigate = undefined;
+      host.openExecution = vi
+        .fn()
+        .mockResolvedValue({ success: true, status: 'opened' });
+      expect(
+        await execute('workbench.navigation.open', {
+          target,
+          conversationId: 'conversation',
+          threadId: 'thread',
+          executionId: 'attempt-2',
+          projectId: 'project',
+        }),
+      ).toEqual({ success: true, status: 'opened' });
+      expect(host.openExecution).toHaveBeenCalledWith({
+        conversationId: 'conversation',
+        threadId: 'thread',
+        executionId: 'attempt-2',
+        projectId: 'project',
+      });
+      expect(host.forward).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    'forbidden',
+    'execution_unavailable',
+    'execution_load_failed',
+    'stale_context',
+  ])(
+    'does not fall back to host navigation after a local %s failure',
+    async (code) => {
+      const { host, execute } = fixture();
+      host.openExecution = vi.fn().mockResolvedValue({ success: false, code });
+      expect(
+        await execute('workbench.navigation.open', {
+          target: 'assistant.execution',
+          conversationId: 'conversation',
+          executionId: 'attempt',
+        }),
+      ).toEqual({ success: false, code });
+      expect(host.forward).not.toHaveBeenCalled();
+    },
+  );
+  it('falls back once using the compatible host contract for a different conversation', async () => {
+    const { host, execute } = fixture({ success: true, status: 'opened' });
+    host.openExecution = vi
+      .fn()
+      .mockResolvedValue({ success: false, code: 'unsupported' });
+    await execute('workbench.navigation.open', {
+      target: 'assistant.execution',
+      conversationId: 'other',
+      threadId: 'branch',
+      executionId: 'attempt',
+    });
+    expect(host.openExecution).toHaveBeenCalledOnce();
+    expect(host.forward).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          target: 'assistant.conversation',
+          conversationId: 'other',
+          threadId: 'branch',
+          executionId: 'attempt',
+        }),
+      }),
+    );
+  });
+  it('keeps plain conversation navigation host-owned and validates execution targets', async () => {
+    const { host, execute } = fixture({ success: true, status: 'opened' });
+    host.openExecution = vi.fn();
+    expect(
+      await execute('workbench.navigation.open', {
+        target: 'assistant.execution',
+        conversationId: 'conversation',
+      }),
+    ).toMatchObject({ code: 'bad_request' });
+    expect(
+      await execute('workbench.navigation.open', {
+        target: 'assistant.conversation',
+        conversationId: 'conversation',
+      }),
+    ).toMatchObject({ success: true });
+    expect(host.openExecution).not.toHaveBeenCalled();
+    expect(host.forward).toHaveBeenCalledOnce();
+  });
   it('opens a registered view with sanitized selection and parameters without forwarding', async () => {
     const { host, execute } = fixture();
     expect(
@@ -171,6 +258,21 @@ describe('Workbench built-in commands', () => {
       success: false,
       code: 'invalid_session',
     });
+  });
+  it('preserves a host navigation failure so a view can display why it did not open', async () => {
+    const failure = {
+      success: false,
+      code: 'forbidden',
+      message: 'This execution is not accessible.',
+    };
+    const { host, execute } = fixture(failure);
+    expect(
+      await execute('workbench.navigation.open', {
+        target: 'assistant.conversation',
+        conversationId: 'conversation',
+      }),
+    ).toEqual(failure);
+    expect(host.navigate).not.toHaveBeenCalled();
   });
   it('forwards platform commands unchanged', async () => {
     const { host, execute } = fixture({
