@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   createRuntimeCapabilitiesForSubmit,
   getRuntimeCapabilityOptions,
+  getRecommendedRuntimeCapabilitiesSelection,
   isRuntimeCapabilitySelected,
   mergeRuntimeCapabilitiesSelections,
   type RuntimeCapabilitiesSelection,
@@ -63,6 +64,7 @@ export function useComposerCapabilitySelection({
       isRuntimeCapabilitySelected(selection, option.type, option.id),
   );
   const tokenKeys = getComposerCapabilitySelectionKeys(parts);
+  const recommended = getRecommendedRuntimeCapabilitiesSelection(selection);
 
   const removeFromSessionAndPrompt = React.useCallback(
     (option: RuntimeCapabilityOption) => {
@@ -99,6 +101,15 @@ export function useComposerCapabilitySelection({
     inline: selectedOptions.filter(
       (option) =>
         option.type !== 'subAgent' &&
+        // Default availability is not an explicit invocation in the draft.
+        (option.type !== 'skill' ||
+          option.capability.default !== true ||
+          (recommended &&
+            isRuntimeCapabilitySelected(
+              recommended,
+              option.type,
+              option.id,
+            ))) &&
         !tokenKeys.has(getRuntimeCapabilityOptionKey(option)),
     ),
     subAgents: selectedOptions.filter((option) => option.type === 'subAgent'),

@@ -852,7 +852,6 @@ export function ComposerCapabilityToken({
       data-composer-capability-key={part.key}
       data-capability-type={part.capability.type}
       data-capability-id={part.capability.id}
-      contentEditable={false}
       style={color ? { color } : undefined}
     >
       <ComposerCapabilityChip
