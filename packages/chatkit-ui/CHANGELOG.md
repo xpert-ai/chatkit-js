@@ -1,5 +1,26 @@
 # @xpert-ai/chatkit-ui
 
+## 0.8.0
+
+### Minor Changes
+
+- 2bea2b2: Support on-demand Workbench views opened through the view menu, navigation commands, or live Agent requests scoped to the active project and conversation. Allow closing and reopening these tabs while preserving automatic views and the existing Workbench slot. Upgrade xpert-sdk to 0.4.4 for the view-opening event contract and keep navigation events out of the transcript.
+
+### Patch Changes
+
+- dec1b39: Keep default available skills out of the composer unless explicitly selected or recommended by the active prompt. Preserve selected capabilities in submissions and remove redundant non-editable attributes from capability labels so the composer remains editable.
+- ce2d858: Preserve separate assistant messages within the same execution, and route streamed text, components, and replayed updates to the correct message. Keep existing pause and resume behavior compatible.
+
+  Hide empty agent errors and let an explicit null clear a previous error while preserving real failures.
+
+- 119a60b: Open execution records requested by Workbench views inside the current ChatKit conversation before asking the host to navigate. Preserve the composer and active thread, load older records through SDK pagination, and allow closed execution panels to reopen. Return unavailable or stale-scope errors without a redundant host navigation, while retaining compatibility with existing conversation navigation commands.
+- b9bcec6: Simplify MCP App headers by hiding the resource URI and MCP App badge. Set the embedded HTML root font size to 14px and provide standard MCP Apps theme variables.
+- d7b8c7e: Preserve active MCP App forms and RPC sessions when message streaming recreates unchanged component data.
+- b7a935a: Support tool-after interrupt continuation from MCP Apps and a Continue panel for tools without an App. Preserve image, audio, and file attachments during resume, and acknowledge continuation only after the server accepts the run. Server run acceptance requires a Content-Location response header exposed through CORS.
+  - @xpert-ai/chatkit-types@0.8.0
+  - @xpert-ai/chatkit-web-shared@0.8.0
+  - @xpert-ai/a2ui-react@0.8.0
+
 ## 0.7.0
 
 ### Minor Changes
