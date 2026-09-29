@@ -161,6 +161,43 @@ describe('thread history restoration', () => {
   });
   afterEach(cleanup);
 
+  it('acknowledges a resume only after the SDK receives its server run identity', async () => {
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    const accepted = vi.fn();
+    const resolved = vi.fn();
+    const response = deferred<void>();
+    const finished = deferred<void>();
+    mocks.runStream.mockImplementation(async function* (_thread, _assistant, options) {
+      await response.promise;
+      options.onRunCreated({ run_id: 'run-1', thread_id: 'thread-1' });
+      await finished.promise;
+    });
+    let run!: Promise<void>;
+    await act(async () => {
+      run = stream.submit({ action: 'resume', conversationId: 'conversation-thread-1', target: {},
+        decision: { type: 'confirm', payload: {} } }, { onThreadResolved: resolved, onRunAccepted: accepted });
+    });
+    expect(resolved).toHaveBeenCalledOnce();
+    expect(accepted).not.toHaveBeenCalled();
+    await act(async () => response.resolve());
+    expect(accepted).toHaveBeenCalledOnce();
+    expect(stream.isLoading).toBe(true);
+    await act(async () => { finished.resolve(); await run; });
+  });
+
+  it('propagates a rejected resume without acknowledging it', async () => {
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    const accepted = vi.fn();
+    mocks.runStream.mockImplementation(async function* () { throw new Error('HTTP 409 resume rejected'); });
+    await act(async () => {
+      await expect(stream.submit({ action: 'resume', conversationId: 'conversation-thread-1', target: {},
+        decision: { type: 'confirm', payload: {} } }, { onRunAccepted: accepted })).rejects.toThrow('HTTP 409');
+    });
+    expect(accepted).not.toHaveBeenCalled();
+  });
+
   it('exposes a stable runtime scope only after initial history restoration', async () => {
     const snapshots: { ready: boolean; conversation: string | null; project?: string }[] = [];
     function ScopeProbe() {

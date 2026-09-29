@@ -1,5 +1,11 @@
 {
+  "ToolAfter": {
+    "Paused": "工具已执行完成，等待继续。",
+    "Continue": "继续"
+  },
   "workbench": {
+    "addView": "添加视图",
+    "executionUnavailable": "当前对话中找不到指定执行记录。",
     "title": "视图",
     "description": "远程工作台视图",
     "views": "可用视图",

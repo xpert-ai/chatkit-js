@@ -69,7 +69,6 @@ export function useWorkbenchViews({
             (view) =>
               view.visible !== false &&
               view.workbench?.fixed !== false &&
-              view.workbench?.menu?.enabled !== false &&
               view.view.type === 'remote_component' &&
               view.view.component.isolation === 'iframe',
           )

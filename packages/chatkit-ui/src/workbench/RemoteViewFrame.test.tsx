@@ -185,6 +185,94 @@ describe('RemoteViewFrame', () => {
     );
   });
 
+  it('checks frame identity and declared commands before dispatching local navigation', async () => {
+    const navigationManifest: XpertExtensionViewManifest = {
+      ...manifest,
+      clientCommands: [
+        {
+          key: 'workbench.navigation.open',
+          label: { en_US: 'Open execution' },
+        },
+      ],
+    };
+    const onClientCommand = vi
+      .fn()
+      .mockResolvedValue({ success: true, status: 'opened' });
+    render(
+      <ThemeProvider>
+        <RemoteViewFrame
+          manifest={navigationManifest}
+          hostId="agent-1"
+          locale="en-US"
+          title="Documents"
+          hostEvent={null}
+          viewHosts={mocks.client.viewHosts}
+          onNotify={vi.fn()}
+          onClientCommand={onClientCommand}
+        />
+      </ThemeProvider>,
+    );
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    const init = postMessage.mock.calls.find(
+      ([message]) =>
+        isObject(message) && Reflect.get(message, 'type') === 'init',
+    )?.[0];
+    const instanceId = isObject(init)
+      ? Reflect.get(init, 'instanceId')
+      : undefined;
+    expect(instanceId).toBeTruthy();
+    const command = {
+      channel: REMOTE_COMPONENT_CHANNEL,
+      protocolVersion: 1,
+      instanceId,
+      type: 'invokeClientCommand',
+      requestId: 'open-execution',
+      commandKey: 'workbench.navigation.open',
+      payload: {
+        target: 'assistant.execution',
+        conversationId: 'conversation-1',
+        executionId: 'attempt-2',
+      },
+    };
+    window.dispatchEvent(new MessageEvent('message', { data: command }));
+    dispatchFrameMessage(iframe, { ...command, instanceId: 'stale-instance' });
+    expect(onClientCommand).not.toHaveBeenCalled();
+    dispatchFrameMessage(iframe, {
+      ...command,
+      requestId: 'undeclared',
+      commandKey: 'assistant.chat.send_message',
+    });
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: 'undeclared',
+          type: 'error',
+        }),
+        '*',
+      ),
+    );
+    expect(onClientCommand).not.toHaveBeenCalled();
+    dispatchFrameMessage(iframe, command);
+    await waitFor(() =>
+      expect(onClientCommand).toHaveBeenCalledExactlyOnceWith(
+        'workbench.navigation.open',
+        command.payload,
+        navigationManifest,
+      ),
+    );
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: 'open-execution',
+          type: 'clientCommandResult',
+        }),
+        '*',
+      ),
+    );
+  });
+
   it('scopes entry, data and actions to the host conversation, ignoring iframe scope overrides', async () => {
     renderFrame();
     const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;

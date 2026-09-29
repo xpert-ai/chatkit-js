@@ -35,7 +35,6 @@ export function ComposerCapabilityChip({
           ? `${option.label}\n${option.description}`
           : option.label
       }
-      contentEditable={false}
     >
       <RuntimeCapabilityIcon option={option} variant="chip" />
       <span className="min-w-0 truncate">{option.label}</span>

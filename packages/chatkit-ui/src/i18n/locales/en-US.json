@@ -1,5 +1,11 @@
 {
+  "ToolAfter": {
+    "Paused": "Tool completed. Waiting to continue.",
+    "Continue": "Continue"
+  },
   "workbench": {
+    "addView": "Add view",
+    "executionUnavailable": "The requested execution is unavailable in this conversation.",
     "title": "Views",
     "description": "Remote workbench views",
     "views": "Available views",

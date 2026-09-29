@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   }>,
   stream: {
     client: {
+      threads: {
+        get: vi.fn().mockResolvedValue({ operation: { tasks: [] } }),
+      },
       contexts: {
         uploadFile: vi.fn(),
         deleteFile: vi.fn(),

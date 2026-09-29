@@ -35,6 +35,9 @@ const mocks = vi.hoisted(() => {
         xperts: {
           listWorkspaceFiles: vi.fn().mockResolvedValue([]),
         },
+        threads: {
+          get: vi.fn().mockResolvedValue({ operation: null }),
+        },
       },
       apiUrl: 'https://api.example.com',
       assistantId: 'assistant-1',
@@ -1475,7 +1478,17 @@ describe('Chat plan mode payload', () => {
     );
     expect(globalThis.fetch).not.toHaveBeenCalled();
 
+    await waitFor(() =>
+      expect(screen.getByTestId('selected-skills')).toHaveTextContent(
+        'skill-default',
+      ),
+    );
+    expect(
+      document.querySelector('[data-slot="composer-body"]'),
+    ).not.toHaveTextContent('Default Skill');
+
     const textarea = screen.getByRole('textbox');
+    expect(textarea).toHaveAttribute('contenteditable', 'true');
     setComposerText(textarea, 'hello');
     const send = screen.getByRole('button', { name: 'send' });
     await waitFor(() => expect(send).not.toBeDisabled());
@@ -2575,6 +2588,7 @@ describe('Chat plan mode payload', () => {
     expect(toolbar).not.toBeNull();
     expect(body).not.toBeNull();
     expect(body).toHaveTextContent('documents');
+    expect(body?.querySelector('[contenteditable="false"]')).toBeNull();
     expect(body).not.toHaveTextContent('Researcher');
     expect(toolbar).toHaveTextContent('Researcher');
     expect(screen.getByTestId('selected-sub-agents')).toHaveTextContent('researcher');

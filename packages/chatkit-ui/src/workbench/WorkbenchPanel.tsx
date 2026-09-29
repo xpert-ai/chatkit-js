@@ -1,3 +1,4 @@
+import { WorkbenchAvailableViews } from './WorkbenchAvailableViews';
 import * as React from 'react';
 import type { WorkbenchPreview } from './client-command-payload';
 import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
@@ -58,6 +59,8 @@ type WorkbenchPanelProps = {
   onClosePreview: (key: string) => void;
   visible: boolean;
   views: XpertExtensionViewManifest[];
+  availableViews?: XpertExtensionViewManifest[];
+  onCloseView?: (key: string) => void;
   activeView: XpertExtensionViewManifest | null;
   activeViewKey: string | null;
   sideChat: SideChatSession | null;
@@ -98,6 +101,8 @@ export function WorkbenchPanel({
   viewQueries,
   onClosePreview,
   views,
+  availableViews = views,
+  onCloseView,
   activeView,
   activeViewKey,
   sideChat,
@@ -285,7 +290,9 @@ export function WorkbenchPanel({
                   {selected && (
                     <button
                       type="button"
-                      onClick={onClose}
+                      onClick={() =>
+                        onCloseView ? onCloseView(view.key) : onClose()
+                      }
                       className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
                       aria-label={`${t('workbench.close')}: ${label}`}
                     >
@@ -300,6 +307,13 @@ export function WorkbenchPanel({
           <div className="min-w-0 flex-1" />
         )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          <WorkbenchAvailableViews
+            views={availableViews.filter(
+              (view) => !views.some((opened) => opened.key === view.key),
+            )}
+            locale={locale}
+            onSelect={onSelect}
+          />
           <Tooltip>
             <TooltipTrigger asChild>
               <button

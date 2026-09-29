@@ -1,3 +1,4 @@
+import { ToolAfterPanel } from './composer/tool-after-panel';
 import { useInlineApproval } from './approvals/use-inline-approval';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import { useRuntimeResources } from './chat/useRuntimeResources';
@@ -4175,6 +4176,8 @@ export function Chat({
             onDismiss={stream.stop}
             attachToComposer
           />
+
+          <ToolAfterPanel />
 
           {!inlineApproval.enabled && (
             <HITLApprovalPanel

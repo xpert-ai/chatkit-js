@@ -1,4 +1,6 @@
+import { readAppContinuation, resumeAfterTool } from '../../../lib/tool-after';
 import * as React from 'react';
+import { isEqual } from 'lodash-es';
 
 import {
   resolveLocalizedText,
@@ -32,6 +34,7 @@ import {
   type McpAppJsonRpcRequest as JsonRpcRequest,
   type McpAppPendingApproval,
 } from './mcp-app/host';
+import { standardMcpAppStyles } from './mcp-app/theme';
 
 type JsonObject = Record<string, unknown>;
 
@@ -531,7 +534,7 @@ function injectMcpAppTheme(html: string, theme: McpAppTheme) {
   const declarations = Object.entries(theme.cssVariables)
     .map(([name, value]) => `${name}: ${sanitizeCssValue(value)};`)
     .join('');
-  const style = `<style id="mcp-app-host-theme">:root{color-scheme:${theme.mode};${declarations}}</style>`;
+  const style = `<style id="mcp-app-host-theme">:root{font-size:14px;color-scheme:${theme.mode};${declarations}}</style>`;
 
   return injectHeadContent(html, style);
 }
@@ -1051,7 +1054,7 @@ export function isMcpAppComponentData(
 }
 
 export function McpAppMessage({
-  data,
+  data: incomingData,
   messageId,
   className,
   mcpApps,
@@ -1061,8 +1064,13 @@ export function McpAppMessage({
   className?: string;
   mcpApps?: ChatKitMcpAppsOptions;
 }) {
+  // Message streaming recreates equal component data. Do not remount an active
+  // form or tear down its RPC session merely because the parent rerendered.
+  const dataRef = React.useRef(incomingData);
+  if (!isEqual(dataRef.current, incomingData)) dataRef.current = incomingData;
+  const data = dataRef.current;
   const { i18n } = useChatkitTranslation();
-  const { client, isLoading: streamIsLoading, submit } = useStreamContext();
+  const { client, isLoading: streamIsLoading, submit, threadId, conversationId } = useStreamContext();
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const appWindowRef = React.useRef<Window | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -1615,7 +1623,7 @@ export function McpAppMessage({
               toolInfo,
               theme: theme.mode,
               styles: {
-                variables: theme.cssVariables,
+                variables: standardMcpAppStyles(theme.cssVariables),
               },
               themeCssVariables: theme.cssVariables,
               locale: hostLocale,
@@ -1722,6 +1730,15 @@ export function McpAppMessage({
             return;
           }
 
+          const continuation = readAppContinuation(hostResponse);
+          if (continuation) {
+            if (continuation.toolCallId !== data.toolCallId) throw new Error('App continuation tool mismatch');
+            const messageInput = contentBlocksToChatInput(request.params.content);
+            await resumeAfterTool({ client, submit, threadId, conversationId }, continuation.toolCallId, continuation.executionId, messageInput.input, messageInput.files);
+            postToApp(hostResponse);
+            return;
+          }
+
           const messageInput = contentBlocksToChatInput(request.params.content);
 
           await submit(
@@ -1782,6 +1799,8 @@ export function McpAppMessage({
     sendInitialToolNotifications,
     srcDoc,
     streamIsLoading,
+    threadId,
+    conversationId,
     submit,
   ]);
 
@@ -1840,9 +1859,11 @@ export function McpAppMessage({
             ) : null}
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">{displayTitle}</div>
-              <div className="truncate text-[11px] text-muted-foreground">
-                {displayDescription ?? data.resourceUri}
-              </div>
+              {displayDescription ? (
+                <div className="truncate text-[11px] text-muted-foreground">
+                  {displayDescription}
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -1882,9 +1903,6 @@ export function McpAppMessage({
                 <Minimize2 />
               </Button>
             ) : null}
-            <Badge variant="secondary" className="ml-1 rounded-md">
-              MCP App
-            </Badge>
           </div>
         </div>
 

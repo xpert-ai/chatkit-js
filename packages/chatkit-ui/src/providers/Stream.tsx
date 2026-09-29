@@ -1,3 +1,4 @@
+import { parseWorkbenchViewOpenEvent } from '@xpert-ai/xpert-sdk';
 import { parseFileActivityContent } from '@xpert-ai/chatkit-types';
 import { applyFileActivityReceipt } from '../lib/stream-file-activity';
 import React, {
@@ -307,6 +308,8 @@ export type StreamSubmitOptions = {
   newThread?: boolean;
   joinExistingThread?: boolean;
   followUpMode?: FollowUpBehavior;
+  /** Called only after the server accepts the run and returns its identity. */
+  onRunAccepted?: () => void;
   onThreadResolved?: (
     threadId: string,
     conversationId?: string | null,
@@ -2124,6 +2127,8 @@ export function applyStreamEvent(
         break;
       }
       case ChatMessageEventTypeEnum.ON_CHAT_EVENT: {
+        // The live log already delivered this UI request; it is not conversation content.
+        if (parseWorkbenchViewOpenEvent(payload.data)) break;
         const contextUsageEvent = extractThreadContextUsageEvent(payload.data);
         if (contextUsageEvent) {
           onThreadContextUsage?.(contextUsageEvent);
@@ -3741,6 +3746,7 @@ const StreamSession = ({
       setIsLoading(true);
       isLoadingRef.current = true;
       let transportError: unknown = null;
+      let runAccepted = false;
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
           context: mergeStreamRequestContext(
@@ -3772,6 +3778,10 @@ const StreamSession = ({
                 streamResumable: options?.streamResumable,
                 signal: abortController.signal,
                 onDisconnect: 'continue',
+                onRunCreated: () => {
+                  runAccepted = true;
+                  options?.onRunAccepted?.();
+                },
               });
 
         const interrupts: unknown[] = [];
@@ -3918,6 +3928,9 @@ const StreamSession = ({
           setIsLoading(false);
           isLoadingRef.current = false;
         }
+      }
+      if (options?.onRunAccepted && !runAccepted) {
+        throw transportError ?? new Error('The server did not acknowledge the run.');
       }
     },
     [
