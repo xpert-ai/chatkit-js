@@ -14,6 +14,25 @@ import { initI18n } from '../../i18n';
 import { ThemeProvider } from '../../providers/Theme';
 import { WorkspaceFiles } from './WorkspaceFiles';
 
+const originalClipboard = Object.getOwnPropertyDescriptor(
+  navigator,
+  'clipboard',
+);
+function mockClipboard() {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
+}
+async function openFileActions() {
+  fireEvent.keyDown(screen.getByRole('button', { name: 'File actions' }), {
+    key: 'ArrowDown',
+  });
+  return screen.findByRole('menu');
+}
+
 function setup() {
   const client = new Client({ apiUrl: 'https://example.test/api/ai' });
   vi.spyOn(client.workbench, 'listFiles').mockImplementation(
@@ -99,6 +118,9 @@ beforeEach(async () => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  if (originalClipboard)
+    Object.defineProperty(navigator, 'clipboard', originalClipboard);
+  else Reflect.deleteProperty(navigator, 'clipboard');
 });
 
 function browserSetup() {
@@ -187,6 +209,85 @@ describe('workspace file browser', () => {
     expect(onPreview).toHaveBeenLastCalledWith(
       expect.objectContaining({ filePath: 'docs/notes.txt' }),
     );
+  });
+  it('copies complete workspace paths and reuses the loaded original text for the menu', async () => {
+    const copy = mockClipboard();
+    const { download } = browserSetup();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }));
+    await waitFor(() => expect(copy).toHaveBeenLastCalledWith('/'));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'README.md' }));
+    await screen.findByRole('heading', { name: 'File preview' });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }));
+    await waitFor(() =>
+      expect(copy).toHaveBeenLastCalledWith('docs/README.md'),
+    );
+    await openFileActions();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path' }));
+    await waitFor(() => expect(copy).toHaveBeenCalledTimes(3));
+    expect(copy).toHaveBeenLastCalledWith('docs/README.md');
+    await openFileActions();
+    fireEvent.click(
+      screen.getByRole('menuitem', { name: 'Copy file contents' }),
+    );
+    await waitFor(() =>
+      expect(copy).toHaveBeenLastCalledWith(
+        '# File preview\n\nA **formatted** document.',
+      ),
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Copied');
+    expect(download).toHaveBeenCalledTimes(1);
+  });
+  it('disables content copying for folders and a new preview that is loading or failed', async () => {
+    const { download } = browserSetup();
+    await openFileActions();
+    expect(
+      screen.getByRole('menuitem', { name: 'Copy file contents' }),
+    ).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'README.md' }));
+    await screen.findByRole('heading', { name: 'File preview' });
+    let reject!: (error: Error) => void;
+    download.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    fireEvent.click(screen.getByRole('treeitem', { name: 'notes.txt' }));
+    await openFileActions();
+    expect(
+      screen.getByRole('menuitem', { name: 'Copy file contents' }),
+    ).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    reject(new Error('Download failed'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Download failed',
+    );
+    await openFileActions();
+    expect(
+      screen.getByRole('menuitem', { name: 'Copy file contents' }),
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+  it('reports a clipboard failure and allows retrying without leaving the preview', async () => {
+    const copy = mockClipboard();
+    copy.mockRejectedValueOnce(new Error('Clipboard denied'));
+    browserSetup();
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'README.md' }));
+    await screen.findByRole('heading', { name: 'File preview' });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not copy',
+    );
+    expect(screen.queryByText('Copied')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }));
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Copied'),
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'File preview' })).toBeVisible();
   });
   it.each(['fullPath', 'entryName', 'workspacePath'] as const)(
     'expands nested directories and uses complete paths for preview and Office editors (%s)',

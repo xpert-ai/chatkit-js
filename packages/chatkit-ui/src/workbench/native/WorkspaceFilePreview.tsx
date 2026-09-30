@@ -11,18 +11,22 @@ import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { fileName, previewKind } from './workspace-file-utils';
 const CodeEditor = React.lazy(() => import('./CodeEditor'));
 
+export type WorkspaceFileTextContent = { filePath: string; text: string };
+
 export function WorkspaceFilePreview({
   client,
   scope,
   file,
   source,
   revision,
+  onTextContent,
 }: {
   client: Client;
   scope: WorkspaceFileScope;
   file: XpertWorkspaceFile | null;
   source: boolean;
   revision: number;
+  onTextContent?: (content: WorkspaceFileTextContent | null) => void;
 }) {
   const { t } = useChatkitTranslation();
   const [content, setContent] = React.useState<{
@@ -40,6 +44,7 @@ export function WorkspaceFilePreview({
     const abort = new AbortController();
     let url = '';
     setContent(null);
+    onTextContent?.(null);
     setError('');
     setCopied(false);
     setCopyError('');
@@ -60,6 +65,7 @@ export function WorkspaceFilePreview({
             new Blob([blob], { type: file.mimeType || blob.type }),
           );
         setContent({ text, url });
+        if (textFile) onTextContent?.({ filePath: file.filePath, text });
       })().catch((error: unknown) => {
         if (!abort.signal.aborted)
           setError(
@@ -71,9 +77,20 @@ export function WorkspaceFilePreview({
     }
     return () => {
       abort.abort();
+      onTextContent?.(null);
       if (url) URL.revokeObjectURL(url);
     };
-  }, [client, scopeKey, file?.filePath, kind, textFile, revision, attempt, t]);
+  }, [
+    client,
+    scopeKey,
+    file?.filePath,
+    kind,
+    textFile,
+    revision,
+    attempt,
+    t,
+    onTextContent,
+  ]);
   React.useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 2000);

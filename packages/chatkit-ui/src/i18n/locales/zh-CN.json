@@ -200,6 +200,7 @@
       "viewSource": "查看源代码",
       "openEditor": "打开编辑器",
       "actions": "文件操作",
+      "copyPath": "复制路径",
       "copy": "复制文件内容",
       "copied": "已复制",
       "copyFailed": "复制失败，请重试。"

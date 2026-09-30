@@ -5,7 +5,9 @@ import type {
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
 import {
+  Check,
   ChevronRight,
+  Copy,
   Download,
   FilePlus2,
   Folders,
@@ -34,7 +36,10 @@ import {
   AlertDialogCancel,
 } from '../../components/ui/alert-dialog';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import { WorkspaceFilePreview } from './WorkspaceFilePreview';
+import {
+  WorkspaceFilePreview,
+  type WorkspaceFileTextContent,
+} from './WorkspaceFilePreview';
 import { WorkspaceFileTree } from './WorkspaceFileTree';
 import { useWorkspaceFileTree } from './useWorkspaceFileTree';
 import {
@@ -90,6 +95,10 @@ function WorkspaceFilesSession({
   const [source, setSource] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [sidebar, setSidebar] = React.useState(true);
+  const [previewText, setPreviewText] =
+    React.useState<WorkspaceFileTextContent | null>(null);
+  const [copied, setCopied] = React.useState<'path' | 'content' | null>(null);
+  const [copyError, setCopyError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
   const [version, bumpVersion] = React.useReducer((n) => n + 1, 0);
@@ -118,11 +127,33 @@ function WorkspaceFilesSession({
   const currentPath = selected?.filePath ?? path;
   const segments = currentPath.split('/').filter(Boolean);
   const kind = selected ? previewKind(selected) : null;
+  const canCopyContent =
+    previewText !== null && previewText.filePath === selected?.filePath;
+  React.useEffect(() => {
+    setCopied(null);
+    setCopyError('');
+  }, [currentPath]);
+  React.useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const itemButton =
     'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--chat-item-radius,var(--radius))] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40';
   function refresh() {
     bumpVersion();
   }
+  async function copy(text: string, target: 'path' | 'content') {
+    setCopied(null);
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(text);
+      if (alive.current) setCopied(target);
+    } catch {
+      if (alive.current) setCopyError(t('workbench.files.copyFailed'));
+    }
+  }
+  const copyPath = () => void copy(currentPath || '/', 'path');
   function select(file: XpertWorkspaceFile) {
     if (isOfficeFile(file)) {
       onOpen(file);
@@ -173,41 +204,60 @@ function WorkspaceFilesSession({
       className="workspace-files flex h-full min-h-0 flex-col bg-background text-foreground"
     >
       <header className="flex h-12 shrink-0 items-center gap-1.5 border-b px-3">
-        <nav
-          aria-label={t('workbench.files.breadcrumb')}
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
-        >
-          <button
-            className="shrink-0 rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 text-muted-foreground hover:bg-muted"
-            aria-label={t('workbench.files.root')}
-            onClick={() => navigate('')}
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <nav
+            aria-label={t('workbench.files.breadcrumb')}
+            className="flex min-w-0 items-center gap-1 overflow-hidden text-sm"
           >
-            /
+            <button
+              className="shrink-0 rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 text-muted-foreground hover:bg-muted"
+              aria-label={t('workbench.files.root')}
+              onClick={() => navigate('')}
+            >
+              /
+            </button>
+            {segments.map((segment, index) => (
+              <React.Fragment key={index}>
+                {index > 0 && (
+                  <ChevronRight
+                    size={14}
+                    className="shrink-0 text-muted-foreground"
+                  />
+                )}
+                <button
+                  className={`min-w-0 truncate rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 hover:bg-muted ${index === segments.length - 1 ? 'font-medium' : 'text-muted-foreground'}`}
+                  title={segments.slice(0, index + 1).join('/')}
+                  aria-current={
+                    index === segments.length - 1 ? 'page' : undefined
+                  }
+                  onClick={() => {
+                    if (!(selected && index === segments.length - 1))
+                      navigate(segments.slice(0, index + 1).join('/'));
+                  }}
+                >
+                  {segment}
+                </button>
+              </React.Fragment>
+            ))}
+          </nav>
+          <button
+            type="button"
+            className={itemButton}
+            aria-label={t('workbench.files.copyPath')}
+            title={t('workbench.files.copyPath')}
+            onClick={copyPath}
+          >
+            {copied === 'path' ? <Check size={16} /> : <Copy size={16} />}
           </button>
-          {segments.map((segment, index) => (
-            <React.Fragment key={index}>
-              {index > 0 && (
-                <ChevronRight
-                  size={14}
-                  className="shrink-0 text-muted-foreground"
-                />
-              )}
-              <button
-                className={`min-w-0 truncate rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 hover:bg-muted ${index === segments.length - 1 ? 'font-medium' : 'text-muted-foreground'}`}
-                title={segments.slice(0, index + 1).join('/')}
-                aria-current={
-                  index === segments.length - 1 ? 'page' : undefined
-                }
-                onClick={() => {
-                  if (!(selected && index === segments.length - 1))
-                    navigate(segments.slice(0, index + 1).join('/'));
-                }}
-              >
-                {segment}
-              </button>
-            </React.Fragment>
-          ))}
-        </nav>
+          {copied && (
+            <span
+              role="status"
+              className="shrink-0 text-xs text-muted-foreground"
+            >
+              {t('workbench.files.copied')}
+            </span>
+          )}
+        </div>
         {(kind === 'markdown' || kind === 'html') && (
           <button
             className="shrink-0 rounded-[var(--chat-item-radius,var(--radius))] px-2 py-1.5 text-xs font-medium hover:bg-muted"
@@ -255,6 +305,21 @@ function WorkspaceFilesSession({
             align="end"
             className="w-48 rounded-[var(--chat-item-radius,var(--radius))]"
           >
+            <DropdownMenuItem onSelect={copyPath}>
+              <Copy />
+              {t('workbench.files.copyPath')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!canCopyContent}
+              onSelect={() => {
+                if (canCopyContent && previewText)
+                  void copy(previewText.text, 'content');
+              }}
+            >
+              <Copy />
+              {t('workbench.files.copy')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={refresh} disabled={loading}>
               <RefreshCw />
               {t('workbench.files.refresh')}
@@ -310,6 +375,11 @@ function WorkspaceFilesSession({
           }}
         />
       </header>
+      {copyError && (
+        <p role="alert" className="border-b px-4 py-2 text-sm text-destructive">
+          {copyError}
+        </p>
+      )}
       {error && (
         <p role="alert" className="border-b px-4 py-2 text-sm text-destructive">
           {error}
@@ -332,6 +402,7 @@ function WorkspaceFilesSession({
             file={selected}
             source={source}
             revision={revision + version}
+            onTextContent={setPreviewText}
           />
         </section>
         {sidebar && (

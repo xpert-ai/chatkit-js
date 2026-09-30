@@ -200,6 +200,7 @@
       "viewSource": "View source",
       "openEditor": "Open in editor",
       "actions": "File actions",
+      "copyPath": "Copy path",
       "copy": "Copy file contents",
       "copied": "Copied",
       "copyFailed": "Could not copy. Please try again."
