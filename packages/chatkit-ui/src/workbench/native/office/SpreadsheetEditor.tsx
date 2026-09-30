@@ -5,6 +5,8 @@ import {
   mergeLocales,
   CommandType,
   ThemeService,
+  LifecycleService,
+  LifecycleStages,
   type FUniver,
 } from '@univerjs/presets';
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
@@ -22,6 +24,7 @@ import {
 } from './spreadsheet-xlsx-preservation';
 import type { BinaryEditorHandle, BinaryEditorProps } from '../file-types';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
+import { xlsxMenu, unsupportedXlsxCommand } from './spreadsheet-capabilities';
 import { useTheme } from '../../../providers/Theme';
 
 const SpreadsheetEditor = React.forwardRef<
@@ -35,6 +38,7 @@ const SpreadsheetEditor = React.forwardRef<
   const session = React.useRef<XlsxEditSession | null>(null);
   const themeService = React.useRef<ThemeService | null>(null);
   const interacted = React.useRef(false);
+  const pendingSaves = React.useRef(new WeakMap<Blob, XlsxEditSession>());
   const [error, setError] = React.useState('');
   const [ready, setReady] = React.useState(false);
   const chinese = i18n.language.startsWith('zh');
@@ -63,12 +67,30 @@ const SpreadsheetEditor = React.forwardRef<
             header: true,
             toolbar: true,
             footer: {},
+            menu: original ? xlsxMenu : undefined,
           }),
         ],
       });
       api.current = univerAPI;
       themeService.current = univer.__getInjector().get(ThemeService);
       const workbook = univerAPI.createWorkbook(snapshot);
+      // Register cleanup before awaiting startup so switching tabs cannot leak an engine.
+      // Univer owns another React root; dispose it after this root's commit.
+      cleanup = () => queueMicrotask(() => univer.dispose());
+      await univer
+        .__getInjector()
+        .get(LifecycleService)
+        .onStage(LifecycleStages.Steady);
+      if (disposed) return;
+      const guard = univerAPI.addEvent(
+        univerAPI.Event.BeforeCommandExecute,
+        (event) => {
+          if (original && unsupportedXlsxCommand(event.id)) {
+            event.cancel = true;
+            setError(t('workbench.files.xlsxUnsupported'));
+          }
+        },
+      );
       const listener = univerAPI.addEvent(
         univerAPI.Event.CommandExecuted,
         (event) => {
@@ -85,8 +107,9 @@ const SpreadsheetEditor = React.forwardRef<
         },
       );
       cleanup = () => {
+        guard.dispose();
         listener.dispose();
-        univer.dispose();
+        queueMicrotask(() => univer.dispose());
       };
       session.current = original
         ? { source: original, baseline: structuredClone(workbook.save()) }
@@ -113,6 +136,12 @@ const SpreadsheetEditor = React.forwardRef<
   React.useImperativeHandle(
     ref,
     () => ({
+      markSaved: (file) => {
+        const saved = pendingSaves.current.get(file);
+        if (saved) session.current = saved;
+        pendingSaves.current.delete(file);
+        setError('');
+      },
       exportFile: async () => {
         const workbook = api.current?.getActiveWorkbook();
         if (!workbook) throw new Error(t('workbench.files.loading'));
@@ -133,9 +162,15 @@ const SpreadsheetEditor = React.forwardRef<
           await calculated;
         }
         const snapshot = workbook.save();
-        return session.current
-          ? exportXlsxEdits(session.current, snapshot, name)
-          : exportSpreadsheetFile(snapshot, name);
+        const file = session.current
+          ? await exportXlsxEdits(session.current, snapshot, name)
+          : await exportSpreadsheetFile(snapshot, name);
+        if (session.current)
+          pendingSaves.current.set(file, {
+            source: new Uint8Array(await file.arrayBuffer()),
+            baseline: structuredClone(snapshot),
+          });
+        return file;
       },
     }),
     [name, t],
@@ -168,7 +203,11 @@ const SpreadsheetEditor = React.forwardRef<
           {t('workbench.files.xlsxHint')}
         </p>
       )}
-      <div ref={host} className="min-h-0 w-full flex-1" />
+      <div
+        ref={host}
+        inert={!ready || undefined}
+        className="min-h-0 w-full flex-1"
+      />
     </div>
   );
 });

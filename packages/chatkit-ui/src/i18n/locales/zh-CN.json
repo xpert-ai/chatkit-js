@@ -140,6 +140,7 @@
       "underline": "下划线",
       "conflict": "文件已被其他操作修改。请下载当前修改，再重新打开最新文件。",
       "fontSize": "字号",
+      "xlsxUnsupported": "当前 XLSX 仅支持内容与公式编辑，此操作暂不支持保存。",
       "xlsxHint": "支持编辑单元格内容和公式；保留原格式，请勿调整工作表结构与样式。",
       "unsavedLabel": "有未保存的修改",
       "pathExists": "路径已存在，请使用其他文件名。",
