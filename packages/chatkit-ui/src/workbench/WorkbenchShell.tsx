@@ -2,6 +2,7 @@ import { useNativeWorkbench, NATIVE_PREFIX } from './native/useNativeWorkbench';
 import { NativeCloseDialog } from './native/NativeCloseDialog';
 import { useResourceCardNavigation } from './useResourceCardNavigation';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
+import { useWorkbenchTabOrder } from './useWorkbenchTabOrder';
 import { useExecutionFocus } from './useExecutionFocus';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
 import * as React from 'react';
@@ -183,9 +184,10 @@ export function WorkbenchShell({
     runtimeScope.projectId,
     runtimeScope.conversationId,
   ]);
-  const native = useNativeWorkbench(
-    JSON.stringify([viewScopeKey, authenticated, enabled]),
-  );
+  const startPageScope = JSON.stringify([viewScopeKey, authenticated, enabled]);
+  const startPageScopeRef = React.useRef(startPageScope);
+  startPageScopeRef.current = startPageScope;
+  const native = useNativeWorkbench(startPageScope);
   const {
     previews,
     newTabs,
@@ -197,7 +199,7 @@ export function WorkbenchShell({
     openPreview: storePreview,
     closePreview: removePreview,
     visitPreview,
-  } = useWorkbenchPages(JSON.stringify([viewScopeKey, authenticated, enabled]));
+  } = useWorkbenchPages(startPageScope);
   const { views, viewsScope, loading, error } = useWorkbenchViews({
     client: viewHosts,
     hostId: stream.assistantId,
@@ -267,17 +269,35 @@ export function WorkbenchShell({
     else setActiveViewKey(key);
     visitPreview(key);
   };
-  const tabKeys = React.useMemo(
+  const availableTabKeys = React.useMemo(
     () => [
       ...native.tabs.map((tab) => tab.key),
       ...(externalViewOpen ? [EXTERNAL_ASSISTANTS_VIEW_KEY] : []),
-      ...(sideChat ? [SIDE_CHAT_VIEW_KEY] : []),
+      ...(sideChat || sideChatOpening ? [SIDE_CHAT_VIEW_KEY] : []),
       ...previews.map((preview) => preview.key),
       ...scopedViews.map((view) => view.key),
       ...newTabs,
     ],
-    [native.tabs, externalViewOpen, sideChat, previews, scopedViews, newTabs],
+    [
+      native.tabs,
+      externalViewOpen,
+      sideChat,
+      sideChatOpening,
+      previews,
+      scopedViews,
+      newTabs,
+    ],
   );
+  const {
+    keys: tabKeys,
+    replace: replaceTab,
+    insertBefore: insertTabBefore,
+  } = useWorkbenchTabOrder(startPageScope, availableTabKeys);
+  const replaceNewTab = (from: string | undefined, to: string) => {
+    if (!from) return;
+    replaceTab(from, to);
+    closeNewTab(from);
+  };
   const adjacentTab = React.useCallback(
     (key: string) => {
       const index = tabKeys.indexOf(key);
@@ -902,29 +922,43 @@ export function WorkbenchShell({
   const panelHost = useWorkbenchPanelHost();
   const panel = (
     <WorkbenchPanel
+      tabOrder={tabKeys}
       native={native}
       sideChatEnabled={sideChatEnabled}
       onOpenNative={(tool, fromTab) => {
         if (tool === 'side-chat') {
-          void askInSideChat()
-            .then(() => {
-              if (fromTab) closeNewTab(fromTab);
-            })
-            .catch((error: unknown) =>
-              setNotification({
-                level: 'error',
-                message: getErrorMessage(error, t('workbench.files.failed')),
-              }),
-            );
+          const nextTab = fromTab
+            ? tabKeys
+                .slice(tabKeys.indexOf(fromTab) + 1)
+                .find((key) => key !== SIDE_CHAT_VIEW_KEY)
+            : undefined;
+          replaceNewTab(fromTab, SIDE_CHAT_VIEW_KEY);
+          void askInSideChat().catch((error: unknown) => {
+            if (startPageScopeRef.current !== startPageScope) return;
+            if (fromTab) {
+              // The pending side-chat tab may already have disappeared after failure.
+              insertTabBefore(fromTab, nextTab);
+              addNewTab(fromTab);
+              setActiveViewKey((current) =>
+                current === SIDE_CHAT_VIEW_KEY ? fromTab : current,
+              );
+            }
+            setNotification({
+              level: 'error',
+              message: getErrorMessage(error, t('workbench.files.failed')),
+            });
+          });
         } else {
-          if (fromTab) closeNewTab(fromTab);
-          setActiveViewKey(native.openTool(tool));
+          const key = native.openTool(tool);
+          replaceNewTab(fromTab, key);
+          setActiveViewKey(key);
           setOpen(true);
         }
       }}
       onOpenNativeFile={(file, fromTab) => {
-        if (fromTab) closeNewTab(fromTab);
-        setActiveViewKey(native.openFile(file));
+        const key = native.openFile(file);
+        replaceNewTab(fromTab, key);
+        setActiveViewKey(key);
         setOpen(true);
       }}
       onCloseNative={(key) => {
@@ -950,11 +984,11 @@ export function WorkbenchShell({
       }}
       onNavigateNewTab={(tabKey, viewKey) => {
         if (!menuViews.some((view) => view.key === viewKey)) return;
-        closeNewTab(tabKey);
+        replaceNewTab(tabKey, viewKey);
         selectView(viewKey);
       }}
       onPreviewFromNewTab={(tabKey, preview) => {
-        closeNewTab(tabKey);
+        replaceNewTab(tabKey, preview.key);
         openPreview(preview);
       }}
       onClosePreview={(key) => {

@@ -4,9 +4,11 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 
 export function WorkbenchTabs({
   activeKey,
+  order,
   children,
 }: {
   activeKey: string | null;
+  order?: string[];
   children: React.ReactNode;
 }) {
   const { t } = useChatkitTranslation();
@@ -113,7 +115,21 @@ export function WorkbenchTabs({
       '[role="tab"][aria-selected="true"]',
     );
     if (selected) reveal(selected.parentElement ?? selected);
-  }, [activeKey, edges.overflow, reveal]);
+  }, [activeKey, edges.overflow, order, reveal]);
+
+  const orderedChildren = React.useMemo(() => {
+    if (!order) return children;
+    const rank = new Map(order.map((key, index) => [key, index]));
+    const tabs: React.ReactElement[] = [];
+    React.Children.forEach(children, (child) => {
+      if (React.isValidElement(child)) tabs.push(child);
+    });
+    return tabs.sort(
+      (a, b) =>
+        (rank.get(String(a.key)) ?? order.length) -
+        (rank.get(String(b.key)) ?? order.length),
+    );
+  }, [children, order]);
 
   const arrow = (direction: -1 | 1) => {
     const label = t(
@@ -166,7 +182,7 @@ export function WorkbenchTabs({
           aria-label={t('workbench.views')}
           className="flex w-max min-w-full items-center gap-1"
         >
-          {children}
+          {orderedChildren}
         </div>
       </div>
       {edges.overflow && arrow(1)}

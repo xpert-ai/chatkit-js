@@ -50,6 +50,7 @@ const mocks = vi.hoisted(() => ({
         copy: vi.fn(),
         delete: vi.fn(),
       },
+      workbench: { listFiles: vi.fn() },
     },
     apiKey: 'cs-x-secret',
     apiUrl: '/api/ai',
@@ -90,6 +91,10 @@ vi.mock('../hooks/useParentMessenger', () => ({
     isParentAvailable: false,
     sendCommand: vi.fn(),
   }),
+}));
+
+vi.mock('./native/WorkbenchTerminal', () => ({
+  default: () => <div data-testid="terminal">Terminal content</div>,
 }));
 
 vi.mock('./RemoteViewFrame', () => ({
@@ -238,6 +243,7 @@ describe('WorkbenchShell', () => {
     mocks.sideChatUnmounts = 0;
     mocks.remoteUnmounts = 0;
     mocks.stream.reset.mockReset();
+    mocks.stream.client.workbench.listFiles.mockReset().mockResolvedValue([]);
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
     mocks.stream.apiUrl = '/api/ai';
@@ -269,6 +275,113 @@ describe('WorkbenchShell', () => {
     expect(screen.getByLabelText('Draft')).toHaveValue('Keep my draft');
     expect(screen.queryByRole('tab', { name: 'New tab' })).not.toBeInTheDocument();
   });
+
+  it.each([
+    ['Files / folders', 'Open file'],
+    ['Terminal', 'Terminal'],
+  ])(
+    'replaces a middle guide tab with %s and reuses it in place',
+    async (tool, label) => {
+      mocks.listSlotViews.mockResolvedValue([manifest]);
+      render(
+        <WorkbenchShell
+          options={{ ...baseOptions, workbench: { enabled: true } }}
+          locale="en-US"
+          onRequestContextChange={vi.fn()}
+        >
+          <WorkbenchToggleButton />
+        </WorkbenchShell>,
+      );
+      setObservedWidth(1200);
+      await waitFor(() =>
+        expect(screen.getByLabelText('Open views')).toBeEnabled(),
+      );
+      fireEvent.click(screen.getByLabelText('Open views'));
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      const middle = screen.getByRole('tab', { name: 'New tab' });
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      const last = screen.getAllByRole('tab', { name: 'New tab' })[1];
+      fireEvent.click(middle);
+      fireEvent.click(screen.getByRole('button', { name: tool }));
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+        'Documents',
+        label,
+        'New tab',
+      ]);
+      expect(screen.getByRole('tab', { name: label })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      expect(middle).not.toBeInTheDocument();
+      expect(last).toBeInTheDocument();
+      if (tool === 'Terminal') await screen.findByTestId('terminal');
+      const toolPanel = screen.getByRole('tabpanel', { name: label });
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      fireEvent.click(screen.getByRole('button', { name: tool }));
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+        'Documents',
+        'New tab',
+        label,
+      ]);
+      expect(screen.getByRole('tabpanel', { name: label })).toBe(toolPanel);
+      fireEvent.click(screen.getByRole('button', { name: `Close ${label}` }));
+      expect(last).toHaveAttribute('aria-selected', 'true');
+      expect(mocks.remoteUnmounts).toBe(0);
+    },
+  );
+
+  it.each(['resolve', 'reject'] as const)(
+    'replaces a guide with pending side chat in place and handles %s',
+    async (result) => {
+      mocks.listSlotViews.mockResolvedValue([manifest]);
+      let resolve!: (value: { thread_id: string }) => void;
+      let reject!: (error: Error) => void;
+      mocks.copyThread.mockReturnValue(
+        new Promise((done, fail) => {
+          resolve = done;
+          reject = fail;
+        }),
+      );
+      render(
+        <WorkbenchShell
+          options={{ ...baseOptions, workbench: { enabled: true } }}
+          locale="en-US"
+          onRequestContextChange={vi.fn()}
+        >
+          <WorkbenchToggleButton />
+        </WorkbenchShell>,
+      );
+      setObservedWidth(1200);
+      await waitFor(() =>
+        expect(screen.getByLabelText('Open views')).toBeEnabled(),
+      );
+      fireEvent.click(screen.getByLabelText('Open views'));
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      const middle = screen.getByRole('tab', { name: 'New tab' });
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      fireEvent.click(middle);
+      fireEvent.click(screen.getByRole('button', { name: 'Side chat' }));
+      expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+        'Documents',
+        'Side chat',
+        'New tab',
+      ]);
+      await act(async () => {
+        if (result === 'resolve') resolve({ thread_id: 'side-thread' });
+        else reject(new Error('Side chat unavailable'));
+      });
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs.map((tab) => tab.textContent)).toEqual([
+        'Documents',
+        result === 'resolve' ? 'Side chat' : 'New tab',
+        'New tab',
+      ]);
+      expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+      if (result === 'resolve')
+        expect(screen.getByTestId('side-chat')).toBeVisible();
+      else expect(screen.getByText('Side chat unavailable')).toBeVisible();
+    },
+  );
 
   it('creates independent guide tabs without reloading views or losing the draft', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
@@ -371,6 +484,10 @@ describe('WorkbenchShell', () => {
       'aria-selected',
       'true',
     );
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Documents',
+      'Studio',
+    ]);
     expect(
       screen.queryByRole('tab', { name: 'New tab' }),
     ).not.toBeInTheDocument();
@@ -402,6 +519,10 @@ describe('WorkbenchShell', () => {
       'aria-selected',
       'true',
     );
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Studio',
+      'Documents',
+    ]);
   });
 
   it('keeps recent files after close, reopens their evidence and preserves other preview frames', async () => {
@@ -455,6 +576,11 @@ describe('WorkbenchShell', () => {
       'aria-selected',
       'true',
     );
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Documents',
+      'Report',
+      'site.html',
+    ]);
     expect(frame).toBeInTheDocument();
     expect(frame).not.toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
@@ -466,6 +592,11 @@ describe('WorkbenchShell', () => {
       within(recent).getByRole('button', { name: /Report File/ }),
     );
     expect(screen.getAllByRole('tab', { name: 'Report' })).toHaveLength(1);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Documents',
+      'site.html',
+      'Report',
+    ]);
     expect(
       within(screen.getByRole('region', { name: 'Report' })).getByTitle(
         'Report',

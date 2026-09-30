@@ -71,6 +71,7 @@ type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
 
 type WorkbenchPanelProps = {
+  tabOrder?: string[];
   native?: ReturnType<typeof useNativeWorkbench>;
   onOpenNative?: (tool: NativeTool, fromTab?: string) => void;
   onOpenNativeFile?: (file: XpertWorkspaceFile, fromTab?: string) => void;
@@ -124,6 +125,7 @@ type WorkbenchPanelProps = {
 };
 
 export function WorkbenchPanel({
+  tabOrder,
   native,
   onOpenNative,
   onOpenNativeFile,
@@ -235,18 +237,22 @@ export function WorkbenchPanel({
         sideChat ||
         sideChatOpening ||
         externalViewOpen ? (
-          <WorkbenchTabs activeKey={activeViewKey}>
-            {native && onCloseNative && (
-              <NativeWorkbenchTabs
-                tabs={native.tabs}
-                dirty={native.dirty}
-                activeKey={activeViewKey}
-                onSelect={onSelect}
-                onClose={onCloseNative}
-              />
-            )}
+          <WorkbenchTabs activeKey={activeViewKey} order={tabOrder}>
+            {native &&
+              onCloseNative &&
+              native.tabs.map((tab) => (
+                <NativeWorkbenchTabs
+                  key={tab.key}
+                  tabs={[tab]}
+                  dirty={native.dirty}
+                  activeKey={activeViewKey}
+                  onSelect={onSelect}
+                  onClose={onCloseNative}
+                />
+              ))}
             {externalViewOpen && (
               <WorkbenchTab
+                key={EXTERNAL_ASSISTANTS_VIEW_KEY}
                 label={t('workbench.externalAssistants.title')}
                 icon={<Bot size={16} />}
                 selected={activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY}
@@ -261,6 +267,7 @@ export function WorkbenchPanel({
             )}
             {(sideChat || sideChatOpening) && (
               <WorkbenchTab
+                key={SIDE_CHAT_VIEW_KEY}
                 label={sideChat?.title ?? t('workbench.sideChat.title')}
                 icon={<MessageSquarePlus size={16} />}
                 selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
@@ -275,12 +282,15 @@ export function WorkbenchPanel({
                 }
               />
             )}
-            <PreviewTabs
-              previews={previews}
-              activeKey={activeViewKey}
-              onSelect={onSelect}
-              onClose={onClosePreview}
-            />
+            {previews.map((preview) => (
+              <PreviewTabs
+                key={preview.key}
+                previews={[preview]}
+                activeKey={activeViewKey}
+                onSelect={onSelect}
+                onClose={onClosePreview}
+              />
+            ))}
             {views.map((view) => {
               const selected = view.key === activeViewKey;
               const label = resolveManifestText(
