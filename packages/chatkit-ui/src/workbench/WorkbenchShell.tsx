@@ -70,11 +70,7 @@ import { useWorkbenchLayout } from './useWorkbenchLayout';
 import { useWorkbenchViews } from './useWorkbenchViews';
 import { useInitialLoading } from './useInitialLoading';
 import { workbenchLayoutKey } from './layout-storage';
-import {
-  CHAT_MIN_WIDTH,
-  WORKBENCH_MIN_WIDTH,
-  clampPanelWidth,
-} from './split-resize';
+import { WorkbenchDivider } from './WorkbenchDivider';
 
 const isNativeView = (key: string | null) =>
   key === SIDE_CHAT_VIEW_KEY || key === EXTERNAL_ASSISTANTS_VIEW_KEY;
@@ -207,6 +203,8 @@ export function WorkbenchShell({
     expanded,
     restoring,
     resolvedPanelWidth,
+    workbenchSide,
+    swapSides,
     setOpen,
     setExpanded,
     setPanelWidth,
@@ -799,6 +797,7 @@ export function WorkbenchShell({
     resolvedPanelWidth,
     open,
     expanded,
+    workbenchSide,
     setPanelWidth,
     setExpanded,
   });
@@ -869,7 +868,11 @@ export function WorkbenchShell({
     <WorkbenchContext.Provider value={contextValue}>
       <div
         ref={rootRef}
-        className="relative flex h-full min-h-0 w-full overflow-hidden bg-background"
+        className={cn(
+          'relative flex h-full min-h-0 w-full overflow-hidden bg-background',
+          !isNarrow && workbenchSide === 'left' && 'flex-row-reverse',
+        )}
+        data-workbench-side={workbenchSide}
         data-chatkit-workbench-root=""
         aria-busy={initialLoading}
       >
@@ -917,47 +920,16 @@ export function WorkbenchShell({
         {(open || Boolean(sideChat) || externalViewOpen) && !isNarrow && (
           <>
             {open && !expanded && (
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label={t('workbench.resize')}
-                tabIndex={0}
-                aria-valuemin={CHAT_MIN_WIDTH}
-                aria-valuemax={Math.max(
-                  CHAT_MIN_WIDTH,
-                  containerWidth - WORKBENCH_MIN_WIDTH,
-                )}
-                aria-valuenow={Math.round(containerWidth - resolvedPanelWidth)}
-                onPointerDown={startResize}
-                onKeyDown={(event) => {
-                  if (
-                    ![
-                      'ArrowLeft',
-                      'ArrowRight',
-                      'Home',
-                      'End',
-                      'Enter',
-                    ].includes(event.key)
-                  )
-                    return;
-                  event.preventDefault();
-                  if (event.key === 'Enter') {
-                    setExpanded(true);
-                    return;
-                  }
-                  const width =
-                    event.key === 'Home'
-                      ? containerWidth - CHAT_MIN_WIDTH
-                      : event.key === 'End'
-                        ? WORKBENCH_MIN_WIDTH
-                        : resolvedPanelWidth +
-                          (event.key === 'ArrowLeft' ? 16 : -16);
-                  setPanelWidth(clampPanelWidth(width, containerWidth));
-                }}
-                className="group relative z-20 w-0.5 shrink-0 cursor-col-resize touch-none bg-border outline-none transition-colors hover:bg-primary/50 focus-visible:bg-primary"
-              >
-                <div className="absolute inset-y-0 -left-1 -right-1" />
-              </div>
+              <WorkbenchDivider
+                containerWidth={containerWidth}
+                panelWidth={resolvedPanelWidth}
+                workbenchSide={workbenchSide}
+                resizing={resizing}
+                onResizeStart={startResize}
+                onPanelWidthChange={setPanelWidth}
+                onExpand={() => setExpanded(true)}
+                onSwap={swapSides}
+              />
             )}
             <aside
               hidden={!open}

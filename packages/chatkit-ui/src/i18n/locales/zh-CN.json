@@ -23,6 +23,7 @@
     "restorePanel": "还原面板",
     "toggleSidebar": "显示/隐藏侧边栏",
     "resize": "调整视图面板宽度",
+    "swapPanes": "交换左右窗格",
     "loading": "正在加载视图...",
     "loadingView": "正在加载视图...",
     "empty": "暂无兼容的视图。",

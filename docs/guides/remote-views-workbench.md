@@ -1,7 +1,7 @@
 # Remote Views Workbench
 
 ChatKit can discover iframe-based Xpert extension views and display them in a
-right-side workbench. The feature is opt-in and remains disabled unless
+workbench that starts on the right. The feature is opt-in and remains disabled unless
 `workbench.enabled` is exactly `true`.
 
 ```ts
@@ -54,10 +54,14 @@ Within the same scope, switching views or opening a preview keeps visited remote
 frames mounted. Changing scope clears that visited-view cache, including hidden
 frames, and waits for fresh view discovery before opening new remote frames.
 
-On wide containers the workbench is a resizable split panel. Below 960px it
-opens as a right-side drawer. Maximizing hides chat at every width. Chat width
-and maximized state are saved per API / organization / Assistant in local
-storage; the active view remains local to the current mount.
+On wide containers the workbench is a resizable split panel. Hover over the divider
+or focus it with the keyboard to reveal the swap button at its center. Use it to
+exchange the chat and workbench positions without
+reloading either pane. Pointer and arrow-key resizing follow the new position.
+Chat width, pane positions and maximized state are saved per API / organization /
+Assistant in local storage; the active view remains local to the current mount.
+Below 960px, the workbench opens as a right-side drawer and leaves the saved desktop
+layout unchanged. Maximizing hides chat at every width.
 
 ## Theme
 

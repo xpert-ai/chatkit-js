@@ -23,6 +23,7 @@
     "restorePanel": "Restore panel",
     "toggleSidebar": "Show or hide sidebar",
     "resize": "Resize views panel",
+    "swapPanes": "Swap left and right panes",
     "loading": "Loading views...",
     "loadingView": "Loading view...",
     "empty": "No compatible views are available.",

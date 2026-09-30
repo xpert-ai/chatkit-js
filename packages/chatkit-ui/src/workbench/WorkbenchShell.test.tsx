@@ -940,6 +940,100 @@ describe('WorkbenchShell', () => {
     vi.unstubAllGlobals();
   });
 
+  it('swaps panes without remounting the draft or remote view and preserves their widths', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const { container } = render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Draft message" defaultValue="Keep my draft" /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    expect(screen.queryByLabelText('Swap left and right panes')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const remote = await screen.findByTestId('remote-view');
+    const draft = screen.getByLabelText('Draft message');
+    const root = container.querySelector('[data-chatkit-workbench-root]');
+    fireEvent.click(screen.getByLabelText('Swap left and right panes'));
+    expect(root).toHaveClass('flex-row-reverse');
+    expect(screen.getByLabelText('Draft message')).toBe(draft);
+    expect(draft).toHaveValue('Keep my draft');
+    expect(screen.getByTestId('remote-view')).toBe(remote);
+    expect(mocks.remoteUnmounts).toBe(0);
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '524');
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowLeft' });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    expect(screen.queryByLabelText('Swap left and right panes')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(root).toHaveClass('flex-row-reverse');
+    fireEvent.click(screen.getByLabelText('Swap left and right panes'));
+    expect(root).not.toHaveClass('flex-row-reverse');
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    expect(mocks.remoteUnmounts).toBe(0);
+  });
+
+  it('resizes a left workbench in the pointer direction and collapses chat toward the right', async () => {
+    vi.stubGlobal('PointerEvent', class extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+    });
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const { container } = render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await screen.findByTestId('remote-view');
+    fireEvent.click(screen.getByLabelText('Swap left and right panes'));
+    const root = container.querySelector('[data-chatkit-workbench-root]');
+    if (!root) throw new Error('Missing workbench root');
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 0, 1200, 800));
+    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 760, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 660, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '640');
+    fireEvent.pointerMove(window, { clientX: 860, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '440');
+    fireEvent.pointerMove(window, { clientX: 1100, pointerId: 1 });
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    fireEvent.pointerMove(window, { clientX: 1109, pointerId: 1 });
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(root).toHaveClass('flex-row-reverse');
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '384');
+    vi.unstubAllGlobals();
+  });
+
+  it('remembers pane positions per assistant while narrow drawers leave the desktop preference intact', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const tree = () => <WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>;
+    const first = render(tree());
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(screen.getByLabelText('Swap left and right panes'));
+    first.unmount();
+    const second = render(tree());
+    setObservedWidth(1200);
+    await screen.findByRole('separator');
+    const root = second.container.querySelector('[data-chatkit-workbench-root]');
+    expect(root).toHaveClass('flex-row-reverse');
+    setObservedWidth(720);
+    expect(root).not.toHaveClass('flex-row-reverse');
+    expect(screen.queryByLabelText('Swap left and right panes')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Open views'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    setObservedWidth(1200);
+    expect(root).toHaveClass('flex-row-reverse');
+    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    mocks.stream.assistantId = 'agent-2';
+    second.rerender(tree());
+    expect(root).not.toHaveClass('flex-row-reverse');
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    mocks.stream.assistantId = 'agent-1';
+    second.rerender(tree());
+    expect(root).toHaveClass('flex-row-reverse');
+    await screen.findByRole('separator');
+  });
+
   it('restores each assistant layout after remount, preserving chat width when the window changes', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     const onContext = vi.fn();
@@ -983,7 +1077,7 @@ describe('WorkbenchShell', () => {
 
   it('keeps desktop preferences while narrow drawers use a temporary layout', async () => {
     const key = workbenchLayoutKey('/api/ai', 'organization-1', 'agent-1');
-    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 600 });
+    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 600, workbenchSide: 'right' });
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
     setObservedWidth(800);
@@ -1004,7 +1098,7 @@ describe('WorkbenchShell', () => {
 
   it('does not hide chat before saved workbench views become available', async () => {
     const key = workbenchLayoutKey('/api/ai', 'organization-1', 'agent-1');
-    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 500 });
+    writeWorkbenchLayout(key, { open: true, expanded: true, chatWidth: 500, workbenchSide: 'right' });
     let resolveViews!: (views: XpertExtensionViewManifest[]) => void;
     mocks.listSlotViews.mockReturnValue(new Promise<XpertExtensionViewManifest[]>((resolve) => { resolveViews = resolve; }));
     render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Draft message" /></WorkbenchShell>);

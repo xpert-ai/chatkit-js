@@ -4,12 +4,14 @@ export interface WorkbenchLayout {
   open: boolean;
   expanded: boolean;
   chatWidth: number | null;
+  workbenchSide: 'left' | 'right';
 }
 
 const DEFAULT_LAYOUT: WorkbenchLayout = {
   open: false,
   expanded: false,
   chatWidth: null,
+  workbenchSide: 'right',
 };
 
 export function workbenchLayoutKey(
@@ -49,6 +51,10 @@ export function readWorkbenchLayout(key: string | null): WorkbenchLayout {
         open: value.open,
         expanded: value.open && value.expanded,
         chatWidth: value.chatWidth,
+        workbenchSide:
+          'workbenchSide' in value && value.workbenchSide === 'left'
+            ? 'left'
+            : 'right',
       };
     }
   } catch {
