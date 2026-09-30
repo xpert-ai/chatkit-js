@@ -1,6 +1,11 @@
 import * as React from 'react';
 import type { ChatKitReference, TMessageContentResourceCard } from '@xpert-ai/chatkit-types';
-import { Loader2, PanelRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import {
+  WorkbenchViewMenu,
+  WorkbenchViewsIcon,
+  type WorkbenchViewMenuProps,
+} from './WorkbenchViewMenu';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { cn } from '../lib/utils';
 import {
@@ -17,6 +22,7 @@ export type WorkbenchContextValue = {
   available: boolean;
   disabledReason?: string;
   toggle: () => void;
+  viewMenu?: Omit<WorkbenchViewMenuProps, 'children'>;
   sideChatEnabled: boolean;
   askInSideChat: (reference: ChatKitReference) => Promise<void>;
   externalAssistantsEnabled?: boolean;
@@ -47,29 +53,37 @@ export function WorkbenchToggleButton() {
 
   const label = t('workbench.open');
   const tooltip = workbench.disabledReason ?? label;
+  const viewMenu = workbench.viewMenu;
+  const button = (
+    <button
+      type="button"
+      onClick={workbench.toggle}
+      disabled={!workbench.available}
+      className={cn(
+        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg',
+        'text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground data-[state=open]:bg-muted',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
+      )}
+      aria-label={label}
+    >
+      {workbench.loading ? (
+        <Loader2 size={16} className="animate-spin" />
+      ) : (
+        <WorkbenchViewsIcon count={viewMenu?.views.length ?? 0} />
+      )}
+    </button>
+  );
+
+  if (workbench.available && viewMenu?.views.length) {
+    return <WorkbenchViewMenu {...viewMenu}>{button}</WorkbenchViewMenu>;
+  }
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex h-8 w-8">
-          <button
-            type="button"
-            onClick={workbench.toggle}
-            disabled={!workbench.available}
-            className={cn(
-              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-              'text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
-              'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
-            )}
-            aria-label={label}
-            aria-expanded={false}
-          >
-            {workbench.loading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <PanelRight size={16} />
-            )}
-          </button>
+          {button}
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom">{tooltip}</TooltipContent>

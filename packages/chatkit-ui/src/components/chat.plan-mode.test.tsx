@@ -739,7 +739,8 @@ describe('Chat plan mode payload', () => {
     const onProjectChange = vi.fn();
     render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-1"
       onProjectChange={onProjectChange} />);
-    const button = screen.getByRole('button', { name: 'history.newThreadInProject' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
+    const button = await screen.findByRole('menuitem', { name: 'history.newThreadInProject' });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     expect(onProjectChange).toHaveBeenCalledWith('project-1', { mode: 'existing', projectId: 'project-1' });
@@ -754,7 +755,8 @@ describe('Chat plan mode payload', () => {
     render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-a"
       projectsEnabled onProjectChange={onProjectChange} />);
     expect(screen.getByTestId('project-locked')).toHaveTextContent('project-b');
-    const button = screen.getByRole('button', { name: 'history.newThreadInProject' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
+    const button = await screen.findByRole('menuitem', { name: 'history.newThreadInProject' });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     expect(onProjectChange).toHaveBeenCalledWith('project-b', { mode: 'existing', projectId: 'project-b' });
@@ -767,7 +769,8 @@ describe('Chat plan mode payload', () => {
     render(<Chat clientSecret="secret" options={baseChatOptions} activeProjectId="project-a"
       projectsEnabled onProjectChange={onProjectChange} />);
     expect(screen.queryByTestId('project-locked')).not.toBeInTheDocument();
-    const button = screen.getByRole('button', { name: 'history.newThread' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
+    const button = await screen.findByRole('menuitem', { name: 'history.newThread' });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     expect(onProjectChange).toHaveBeenCalledWith(null, { mode: 'none' });

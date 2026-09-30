@@ -36,6 +36,7 @@ export type SettingsSheetProps = {
   settings: PetLocalSettings;
   petRequired?: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: React.ComponentProps<typeof SheetContent>['onCloseAutoFocus'];
   onSave: (settings: PetLocalSettings) => void;
 };
 
@@ -53,6 +54,7 @@ export function SettingsSheet({
   settings,
   petRequired = false,
   onOpenChange,
+  onCloseAutoFocus,
   onSave,
 }: SettingsSheetProps) {
   const { t } = useChatkitTranslation();
@@ -88,7 +90,11 @@ export function SettingsSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[min(92vw,26rem)] overflow-y-auto">
+      <SheetContent
+        side="right"
+        className="w-[min(92vw,26rem)] overflow-y-auto"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <SheetHeader>
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">

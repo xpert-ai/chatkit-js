@@ -67,7 +67,6 @@ import {
   type WorkbenchPreview,
 } from './client-command-payload';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
-import { WorkbenchViewRail } from './WorkbenchViewRail';
 import { useWorkbenchViews } from './useWorkbenchViews';
 import { useInitialLoading } from './useInitialLoading';
 import { workbenchLayoutKey } from './layout-storage';
@@ -734,6 +733,16 @@ export function WorkbenchShell({
       loading,
       available,
       disabledReason,
+      viewMenu: {
+        views: menuViews,
+        locale,
+        onSelect: (key) => {
+          if (!available || !menuViews.some((view) => view.key === key)) return;
+          selectView(key);
+          setExpanded(false);
+          setOpen(true);
+        },
+      },
       sideChatEnabled,
       askInSideChat,
       externalAssistantsEnabled,
@@ -753,6 +762,8 @@ export function WorkbenchShell({
           if (hasExternalRuns && !activeViewKey) {
             setExternalSession({ scope: externalScope, selectedId: null });
             setActiveViewKey(EXTERNAL_ASSISTANTS_VIEW_KEY);
+          } else if (!activeViewKey && menuViews[0]) {
+            selectView(menuViews[0].key);
           }
           setOpen(true);
         }
@@ -766,6 +777,10 @@ export function WorkbenchShell({
       openExternalAssistant,
       hasExternalRuns,
       activeViewKey,
+      menuViews,
+      selectView,
+      locale,
+      setExpanded,
       externalScope,
       available,
       closeWorkbench,
@@ -898,22 +913,6 @@ export function WorkbenchShell({
         >
           {children}
         </div>
-
-        {options?.workbench?.viewRail?.enabled === true &&
-          remoteViewsEnabled &&
-          authenticated &&
-          !open &&
-          menuViews.length > 0 && (
-            <WorkbenchViewRail
-              views={menuViews}
-              locale={locale}
-              onSelect={(key) => {
-                selectView(key);
-                setExpanded(false);
-                setOpen(true);
-              }}
-            />
-          )}
 
         {(open || Boolean(sideChat) || externalViewOpen) && !isNarrow && (
           <>

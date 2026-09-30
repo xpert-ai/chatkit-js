@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
 const mocks = vi.hoisted(() => ({
@@ -142,10 +142,6 @@ vi.mock('./composer/SendButton', () => ({
   SendButton: () => <button type="submit">send</button>,
 }));
 
-vi.mock('./history/HistorySidebar', () => ({
-  HistorySidebar: () => null,
-}));
-
 vi.mock('./composer/pending-follow-ups', () => ({
   PendingFollowUps: () => null,
 }));
@@ -222,6 +218,11 @@ function getThreadSummaryLogData() {
 describe('Chat pet integration', () => {
   beforeEach(() => {
     installMatchMedia();
+    vi.stubGlobal('ResizeObserver', class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
     window.localStorage.clear();
     mocks.stream.client.assistants.get.mockClear();
     mocks.threads = [];
@@ -239,6 +240,37 @@ describe('Chat pet integration', () => {
     mocks.stream.isReady = true;
     mocks.stream.error = null;
     mocks.parentMessengerSendEvent.mockClear();
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    ['settings.open', 'settings.title'],
+    ['history.threadHistory', 'history.title'],
+  ])('opens %s from More and restores keyboard focus when the sheet closes', async (action, title) => {
+    render(<Chat options={baseOptions} />);
+    const more = screen.getByRole('button', { name: 'chat.moreActions' });
+    expect(screen.queryByRole('button', { name: action })).not.toBeInTheDocument();
+    fireEvent.keyDown(more, { key: 'Enter' });
+    const item = await screen.findByRole('menuitem', { name: action });
+    await waitFor(() => expect(item).not.toHaveAttribute('aria-disabled', 'true'));
+    fireEvent.click(item);
+    const dialog = await screen.findByRole('dialog', { name: title });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: 'sheet.close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(more).toHaveFocus();
+  });
+
+  it('honors history and pet visibility in the More menu', async () => {
+    const { rerender } = render(<Chat options={{ ...baseOptions, history: { enabled: false } }} />);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'settings.open' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'history.newThread' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'history.threadHistory' })).not.toBeInTheDocument();
+    rerender(<Chat options={{ ...baseOptions, pet: false, history: { enabled: false } }} />);
+    expect(screen.queryByRole('button', { name: 'chat.moreActions' })).not.toBeInTheDocument();
   });
 
   it('does not send pet bridge events by default', async () => {
@@ -288,7 +320,11 @@ describe('Chat pet integration', () => {
     expect(
       screen.queryByRole('button', { name: 'chat.minimizeToPet' }),
     ).toBeNull();
-    expect(screen.queryByRole('button', { name: 'settings.open' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'history.threadHistory' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'settings.open' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     expect(window.localStorage.getItem('chatkit:pet:settings:v1')).toBe(saved);
 
     rerender(<Chat options={{ ...baseOptions, pet: true }} />);

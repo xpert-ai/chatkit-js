@@ -53,6 +53,12 @@ const formatThreadUpdatedAt = (
 };
 
 export type HistorySidebarProps = {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
+  onCloseAutoFocus?: React.ComponentProps<
+    typeof SheetContent
+  >['onCloseAutoFocus'];
   threads?: ThreadItem[];
   currentThreadId?: string;
   onNewThread?: () => void;
@@ -69,6 +75,10 @@ export type HistorySidebarProps = {
 };
 
 export function HistorySidebar({
+  open: controlledOpen,
+  onOpenChange,
+  showTrigger = true,
+  onCloseAutoFocus,
   threads = [],
   currentThreadId,
   onNewThread,
@@ -84,7 +94,12 @@ export function HistorySidebar({
   hasCurrentProject = false,
 }: HistorySidebarProps) {
   const { t, i18n } = useChatkitTranslation();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    setInternalOpen(value);
+    onOpenChange?.(value);
+  };
   const language = i18n.resolvedLanguage ?? i18n.language;
   const threadTimeFormatters = React.useMemo<ThreadTimeFormatters>(
     () => ({
@@ -121,28 +136,31 @@ export function HistorySidebar({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex h-8 w-8">
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                disabled={disabled}
-                className="h-8 w-8 cursor-pointer"
-                aria-label={t('history.threadHistory')}
-              >
-                <History size={16} />
-                <span className="sr-only">{t('history.threadHistory')}</span>
-              </Button>
-            </SheetTrigger>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {t('history.threadHistory')}
-        </TooltipContent>
-      </Tooltip>
+      {showTrigger && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex h-8 w-8">
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={disabled}
+                  className="h-8 w-8 cursor-pointer"
+                  aria-label={t('history.threadHistory')}
+                >
+                  <History size={16} />
+                  <span className="sr-only">{t('history.threadHistory')}</span>
+                </Button>
+              </SheetTrigger>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {t('history.threadHistory')}
+          </TooltipContent>
+        </Tooltip>
+      )}
       <SheetContent
+        onCloseAutoFocus={onCloseAutoFocus}
         side="right"
         className="flex w-80 flex-col p-0"
         showCloseButton={false}

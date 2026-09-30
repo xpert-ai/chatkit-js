@@ -15,7 +15,6 @@ const options: ChatKitOptions = {
   },
   workbench: {
     enabled: true,
-    viewRail: { enabled: true },
     async onClientCommand(request) {
       // Only platform-specific operations need a host callback.
       return { success: false, code: 'unsupported', commandKey: request.commandKey };
@@ -24,21 +23,20 @@ const options: ChatKitOptions = {
 };
 ```
 
-`workbench.viewRail.enabled` optionally displays a compact vertical strip of view
-icons at the right edge of chat when the workbench is closed. It defaults to
-`false` and requires `workbench.enabled: true`. Hover or keyboard focus reveals
-the localized view name and description; clicking an icon opens that view
-directly, using the existing drawer on narrow screens. The rail disappears while
-the workbench is open and returns when it is closed. It uses the same authorized
-remote views, ordering, menu icons and labels as the workbench tabs. It does not
-reserve space when no views are available, and switching Assistant or runtime
-scope clears stale entries while loading the new views.
+The stacked-tabs button in the chat header shows the number of available menu
+views. Hover over it, or press Arrow Down while focused, to open a menu with each
+view's icon and localized name. Selecting a view opens it in the workbench,
+including on-demand views. Clicking the button directly restores the active
+view or opens the first available menu view.
+Switch views with the workbench tabs or its add-view menu. On narrow screens,
+the same button opens the workbench drawer. The chat no longer reserves a
+right-side icon rail; `workbench.viewRail` is deprecated and ignored.
 
 When restoring an existing thread, view discovery waits for its conversation and
 Project scope to finish loading, including conversations without a Project.
 ChatKit shows an initial loading state until that scope and its views are ready;
 the Web Component's `chatkit.ready` event still only reports iframe document load.
-Refreshing within the same scope preserves the rail, active view, previews and
+Refreshing within the same scope preserves the active view, previews and
 injected context. Transient refresh errors retain loaded views; denied access or
 a changed scope clears them. Background refreshes do not cover the chat again.
 

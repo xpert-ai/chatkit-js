@@ -529,9 +529,8 @@ export type ChatKitWorkbenchOptions = {
   enabled?: boolean;
 
   /**
-   * Show a vertical strip of available remote-view icons at the right edge of
-   * chat while the workbench is closed. Clicking an icon opens that view.
-   * Requires `workbench.enabled`. Disabled by default.
+   * @deprecated Views now open from the stacked-tabs button in the chat header.
+   * This option is retained for compatibility and no longer renders a view rail.
    */
   viewRail?: { enabled?: boolean };
 

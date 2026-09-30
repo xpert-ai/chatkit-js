@@ -9,9 +9,11 @@ import {
   ArrowDown,
   ChevronDown,
   FileText,
+  History,
   Loader2,
   MessageSquarePlus,
   Minus,
+  MoreHorizontal,
   Pause,
   Pencil,
   Play,
@@ -67,6 +69,12 @@ import { SendButton } from './composer/SendButton';
 import { SlashPalette } from './composer/SlashPalette';
 import { ThreadHistoryStatus } from './history/ThreadHistoryStatus';
 import { HistorySidebar } from './history/HistorySidebar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 import { ConversationTitle } from './history/ConversationTitle';
 import { PendingFollowUps } from './composer/pending-follow-ups';
 import { PendingRuntimeServices } from './composer/pending-runtime-services';
@@ -687,6 +695,14 @@ export function Chat({
   const modelAssistantIdRef = React.useRef(modelAssistantId);
   const [planModeEnabled, setPlanModeEnabled] = React.useState(false);
   const [petSettingsOpen, setPetSettingsOpen] = React.useState(false);
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const headerMoreButtonRef = React.useRef<HTMLButtonElement>(null);
+  const restoreHeaderFocus = React.useCallback((event: Event) => {
+    if (headerMoreButtonRef.current) {
+      event.preventDefault();
+      headerMoreButtonRef.current.focus();
+    }
+  }, []);
   const [hasSelectableProjects, setHasSelectableProjects] =
     React.useState(false);
   const [petLocalSettings, setPetLocalSettings] =
@@ -3660,6 +3676,70 @@ export function Chat({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
+                {(!petDisabled || history?.enabled !== false) && (
+                  <DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            ref={headerMoreButtonRef}
+                            type="button"
+                            className={cn(
+                              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
+                              'text-muted-foreground hover:text-foreground hover:bg-muted',
+                              'transition-colors duration-150',
+                            )}
+                            aria-label={t('chat.moreActions')}
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {t('chat.moreActions')}
+                      </TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent
+                      align="end"
+                      className="min-w-52"
+                      onCloseAutoFocus={(event) => {
+                        if (petSettingsOpen || historyOpen) {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
+                      {!petDisabled && (
+                        <DropdownMenuItem
+                          onSelect={() => setPetSettingsOpen(true)}
+                        >
+                          <Settings size={16} />
+                          {t('settings.open')}
+                        </DropdownMenuItem>
+                      )}
+                      {history?.enabled !== false && (
+                        <>
+                          <DropdownMenuItem
+                            onSelect={handleNewThread}
+                            disabled={missingConfig || isHistoryLoading}
+                          >
+                            <Pencil size={16} />
+                            {t(
+                              activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                            )}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setHistoryOpen(true)}
+                            disabled={missingConfig || isHistoryLoading}
+                          >
+                            <History size={16} />
+                            {t('history.threadHistory')}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+
                 {taskSummaryAvailable && (
                   <TaskSummaryTrigger
                     {...taskSummaryProps}
@@ -3668,7 +3748,6 @@ export function Chat({
                     onOpenChange={handleTaskSummaryOpenChange}
                   />
                 )}
-                <WorkbenchToggleButton />
 
                 {canMinimizeToPet && (
                   <Tooltip>
@@ -3694,81 +3773,30 @@ export function Chat({
                   </Tooltip>
                 )}
 
-                {!petDisabled && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex h-8 w-8">
-                        <button
-                          type="button"
-                          onClick={() => setPetSettingsOpen(true)}
-                          className={cn(
-                            'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                            'text-muted-foreground hover:text-foreground hover:bg-muted',
-                            'transition-colors duration-150',
-                          )}
-                          aria-label={t('settings.open')}
-                        >
-                          <Settings size={16} />
-                        </button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                      {t('settings.open')}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+                <WorkbenchToggleButton />
 
-                {/* History controls - only shown when history.enabled is true (default) */}
                 {history?.enabled !== false && (
-                  <>
-                    {/* New thread button */}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="inline-flex h-8 w-8">
-                          <button
-                            type="button"
-                            onClick={handleNewThread}
-                            disabled={missingConfig || isHistoryLoading}
-                            className={cn(
-                              'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md',
-                              'text-muted-foreground hover:text-foreground hover:bg-muted',
-                              'transition-colors duration-150',
-                              'disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed',
-                            )}
-                            aria-label={t(
-                              activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
-                            )}
-                          >
-                            <Pencil size={16} />
-                          </button>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {t(
-                          activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
-                        )}
-                      </TooltipContent>
-                    </Tooltip>
-                    <HistorySidebar
-                      threads={threads}
-                      scope={effectiveHistoryScope}
-                      onScopeChange={setHistoryScope}
-                      hasCurrentProject={Boolean(activeProjectId)}
-                      currentThreadId={stream.threadId ?? undefined}
-                      onNewThread={handleNewThread}
-                      newThreadLabel={t(
-                        activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
-                      )}
-                      onRefresh={refreshThreads}
-                      onSelectThread={handleSelectThread}
-                      onDeleteThread={handleDeleteThread}
-                      isRefreshing={isThreadsLoading}
-                      showDelete={history?.showDelete !== false}
-                      disabled={
-                        missingConfig || isThreadsLoading || isHistoryLoading
-                      }
-                    />
-                  </>
+                  <HistorySidebar
+                    open={historyOpen}
+                    onOpenChange={setHistoryOpen}
+                    showTrigger={false}
+                    onCloseAutoFocus={restoreHeaderFocus}
+                    threads={threads}
+                    scope={effectiveHistoryScope}
+                    onScopeChange={setHistoryScope}
+                    hasCurrentProject={Boolean(activeProjectId)}
+                    currentThreadId={stream.threadId ?? undefined}
+                    onNewThread={handleNewThread}
+                    newThreadLabel={t(
+                      activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
+                    )}
+                    onRefresh={refreshThreads}
+                    onSelectThread={handleSelectThread}
+                    onDeleteThread={handleDeleteThread}
+                    isRefreshing={isThreadsLoading}
+                    showDelete={history?.showDelete !== false}
+                    disabled={missingConfig || isHistoryLoading}
+                  />
                 )}
               </div>
             </div>
@@ -4611,6 +4639,7 @@ export function Chat({
           settings={displayedPetSettings}
           petRequired={petRequired}
           onOpenChange={setPetSettingsOpen}
+          onCloseAutoFocus={restoreHeaderFocus}
           onSave={savePetLocalSettings}
         />
         <PetBridge pet={effectivePet} state={petAutoState} />
