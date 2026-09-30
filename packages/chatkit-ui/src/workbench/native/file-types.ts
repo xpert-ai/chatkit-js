@@ -93,6 +93,28 @@ export function fileKind(path: string, mime = ''): FileKind {
   )
     return 'text';
   if (mime.startsWith('text/')) return 'text';
+  if (
+    mime ===
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  )
+    return 'docx';
+  if (
+    mime ===
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mime === 'application/vnd.ms-excel'
+  )
+    return 'spreadsheet';
+  if (
+    mime ===
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  )
+    return 'pptx';
+  if (
+    ['application/json', 'application/xml', 'application/javascript'].includes(
+      mime,
+    )
+  )
+    return 'text';
   if (mime.startsWith('image/')) return 'image';
   if (mime.startsWith('audio/')) return 'audio';
   if (mime.startsWith('video/')) return 'video';

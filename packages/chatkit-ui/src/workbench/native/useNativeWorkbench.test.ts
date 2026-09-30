@@ -3,6 +3,38 @@ import { describe, expect, it, vi } from 'vitest';
 import { useNativeWorkbench } from './useNativeWorkbench';
 
 describe('native Workbench sessions', () => {
+  it('reuses the browser tab for previews while recording recent files separately from editor tabs', () => {
+    const { result } = renderHook(() => useNativeWorkbench('preview-scope'));
+    act(() => {
+      result.current.openTool('files');
+      result.current.previewFile({ filePath: 'docs/a.md' });
+      result.current.previewFile({ filePath: 'docs/b.txt' });
+      result.current.previewFile({ filePath: 'docs/a.md' });
+    });
+    expect(result.current.tabs).toHaveLength(1);
+    expect(result.current.tabs[0]).toMatchObject({
+      kind: 'files',
+      preview: { filePath: 'docs/a.md' },
+    });
+    expect(result.current.recent.map((item) => item.file.filePath)).toEqual([
+      'docs/a.md',
+      'docs/b.txt',
+    ]);
+    act(() => {
+      result.current.openFile({ filePath: 'budget.xlsx' });
+      result.current.previewFile(null);
+    });
+    expect(result.current.tabs).toHaveLength(2);
+    expect(result.current.tabs[0]).toMatchObject({
+      kind: 'files',
+      preview: undefined,
+    });
+    expect(result.current.tabs[1]).toMatchObject({
+      kind: 'file',
+      file: { filePath: 'budget.xlsx' },
+    });
+    expect(result.current.recent).toHaveLength(3);
+  });
   it('reuses tools and file tabs, remembers files, and isolates runtime scopes', () => {
     const { result, rerender } = renderHook(
       ({ scope }) => useNativeWorkbench(scope),

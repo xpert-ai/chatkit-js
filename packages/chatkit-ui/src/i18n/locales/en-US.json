@@ -104,7 +104,7 @@
       "delete": "Delete",
       "deleteTitle": "Delete this file or folder?",
       "deleteDescription": "The selected item and its contents will be deleted. This cannot be undone.",
-      "search": "Search this folder",
+      "search": "Filter files…",
       "empty": "This folder is empty",
       "name": "File path",
       "create": "Create",
@@ -142,7 +142,19 @@
       "fontSize": "Font size",
       "xlsxHint": "Edit cell values and formulas while preserving the original layout. Sheet structure and formatting changes cannot be saved.",
       "unsavedLabel": "Unsaved changes",
-      "pathExists": "The path already exists. Choose another file name."
+      "pathExists": "The path already exists. Choose another file name.",
+      "openFile": "Open file",
+      "selectHint": "Select a file from the workspace tree",
+      "tree": "Workspace file tree",
+      "toggleTree": "Toggle file tree",
+      "hideTree": "Hide file tree",
+      "breadcrumb": "File path",
+      "viewSource": "View source",
+      "openEditor": "Open in editor",
+      "actions": "File actions",
+      "copy": "Copy file contents",
+      "copied": "Copied",
+      "copyFailed": "Could not copy. Please try again."
     }
   },
   "chat": {

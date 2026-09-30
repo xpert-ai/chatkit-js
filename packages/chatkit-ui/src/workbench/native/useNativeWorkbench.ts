@@ -3,7 +3,7 @@ import type { XpertWorkspaceFile } from '@xpert-ai/xpert-sdk';
 
 export type NativeTool = 'files' | 'terminal' | 'side-chat';
 export type NativeTab = { key: string } & (
-  | { kind: 'files' }
+  | { kind: 'files'; preview?: XpertWorkspaceFile }
   | { kind: 'terminal' }
   | { kind: 'file'; file: XpertWorkspaceFile }
 );
@@ -104,6 +104,20 @@ export function useNativeWorkbench(scope: string) {
       open({ key: `${NATIVE_PREFIX}${kind}`, kind }),
     openFile: (file: XpertWorkspaceFile) =>
       open({ key: nativeFileKey(file.filePath), kind: 'file', file }),
+    previewFile: (file: XpertWorkspaceFile | null) =>
+      update((data) => ({
+        tabs: data.tabs.map((tab) =>
+          tab.kind === 'files' ? { ...tab, preview: file ?? undefined } : tab,
+        ),
+        recent: file
+          ? [
+              { file, openedAt: Date.now() },
+              ...data.recent.filter(
+                (item) => item.file.filePath !== file.filePath,
+              ),
+            ].slice(0, 30)
+          : data.recent,
+      })),
     requestClose: (key: string) => {
       if (handles.current.get(key)?.dirty) {
         setPending(key);

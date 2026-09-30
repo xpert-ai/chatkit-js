@@ -104,7 +104,7 @@
       "delete": "删除",
       "deleteTitle": "删除此文件或文件夹？",
       "deleteDescription": "选中项目及其内容将被删除，此操作无法撤销。",
-      "search": "搜索当前文件夹",
+      "search": "筛选文件…",
       "empty": "此文件夹为空",
       "name": "文件路径",
       "create": "创建",
@@ -142,7 +142,19 @@
       "fontSize": "字号",
       "xlsxHint": "支持编辑单元格内容和公式；保留原格式，请勿调整工作表结构与样式。",
       "unsavedLabel": "有未保存的修改",
-      "pathExists": "路径已存在，请使用其他文件名。"
+      "pathExists": "路径已存在，请使用其他文件名。",
+      "openFile": "打开文件",
+      "selectHint": "从工作区目录树中选择文件",
+      "tree": "工作区目录树",
+      "toggleTree": "显示或隐藏目录树",
+      "hideTree": "隐藏目录树",
+      "breadcrumb": "文件路径",
+      "viewSource": "查看源代码",
+      "openEditor": "打开编辑器",
+      "actions": "文件操作",
+      "copy": "复制文件内容",
+      "copied": "已复制",
+      "copyFailed": "复制失败，请重试。"
     }
   },
   "chat": {

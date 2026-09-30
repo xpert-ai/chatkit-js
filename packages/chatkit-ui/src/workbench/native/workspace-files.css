@@ -1,0 +1,102 @@
+.workspace-files {
+  container-type: inline-size;
+  container-name: workspace-files;
+}
+.workspace-files-sidebar {
+  width: clamp(14rem, 28cqw, 19rem);
+}
+.workspace-files-backdrop {
+  display: none;
+}
+.workspace-markdown {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.workspace-markdown > :first-child {
+  margin-top: 0;
+}
+.workspace-markdown h1 {
+  margin: 1.2em 0 0.75em;
+  font-size: 1.8rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.workspace-markdown h2 {
+  margin: 1.5em 0 0.75em;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+.workspace-markdown h3 {
+  margin: 1.2em 0 0.5em;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.workspace-markdown p,
+.workspace-markdown ul,
+.workspace-markdown ol,
+.workspace-markdown pre,
+.workspace-markdown table {
+  margin: 1em 0;
+}
+.workspace-markdown ul {
+  list-style: disc;
+  padding-inline-start: 1.5em;
+}
+.workspace-markdown ol {
+  list-style: decimal;
+  padding-inline-start: 1.5em;
+}
+.workspace-markdown li + li {
+  margin-top: 0.4em;
+}
+.workspace-markdown pre {
+  overflow: auto;
+  padding: 1rem;
+  border-radius: var(--chat-item-radius, var(--radius));
+  background: var(--muted);
+  font-size: 0.875em;
+}
+.workspace-markdown :not(pre) > code {
+  border-radius: var(--chat-item-radius, var(--radius));
+  background: var(--muted);
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+.workspace-markdown blockquote {
+  border-inline-start: 3px solid var(--border);
+  padding-inline-start: 1em;
+  color: var(--muted-foreground);
+}
+.workspace-markdown th,
+.workspace-markdown td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.8em;
+}
+.workspace-markdown a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.workspace-markdown img {
+  max-width: 100%;
+}
+@container workspace-files (max-width: 600px) {
+  .workspace-files-sidebar {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    z-index: 20;
+    width: min(85%, 19rem);
+    box-shadow: -8px 0 24px
+      color-mix(in srgb, var(--foreground) 8%, transparent);
+  }
+  .workspace-files-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  }
+  .workspace-files-edit-label {
+    display: none;
+  }
+}

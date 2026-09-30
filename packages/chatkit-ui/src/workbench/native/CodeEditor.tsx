@@ -15,11 +15,13 @@ export default function CodeEditor({
   onChange,
   path,
   onSave,
+  readOnly = false,
 }: {
   value: string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void;
   path: string;
-  onSave: () => void;
+  onSave?: () => void;
+  readOnly?: boolean;
 }) {
   const { isDarkMode } = useTheme();
   const extensions = React.useMemo(() => {
@@ -65,16 +67,19 @@ export default function CodeEditor({
       onKeyDown={(event) => {
         if (
           (event.metaKey || event.ctrlKey) &&
-          event.key.toLowerCase() === 's'
+          event.key.toLowerCase() === 's' &&
+          !readOnly
         ) {
           event.preventDefault();
-          onSave();
+          onSave?.();
         }
       }}
     >
       <CodeMirror
         value={value}
         onChange={onChange}
+        readOnly={readOnly}
+        editable={!readOnly}
         height="100%"
         className="h-full [&_.cm-editor]:h-full"
         extensions={extensions}
@@ -83,7 +88,7 @@ export default function CodeEditor({
           lineNumbers: true,
           foldGutter: true,
           searchKeymap: true,
-          highlightActiveLine: true,
+          highlightActiveLine: !readOnly,
         }}
         aria-label={path}
       />

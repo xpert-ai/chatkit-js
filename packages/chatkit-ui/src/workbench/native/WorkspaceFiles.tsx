@@ -5,18 +5,26 @@ import type {
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
 import {
-  ArrowUp,
+  ChevronRight,
   Download,
-  File,
   FilePlus2,
-  Folder,
-  Loader2,
+  Folders,
+  MoreHorizontal,
+  Pencil,
   RefreshCw,
+  Search,
   Trash2,
   Upload,
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -26,162 +34,268 @@ import {
   AlertDialogCancel,
 } from '../../components/ui/alert-dialog';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { WorkspaceFilePreview } from './WorkspaceFilePreview';
+import { WorkspaceFileTree } from './WorkspaceFileTree';
+import { useWorkspaceFileTree } from './useWorkspaceFileTree';
+import {
+  downloadBlob,
+  fileName,
+  isFolder,
+  isOfficeFile,
+  previewKind,
+  validRelativePath,
+} from './workspace-file-utils';
+import './workspace-files.css';
+export {
+  downloadBlob,
+  fileName,
+  isFolder,
+  validRelativePath,
+} from './workspace-file-utils';
 
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-export const fileName = (path: string) =>
-  path.split('/').filter(Boolean).pop() ?? path;
-export const isFolder = (file: XpertWorkspaceFile) =>
-  file.hasChildren === true || file.fileType === 'directory';
-export const validRelativePath = (path: string) =>
-  !!path &&
-  !path.startsWith('/') &&
-  !path.includes('\\') &&
-  !path.includes('\0') &&
-  path.split('/').every((part) => !!part && part !== '..' && part !== '.');
-
-export function WorkspaceFiles({
-  client,
-  scope,
-  onOpen,
-  revision = 0,
-}: {
+type Props = {
   client: Client;
   scope: WorkspaceFileScope | null;
   onOpen: (file: XpertWorkspaceFile) => void;
   revision?: number;
-}) {
+  onPreview?: (file: XpertWorkspaceFile | null) => void;
+};
+export function WorkspaceFiles(props: Props) {
+  const { t } = useChatkitTranslation();
+  return props.scope ? (
+    <WorkspaceFilesSession
+      key={JSON.stringify(props.scope)}
+      {...props}
+      scope={props.scope}
+    />
+  ) : (
+    <p className="p-6 text-sm text-muted-foreground">
+      {t('workbench.start.conversationRequired')}
+    </p>
+  );
+}
+function WorkspaceFilesSession({
+  client,
+  scope,
+  onOpen,
+  onPreview,
+  revision = 0,
+}: Props & { scope: WorkspaceFileScope }) {
   const { t } = useChatkitTranslation();
   const [path, setPath] = React.useState('');
-  const [files, setFiles] = React.useState<XpertWorkspaceFile[]>([]);
+  const [selected, setSelected] = React.useState<XpertWorkspaceFile | null>(
+    null,
+  );
+  const [source, setSource] = React.useState(false);
   const [query, setQuery] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
+  const [sidebar, setSidebar] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState('');
-  const [version, refresh] = React.useReducer((x) => x + 1, 0);
+  const [version, bumpVersion] = React.useReducer((n) => n + 1, 0);
   const [create, setCreate] = React.useState(false);
   const [name, setName] = React.useState('');
   const [deleting, setDeleting] = React.useState<XpertWorkspaceFile | null>(
     null,
   );
   const input = React.useRef<HTMLInputElement>(null);
-  const scopeKey = JSON.stringify(scope);
-  const currentScope = React.useRef(scopeKey);
-  currentScope.current = scopeKey;
+  const container = React.useRef<HTMLDivElement>(null);
+  const alive = React.useRef(true);
   React.useEffect(() => {
-    if (!scope) return;
-    const abort = new AbortController();
-    setLoading(true);
-    setError('');
-    setFiles([]);
-    client.workbench
-      .listFiles(scope, path, { signal: abort.signal })
-      .then((items) => {
-        if (!abort.signal.aborted) setFiles(items);
-      })
-      .catch((error: unknown) => {
-        if (!abort.signal.aborted)
-          setError(
-            error instanceof Error
-              ? error.message
-              : t('workbench.files.failed'),
-          );
-      })
-      .finally(() => {
-        if (!abort.signal.aborted) setLoading(false);
-      });
-    return () => abort.abort();
-  }, [client, scopeKey, path, version, revision, t]);
-  async function run(action: () => Promise<void>) {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  const tree = useWorkspaceFileTree(
+    client,
+    scope,
+    revision + version,
+    t('workbench.files.failed'),
+  );
+  const files = tree.directories[path]?.files ?? [];
+  const loading = tree.directories['']?.loading;
+  const currentPath = selected?.filePath ?? path;
+  const segments = currentPath.split('/').filter(Boolean);
+  const kind = selected ? previewKind(selected) : null;
+  const itemButton =
+    'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--chat-item-radius,var(--radius))] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40';
+  function refresh() {
+    bumpVersion();
+  }
+  function select(file: XpertWorkspaceFile) {
+    if (isOfficeFile(file)) {
+      onOpen(file);
+      return;
+    }
+    setSelected(file);
+    setPath(file.filePath.split('/').slice(0, -1).join('/'));
+    setSource(false);
+    onPreview?.(file);
+    const width = container.current?.getBoundingClientRect().width ?? 0;
+    if (width > 0 && width <= 600) setSidebar(false);
+  }
+  function navigate(folder: string) {
+    setPath(folder);
+    setSelected(null);
+    onPreview?.(null);
+    tree.reveal(folder);
+    setSidebar(true);
+  }
+  async function run(action: () => Promise<void>, refreshAfter = true) {
     setBusy(true);
     setError('');
     try {
       await action();
-      if (currentScope.current === scopeKey) refresh();
+      if (alive.current && refreshAfter) refresh();
     } catch (error) {
-      if (currentScope.current === scopeKey)
+      if (alive.current)
         setError(
           error instanceof Error ? error.message : t('workbench.files.failed'),
         );
     } finally {
-      if (currentScope.current === scopeKey) setBusy(false);
+      if (alive.current) setBusy(false);
     }
   }
-  if (!scope)
-    return (
-      <p className="p-6 text-sm text-muted-foreground">
-        {t('workbench.start.conversationRequired')}
-      </p>
-    );
-  const visible = files
-    .filter((file) =>
-      fileName(file.filePath)
-        .toLocaleLowerCase()
-        .includes(query.toLocaleLowerCase()),
-    )
-    .sort(
-      (a, b) =>
-        Number(isFolder(b)) - Number(isFolder(a)) ||
-        a.filePath.localeCompare(b.filePath),
-    );
-  const itemButton =
-    'rounded-[var(--chat-item-radius)] p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40';
+  const download = () =>
+    void run(async () => {
+      const target =
+        selected ?? (path ? { filePath: path, hasChildren: true } : null);
+      if (target)
+        downloadBlob(
+          await client.workbench.downloadFile(scope, target.filePath),
+          fileName(target.filePath) + (isFolder(target) ? '.zip' : ''),
+        );
+    }, false);
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-y p-3">
-        <button
-          className={itemButton}
-          title={t('workbench.files.parent')}
-          aria-label={t('workbench.files.parent')}
-          disabled={!path || busy}
-          onClick={() => setPath(path.split('/').slice(0, -1).join('/'))}
+    <div
+      ref={container}
+      className="workspace-files flex h-full min-h-0 flex-col bg-background text-foreground"
+    >
+      <header className="flex h-12 shrink-0 items-center gap-1.5 border-b px-3">
+        <nav
+          aria-label={t('workbench.files.breadcrumb')}
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
         >
-          <ArrowUp size={16} />
-        </button>
+          <button
+            className="shrink-0 rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 text-muted-foreground hover:bg-muted"
+            aria-label={t('workbench.files.root')}
+            onClick={() => navigate('')}
+          >
+            /
+          </button>
+          {segments.map((segment, index) => (
+            <React.Fragment key={index}>
+              {index > 0 && (
+                <ChevronRight
+                  size={14}
+                  className="shrink-0 text-muted-foreground"
+                />
+              )}
+              <button
+                className={`min-w-0 truncate rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 hover:bg-muted ${index === segments.length - 1 ? 'font-medium' : 'text-muted-foreground'}`}
+                title={segments.slice(0, index + 1).join('/')}
+                aria-current={
+                  index === segments.length - 1 ? 'page' : undefined
+                }
+                onClick={() => {
+                  if (!(selected && index === segments.length - 1))
+                    navigate(segments.slice(0, index + 1).join('/'));
+                }}
+              >
+                {segment}
+              </button>
+            </React.Fragment>
+          ))}
+        </nav>
+        {(kind === 'markdown' || kind === 'html') && (
+          <button
+            className="shrink-0 rounded-[var(--chat-item-radius,var(--radius))] px-2 py-1.5 text-xs font-medium hover:bg-muted"
+            onClick={() => setSource((value) => !value)}
+          >
+            {t(
+              source ? 'workbench.files.preview' : 'workbench.files.viewSource',
+            )}
+          </button>
+        )}
         <button
-          className="min-w-0 flex-1 truncate text-left text-sm"
-          onClick={() => setPath('')}
+          className={`${itemButton} ${sidebar ? 'bg-muted/60' : ''}`}
+          aria-label={t('workbench.files.toggleTree')}
+          title={t('workbench.files.toggleTree')}
+          aria-expanded={sidebar}
+          onClick={() => setSidebar((value) => !value)}
         >
-          {t('workbench.files.root')}
-          {path && ` / ${path}`}
+          <Folders size={18} />
         </button>
-        <button
-          className={itemButton}
-          aria-label={t('workbench.files.refresh')}
-          disabled={busy || loading}
-          onClick={refresh}
-        >
-          <RefreshCw size={16} />
-        </button>
-        <button
-          className={itemButton}
-          aria-label={t('workbench.files.newFile')}
-          title={t('workbench.files.newFile')}
-          disabled={busy}
-          onClick={() => {
-            setName('');
-            setCreate(true);
-          }}
-        >
-          <FilePlus2 size={16} />
-        </button>
-        <button
-          className={itemButton}
-          aria-label={t('workbench.files.upload')}
-          title={t('workbench.files.upload')}
-          disabled={busy}
-          onClick={() => input.current?.click()}
-        >
-          <Upload size={16} />
-        </button>
+        {selected && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpen(selected)}
+            title={t('workbench.files.openEditor')}
+          >
+            <Pencil size={14} />
+            <span className="workspace-files-edit-label">
+              {t('workbench.files.openEditor')}
+            </span>
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={itemButton}
+              disabled={busy}
+              aria-label={t('workbench.files.actions')}
+              title={t('workbench.files.actions')}
+            >
+              <MoreHorizontal size={18} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-48 rounded-[var(--chat-item-radius,var(--radius))]"
+          >
+            <DropdownMenuItem onSelect={refresh} disabled={loading}>
+              <RefreshCw />
+              {t('workbench.files.refresh')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                setName('');
+                setCreate(true);
+              }}
+            >
+              <FilePlus2 />
+              {t('workbench.files.newFile')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => input.current?.click()}>
+              <Upload />
+              {t('workbench.files.upload')}
+            </DropdownMenuItem>
+            {(selected || path) && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={download}>
+                  <Download />
+                  {t('workbench.files.download')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() =>
+                    setDeleting(
+                      selected ?? { filePath: path, hasChildren: true },
+                    )
+                  }
+                >
+                  <Trash2 />
+                  {t('workbench.files.delete')}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <input
           ref={input}
+          aria-label={t('workbench.files.upload')}
           type="file"
           multiple
           hidden
@@ -194,91 +308,73 @@ export function WorkspaceFiles({
             });
           }}
         />
-      </div>
-      <div className="px-4 pt-3">
-        <Input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('workbench.files.search')}
-          aria-label={t('workbench.files.search')}
-        />
-      </div>
+      </header>
       {error && (
-        <p role="alert" className="px-4 py-3 text-sm text-destructive">
+        <p role="alert" className="border-b px-4 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
-      <div className="min-h-0 flex-1 overflow-auto p-3">
-        {loading || busy ? (
-          <div
-            role="status"
-            className="flex items-center gap-2 p-3 text-sm text-muted-foreground"
-          >
-            <Loader2 size={16} className="animate-spin" />
-            {t('workbench.loading')}
-          </div>
-        ) : null}
-        {!loading && !visible.length && (
-          <p className="p-3 text-sm text-muted-foreground">
-            {t(query ? 'workbench.start.noResults' : 'workbench.files.empty')}
-          </p>
+      {busy && (
+        <p role="status" className="px-4 py-1 text-xs text-muted-foreground">
+          {t('workbench.loading')}
+        </p>
+      )}
+      <div className="relative flex min-h-0 flex-1">
+        <section
+          aria-label={t('workbench.files.preview')}
+          className="min-h-0 min-w-0 flex-1 overflow-hidden"
+        >
+          <WorkspaceFilePreview
+            key={selected?.filePath ?? 'empty'}
+            client={client}
+            scope={scope}
+            file={selected}
+            source={source}
+            revision={revision + version}
+          />
+        </section>
+        {sidebar && (
+          <>
+            <button
+              className="workspace-files-backdrop"
+              aria-label={t('workbench.files.hideTree')}
+              onClick={() => setSidebar(false)}
+            />
+            <aside
+              className="workspace-files-sidebar flex min-h-0 shrink-0 flex-col border-l bg-background"
+              aria-label={t('workbench.files.tree')}
+            >
+              <div className="relative mx-3 mt-3 mb-2">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute top-2.5 left-3 text-muted-foreground"
+                />
+                <Input
+                  type="search"
+                  className="h-9 rounded-[var(--chat-item-radius,var(--radius))] pl-9 shadow-none"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t('workbench.files.search')}
+                  aria-label={t('workbench.files.search')}
+                />
+              </div>
+              <WorkspaceFileTree
+                directories={tree.directories}
+                expanded={tree.expanded}
+                query={query}
+                selectedPath={selected?.filePath ?? path}
+                onRetry={tree.load}
+                onToggle={(folder) => {
+                  tree.toggle(folder);
+                  setPath(folder);
+                  setSelected(null);
+                  onPreview?.(null);
+                }}
+                onSelect={select}
+              />
+            </aside>
+          </>
         )}
-        {visible.map((file) => (
-          <div
-            key={file.filePath}
-            className="group flex items-center gap-1 rounded-[var(--chat-item-radius)] hover:bg-muted/50"
-          >
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left text-sm"
-              onClick={() =>
-                isFolder(file) ? setPath(file.filePath) : onOpen(file)
-              }
-            >
-              {isFolder(file) ? (
-                <Folder className="shrink-0 text-muted-foreground" size={18} />
-              ) : (
-                <File className="shrink-0 text-muted-foreground" size={18} />
-              )}
-              <span className="min-w-0 flex-1 truncate" title={file.filePath}>
-                {fileName(file.filePath)}
-              </span>
-              {file.size != null && !isFolder(file) && (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {new Intl.NumberFormat(undefined, {
-                    style: 'unit',
-                    unit: 'kilobyte',
-                    maximumFractionDigits: 1,
-                  }).format(file.size / 1024)}
-                </span>
-              )}
-            </button>
-            <button
-              className={itemButton}
-              disabled={busy}
-              aria-label={`${t('workbench.files.download')} ${fileName(file.filePath)}`}
-              onClick={() =>
-                void run(async () =>
-                  downloadBlob(
-                    await client.workbench.downloadFile(scope, file.filePath),
-                    fileName(file.filePath) + (isFolder(file) ? '.zip' : ''),
-                  ),
-                )
-              }
-            >
-              <Download size={16} />
-            </button>
-            <button
-              className={itemButton}
-              disabled={busy}
-              aria-label={`${t('workbench.files.delete')} ${fileName(file.filePath)}`}
-              onClick={() => setDeleting(file)}
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
       </div>
       <AlertDialog
         open={create}
@@ -318,7 +414,10 @@ export function WorkspaceFiles({
                 void run(async () => {
                   const filePath = [path, name].filter(Boolean).join('/');
                   let parent = path;
-                  let siblings = files;
+                  let siblings = await client.workbench.listFiles(
+                    scope,
+                    parent,
+                  );
                   for (const directory of name.split('/').slice(0, -1)) {
                     parent = [parent, directory].filter(Boolean).join('/');
                     const existing = siblings.find(
@@ -342,8 +441,10 @@ export function WorkspaceFiles({
                     new Blob([''], { type: 'text/plain' }),
                     filePath.slice(separator + 1),
                   );
-                  setCreate(false);
-                  onOpen({ ...created, filePath });
+                  if (alive.current) {
+                    setCreate(false);
+                    onOpen({ ...created, filePath });
+                  }
                 })
               }
             >
@@ -381,7 +482,12 @@ export function WorkspaceFiles({
                 void run(async () => {
                   if (deleting)
                     await client.workbench.deleteFile(scope, deleting.filePath);
-                  setDeleting(null);
+                  if (alive.current) {
+                    setDeleting(null);
+                    setSelected(null);
+                    onPreview?.(null);
+                    setPath('');
+                  }
                 })
               }
             >

@@ -508,6 +508,7 @@ export function WorkbenchPanel({
             projectId={stream.projectId}
             register={native.register}
             onOpenFile={onOpenNativeFile}
+            onPreviewFile={native.previewFile}
             revision={fileRevision}
             onSaved={refreshFiles}
           />

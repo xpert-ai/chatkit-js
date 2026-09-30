@@ -29,11 +29,15 @@ export function NativeWorkbenchTabs({
     <>
       {tabs.map((tab) => {
         const title =
-          tab.kind === 'file'
-            ? fileName(tab.file.filePath)
-            : t(`workbench.start.${tab.kind}`);
-        const Icon =
           tab.kind === 'files'
+            ? tab.preview
+              ? fileName(tab.preview.filePath)
+              : t('workbench.files.openFile')
+            : tab.kind === 'file'
+              ? fileName(tab.file.filePath)
+              : t(`workbench.start.${tab.kind}`);
+        const Icon =
+          tab.kind === 'files' && !tab.preview
             ? Folder
             : tab.kind === 'terminal'
               ? Terminal
@@ -84,6 +88,7 @@ export function NativeWorkbenchContent({
   onOpenFile,
   revision,
   onSaved,
+  onPreviewFile,
 }: {
   tabs: NativeTab[];
   activeKey: string | null;
@@ -96,6 +101,7 @@ export function NativeWorkbenchContent({
   onOpenFile: (file: XpertWorkspaceFile) => void;
   revision: number;
   onSaved: () => void;
+  onPreviewFile?: (file: XpertWorkspaceFile | null) => void;
 }) {
   const { t } = useChatkitTranslation();
   return (
@@ -121,6 +127,7 @@ export function NativeWorkbenchContent({
                 client={client}
                 scope={scope}
                 onOpen={onOpenFile}
+                onPreview={onPreviewFile}
                 revision={revision}
               />
             ) : tab.kind === 'terminal' ? (
