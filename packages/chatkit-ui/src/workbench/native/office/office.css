@@ -2,3 +2,8 @@
 .chatkit-docx :is(button, select, input) {
   border-radius: var(--chat-item-radius);
 }
+
+/* The workbench already displays the filename. Keep the editor's menu below it. */
+.chatkit-docx span:has(+ .docx-menubar) {
+  display: none;
+}
