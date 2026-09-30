@@ -493,12 +493,12 @@ export function createSlideCopy(
     slides: [source],
   }).slides[0];
   copy.path = `ppt/slides/editor-slide-${Date.now()}.xml`;
-  copy.sourcePath = source.path;
+  copy.sourcePath = source.sourcePath ?? source.path;
   copy.created = true;
   copy.shapes = copy.shapes.map((shape) => ({
     ...shape,
     deleted: blank,
-    created: false,
+    created: shape.created,
   }));
   if (blank) {
     copy.background = rgbColor(255, 255, 255);

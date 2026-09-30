@@ -4,6 +4,7 @@ import { createPresentation } from './pptx-fixture.test-support';
 import { parsePptx, savePptx } from './pptx-file.utils';
 import {
   createSlideCopy,
+  createPresetShape,
   paragraphsForShapeText,
 } from './pptx-editor-model.utils';
 
@@ -41,4 +42,23 @@ it('adds a slide with valid presentation relationships and removes it again', as
   expect(
     (await parsePptx(await savePptx(reloaded, saved))).slides,
   ).toHaveLength(1);
+});
+
+it('keeps newly inserted objects when duplicating a slide more than once', async () => {
+  const source = await createPresentation();
+  const deck = await parsePptx(source);
+  const inserted = createPresetShape(deck, 'ellipse');
+  deck.slides[0].shapes.push(inserted);
+  const first = createSlideCopy(deck, deck.slides[0], false);
+  first.path = 'ppt/slides/copy1.xml';
+  deck.slides.push(first);
+  const second = createSlideCopy(deck, first, false);
+  second.path = 'ppt/slides/copy2.xml';
+  deck.slides.push(second);
+  const reloaded = await parsePptx(await savePptx(deck, source));
+  expect(reloaded.slides).toHaveLength(3);
+  for (const slide of reloaded.slides) {
+    expect(slide.shapes.some((s) => s.geometry === 'ellipse')).toBe(true);
+    expect(slide.shapes.some((s) => s.kind === 'image')).toBe(true);
+  }
 });
