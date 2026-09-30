@@ -41,6 +41,7 @@ export function WorkspaceFileIcon({ file }: { file: XpertWorkspaceFile }) {
 }
 
 export function WorkspaceFileTree({
+  rootPath = '',
   directories,
   expanded,
   query,
@@ -49,6 +50,7 @@ export function WorkspaceFileTree({
   onSelect,
   onRetry,
 }: {
+  rootPath?: string;
   directories: Record<string, DirectoryState>;
   expanded: Set<string>;
   query: string;
@@ -90,7 +92,8 @@ export function WorkspaceFileTree({
       if (open) visit(file.filePath, depth + 1);
     }
   }
-  visit('', 0);
+  visit(rootPath, 0);
+  const rootState = directories[rootPath];
   const tabStop = rows.some(({ file }) => file.filePath === focused)
     ? focused
     : rows[0]?.file.filePath;
@@ -104,9 +107,10 @@ export function WorkspaceFileTree({
       ref={root}
       role="tree"
       aria-label={t('workbench.files.tree')}
+      aria-busy={!rootState || rootState.loading}
       className="min-h-0 flex-1 overflow-auto px-2 pb-3"
     >
-      {directories['']?.loading && (
+      {(!rootState || rootState.loading) && (
         <div
           role="status"
           className="flex items-center gap-2 p-3 text-xs text-muted-foreground"
@@ -115,15 +119,15 @@ export function WorkspaceFileTree({
           {t('workbench.loading')}
         </div>
       )}
-      {directories['']?.error && (
+      {rootState?.error && (
         <div role="alert" className="p-3 text-xs text-destructive">
-          {directories[''].error}
-          <button className="ml-2 underline" onClick={() => onRetry('')}>
+          {rootState.error}
+          <button className="ml-2 underline" onClick={() => onRetry(rootPath)}>
             {t('workbench.files.retry')}
           </button>
         </div>
       )}
-      {!directories['']?.loading && !directories['']?.error && !rows.length && (
+      {rootState && !rootState.loading && !rootState.error && !rows.length && (
         <p className="p-3 text-sm text-muted-foreground">
           {t(query ? 'workbench.start.noResults' : 'workbench.files.empty')}
         </p>

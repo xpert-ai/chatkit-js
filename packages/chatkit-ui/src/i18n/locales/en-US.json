@@ -197,6 +197,7 @@
       "toggleTree": "Toggle file tree",
       "hideTree": "Hide file tree",
       "breadcrumb": "File path",
+      "browseFolder": "Files in {{path}}",
       "viewSource": "View source",
       "openEditor": "Open in editor",
       "actions": "File actions",

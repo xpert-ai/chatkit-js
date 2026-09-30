@@ -197,6 +197,7 @@
       "toggleTree": "显示或隐藏目录树",
       "hideTree": "隐藏目录树",
       "breadcrumb": "文件路径",
+      "browseFolder": "{{path}} 中的文件",
       "viewSource": "查看源代码",
       "openEditor": "打开编辑器",
       "actions": "文件操作",

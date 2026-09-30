@@ -6,7 +6,6 @@ import type {
 } from '@xpert-ai/xpert-sdk';
 import {
   Check,
-  ChevronRight,
   Copy,
   Download,
   FilePlus2,
@@ -41,6 +40,7 @@ import {
   type WorkspaceFileTextContent,
 } from './WorkspaceFilePreview';
 import { WorkspaceFileTree } from './WorkspaceFileTree';
+import { WorkspaceFileBreadcrumbs } from './WorkspaceFileBreadcrumbs';
 import { useWorkspaceFileTree } from './useWorkspaceFileTree';
 import {
   downloadBlob,
@@ -125,7 +125,6 @@ function WorkspaceFilesSession({
   const files = tree.directories[path]?.files ?? [];
   const loading = tree.directories['']?.loading;
   const currentPath = selected?.filePath ?? path;
-  const segments = currentPath.split('/').filter(Boolean);
   const kind = selected ? previewKind(selected) : null;
   const canCopyContent =
     previewText !== null && previewText.filePath === selected?.filePath;
@@ -166,13 +165,6 @@ function WorkspaceFilesSession({
     const width = container.current?.getBoundingClientRect().width ?? 0;
     if (width > 0 && width <= 600) setSidebar(false);
   }
-  function navigate(folder: string) {
-    setPath(folder);
-    setSelected(null);
-    onPreview?.(null);
-    tree.reveal(folder);
-    setSidebar(true);
-  }
   async function run(action: () => Promise<void>, refreshAfter = true) {
     setBusy(true);
     setError('');
@@ -205,41 +197,15 @@ function WorkspaceFilesSession({
     >
       <header className="flex h-12 shrink-0 items-center gap-1.5 border-b px-3">
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <nav
-            aria-label={t('workbench.files.breadcrumb')}
-            className="flex min-w-0 items-center gap-1 overflow-hidden text-sm"
-          >
-            <button
-              className="shrink-0 rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 text-muted-foreground hover:bg-muted"
-              aria-label={t('workbench.files.root')}
-              onClick={() => navigate('')}
-            >
-              /
-            </button>
-            {segments.map((segment, index) => (
-              <React.Fragment key={index}>
-                {index > 0 && (
-                  <ChevronRight
-                    size={14}
-                    className="shrink-0 text-muted-foreground"
-                  />
-                )}
-                <button
-                  className={`min-w-0 truncate rounded-[var(--chat-item-radius,var(--radius))] px-1 py-1 hover:bg-muted ${index === segments.length - 1 ? 'font-medium' : 'text-muted-foreground'}`}
-                  title={segments.slice(0, index + 1).join('/')}
-                  aria-current={
-                    index === segments.length - 1 ? 'page' : undefined
-                  }
-                  onClick={() => {
-                    if (!(selected && index === segments.length - 1))
-                      navigate(segments.slice(0, index + 1).join('/'));
-                  }}
-                >
-                  {segment}
-                </button>
-              </React.Fragment>
-            ))}
-          </nav>
+          <WorkspaceFileBreadcrumbs
+            path={currentPath}
+            isFile={!!selected}
+            tree={tree}
+            onSelect={(file) => {
+              setQuery('');
+              select(file);
+            }}
+          />
           <button
             type="button"
             className={itemButton}
