@@ -1,0 +1,360 @@
+diff --git a/dist/client.d.ts b/dist/client.d.ts
+index 0ec2d09f06ed2e336014ecb828bdd5b98fd83574..d2ccc093352f2fcfe826977cc8d35aac61fe41b4 100644
+--- a/dist/client.d.ts
++++ b/dist/client.d.ts
+@@ -1,3 +1,4 @@
++import { WorkbenchClient } from "./workbench.js";
+ import type { MessageFileChangeStats } from "./types.messages.js";
+ import { Assistant, AssistantGraph, AssistantSortBy, AssistantSelectField, AssistantVersion, CancelAction, Checkpoint, Config, Cron, CronSelectField, CronCreateForThreadResponse, CronCreateResponse, CronSortBy, DefaultValues, GraphSchema, Item, ListNamespaceResponse, Metadata, Run, RunSelectField, RunStatus, SearchItemsResponse, SortOrder, Subgraphs, Thread, ThreadContextUsage, ThreadSelectField, ThreadSortBy, ThreadState, ThreadStatus, ThreadPauseResult, ThreadCopyOptions, Knowledgebase, ChatConversation, ConversationBranchRequest, ChatMessage, ChatMessageFeedback, ChatTaskSummarySection, ChatTaskSummarySectionPage, ChatTaskSummarySnapshot, Pagination, RuntimeCapabilitiesResponse, AssistantModelsResponse, SandboxManagedService, SandboxManagedServiceLogs, SandboxManagedServicePreviewSession, SandboxManagedServiceStartInput, ThreadGoal, ThreadGoalPatchRequest, ThreadGoalSetRequest, XpertProject, XpertProjectListOptions, XpertProjectTypeRef, XpertProjectTypeCatalog, XpertProjectEntry, XpertWorkspaceFile, XpertWorkspaceFileListOptions, XpertWorkspace, XpertWorkspaceDefaultOptions, ConnectorConnectRequest, ConnectorConnectResponse, ConnectorConsentRequest, ConnectorBinding, ConnectorBindingCreateRequest, ConnectorPersonalAccountInstance, ConnectorRuntimeOptionsResponse, ConnectorRuntimeStatus, ConnectorScope, ConnectorOAuthStatusResponse, ConnectorStrategyDefinition } from "./schema.js";
+ import type { RuntimeResourceAuthorization, RuntimeResourceCatalog, RuntimeResourceKind, RuntimeResourcesSelection } from "./runtime-resources.js";
+@@ -748,6 +749,7 @@ export declare class Client<TStateType = DefaultValues, TUpdateType = TStateType
+      * The client for interacting with sandbox runtime resources.
+      */
+     sandbox: SandboxClient;
++    workbench: WorkbenchClient;
+     /**
+      * The client for Xpert extension views and their workspace-file grants.
+      */
+diff --git a/dist/client.js b/dist/client.js
+index f69be1fb93403b48a50a6f5a3ee7f8b8a1be372b..3488286e9fe91a3ce5424979ecb81c382ace6d1f 100644
+--- a/dist/client.js
++++ b/dist/client.js
+@@ -1,3 +1,4 @@
++import { WorkbenchClient } from "./workbench.js";
+ import { AsyncCaller } from "./utils/async_caller.js";
+ import { getEnvironmentVariable } from "./utils/env.js";
+ import { mergeSignals } from "./utils/signals.js";
+@@ -1350,6 +1351,7 @@ export class Client {
+      * The client for interacting with sandbox runtime resources.
+      */
+     sandbox;
++    workbench;
+     /**
+      * The client for Xpert extension views and their workspace-file grants.
+      */
+@@ -1406,6 +1408,7 @@ export class Client {
+         this.knowledges = new KnowledgesClient(config);
+         this.conversations = new ConversationsClient(config);
+         this.sandbox = new SandboxClient(config);
++        this.workbench = new WorkbenchClient(new WorkbenchTransportClient(config));
+         this.viewHosts = new ViewHostsClient(config);
+         this.projects = new ProjectsClient(config);
+         this.xperts = new XpertsClient(config);
+@@ -2145,3 +2148,23 @@ export class ConversationsClient extends BaseClient {
+     }
+ }
+ //# sourceMappingURL=client.js.map
++class WorkbenchTransportClient extends BaseClient {
++    constructor(config) { super({ ...config, apiUrl: deriveMcpApiUrl(config?.apiUrl) }); }
++    json(path, options) { return this.fetch(path, { ...options, signal: options?.signal ?? undefined }); }
++    async blob(path, options) {
++        const [url, init] = this.prepareFetchOptions(path, options);
++        const finalInit = this.onRequest ? await this.onRequest(url, init) : init;
++        const response = await this.asyncCaller.fetch(url, finalInit);
++        return response.blob();
++    }
++    async socketAuthentication() {
++        const [url, init] = this.prepareFetchOptions("");
++        const finalInit = this.onRequest ? await this.onRequest(url, init) : init;
++        const headers = new Headers(finalInit.headers);
++        const token = headers.get("x-client-secret") ?? headers.get("authorization")?.replace(/^Bearer /, "") ?? headers.get("x-api-key");
++        if (!token)
++            throw new Error("Terminal authentication is required.");
++        const basePath = url.pathname.replace(/\/api\/?$/, "").replace(/\/$/, "");
++        return { url: url.origin, path: `${basePath}/socket.io`, token, organizationId: headers.get("organization-id") ?? undefined };
++    }
++}
+diff --git a/dist/client.mjs b/dist/client.mjs
+index 31b7218264b798e5b5e984090e707155f5c7dc49..62593095527cfeed299b0ed1b26ec5b11e31979d 100644
+--- a/dist/client.mjs
++++ b/dist/client.mjs
+@@ -1,3 +1,4 @@
++import { WorkbenchClient } from "./workbench.js";
+ import { AsyncCaller } from "./utils/async_caller.mjs";
+ import { getEnvironmentVariable } from "./utils/env.mjs";
+ import { mergeSignals } from "./utils/signals.mjs";
+@@ -1350,6 +1351,7 @@ export class Client {
+      * The client for interacting with sandbox runtime resources.
+      */
+     sandbox;
++    workbench;
+     /**
+      * The client for Xpert extension views and their workspace-file grants.
+      */
+@@ -1406,6 +1408,7 @@ export class Client {
+         this.knowledges = new KnowledgesClient(config);
+         this.conversations = new ConversationsClient(config);
+         this.sandbox = new SandboxClient(config);
++        this.workbench = new WorkbenchClient(new WorkbenchTransportClient(config));
+         this.viewHosts = new ViewHostsClient(config);
+         this.projects = new ProjectsClient(config);
+         this.xperts = new XpertsClient(config);
+@@ -2145,3 +2148,23 @@ export class ConversationsClient extends BaseClient {
+     }
+ }
+ //# sourceMappingURL=client.mjs.map
++class WorkbenchTransportClient extends BaseClient {
++    constructor(config) { super({ ...config, apiUrl: deriveMcpApiUrl(config?.apiUrl) }); }
++    json(path, options) { return this.fetch(path, { ...options, signal: options?.signal ?? undefined }); }
++    async blob(path, options) {
++        const [url, init] = this.prepareFetchOptions(path, options);
++        const finalInit = this.onRequest ? await this.onRequest(url, init) : init;
++        const response = await this.asyncCaller.fetch(url, finalInit);
++        return response.blob();
++    }
++    async socketAuthentication() {
++        const [url, init] = this.prepareFetchOptions("");
++        const finalInit = this.onRequest ? await this.onRequest(url, init) : init;
++        const headers = new Headers(finalInit.headers);
++        const token = headers.get("x-client-secret") ?? headers.get("authorization")?.replace(/^Bearer /, "") ?? headers.get("x-api-key");
++        if (!token)
++            throw new Error("Terminal authentication is required.");
++        const basePath = url.pathname.replace(/\/api\/?$/, "").replace(/\/$/, "");
++        return { url: url.origin, path: `${basePath}/socket.io`, token, organizationId: headers.get("organization-id") ?? undefined };
++    }
++}
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 21a2c61234b6483dab684a32f731df019e4910f0..6fba9f0e85607c8385f9e0797781144291e5a700 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -12,3 +12,6 @@ export type { XpertExtensionViewManifest, XpertI18nObject, XpertRemoteComponentE
+ export type * from "./runtime-resources.js";
+ export * from "./workbench-open.js";
+ export type { ConversationResourceCard, ResourceCardOpenTarget, TMessageContentResourceCard } from './resource-card.js';
++
++export { WorkbenchClient } from "./workbench.js";
++export type { WorkspaceFileScope, WorkspaceFileDocument, WorkbenchRequestOptions, TerminalEvent, TerminalConnection, TerminalOpenOptions } from "./workbench.js";
+diff --git a/dist/index.js b/dist/index.js
+index 9502d76e58b0d58e356b3acb29a37f87d35501a4..321adda18a4007b95c0ac16a3a123da0e577c9cd 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -4,3 +4,4 @@ export { overrideFetchImplementation } from "./singletons/fetch.js";
+ export { ASSISTANT_CHAT_SEND_MESSAGE_COMMAND, ASSISTANT_CITATION_OPEN_EVENT, ASSISTANT_CONTEXT_SET_COMMAND, KNOWLEDGEBASE_OPEN_CITATION_EFFECT, WORKBENCH_ASSISTANT_CONVERSATION_TARGET, WORKBENCH_FILE_OPEN_COMMAND, WORKBENCH_KNOWLEDGEBASE_DOCUMENTS_TARGET, WORKBENCH_NAVIGATION_OPEN_COMMAND, XPERT_REMOTE_COMPONENT_INVOKE_CLIENT_COMMAND_MESSAGE_TYPE, XPERT_VIEW_CONVERSATION_ID_HEADER, XPERT_VIEW_PROJECT_ID_HEADER, } from "./view-extension.js";
+ export * from "./workbench-open.js";
+ //# sourceMappingURL=index.js.map
++export { WorkbenchClient } from "./workbench.js";
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 77edc273418e4eee3dd8742da986087c2c9a0f7b..e17b0e0739060b0e96d9392a7e7cd5bd67f81705 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -4,3 +4,4 @@ export { overrideFetchImplementation } from "./singletons/fetch.mjs";
+ export { ASSISTANT_CHAT_SEND_MESSAGE_COMMAND, ASSISTANT_CITATION_OPEN_EVENT, ASSISTANT_CONTEXT_SET_COMMAND, KNOWLEDGEBASE_OPEN_CITATION_EFFECT, WORKBENCH_ASSISTANT_CONVERSATION_TARGET, WORKBENCH_FILE_OPEN_COMMAND, WORKBENCH_KNOWLEDGEBASE_DOCUMENTS_TARGET, WORKBENCH_NAVIGATION_OPEN_COMMAND, XPERT_REMOTE_COMPONENT_INVOKE_CLIENT_COMMAND_MESSAGE_TYPE, XPERT_VIEW_CONVERSATION_ID_HEADER, XPERT_VIEW_PROJECT_ID_HEADER, } from "./view-extension.mjs";
+ export * from "./workbench-open.mjs";
+ //# sourceMappingURL=index.mjs.map
++export { WorkbenchClient } from "./workbench.js";
+diff --git a/dist/workbench.d.ts b/dist/workbench.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..97d16789aa075c3f51bf46328d3c9122dd1146a0
+--- /dev/null
++++ b/dist/workbench.d.ts
+@@ -0,0 +1,86 @@
++/** Native Workbench resources share the SDK transport and its authorization hook. */
++import type { XpertWorkspaceFile } from './schema.js';
++export type WorkspaceFileScope = {
++    kind: 'assistant';
++    assistantId: string;
++} | {
++    kind: 'conversation';
++    conversationId: string;
++};
++export type WorkspaceFileDocument = XpertWorkspaceFile & {
++    contents?: string;
++};
++export type WorkbenchRequestOptions = {
++    signal?: AbortSignal;
++};
++export type TerminalEvent = {
++    type: 'connected';
++} | {
++    type: 'disconnected';
++    message: string;
++} | {
++    type: 'opened';
++    sessionId: string;
++    requestId: string;
++    provider: string;
++    workingDirectory: string;
++} | {
++    type: 'output';
++    sessionId: string;
++    data: string;
++} | {
++    type: 'exit';
++    sessionId: string;
++    exitCode: number | null;
++} | {
++    type: 'closed';
++    sessionId?: string;
++    requestId?: string;
++    reason: string;
++} | {
++    type: 'error';
++    sessionId?: string;
++    requestId?: string;
++    code: string;
++    message: string;
++};
++export type TerminalConnection = {
++    input(data: string): void;
++    resize(cols: number, rows: number): void;
++    close(): void;
++};
++export type TerminalOpenOptions = {
++    conversationId: string;
++    projectId?: string | null;
++    cols: number;
++    rows: number;
++    onEvent: (event: TerminalEvent) => void;
++    signal?: AbortSignal;
++};
++export interface WorkbenchTransport {
++    json<T>(path: string, options?: RequestInit & {
++        json?: unknown;
++        params?: Record<string, unknown>;
++    }): Promise<T>;
++    blob(path: string, options?: RequestInit & {
++        params?: Record<string, unknown>;
++    }): Promise<Blob>;
++    socketAuthentication(): Promise<{
++        url: string;
++        path: string;
++        token: string;
++        organizationId?: string;
++    }>;
++}
++export declare class WorkbenchClient {
++    private readonly transport;
++    constructor(transport: WorkbenchTransport);
++    listFiles(scope: WorkspaceFileScope, path?: string, options?: WorkbenchRequestOptions): Promise<XpertWorkspaceFile[]>;
++    readFile(scope: WorkspaceFileScope, path: string, options?: WorkbenchRequestOptions): Promise<WorkspaceFileDocument>;
++    saveFile(scope: WorkspaceFileScope, path: string, content: string, options?: WorkbenchRequestOptions): Promise<WorkspaceFileDocument>;
++    uploadFile(scope: WorkspaceFileScope, path: string, file: Blob, filename: string, options?: WorkbenchRequestOptions): Promise<WorkspaceFileDocument>;
++    saveBinaryFile(scope: WorkspaceFileScope, path: string, file: Blob, options?: WorkbenchRequestOptions): Promise<WorkspaceFileDocument>;
++    deleteFile(scope: WorkspaceFileScope, path: string, options?: WorkbenchRequestOptions): Promise<void>;
++    downloadFile(scope: WorkspaceFileScope, path: string, options?: WorkbenchRequestOptions): Promise<Blob>;
++    connectTerminal(options: TerminalOpenOptions): Promise<TerminalConnection>;
++}
+diff --git a/dist/workbench.js b/dist/workbench.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7e595ff91d991589ce7a9a0b3dde59dd09d3cd3
+--- /dev/null
++++ b/dist/workbench.js
+@@ -0,0 +1,118 @@
++function scopePath(scope) {
++    const id = scope.kind === 'assistant' ? scope.assistantId : scope.conversationId;
++    if (!id.trim())
++        throw new Error('A workspace scope is required.');
++    return scope.kind === 'assistant'
++        ? `/xpert/${encodeURIComponent(id)}/workspace`
++        : `/ai/conversations/${encodeURIComponent(id)}`;
++}
++export class WorkbenchClient {
++    transport;
++    constructor(transport) {
++        this.transport = transport;
++    }
++    listFiles(scope, path = '', options = {}) {
++        return this.transport.json(`${scopePath(scope)}/files`, { params: { path }, ...options });
++    }
++    readFile(scope, path, options = {}) {
++        return this.transport.json(`${scopePath(scope)}/file`, { params: { path }, ...options });
++    }
++    saveFile(scope, path, content, options = {}) {
++        return this.transport.json(`${scopePath(scope)}/file`, { method: 'PUT', json: { path, content }, ...options });
++    }
++    uploadFile(scope, path, file, filename, options = {}) {
++        const body = new FormData();
++        body.append('file', file, filename);
++        body.append('path', path);
++        return this.transport.json(`${scopePath(scope)}/file/upload`, { method: 'POST', body, ...options });
++    }
++    saveBinaryFile(scope, path, file, options = {}) {
++        const separator = path.lastIndexOf('/');
++        if (scope.kind === 'conversation')
++            return this.uploadFile(scope, path.slice(0, Math.max(0, separator)), file, path.slice(separator + 1), options);
++        const body = new FormData();
++        body.append('file', file, path.slice(separator + 1));
++        body.append('path', path);
++        return this.transport.json(`${scopePath(scope)}/file/save-binary`, { method: 'POST', body, ...options });
++    }
++    deleteFile(scope, path, options = {}) {
++        return this.transport.json(`${scopePath(scope)}/file`, { method: 'DELETE', params: { path }, ...options });
++    }
++    downloadFile(scope, path, options = {}) {
++        return this.transport.blob(`${scopePath(scope)}/file/download`, { params: { path }, ...options });
++    }
++    async connectTerminal(options) {
++        if (!options.conversationId.trim())
++            throw new Error('A conversation is required.');
++        options.signal?.throwIfAborted();
++        const [{ io }, auth] = await Promise.all([import('socket.io-client'), this.transport.socketAuthentication()]);
++        options.signal?.throwIfAborted();
++        const socket = io(`${auth.url}/sandbox-terminal`, {
++            path: auth.path, transports: ['websocket'], autoConnect: false,
++            auth: { token: auth.token, organizationId: auth.organizationId },
++        });
++        let sessionId = null;
++        let requestId = '';
++        let closed = false;
++        const send = (event) => { if (!closed)
++            options.onEvent(event); };
++        const dimensions = { cols: options.cols, rows: options.rows };
++        socket.on('connect', () => {
++            sessionId = null;
++            requestId = globalThis.crypto.randomUUID();
++            send({ type: 'connected' });
++            socket.emit('open', { ...dimensions, conversationId: options.conversationId, projectId: options.projectId, requestId });
++        });
++        socket.on('opened', (data) => {
++            if (data.requestId !== requestId)
++                return;
++            sessionId = data.sessionId;
++            send({ ...data, type: 'opened' });
++        });
++        socket.on('output', (data) => {
++            // The server can emit initial PTY output before acknowledging open.
++            if (!sessionId || data.sessionId === sessionId)
++                send({ ...data, type: 'output' });
++        });
++        socket.on('exit', (data) => {
++            if (data.sessionId === sessionId)
++                send({ ...data, type: 'exit' });
++        });
++        socket.on('closed', (data) => {
++            if (data.sessionId === sessionId || data.requestId === requestId) {
++                sessionId = null;
++                send({ ...data, type: 'closed' });
++            }
++        });
++        socket.on('error', (data) => {
++            if (data.requestId === requestId || data.sessionId === sessionId)
++                send({ ...data, type: 'error' });
++        });
++        socket.on('exception', (data) => {
++            sessionId = null;
++            send({ type: 'error', code: String(data.status ?? 'authorization'), message: data.message ?? 'Terminal authorization failed.' });
++            socket.disconnect();
++        });
++        socket.on('connect_error', (error) => send({ type: 'error', code: 'connection', message: error.message }));
++        socket.on('disconnect', (reason) => { sessionId = null; send({ type: 'disconnected', message: reason }); });
++        const connection = {
++            input: (data) => { if (!closed && sessionId && socket.connected)
++                socket.emit('input', { sessionId, data }); },
++            resize: (cols, rows) => { dimensions.cols = cols; dimensions.rows = rows; if (!closed && sessionId && socket.connected)
++                socket.emit('resize', { sessionId, cols, rows }); },
++            close: () => {
++                if (closed)
++                    return;
++                closed = true;
++                if (socket.connected)
++                    socket.emit('close', sessionId ? { sessionId } : { requestId });
++                socket.removeAllListeners();
++                socket.disconnect();
++                options.signal?.removeEventListener('abort', connection.close);
++            },
++        };
++        options.signal?.addEventListener('abort', connection.close, { once: true });
++        socket.connect();
++        return connection;
++    }
++}
