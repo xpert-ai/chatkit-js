@@ -282,6 +282,34 @@ extension declared in `pnpm-workspace.yaml`. Keep the patch and lockfile togethe
 install with `pnpm install --frozen-lockfile`. Consumers need this patched SDK or
 a release containing the same API; the unpatched 0.5.0 package is insufficient.
 
+### Local testing without publishing the SDK
+
+The checked-in pnpm patch is enough for local development; publishing or linking
+the SDK is not required. Stop the existing ChatKit development server first, then
+run these commands from the `chatkit-js` repository root:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev:ui:fresh
+```
+
+`dev:ui:fresh` verifies that the installed SDK exposes the Workbench file and
+terminal methods, then starts Vite on port 5173 with fresh dependency optimization.
+It fails if that port is occupied instead of silently switching ports. To check
+the installed SDK separately, run `corepack pnpm check:sdk`.
+
+The local Xpert host should use `VITE_CHATKIT_FRAME_URL=http://localhost:5173`.
+After restarting Vite, fully reload the host page (for example,
+`http://localhost:4300/chat/clawxpert/c`) to recreate the SDK client inside the
+iframe. Hot module replacement can retain an older client instance even after
+the installed package has been patched. On macOS Chrome, use Cmd+Shift+R.
+
+If `client.workbench` is undefined, check the installed SDK and reload the page
+before debugging the file API. Connection-refused and HTTP 401 errors are separate
+backend connectivity or authentication failures; rebuilding the SDK alone does
+not resolve them. Terminal authentication uses the SDK request hook so both HTTP
+and Socket.IO receive the current client secret and organization context.
+
 Deploy the matching Xpert changes before using the tools: the Assistant workspace
 routes accept the scoped interactive credential, the conversation file controller
 uses the existing workspace services, and the terminal guard accepts USER_XPERT

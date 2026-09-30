@@ -16,7 +16,9 @@
     "check": "prettier --check . && pnpm -r run lint && pnpm types && pnpm test",
     "managed-chatkit:dev": "pnpm --filter managed-chatkit dev",
     "managed-chatkit-angular:dev": "pnpm --filter managed-chatkit-angular dev",
-    "excel-echarts-chatkit:dev": "pnpm --filter excel-echarts-chatkit dev"
+    "excel-echarts-chatkit:dev": "pnpm --filter excel-echarts-chatkit dev",
+    "check:sdk": "node scripts/check-workbench-sdk.mjs",
+    "dev:ui:fresh": "pnpm check:sdk && pnpm --filter @xpert-ai/chatkit-ui dev --force --strictPort"
   },
   "devDependencies": {
     "@changesets/cli": "2.27.10",
