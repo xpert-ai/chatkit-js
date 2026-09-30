@@ -161,6 +161,34 @@ describe('thread history restoration', () => {
   });
   afterEach(cleanup);
 
+  it('reveals history and the view scope while sandbox discovery is still pending', async () => {
+    const services = deferred<void>();
+    mocks.refreshServices.mockReturnValue(services.promise);
+    render(provider('thread-1'));
+    await waitFor(() => expect(mocks.refreshServices).toHaveBeenCalled());
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(stream.runtimeScopeReady).toBe(true);
+    expect(stream.messages).toHaveLength(2);
+    await act(async () => services.resolve());
+  });
+
+  it('keeps history and views available when background sandbox discovery fails', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.refreshServices.mockRejectedValue(new Error('Provider unavailable'));
+    try {
+      render(provider('thread-1'));
+      await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+      expect(stream.runtimeScopeReady).toBe(true);
+      expect(stream.messages).toHaveLength(2);
+      expect(warning).toHaveBeenCalledWith(
+        '[chatkit-ui] Background sandbox service refresh failed',
+        expect.any(Error),
+      );
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
   it('acknowledges a resume only after the SDK receives its server run identity', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));

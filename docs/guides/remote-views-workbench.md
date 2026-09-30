@@ -317,4 +317,14 @@ client secrets in addition to JWT. Assistant/tenant/organization bindings and th
 existing project/user permissions remain enforced. Public and enterprise client
 secrets do not gain native workspace access.
 
+Sandbox service discovery runs in the background when restoring history; its
+loading and error state belongs to the runtime services panel and does not block
+Workbench readiness. The matching server treats service listing as passive:
+it authorizes the conversation, reads persisted services, and inspects only an
+existing runtime. Missing runtimes report active services as `lost`; discovery
+does not provision workspace directories or create/recover a sandbox. Terminal
+and explicit execution/start operations retain their on-demand runtime creation.
+Missing provider or workspace mapping configuration returns a structured 400
+error so the SDK does not repeatedly retry it.
+
 See [implementation and verification notes](./workbench-native-tools-plan.md).

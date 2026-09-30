@@ -4013,9 +4013,12 @@ const StreamSession = ({
           protocolThread?.displayPause ?? null,
         );
         if (!request.isCurrent()) return;
-        await refreshSandboxServices({
+        // Service discovery owns its loading/error state and must not gate views.
+        void refreshSandboxServices({
           targetThreadId: threadId,
           force: true,
+        })?.catch((servicesError) => {
+          console.warn('[chatkit-ui] Background sandbox service refresh failed', servicesError);
         });
         if (!request.isCurrent()) return;
         const latestExecutionId = getLatestExecutionIdFromMessages(
