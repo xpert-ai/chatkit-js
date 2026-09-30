@@ -4,6 +4,7 @@ import type {
   WorkspaceFileScope,
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
+import { normalizeWorkspaceFiles } from './workspace-file-utils';
 
 export type DirectoryState = {
   files: XpertWorkspaceFile[];
@@ -41,7 +42,10 @@ export function useWorkspaceFileTree(
           if (!abort.signal.aborted)
             setDirectories((current) => ({
               ...current,
-              [path]: { files, loading: false },
+              [path]: {
+                files: normalizeWorkspaceFiles(files, path),
+                loading: false,
+              },
             }));
         })
         .catch((error: unknown) => {

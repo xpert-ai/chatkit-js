@@ -13,7 +13,13 @@ function setup() {
   vi.spyOn(client.workbench, 'listFiles').mockImplementation(
     async (_scope, path) =>
       path === 'reports'
-        ? [{ filePath: 'reports/budget.xlsx' }]
+        ? [
+            {
+              filePath: 'budget.xlsx',
+              fullPath: 'reports/budget.xlsx',
+              directory: 'reports',
+            },
+          ]
         : [{ filePath: 'reports', hasChildren: true }],
   );
   const upload = vi
@@ -96,10 +102,20 @@ function browserSetup() {
     .mockImplementation(async (_scope, path) =>
       path === 'docs'
         ? [
-            { filePath: 'docs/README.md' },
-            { filePath: 'docs/notes.txt' },
+            {
+              filePath: 'README.md',
+              fullPath: 'docs/README.md',
+              directory: 'docs',
+            },
+            {
+              filePath: 'notes.txt',
+              fullPath: 'docs/notes.txt',
+              directory: 'docs',
+            },
             ...['docx', 'xlsx', 'xls', 'pptx'].map((extension) => ({
-              filePath: `docs/report.${extension}`,
+              filePath: `report.${extension}`,
+              fullPath: `docs/report.${extension}`,
+              directory: 'docs',
             })),
           ]
         : [{ filePath: 'docs', fileType: 'directory' }],
@@ -124,6 +140,53 @@ function browserSetup() {
   return { client, list, download, onOpen, onPreview, ...view };
 }
 describe('workspace file browser', () => {
+  it.each(['fullPath', 'entryName', 'workspacePath'] as const)(
+    'expands nested directories and uses complete paths for preview and Office editors (%s)',
+    async (shape) => {
+      const { list, download, onOpen } = browserSetup();
+      const entry = (parent: string, name: string, folder = false) => ({
+        filePath: shape === 'workspacePath' ? `${parent}/${name}` : name,
+        ...(shape === 'fullPath' ? { fullPath: `${parent}/${name}` } : {}),
+        directory: parent,
+        fileType: folder ? 'directory' : 'file',
+        hasChildren: folder,
+        children: null,
+      });
+      list.mockImplementation(async (_scope, path) => {
+        if (path === 'docs') return [entry(path, 'web-acceptance-v1', true)];
+        if (path === 'docs/web-acceptance-v1')
+          return [entry(path, 'notes.txt'), entry(path, 'budget.xlsx')];
+        return [{ filePath: 'docs', fileType: 'directory' }];
+      });
+      fireEvent.click(await screen.findByRole('treeitem', { name: 'docs' }));
+      fireEvent.click(
+        await screen.findByRole('treeitem', { name: 'web-acceptance-v1' }),
+      );
+      fireEvent.click(
+        await screen.findByRole('treeitem', { name: 'notes.txt' }),
+      );
+      expect(
+        await screen.findByRole('textbox', { name: 'File source' }),
+      ).toHaveValue('# File preview\n\nA **formatted** document.');
+      expect(list).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'docs/web-acceptance-v1',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(download).toHaveBeenCalledWith(
+        expect.anything(),
+        'docs/web-acceptance-v1/notes.txt',
+        expect.anything(),
+      );
+      expect(screen.queryByText('This folder is empty')).toBeNull();
+      fireEvent.click(screen.getByRole('treeitem', { name: 'budget.xlsx' }));
+      expect(onOpen).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filePath: 'docs/web-acceptance-v1/budget.xlsx',
+        }),
+      );
+    },
+  );
   it('loads expanded folders lazily and previews Markdown inline with a read-only source toggle', async () => {
     const { list, download, onOpen, onPreview } = browserSetup();
     expect(
@@ -135,7 +198,9 @@ describe('workspace file browser', () => {
       await screen.findByRole('heading', { name: 'File preview' }),
     ).toBeVisible();
     expect(onOpen).not.toHaveBeenCalled();
-    expect(onPreview).toHaveBeenLastCalledWith({ filePath: 'docs/README.md' });
+    expect(onPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filePath: 'docs/README.md' }),
+    );
     expect(list).toHaveBeenCalledTimes(2);
     expect(download).toHaveBeenCalledWith(
       { kind: 'assistant', assistantId: 'a1' },
@@ -172,9 +237,11 @@ describe('workspace file browser', () => {
       fireEvent.click(
         await screen.findByRole('treeitem', { name: `report.${extension}` }),
       );
-      expect(onOpen).toHaveBeenCalledWith({
-        filePath: `docs/report.${extension}`,
-      });
+      expect(onOpen).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filePath: `docs/report.${extension}`,
+        }),
+      );
       expect(download).not.toHaveBeenCalled();
     },
   );

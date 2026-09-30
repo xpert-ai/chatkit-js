@@ -42,6 +42,7 @@ import {
   fileName,
   isFolder,
   isOfficeFile,
+  normalizeWorkspaceFiles,
   previewKind,
   validRelativePath,
 } from './workspace-file-utils';
@@ -414,8 +415,8 @@ function WorkspaceFilesSession({
                 void run(async () => {
                   const filePath = [path, name].filter(Boolean).join('/');
                   let parent = path;
-                  let siblings = await client.workbench.listFiles(
-                    scope,
+                  let siblings = normalizeWorkspaceFiles(
+                    await client.workbench.listFiles(scope, parent),
                     parent,
                   );
                   for (const directory of name.split('/').slice(0, -1)) {
@@ -429,7 +430,10 @@ function WorkspaceFilesSession({
                     }
                     if (!isFolder(existing))
                       throw new Error(t('workbench.files.pathExists'));
-                    siblings = await client.workbench.listFiles(scope, parent);
+                    siblings = normalizeWorkspaceFiles(
+                      await client.workbench.listFiles(scope, parent),
+                      parent,
+                    );
                   }
                   if (siblings.some((item) => item.filePath === filePath)) {
                     throw new Error(t('workbench.files.pathExists'));
