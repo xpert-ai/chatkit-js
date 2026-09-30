@@ -5,6 +5,10 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
   plugins: [tsconfigPaths(), react(), tailwindcss()],
+  // Both packages locate binary assets relative to their modules.
+  optimizeDeps: {
+    exclude: ['@docx-editor.dev/fonts', '@docx-editor.dev/core'],
+  },
   build: {
     outDir: 'dist/app',
   },
