@@ -172,12 +172,12 @@
     }
   },
   "history": {
-    "threadHistory": "线程历史",
-    "title": "线程",
-    "refresh": "刷新线程",
+    "threadHistory": "消息历史",
+    "title": "消息历史",
+    "refresh": "刷新消息历史",
     "updatedAt": "更新于 {{time}}",
     "deleteThread": "删除 {{title}}",
-    "newThread": "新线程",
+    "newThread": "新建对话",
     "newThreadInProject": "在当前项目中新建对话",
     "scope": {
       "label": "会话范围",
@@ -185,11 +185,28 @@
       "currentProject": "当前项目",
       "noProject": "无项目"
     },
-    "empty": "暂无线程",
-    "newThreadTitle": "新线程",
-    "threadWithId": "线程 {{id}}",
-    "threadFallback": "线程"
+    "empty": "还没有历史对话",
+    "newThreadTitle": "新对话",
+    "threadWithId": "对话 {{id}}",
+    "threadFallback": "未命名对话",
+    "description": "搜索并继续此助手的历史对话。",
+    "search": "搜索消息历史",
+    "searchPlaceholder": "搜索会话标题…",
+    "grouping": "历史分组方式",
+    "recent": "最近更新",
+    "project": "按项目",
+    "projectFallback": "项目 {{id}}",
+    "current": "当前对话",
+    "count": "已加载 {{count}} / {{total}} 条对话",
+    "loading": "正在加载消息历史…",
+    "noResults": "没有找到匹配的对话，请尝试其他关键词或范围。",
+    "loadFailed": "消息历史加载失败，请重试。",
+    "deleteFailed": "删除失败，请重试。",
+    "loadMore": "加载更多",
+    "loadMoreFailed": "更早的对话加载失败，已加载的对话仍可使用。",
+    "retry": "重试"
   },
+
   "messageActions": {
     "skills": {
       "title": "使用的技能",

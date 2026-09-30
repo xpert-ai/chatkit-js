@@ -225,6 +225,10 @@ describe('Chat pet integration', () => {
     });
     window.localStorage.clear();
     mocks.stream.client.assistants.get.mockClear();
+    mocks.stream.client.conversations.search.mockReset();
+    mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
+    mocks.stream.loadThread.mockClear();
+    mocks.stream.reset.mockClear();
     mocks.threads = [];
     mocks.stream.messages = [];
     mocks.stream.threadId = null;
@@ -261,6 +265,23 @@ describe('Chat pet integration', () => {
     fireEvent.click(screen.getByRole('button', { name: 'sheet.close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(more).toHaveFocus();
+  });
+
+  it('opens older history search results without replacing the active conversation title', async () => {
+    mocks.stream.threadId = 'current-thread';
+    mocks.threads = [{ id: 'current-thread', recordId: 'current-record', title: 'Current conversation title' }];
+    mocks.stream.client.conversations.search.mockResolvedValue({ items: [
+      { id: 'older-record', threadId: 'older-thread', title: 'Older search result' },
+    ] });
+    render(<Chat options={baseOptions} />);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'history.threadHistory' }));
+    fireEvent.change(await screen.findByRole('searchbox'), { target: { value: 'Older' } });
+    const older = await screen.findByRole('button', { name: 'Older search result' });
+    expect(screen.getByText('Current conversation title')).toBeInTheDocument();
+    fireEvent.click(older);
+    expect(mocks.stream.reset).toHaveBeenCalledWith('older-thread', []);
+    expect(mocks.stream.loadThread).toHaveBeenCalledWith('older-thread');
   });
 
   it('honors history and pet visibility in the More menu', async () => {

@@ -172,12 +172,12 @@
     }
   },
   "history": {
-    "threadHistory": "Thread history",
-    "title": "Threads",
-    "refresh": "Refresh threads",
+    "threadHistory": "Message history",
+    "title": "Message history",
+    "refresh": "Refresh message history",
     "updatedAt": "Updated {{time}}",
     "deleteThread": "Delete {{title}}",
-    "newThread": "New Thread",
+    "newThread": "New conversation",
     "newThreadInProject": "New conversation in this project",
     "scope": {
       "label": "Conversation scope",
@@ -185,11 +185,28 @@
       "currentProject": "Current project",
       "noProject": "No project"
     },
-    "empty": "No threads yet",
-    "newThreadTitle": "New thread",
-    "threadWithId": "Thread {{id}}",
-    "threadFallback": "Thread"
+    "empty": "No conversations yet",
+    "newThreadTitle": "New conversation",
+    "threadWithId": "Conversation {{id}}",
+    "threadFallback": "Untitled conversation",
+    "description": "Search and continue past conversations with this assistant.",
+    "search": "Search message history",
+    "searchPlaceholder": "Search conversation titles…",
+    "grouping": "Group history",
+    "recent": "Recent",
+    "project": "By project",
+    "projectFallback": "Project {{id}}",
+    "current": "Current conversation",
+    "count": "{{count}} of {{total}} conversations loaded",
+    "loading": "Loading message history…",
+    "noResults": "No matching conversations. Try another search or scope.",
+    "loadFailed": "Message history could not be loaded. Try again.",
+    "deleteFailed": "Could not delete this conversation. Try again.",
+    "loadMore": "Load more",
+    "loadMoreFailed": "Could not load older conversations. Loaded conversations are still available.",
+    "retry": "Retry"
   },
+
   "messageActions": {
     "skills": {
       "title": "Skills used",

@@ -38,6 +38,7 @@ export type ThreadItem = {
    */
   recordId: string;
   projectId?: string | null;
+  projectName?: string;
   title: string;
   status: ChatConversationStatus;
   error?: string;

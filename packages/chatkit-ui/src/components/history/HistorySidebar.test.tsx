@@ -1,8 +1,15 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { HistorySidebar } from './HistorySidebar';
+import { setLanguage } from '../../i18n';
 
 class ResizeObserverMock {
   observe() {}
@@ -11,6 +18,7 @@ class ResizeObserverMock {
 }
 
 beforeAll(() => {
+  setLanguage('en-US');
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
 });
 
@@ -18,26 +26,9 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-vi.mock('../../i18n/useChatkitTranslation', () => ({
-  useChatkitTranslation: () => ({
-    t: (key: string, options?: Record<string, string>) => {
-      const labels: Record<string, string> = {
-        'history.threadHistory': 'Thread history',
-        'history.title': 'Threads',
-        'history.refresh': 'Refresh threads',
-        'history.newThread': 'New Thread',
-        'history.empty': 'No threads yet',
-        'sheet.close': 'Close',
-      };
-      return (labels[key] ?? key).replace('{{time}}', options?.time ?? '');
-    },
-    i18n: { language: 'en-US', resolvedLanguage: 'en-US' },
-  }),
-}));
-
 function openSidebar(props: React.ComponentProps<typeof HistorySidebar> = {}) {
   const result = render(<HistorySidebar {...props} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Thread history' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Message history' }));
   return result;
 }
 
@@ -46,7 +37,7 @@ describe('HistorySidebar', () => {
     const onScopeChange = vi.fn();
     openSidebar({ onScopeChange, hasCurrentProject: true });
     const select = screen.getByRole('combobox', {
-      name: 'history.scope.label',
+      name: 'Conversation scope',
     });
     expect(select).toHaveValue('all');
     fireEvent.change(select, { target: { value: 'current-project' } });
@@ -58,7 +49,7 @@ describe('HistorySidebar', () => {
   it('disables the current Project filter when no Project is selected', () => {
     openSidebar({ onScopeChange: vi.fn() });
     expect(
-      screen.getByRole('option', { name: 'history.scope.currentProject' }),
+      screen.getByRole('option', { name: 'Current project' }),
     ).toBeDisabled();
   });
 
@@ -66,7 +57,9 @@ describe('HistorySidebar', () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
 
     openSidebar({ onRefresh });
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh threads' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh message history' }),
+    );
 
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
@@ -75,7 +68,7 @@ describe('HistorySidebar', () => {
     openSidebar({ onRefresh: vi.fn(), isRefreshing: true });
 
     const refreshButton = screen.getByRole('button', {
-      name: 'Refresh threads',
+      name: 'Refresh message history',
     });
     expect(refreshButton).toBeDisabled();
     expect(refreshButton).toHaveAttribute('aria-busy', 'true');
@@ -86,7 +79,7 @@ describe('HistorySidebar', () => {
     openSidebar({ onRefresh: vi.fn() });
 
     const refreshButton = screen.getByRole('button', {
-      name: 'Refresh threads',
+      name: 'Refresh message history',
     });
     const closeButton = screen.getByRole('button', { name: 'Close' });
 
@@ -104,22 +97,24 @@ describe('HistorySidebar', () => {
     );
   });
 
-  it('keeps the title centered without absolutely positioning header actions', () => {
-    openSidebar({ onRefresh: vi.fn() });
-
-    const title = screen.getByRole('heading', { name: 'Threads' });
-    const header = title.parentElement;
-    const actions = screen.getByRole('button', {
-      name: 'Refresh threads',
-    }).parentElement;
-
-    expect(header).toHaveClass(
-      'grid',
-      'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]',
+  it('opens a dialog with search focused and an accessible description', async () => {
+    openSidebar();
+    const dialog = screen.getByRole('dialog', { name: 'Message history' });
+    expect(dialog).toHaveAccessibleDescription(
+      'Search and continue past conversations with this assistant.',
     );
-    expect(title).toHaveClass('col-start-2', 'text-center');
-    expect(actions).toHaveClass('col-start-3', 'justify-self-end');
-    expect(actions).not.toHaveClass('absolute');
+    await waitFor(() =>
+      expect(
+        screen.getByRole('searchbox', { name: 'Search message history' }),
+      ).toHaveFocus(),
+    );
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Message history' }),
+    ).toHaveFocus();
   });
 
   it('constrains the Radix scroll viewport wrapper to the panel width', () => {
@@ -142,7 +137,7 @@ describe('HistorySidebar', () => {
     expect(viewport).toHaveClass('[&>div]:!block', '[&>div]:!w-full');
   });
 
-  it('reveals the updated time to the left of delete on hover or focus', () => {
+  it('shows the update time without requiring hover', () => {
     const updatedAt = new Date();
     const expectedTime = new Intl.DateTimeFormat('en-US', {
       hour: '2-digit',
@@ -164,17 +159,13 @@ describe('HistorySidebar', () => {
 
     const time = screen.getByText(expectedTime);
     const deleteButton = screen.getByRole('button', {
-      name: 'history.deleteThread',
+      name: 'Delete Thread one',
     });
 
     expect(time.tagName).toBe('TIME');
     expect(time).toHaveAttribute('dateTime', updatedAt.toISOString());
-    expect(time).toHaveClass(
-      'hidden',
-      'group-hover:inline',
-      'group-focus-within:inline',
-    );
-    expect(time.nextElementSibling).toBe(deleteButton);
+    expect(time).not.toHaveClass('hidden');
+    expect(deleteButton).toBeInTheDocument();
   });
 
   it('uses paired accent colors for active and hovered thread items', () => {
@@ -191,20 +182,128 @@ describe('HistorySidebar', () => {
       currentThreadId: 'thread-1',
     });
 
-    const row = screen.getByText('Active thread').parentElement;
-    const icon = row?.querySelector('svg')?.parentElement;
+    expect(
+      screen.getByRole('button', { name: 'Active thread' }),
+    ).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByText('Current conversation')).toBeInTheDocument();
+  });
+  it('groups by project, collapses groups, and switches to a recent list', () => {
+    openSidebar({
+      threads: [
+        {
+          id: 'a',
+          recordId: 'record-a',
+          title: 'Design review',
+          projectId: 'p1',
+          projectName: 'Design',
+          status: 'idle',
+        },
+        {
+          id: 'b',
+          recordId: 'record-b',
+          title: 'Build review',
+          projectId: 'p2',
+          projectName: 'Build',
+          status: 'idle',
+        },
+        {
+          id: 'c',
+          recordId: 'record-c',
+          title: 'Personal note',
+          status: 'idle',
+        },
+      ],
+    });
+    const design = screen.getByRole('button', { name: 'Design 1' });
+    expect(design).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.getByRole('button', { name: 'No project 1' }),
+    ).toBeInTheDocument();
+    fireEvent.click(design);
+    expect(
+      screen.queryByRole('button', { name: 'Design review' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Recent' }),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Design review' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Design 1' }),
+    ).not.toBeInTheDocument();
+  });
 
-    expect(row).toHaveAttribute('data-active', 'true');
-    expect(row).toHaveClass(
-      'hover:bg-accent',
-      'hover:text-accent-foreground',
-      'data-[active=true]:bg-accent',
-      'data-[active=true]:text-accent-foreground',
+  it('passes server search input and reports no matches', () => {
+    const onQueryChange = vi.fn();
+    openSidebar({ query: 'report', onQueryChange });
+    const search = screen.getByRole('searchbox');
+    fireEvent.change(search, { target: { value: 'budget' } });
+    expect(onQueryChange).toHaveBeenCalledWith('budget');
+    expect(
+      screen.getByText(
+        'No matching conversations. Try another search or scope.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the selected search result using its record and thread ids', async () => {
+    const thread = {
+      id: 'older-thread',
+      recordId: 'older-record',
+      title: 'Older result',
+      status: 'idle' as const,
+    };
+    const onSelectThread = vi.fn();
+    openSidebar({ threads: [thread], onSelectThread });
+    fireEvent.click(screen.getByRole('button', { name: 'Older result' }));
+    expect(onSelectThread).toHaveBeenCalledWith(thread);
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
-    expect(icon).toHaveClass(
-      'group-hover:text-accent-foreground',
-      'group-data-[active=true]:text-accent-foreground',
+  });
+
+  it('keeps deletion failures visible without selecting the conversation', async () => {
+    const onSelectThread = vi.fn();
+    const onDeleteThread = vi.fn().mockRejectedValue(new Error('Rejected'));
+    openSidebar({
+      threads: [
+        { id: 'a', recordId: 'record-a', title: 'Report', status: 'idle' },
+      ],
+      onSelectThread,
+      onDeleteThread,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Report' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not delete this conversation. Try again.',
     );
-    expect(row?.parentElement).not.toHaveClass('space-y-1');
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('shows loaded and total counts and retries older pages without discarding results', () => {
+    const onLoadMore = vi.fn();
+    openSidebar({
+      threads: [
+        { id: 'a', recordId: 'record-a', title: 'Report', status: 'idle' },
+      ],
+      total: 70,
+      hasMore: true,
+      onLoadMore,
+      loadMoreError: true,
+    });
+    expect(
+      screen.getByText('1 of 70 conversations loaded'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not load older conversations',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onLoadMore).toHaveBeenCalledOnce();
+    expect(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Report',
+      }),
+    ).toBeInTheDocument();
   });
 });

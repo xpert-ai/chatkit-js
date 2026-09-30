@@ -105,7 +105,12 @@ import {
   extractAssistantAvatar,
 } from './ui/chatkit-avatar';
 import { useStreamManager } from '../hooks/useStream';
-import { useThreads, type ThreadHistoryScope } from '../hooks/useThreads';
+import {
+  useThreads,
+  type ThreadHistoryScope,
+  type ThreadItem,
+} from '../hooks/useThreads';
+import { useMessageHistory } from '../hooks/useMessageHistory';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ContextUsageIndicator } from './thread/context-usage-indicator';
 import { Button } from './ui/button';
@@ -727,6 +732,7 @@ export function Chat({
   const [isAtBottom, setIsAtBottom] = React.useState(true);
   const [hasUpdatesBelow, setHasUpdatesBelow] = React.useState(false);
   const [historyScope, setHistoryScope] = React.useState<ThreadHistoryScope>('all');
+  const [historyQuery, setHistoryQuery] = React.useState('');
   const effectiveHistoryScope = historyScope === 'current-project' && !activeProjectId
     ? 'all' : historyScope;
   const {
@@ -734,8 +740,17 @@ export function Chat({
     updateThread,
     deleteThread,
     refreshThreads,
-    isLoading: isThreadsLoading,
-  } = useThreads(undefined, surface === 'main' && history?.enabled !== false, effectiveHistoryScope);
+  } = useThreads(undefined, surface === 'main' && history?.enabled !== false);
+  const messageHistory = useMessageHistory({
+    client: stream.client,
+    assistantId: stream.assistantId,
+    projectId: activeProjectId,
+    enabled:
+      historyOpen && surface === 'main' && history?.enabled !== false &&
+      !missingConfig && stream.isReady,
+    query: historyQuery,
+    scope: effectiveHistoryScope,
+  });
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const chatColumnRef = React.useRef<HTMLDivElement>(null);
   const messageNavigationAnchorsRef = React.useRef(
@@ -3214,32 +3229,20 @@ export function Chat({
     }
   };
 
-  const handleSelectThread = (id: string) => {
+  const handleSelectThread = (thread: ThreadItem) => {
     if (isHistoryLoading) return;
     setHistoryError(null);
-    const thread = threads.find((item) => item.id === id);
-    if (!thread) return;
-    if (id !== stream.threadId) stream.reset(id, []);
-    void loadThreadHistory(id);
+    if (thread.id !== stream.threadId) stream.reset(thread.id, []);
+    void loadThreadHistory(thread.id);
   };
 
-  const handleDeleteThread = (id: string) => {
+  const handleDeleteThread = async (thread: ThreadItem) => {
     setHistoryError(null);
-    const thread = threads.find((item) => item.id === id);
-    if (!thread?.recordId) return;
-    void deleteThread(thread.recordId)
-      .then(() => {
-        if (stream.threadId === id) {
-          stream.reset(null, []);
-        }
-        return refreshThreads();
-      })
-      .catch((err) => {
-        console.warn('Failed to delete thread', err);
-        setHistoryError(
-          err instanceof Error ? err.message : t('chat.errors.deleteThread'),
-        );
-      });
+    await deleteThread(thread.recordId);
+    messageHistory.remove(thread.recordId);
+    if (stream.threadId === thread.id) stream.reset(null, []);
+    messageHistory.refresh();
+    await refreshThreads();
   };
 
   const handleComposerRunControl = async (action: 'pause' | 'resume') => {
@@ -3781,7 +3784,15 @@ export function Chat({
                     onOpenChange={setHistoryOpen}
                     showTrigger={false}
                     onCloseAutoFocus={restoreHeaderFocus}
-                    threads={threads}
+                    threads={messageHistory.threads}
+                    total={messageHistory.total}
+                    query={historyQuery}
+                    onQueryChange={setHistoryQuery}
+                    hasMore={messageHistory.hasMore}
+                    onLoadMore={messageHistory.loadMore}
+                    isLoadingMore={messageHistory.isLoadingMore}
+                    error={messageHistory.error}
+                    loadMoreError={messageHistory.loadMoreError}
                     scope={effectiveHistoryScope}
                     onScopeChange={setHistoryScope}
                     hasCurrentProject={Boolean(activeProjectId)}
@@ -3790,10 +3801,10 @@ export function Chat({
                     newThreadLabel={t(
                       activeProjectId ? 'history.newThreadInProject' : 'history.newThread',
                     )}
-                    onRefresh={refreshThreads}
+                    onRefresh={messageHistory.refresh}
                     onSelectThread={handleSelectThread}
                     onDeleteThread={handleDeleteThread}
-                    isRefreshing={isThreadsLoading}
+                    isRefreshing={messageHistory.isLoading}
                     showDelete={history?.showDelete !== false}
                     disabled={missingConfig || isHistoryLoading}
                   />
