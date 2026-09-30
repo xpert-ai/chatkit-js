@@ -1,4 +1,10 @@
 {
+  "resourceCard": {
+    "open": "Open",
+    "disabled": "Workbench is not enabled in this chat.",
+    "unavailable": "This resource is unavailable or you no longer have access.",
+    "forbidden": "You do not have access to this resource."
+  },
   "ToolAfter": {
     "Paused": "Tool completed. Waiting to continue.",
     "Continue": "Continue"

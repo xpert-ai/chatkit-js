@@ -1,3 +1,4 @@
+import { useResourceCardNavigation } from './useResourceCardNavigation';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
 import { useExecutionFocus } from './useExecutionFocus';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
@@ -429,11 +430,28 @@ export function WorkbenchShell({
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
   }, [onRequestContextChange]);
 
+  const rememberResourceCard = useResourceCardNavigation({
+    scope: viewScopeKey,
+    enabled: remoteViewsEnabled && authenticated,
+    ready: !loading && viewsScope === viewScopeKey,
+    restore: (target) => {
+      if (target.target !== 'workbench.view' || !views.some((view) => view.key === target.viewKey)) return false;
+      setViewQueries((current) => ({ ...current, [target.viewKey]: {
+        selectionId: target.selectionId, parameters: target.parameters,
+      } }));
+      selectView(target.viewKey);
+      setOpen(true);
+      return true;
+    },
+    close: () => setOpen(false),
+  });
+
   const executeClientCommand = React.useCallback(
     async (
       commandKey: string,
       payload: unknown,
-      manifest: XpertExtensionViewManifest,
+      manifest: Pick<XpertExtensionViewManifest, 'key'>,
+      resourceCard?: { messageId: string; id: string },
     ): Promise<unknown> => {
       if (commandKey === ASSISTANT_CONTEXT_SET_COMMAND) {
         const parsed = parseContextSetPayload(payload);
@@ -561,6 +579,7 @@ export function WorkbenchShell({
       }
 
       const request = {
+        ...(resourceCard ? { resourceCard } : {}),
         commandKey,
         payload,
         hostType: 'agent' as const,
@@ -719,6 +738,13 @@ export function WorkbenchShell({
       askInSideChat,
       externalAssistantsEnabled,
       openExternalAssistant,
+      openResourceCard: async (card, messageId) => {
+        const result = await executeClientCommand('workbench.navigation.open', card.data.open,
+          { key: card.data.open.viewKey }, { messageId, id: card.id });
+        if (result && typeof result === 'object' && 'success' in result && result.success === true)
+          rememberResourceCard(card.data.open);
+        return result;
+      },
       toggle: () => {
         if (!available) return;
         if (open) {
@@ -733,6 +759,8 @@ export function WorkbenchShell({
       },
     }),
     [
+      executeClientCommand,
+      rememberResourceCard,
       askInSideChat,
       externalAssistantsEnabled,
       openExternalAssistant,

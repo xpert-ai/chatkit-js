@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { MessageFileActivity } from '../../task-summary/FileActivity';
+import { MessageResourceCards, messageResourceCards } from './resource-cards';
 
 import type {
   ChatKitOptions,
@@ -972,7 +973,7 @@ export function AssistantMessage({
     ? renderTree.rootReasoning
     : message.reasoning;
   const hasContent =
-    hasRenderableMessageContent(message.content) || renderTree.hasAgentRuns || hasRenderableFileActivity(message);
+    hasRenderableMessageContent(message.content) || renderTree.hasAgentRuns || hasRenderableFileActivity(message) || messageResourceCards(message).length > 0;
   const hasReasoning = hasRenderableReasoning(rootReasoning);
   const resolvedStreamingStatus =
     streamingStatus ?? getAssistantStreamingStatus(message, isStreaming);
@@ -1023,7 +1024,12 @@ export function AssistantMessage({
   return (
     <div className={cn('space-y-3', streamingClass, className)}>
       {answerNode}
-      {!isStreaming && <MessageFileActivity message={message} />}
+      {!isStreaming && (
+        <>
+          <MessageFileActivity message={message} />
+          <MessageResourceCards message={message} />
+        </>
+      )}
       {resolvedStreamingStatus ? (
         <div className="flex items-center gap-2">
           {inlinePet}

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { ChatKitReference } from '@xpert-ai/chatkit-types';
+import type { ChatKitReference, TMessageContentResourceCard } from '@xpert-ai/chatkit-types';
 import { Loader2, PanelRight } from 'lucide-react';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { cn } from '../lib/utils';
@@ -10,6 +10,7 @@ import {
 } from '../components/ui/tooltip';
 
 export type WorkbenchContextValue = {
+  openResourceCard?: (card: TMessageContentResourceCard, messageId: string) => Promise<unknown>;
   enabled: boolean;
   open: boolean;
   loading: boolean;

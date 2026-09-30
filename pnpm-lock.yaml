@@ -104,7 +104,7 @@ importers:
         version: 19.2.3(@types/react@19.2.7)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
-        version: 4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))
+        version: 4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.23(postcss@8.5.6)
@@ -119,7 +119,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^6.0.0
-        version: 6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
+        version: 6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
 
   examples/managed-chatkit:
     devDependencies:
@@ -417,8 +417,8 @@ importers:
         specifier: workspace:~
         version: link:../chatkit-web-shared
       '@xpert-ai/xpert-sdk':
-        specifier: ^0.4.4
-        version: 0.4.4
+        specifier: ^0.5.0
+        version: 0.5.0
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -3581,8 +3581,8 @@ packages:
   '@vue/shared@3.5.26':
     resolution: {integrity: sha512-7Z6/y3uFI5PRoKeorTOSXKcDj0MSasfNNltcslbFrPpcw6aXRUALq4IfJlaTRspiWIUOEZbrpM+iQGmCOiWe4A==}
 
-  '@xpert-ai/xpert-sdk@0.4.4':
-    resolution: {integrity: sha512-NpE8dEqy/V6JQPgebUys3SyrIozVrVJIFC+pugmlcmH05Y45Xd4Yj4XT8/Gs+xsWMkQBHuxJIB74KfTkcSlMMg==}
+  '@xpert-ai/xpert-sdk@0.5.0':
+    resolution: {integrity: sha512-vv6tHYfzLM8zZJLVr7Deps4BiE/mJSpe+56pNdQy8w8z3hhKvRuxV3RX8Yk/qeZd+Fx1vFF8AT1CdYPosqifSA==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -10302,6 +10302,18 @@ snapshots:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
 
+  '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))':
+    dependencies:
+      '@babel/core': 7.28.5
+      '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.28.5)
+      '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.28.5)
+      '@rolldown/pluginutils': 1.0.0-beta.27
+      '@types/babel__core': 7.20.5
+      react-refresh: 0.17.0
+      vite: 6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0)
+    transitivePeerDependencies:
+      - supports-color
+
   '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@20.19.27)(jiti@2.6.1)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0))':
     dependencies:
       '@babel/core': 7.28.5
@@ -10499,7 +10511,7 @@ snapshots:
 
   '@vue/shared@3.5.26': {}
 
-  '@xpert-ai/xpert-sdk@0.4.4':
+  '@xpert-ai/xpert-sdk@0.5.0':
     dependencies:
       p-queue: 6.6.2
       p-retry: 4.6.2
@@ -14962,6 +14974,22 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.27
       fsevents: 2.3.3
+      less: 4.6.4
+      lightningcss: 1.30.2
+      sass: 1.98.0
+
+  vite@6.4.1(@types/node@20.19.27)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.30.2)(sass@1.98.0):
+    dependencies:
+      esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.3)
+      picomatch: 4.0.3
+      postcss: 8.5.6
+      rollup: 4.53.5
+      tinyglobby: 0.2.15
+    optionalDependencies:
+      '@types/node': 20.19.27
+      fsevents: 2.3.3
+      jiti: 1.21.7
       less: 4.6.4
       lightningcss: 1.30.2
       sass: 1.98.0

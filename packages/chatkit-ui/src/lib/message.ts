@@ -1,5 +1,6 @@
 import { isNonTranscriptMessageContent } from './message-content-presentation'
 import { parseFileActivityContent, projectMessageFileActivity, upsertFileActivityContent } from '@xpert-ai/chatkit-types'
+import { parseResourceCardContent, upsertResourceCardContent } from '@xpert-ai/chatkit-types'
 import type {
   ChatkitMessage,
   TMessageContentComplex,
@@ -159,6 +160,12 @@ export function appendMessageContent(
   }
 
   const receipt = parseFileActivityContent(content)
+  const card = parseResourceCardContent(content)
+  if (card) {
+    const parts = Array.isArray(aiMessage.content) ? aiMessage.content : aiMessage.content ? [{ type: 'text' as const, text: aiMessage.content }] : []
+    aiMessage.content = upsertResourceCardContent(parts, card)
+    return
+  }
   if (receipt) {
     const parts = Array.isArray(aiMessage.content) ? aiMessage.content : aiMessage.content ? [{ type: 'text' as const, text: aiMessage.content }] : []
     aiMessage.content = upsertFileActivityContent(parts, receipt)

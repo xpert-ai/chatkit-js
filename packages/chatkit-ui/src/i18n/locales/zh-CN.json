@@ -1,4 +1,10 @@
 {
+  "resourceCard": {
+    "open": "打开",
+    "disabled": "当前对话未启用 Workbench。",
+    "unavailable": "此资源不可用，或你已无权访问。",
+    "forbidden": "你没有访问此资源的权限。"
+  },
   "ToolAfter": {
     "Paused": "工具已执行完成，等待继续。",
     "Continue": "继续"

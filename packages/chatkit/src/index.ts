@@ -1,4 +1,5 @@
 export * from './constants.js';
+export * from './resource-card.js';
 export * from './context-compression.js';
 export * from './interrupt.js';
 export * from './localized-text.js';

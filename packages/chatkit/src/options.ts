@@ -499,6 +499,8 @@ export type ChatKitGoalAdapter = {
 };
 
 export type ChatKitWorkbenchClientCommandRequest = {
+  /** User-clicked persisted resource; hosts resolve its canonical target from message history. */
+  resourceCard?: { messageId: string; id: string };
   commandKey: string;
   payload?: unknown;
   hostType: 'agent';

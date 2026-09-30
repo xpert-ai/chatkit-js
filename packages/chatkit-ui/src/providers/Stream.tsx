@@ -1,5 +1,7 @@
 import { parseWorkbenchViewOpenEvent } from '@xpert-ai/xpert-sdk';
 import { parseFileActivityContent } from '@xpert-ai/chatkit-types';
+import { parseResourceCardContent } from '@xpert-ai/chatkit-types';
+import { applyResourceCard } from '../lib/stream-resource-card';
 import { applyFileActivityReceipt } from '../lib/stream-file-activity';
 import React, {
   createContext,
@@ -1798,6 +1800,11 @@ export function applyStreamEvent(
   const payload = parsed as ChatEventEnvelope<TMessageContentComponent<any>>;
 
   const payloadType: ChatMessageTypeEnum = payload.type;
+  const resourceCard = parseResourceCardContent(payload.data);
+  if (resourceCard && payloadType === ChatMessageTypeEnum.MESSAGE) {
+    setValues((prev) => ({ ...prev, messages: applyResourceCard(prev.messages, resourceCard) }));
+    return;
+  }
 
   const fileActivity = parseFileActivityContent(payload.data);
   if (fileActivity && (payloadType === ChatMessageTypeEnum.MESSAGE ||
