@@ -1,6 +1,4 @@
-import type {
-  ChatKitClientSecretObject,
-} from '@xpert-ai/chatkit-types';
+import type { ChatKitClientSecretObject } from '@xpert-ai/chatkit-types';
 
 export type ResolvedClientSecret = ChatKitClientSecretObject;
 
@@ -55,4 +53,41 @@ export function normalizeClientSecretResult(
   }
 
   throw new Error('[chatkit-ui] Parent returned an invalid client secret.');
+}
+
+export function withClientSecretHeaders(
+  headers: HeadersInit | undefined,
+  clientSecret: ResolvedClientSecret,
+): Headers {
+  const nextHeaders = new Headers(headers);
+  if (clientSecret.secret) {
+    nextHeaders.set('Authorization', `Bearer ${clientSecret.secret}`);
+    nextHeaders.set('x-api-key', clientSecret.secret);
+  } else {
+    nextHeaders.delete('Authorization');
+    nextHeaders.delete('x-api-key');
+  }
+
+  if (clientSecret.organizationId) {
+    nextHeaders.set('organization-id', clientSecret.organizationId);
+  } else {
+    nextHeaders.delete('organization-id');
+  }
+
+  return nextHeaders;
+}
+
+/** Socket transports also use this hook; authentication must precede fetch. */
+export function createSdkRequestHook(
+  getClientSecret: () => ResolvedClientSecret,
+  getLastEventId: () => string | null | undefined = () => undefined,
+) {
+  return (url: URL, init: RequestInit): RequestInit => {
+    const headers = withClientSecretHeaders(init.headers, getClientSecret());
+    const lastEventId = getLastEventId();
+    if (lastEventId && url.pathname.endsWith('/runs/stream')) {
+      headers.set('Last-Event-ID', lastEventId);
+    }
+    return { ...init, headers };
+  };
 }

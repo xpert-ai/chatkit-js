@@ -78,6 +78,8 @@ import {
 } from '../lib/stream-agent-runs';
 import {
   normalizeClientSecretResult,
+  withClientSecretHeaders,
+  createSdkRequestHook,
   type ResolvedClientSecret,
 } from '../lib/client-secret';
 import { createMissingApiConfigurationError } from '../lib/api-config';
@@ -527,28 +529,6 @@ export function shouldIgnoreStreamError(
   signal: Pick<AbortSignal, 'aborted'>,
 ) {
   return signal.aborted || isAbortError(error);
-}
-
-function withClientSecretHeaders(
-  headers: HeadersInit | undefined,
-  clientSecret: ResolvedClientSecret,
-): Headers {
-  const nextHeaders = new Headers(headers);
-  if (clientSecret.secret) {
-    nextHeaders.set('Authorization', `Bearer ${clientSecret.secret}`);
-    nextHeaders.set('x-api-key', clientSecret.secret);
-  } else {
-    nextHeaders.delete('Authorization');
-    nextHeaders.delete('x-api-key');
-  }
-
-  if (clientSecret.organizationId) {
-    nextHeaders.set('organization-id', clientSecret.organizationId);
-  } else {
-    nextHeaders.delete('organization-id');
-  }
-
-  return nextHeaders;
 }
 
 type CreateFetchWithClientSecretRefreshOptions = {
@@ -2695,26 +2675,13 @@ const StreamSession = ({
         callerOptions: {
           fetch: fetchWithClientSecretRefresh,
         },
-        onRequest: (url: URL, init: RequestInit) => {
-          const lastEventId = lastEventIdRef.current;
-          if (lastEventId && url.pathname.endsWith('/runs/stream')) {
-            const headers = init.headers;
-            if (!headers) {
-              init.headers = { 'Last-Event-ID': lastEventId };
-              return init;
-            }
-            if (headers instanceof Headers) {
-              headers.set('Last-Event-ID', lastEventId);
-              return init;
-            }
-            if (Array.isArray(headers)) {
-              init.headers = [...headers, ['Last-Event-ID', lastEventId]];
-              return init;
-            }
-            (headers as Record<string, string>)['Last-Event-ID'] = lastEventId;
-          }
-          return init;
-        },
+        onRequest: createSdkRequestHook(
+          () => ({
+            secret: runtimeClientSecretRef.current.trim(),
+            organizationId: runtimeOrganizationIdRef.current?.trim() || undefined,
+          }),
+          () => lastEventIdRef.current,
+        ),
       }),
     [apiUrl, fetchWithClientSecretRefresh, locale],
   );
