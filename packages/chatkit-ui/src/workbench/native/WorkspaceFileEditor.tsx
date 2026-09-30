@@ -139,6 +139,7 @@ export function WorkspaceFileEditor({
           signal: abort?.signal,
         });
         baseline.current = blob;
+        if (!abort?.signal.aborted) editor.current?.markSaved?.(blob);
       }
       if (!abort?.signal.aborted) {
         setDirty(false);
@@ -162,9 +163,14 @@ export function WorkspaceFileEditor({
   const saveFromToolbar = () => {
     void save().catch(() => undefined);
   };
-  const markDirty = React.useCallback(() => setDirty(true), []);
+  const markDirty = React.useCallback((value = true) => setDirty(value), []);
   const editorProps = source
-    ? { blob: source, name: fileName(file.filePath), onDirty: markDirty }
+    ? {
+        blob: source,
+        name: fileName(file.filePath),
+        onDirty: markDirty,
+        onSave: saveFromToolbar,
+      }
     : null;
   const content = () => {
     if (!source || !editorProps) return null;

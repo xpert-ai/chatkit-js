@@ -135,9 +135,14 @@ export async function sameFileBytes(a: Blob, b: Blob) {
   const bytes = new Uint8Array(right);
   return new Uint8Array(left).every((byte, index) => byte === bytes[index]);
 }
-export type BinaryEditorHandle = { exportFile: () => Promise<Blob> };
+export type BinaryEditorHandle = {
+  exportFile: () => Promise<Blob>;
+  /** Acknowledge persisted bytes only after the workspace API accepts them. */
+  markSaved?: (blob: Blob) => void;
+};
 export type BinaryEditorProps = {
   blob: Blob;
   name: string;
-  onDirty: () => void;
+  onDirty: (dirty?: boolean) => void;
+  onSave?: () => void;
 };

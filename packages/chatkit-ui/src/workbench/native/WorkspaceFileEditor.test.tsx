@@ -37,7 +37,20 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-function setup() {
+const officeSaved = vi.fn();
+vi.mock('./office/PptxEditor', () => ({
+  default: React.forwardRef(function MockOffice(
+    { onDirty }: { onDirty: () => void },
+    ref,
+  ) {
+    React.useImperativeHandle(ref, () => ({
+      exportFile: async () => new Blob(['edited office']),
+      markSaved: officeSaved,
+    }));
+    return <button onClick={() => onDirty()}>Edit office</button>;
+  }),
+}));
+function setup(path = 'note.md') {
   const client = new Client({ apiUrl: 'http://example.test/api/ai' });
   const download = vi
     .spyOn(client.workbench, 'downloadFile')
@@ -52,14 +65,14 @@ function setup() {
       <WorkspaceFileEditor
         client={client}
         scope={{ kind: 'assistant', assistantId: 'a1' }}
-        file={{ filePath: 'note.md' }}
+        file={{ filePath: path }}
         tabKey="file"
         register={register}
         onSaved={saved}
       />
     </ThemeProvider>,
   );
-  return { download, save, register, saved, ...view };
+  return { client, download, save, register, saved, ...view };
 }
 describe('workspace file saving', () => {
   it('saves text through the authorized scope and clears dirty state only on success', async () => {
@@ -106,4 +119,27 @@ describe('workspace file saving', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Access denied');
     expect(register.mock.calls.at(-1)?.[1].dirty).toBe(true);
   });
+});
+
+it('acknowledges Office edits only after the server accepts the exported bytes', async () => {
+  officeSaved.mockClear();
+  const { client, register, download } = setup('slides.pptx');
+  const persist = vi
+    .spyOn(client.workbench, 'saveBinaryFile')
+    .mockRejectedValueOnce(new Error('Save failed'))
+    .mockResolvedValue({ filePath: 'slides.pptx' });
+  fireEvent.click(await screen.findByText('Edit office'));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+  expect(officeSaved).not.toHaveBeenCalled();
+  expect(register.mock.calls.at(-1)?.[1].dirty).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(officeSaved).toHaveBeenCalledOnce());
+  expect(officeSaved).toHaveBeenCalledWith(persist.mock.calls[1][2]);
+  expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false);
+  // The next conflict check compares against the successfully saved file.
+  download.mockResolvedValue(new Blob(['edited office']));
+  fireEvent.click(screen.getByText('Edit office'));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(officeSaved).toHaveBeenCalledTimes(2));
 });
