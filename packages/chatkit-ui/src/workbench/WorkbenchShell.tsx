@@ -58,6 +58,7 @@ export { useWorkbench, WorkbenchToggleButton } from './context';
 import {
   WorkbenchPanel,
   SIDE_CHAT_VIEW_KEY,
+  MAIN_CHAT_VIEW_KEY,
   type SideChatSession,
 } from './WorkbenchPanel';
 
@@ -81,6 +82,7 @@ import { workbenchLayoutKey } from './layout-storage';
 import { WorkbenchDivider } from './WorkbenchDivider';
 
 const isNativeView = (key: string | null) =>
+  key === MAIN_CHAT_VIEW_KEY ||
   key === SIDE_CHAT_VIEW_KEY ||
   key === EXTERNAL_ASSISTANTS_VIEW_KEY ||
   Boolean(key?.startsWith(NATIVE_PREFIX));
@@ -253,6 +255,16 @@ export function WorkbenchShell({
     onOpen: setOpen,
     setQueries: setViewQueries,
   });
+  const open =
+    requestedOpen &&
+    enabled &&
+    authenticated &&
+    (!restoring ||
+      (containerWidth >= NARROW_BREAKPOINT &&
+        (externalViewOpen ||
+          Boolean(sideChat) ||
+          (viewsScope === viewScopeKey && views.length > 0))));
+  const mainChatInWorkbench = open && expanded;
   const openPreview = React.useCallback(
     (preview: WorkbenchPreview) => {
       storePreview(preview);
@@ -292,10 +304,49 @@ export function WorkbenchShell({
     ],
   );
   const {
-    keys: tabKeys,
+    keys: viewTabKeys,
     replace: replaceTab,
     insertBefore: insertTabBefore,
   } = useWorkbenchTabOrder(startPageScope, availableTabKeys);
+  const tabKeys = React.useMemo(
+    () =>
+      mainChatInWorkbench ? [MAIN_CHAT_VIEW_KEY, ...viewTabKeys] : viewTabKeys,
+    [mainChatInWorkbench, viewTabKeys],
+  );
+  const previousView = React.useRef<{ scope: string; key: string | null }>({
+    scope: startPageScope,
+    key: null,
+  });
+  React.useLayoutEffect(() => {
+    if (activeViewKey !== MAIN_CHAT_VIEW_KEY) {
+      previousView.current = { scope: startPageScope, key: activeViewKey };
+    }
+    if (!mainChatInWorkbench && activeViewKey === MAIN_CHAT_VIEW_KEY) {
+      const previous = previousView.current;
+      setActiveViewKey(
+        previous.scope === startPageScope &&
+          previous.key &&
+          viewTabKeys.includes(previous.key)
+          ? previous.key
+          : (viewTabKeys[0] ?? null),
+      );
+    } else if (mainChatInWorkbench && !tabKeys.includes(activeViewKey ?? '')) {
+      // Restored view tabs can arrive one render after their manifests.
+      // Keep that selection instead of treating the pending list as empty.
+      const next =
+        viewTabKeys[0] ??
+        (!loading && views.length === 0 ? MAIN_CHAT_VIEW_KEY : null);
+      if (next) setActiveViewKey(next);
+    }
+  }, [
+    mainChatInWorkbench,
+    activeViewKey,
+    startPageScope,
+    viewTabKeys,
+    tabKeys,
+    loading,
+    views.length,
+  ]);
   const replaceNewTab = (from: string | undefined, to: string) => {
     if (!from) return;
     replaceTab(from, to);
@@ -308,16 +359,6 @@ export function WorkbenchShell({
     },
     [tabKeys],
   );
-  const open =
-    requestedOpen &&
-    enabled &&
-    authenticated &&
-    (!restoring ||
-      (containerWidth >= NARROW_BREAKPOINT &&
-        (externalViewOpen ||
-          Boolean(sideChat) ||
-          (viewsScope === viewScopeKey && views.length > 0))));
-
   React.useEffect(() => {
     const element = rootRef.current;
     if (!element || typeof ResizeObserver === 'undefined') return;
@@ -929,9 +970,21 @@ export function WorkbenchShell({
   });
 
   const panelHost = useWorkbenchPanelHost();
+  const chatHost = useWorkbenchPanelHost();
+  const chat = (
+    <div
+      data-chatkit-chat-panel=""
+      inert={initialLoading}
+      aria-hidden={initialLoading || undefined}
+      className="flex h-full min-h-0 min-w-0 flex-1"
+    >
+      {children}
+    </div>
+  );
   const panel = (
     <WorkbenchPanel
       tabOrder={tabKeys}
+      mainChatHost={mainChatInWorkbench ? chatHost.attach : undefined}
       native={native}
       sideChatEnabled={sideChatEnabled}
       onOpenNative={(tool, fromTab) => {
@@ -1118,13 +1171,11 @@ export function WorkbenchShell({
           />
         )}
         <div
-          data-chatkit-chat-panel=""
-          hidden={open && expanded}
-          inert={initialLoading}
-          aria-hidden={initialLoading || undefined}
-          className={cn('flex min-w-0 flex-1', open && expanded && 'hidden')}
+          ref={mainChatInWorkbench ? undefined : chatHost.attach}
+          hidden={mainChatInWorkbench}
+          className={cn('flex min-w-0 flex-1', mainChatInWorkbench && 'hidden')}
         >
-          {children}
+          {!chatHost.container && chat}
         </div>
 
         {(open || Boolean(sideChat) || externalViewOpen) && !isNarrow && (
@@ -1186,6 +1237,7 @@ export function WorkbenchShell({
         {panelHost.container &&
           (open || Boolean(sideChat) || externalViewOpen) &&
           createPortal(panel, panelHost.container)}
+        {chatHost.container && createPortal(chat, chatHost.container)}
         <NativeCloseDialog
           open={Boolean(native.pending)}
           onCancel={() => native.setPending(null)}

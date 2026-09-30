@@ -10,6 +10,7 @@
     "Continue": "Continue"
   },
   "workbench": {
+    "mainChat": "Chat",
     "newTab": "New tab",
     "closeNewTab": "Close new tab",
     "start": {

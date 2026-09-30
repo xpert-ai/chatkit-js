@@ -48,6 +48,7 @@ import {
   PanelRight,
   RotateCcw,
   MessageSquarePlus,
+  MessageSquare,
   Bot,
   Globe,
   Plus,
@@ -64,6 +65,7 @@ import { WorkbenchTab } from './WorkbenchTab';
 import { resolveManifestText } from './manifest-text';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
+export const MAIN_CHAT_VIEW_KEY = 'chatkit.native.main-chat';
 
 export type SideChatSession = {
   sourceThreadId: string;
@@ -77,6 +79,7 @@ type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
 
 type WorkbenchPanelProps = {
   tabOrder?: string[];
+  mainChatHost?: React.Ref<HTMLDivElement>;
   browserHistory?: Record<string, WorkbenchBrowserHistory>;
   onNavigateBrowser?: (key: string, preview: WorkbenchPreview | null) => void;
   onMoveBrowser?: (key: string, delta: number) => void;
@@ -134,6 +137,7 @@ type WorkbenchPanelProps = {
 
 export function WorkbenchPanel({
   tabOrder,
+  mainChatHost,
   browserHistory = {},
   onNavigateBrowser,
   onMoveBrowser,
@@ -202,6 +206,7 @@ export function WorkbenchPanel({
   );
   const { theme } = useTheme();
   const externalTabId = React.useId();
+  const mainChatTabId = React.useId();
   const frameScope = JSON.stringify([
     stream.apiUrl,
     stream.organizationId,
@@ -251,7 +256,8 @@ export function WorkbenchPanel({
         data-slot="chatkit-workbench-header"
         className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2"
       >
-        {(native?.tabs.length ?? 0) > 0 ||
+        {mainChatHost ||
+        (native?.tabs.length ?? 0) > 0 ||
         views.length > 0 ||
         previews.length > 0 ||
         newTabs.length > 0 ||
@@ -259,6 +265,17 @@ export function WorkbenchPanel({
         sideChatOpening ||
         externalViewOpen ? (
           <WorkbenchTabs activeKey={activeViewKey} order={tabOrder}>
+            {mainChatHost && (
+              <WorkbenchTab
+                key={MAIN_CHAT_VIEW_KEY}
+                label={t('workbench.mainChat')}
+                icon={<MessageSquare size={16} />}
+                selected={activeViewKey === MAIN_CHAT_VIEW_KEY}
+                id={mainChatTabId}
+                panelId={`${mainChatTabId}-panel`}
+                onSelect={() => onSelect(MAIN_CHAT_VIEW_KEY)}
+              />
+            )}
             {native &&
               onCloseNative &&
               native.tabs.map((tab) => (
@@ -436,23 +453,37 @@ export function WorkbenchPanel({
         </div>
       )}
 
-      {error && activeView && !newTabs.includes(activeViewKey ?? '') && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive"
-        >
-          <span className="flex-1">{error}</span>
-          <button
-            type="button"
-            onClick={onReload}
-            className="rounded-md px-2 py-1 hover:bg-muted"
+      {error &&
+        activeView &&
+        activeViewKey !== MAIN_CHAT_VIEW_KEY &&
+        !newTabs.includes(activeViewKey ?? '') && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive"
           >
-            {t('workbench.retry')}
-          </button>
-        </div>
-      )}
+            <span className="flex-1">{error}</span>
+            <button
+              type="button"
+              onClick={onReload}
+              className="rounded-md px-2 py-1 hover:bg-muted"
+            >
+              {t('workbench.retry')}
+            </button>
+          </div>
+        )}
 
       <div className="relative min-h-0 flex-1">
+        {mainChatHost && (
+          <div
+            id={`${mainChatTabId}-panel`}
+            role="tabpanel"
+            aria-labelledby={mainChatTabId}
+            hidden={activeViewKey !== MAIN_CHAT_VIEW_KEY}
+            className="h-full min-h-0"
+          >
+            <div ref={mainChatHost} className="contents" />
+          </div>
+        )}
         {native && onOpenNativeFile && (
           <NativeWorkbenchContent
             tabs={native.tabs}
@@ -583,7 +614,8 @@ export function WorkbenchPanel({
               />
             </div>
           ))}
-        {native?.tabs.some((tab) => tab.key === activeViewKey) ||
+        {(mainChatHost && activeViewKey === MAIN_CHAT_VIEW_KEY) ||
+        native?.tabs.some((tab) => tab.key === activeViewKey) ||
         newTabs.includes(activeViewKey ?? '') ||
         activePreview ? null : activeViewKey ===
           EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===

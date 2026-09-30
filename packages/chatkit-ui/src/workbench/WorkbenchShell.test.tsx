@@ -1768,6 +1768,112 @@ describe('WorkbenchShell', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each(['right', 'left'])('shows the same main chat as the first maximized tab with the workbench on the %s', async (side) => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    let mounts = 0;
+    let unmounts = 0;
+    function MainChat() {
+      const [count, setCount] = React.useState(0);
+      React.useEffect(() => {
+        mounts += 1;
+        return () => { unmounts += 1; };
+      }, []);
+      return <>
+        <WorkbenchToggleButton />
+        <input aria-label="Main chat draft" defaultValue="Keep my draft" />
+        <button onClick={() => setCount(value => value + 1)}>Local state {count}</button>
+        <div role="region" aria-label="Main messages">Conversation messages</div>
+      </>;
+    }
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><MainChat /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    const draft = screen.getByLabelText('Main chat draft');
+    const messages = screen.getByRole('region', { name: 'Main messages' });
+    messages.scrollTop = 80;
+    fireEvent.change(draft, { target: { value: 'Unsent message' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Local state 0' }));
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const remote = await screen.findByTestId('remote-view');
+    if (side === 'left') fireEvent.click(screen.getByLabelText('Swap left and right panes'));
+    expect(screen.queryByRole('tab', { name: 'Chat' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Documents']);
+    expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute('aria-selected', 'true');
+    expect(draft).not.toBeVisible();
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    expect(within(screen.getByRole('tabpanel', { name: 'Chat' })).getByLabelText('Main chat draft')).toBe(draft);
+    expect(draft).toBeVisible();
+    expect(draft).toHaveValue('Unsent message');
+    expect(messages.scrollTop).toBe(80);
+    expect(screen.getByRole('button', { name: 'Local state 1' })).toBeVisible();
+    expect(remote).not.toBeVisible();
+    expect(screen.queryByLabelText('Close views: Chat')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat', 'Documents', 'New tab']);
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.queryByRole('tab', { name: 'Chat' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'New tab' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Main chat draft')).toBe(draft);
+    expect(draft).toBeVisible();
+    expect(draft).toHaveValue('Unsent message');
+    expect(screen.getByTestId('remote-view')).toBe(remote);
+    expect(mocks.remoteUnmounts).toBe(0);
+    expect(mounts).toBe(1);
+    expect(unmounts).toBe(0);
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    expect(screen.getByLabelText('Main chat draft')).toBe(draft);
+    expect(draft).toBeVisible();
+    expect(unmounts).toBe(0);
+  });
+
+  it('keeps the main chat when the last maximized workbench tab is closed', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Main draft" /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByLabelText('Close views: Documents'));
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Chat']);
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByLabelText('Main draft')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(screen.getByLabelText('Main draft')).toBeVisible();
+    expect(screen.queryByRole('tab', { name: 'Chat' })).not.toBeInTheDocument();
+  });
+
+  it('moves main chat into the maximized narrow drawer and releases it on restore and breakpoint changes', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /><input aria-label="Main draft" defaultValue="Keep text" /></WorkbenchShell>);
+    setObservedWidth(800);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    const draft = screen.getByLabelText('Main draft');
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    expect(within(dialog).getByLabelText('Main draft')).toBe(draft);
+    expect(draft.closest('[aria-hidden="true"]')).toBeNull();
+    draft.focus();
+    expect(draft).toHaveFocus();
+    fireEvent.change(draft, { target: { value: 'Edited in full screen' } });
+    fireEvent.click(screen.getByLabelText('Restore panel'));
+    expect(within(dialog).queryByLabelText('Main draft')).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByLabelText('Expand panel'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.queryByRole('dialog', { hidden: true })).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Main draft')).toBe(draft);
+    expect(draft).toHaveValue('Edited in full screen');
+    expect(draft.closest('[aria-hidden="true"]')).toBeNull();
+    expect(document.body.style.pointerEvents).not.toBe('none');
+  });
+
   it('expands, restores, and hides the workbench from its action buttons', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(

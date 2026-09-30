@@ -10,6 +10,7 @@
     "Continue": "继续"
   },
   "workbench": {
+    "mainChat": "聊天",
     "newTab": "新标签页",
     "closeNewTab": "关闭新标签页",
     "start": {
