@@ -189,7 +189,6 @@
       "conflict": "This file changed elsewhere. Download your edits before reopening the latest version.",
       "fontSize": "Font size",
       "xlsxUnsupported": "This XLSX supports cell values and formulas. This operation cannot be saved yet.",
-      "xlsxHint": "Edit cell values and formulas while preserving the original layout. Sheet structure and formatting changes cannot be saved.",
       "unsavedLabel": "Unsaved changes",
       "pathExists": "The path already exists. Choose another file name.",
       "openFile": "Open file",

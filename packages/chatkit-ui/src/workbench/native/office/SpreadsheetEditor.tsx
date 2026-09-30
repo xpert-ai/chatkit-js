@@ -13,6 +13,7 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import zhCN from '@univerjs/preset-sheets-core/locales/zh-CN';
 import enUS from '@univerjs/preset-sheets-core/locales/en-US';
 import '@univerjs/preset-sheets-core/lib/index.css';
+import './spreadsheet.css';
 import {
   importSpreadsheetFile,
   exportSpreadsheetFile,
@@ -66,6 +67,7 @@ const SpreadsheetEditor = React.forwardRef<
             container: host.current,
             header: true,
             toolbar: true,
+            ribbonType: 'classic',
             footer: {},
             menu: original ? xlsxMenu : undefined,
           }),
@@ -177,7 +179,7 @@ const SpreadsheetEditor = React.forwardRef<
   );
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col"
+      className="chatkit-spreadsheet relative flex h-full min-h-0 flex-col"
       onPointerDownCapture={() => {
         interacted.current = true;
       }}
@@ -196,11 +198,6 @@ const SpreadsheetEditor = React.forwardRef<
       {!ready && !error && (
         <p role="status" className="p-4 text-sm text-muted-foreground">
           {t('workbench.files.loading')}
-        </p>
-      )}
-      {/\.xlsx$/i.test(name) && (
-        <p className="border-b px-3 py-1.5 text-xs text-muted-foreground">
-          {t('workbench.files.xlsxHint')}
         </p>
       )}
       <div

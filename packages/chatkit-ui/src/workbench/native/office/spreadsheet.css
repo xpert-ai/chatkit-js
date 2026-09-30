@@ -1,0 +1,31 @@
+/* Keep Univer's category tabs and responsive command overflow on one row. */
+.chatkit-spreadsheet [data-u-comp='headerbar'] {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(120px, 1fr);
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.chatkit-spreadsheet [data-u-comp='ribbon-header-menu'] {
+  min-width: 0;
+  height: 40px;
+}
+
+.chatkit-spreadsheet [data-u-comp='ribbon-header-menu'] [role='tablist'] {
+  justify-content: flex-start;
+  background: transparent !important;
+}
+
+.chatkit-spreadsheet [data-u-comp='ribbon-header-menu'] [role='tab'] {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.chatkit-spreadsheet [data-u-comp='ribbon-header-menu'] + div {
+  min-width: 0;
+  border-bottom: 0;
+}
+
+.chatkit-spreadsheet [data-u-comp='ribbon-toolbar'] {
+  justify-content: flex-start;
+}
