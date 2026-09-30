@@ -1,6 +1,12 @@
 import * as React from 'react';
 import { Client } from '@xpert-ai/xpert-sdk';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Blob as NodeBlob } from 'node:buffer';
 import { cleanup } from '@testing-library/react';
@@ -140,6 +146,48 @@ function browserSetup() {
   return { client, list, download, onOpen, onPreview, ...view };
 }
 describe('workspace file browser', () => {
+  it('keeps the file, source mode and breadcrumb while toggling folders or hiding the tree', async () => {
+    const { onPreview, download } = browserSetup();
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'docs' }));
+    fireEvent.click(await screen.findByRole('treeitem', { name: 'README.md' }));
+    await screen.findByRole('heading', { name: 'File preview' });
+    fireEvent.click(screen.getByRole('button', { name: 'View source' }));
+    await screen.findByRole('textbox', { name: 'File source' });
+    fireEvent.click(screen.getByRole('treeitem', { name: 'docs' }));
+    expect(screen.getByRole('treeitem', { name: 'docs' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('textbox', { name: 'File source' })).toBeVisible();
+    expect(
+      within(screen.getByRole('navigation', { name: 'File path' })).getByRole(
+        'button',
+        { name: 'README.md' },
+      ),
+    ).toHaveAttribute('aria-current', 'page');
+    fireEvent.keyDown(screen.getByRole('treeitem', { name: 'docs' }), {
+      key: 'ArrowRight',
+    });
+    fireEvent.keyDown(screen.getByRole('treeitem', { name: 'docs' }), {
+      key: 'ArrowLeft',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle file tree' }));
+    expect(screen.getByRole('textbox', { name: 'File source' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle file tree' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'docs' }));
+    expect(onPreview).toHaveBeenCalledTimes(1);
+    expect(download).toHaveBeenCalledTimes(1);
+    download.mockResolvedValue(new Blob(['Another file']));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'notes.txt' }));
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'File source' })).toHaveValue(
+        'Another file',
+      ),
+    );
+    expect(onPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filePath: 'docs/notes.txt' }),
+    );
+  });
   it.each(['fullPath', 'entryName', 'workspacePath'] as const)(
     'expands nested directories and uses complete paths for preview and Office editors (%s)',
     async (shape) => {

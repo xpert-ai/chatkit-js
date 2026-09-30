@@ -367,9 +367,7 @@ function WorkspaceFilesSession({
                 onRetry={tree.load}
                 onToggle={(folder) => {
                   tree.toggle(folder);
-                  setPath(folder);
-                  setSelected(null);
-                  onPreview?.(null);
+                  if (!selected) setPath(folder);
                 }}
                 onSelect={select}
               />
