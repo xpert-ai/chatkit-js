@@ -127,19 +127,58 @@ const render = (ui: React.ReactElement) =>
   renderUI(ui, { wrapper: ThemeProvider });
 
 function ExternalTranscript() {
-  return <>{toWorkbenchMessages(mocks.stream.messages).map((message) =>
-    <AssistantMessage key={message.id} message={{ ...message, type: 'assistant' }} />)}</>;
+  return (
+    <>
+      {toWorkbenchMessages(mocks.stream.messages).map((message) => (
+        <AssistantMessage
+          key={message.id}
+          message={{ ...message, type: 'assistant' }}
+        />
+      ))}
+    </>
+  );
 }
 
 function externalMessages(text = 'External response'): StateType['messages'] {
-  return [{ id: 'message-1', type: 'ai', executionId: 'root', content: [
-    { type: 'text', text: 'Main response' },
-    { type: 'text', text, executionId: 'external-1', parentExecutionId: 'root' },
-    { type: 'text', text: 'Unchanged sub-agent output', executionId: 'sub-1', parentExecutionId: 'root' },
-  ], agentRuns: [
-    { id: 'external-1', parentId: 'root', invocationKind: 'external_assistant', title: 'External review', model: 'model-review', status: 'running' },
-    { id: 'sub-1', parentId: 'root', invocationKind: 'sub_agent', title: 'Internal reviewer', status: 'running' },
-  ] }];
+  return [
+    {
+      id: 'message-1',
+      type: 'ai',
+      executionId: 'root',
+      content: [
+        { type: 'text', text: 'Main response' },
+        {
+          type: 'text',
+          text,
+          executionId: 'external-1',
+          parentExecutionId: 'root',
+        },
+        {
+          type: 'text',
+          text: 'Unchanged sub-agent output',
+          executionId: 'sub-1',
+          parentExecutionId: 'root',
+        },
+      ],
+      agentRuns: [
+        {
+          id: 'external-1',
+          parentId: 'root',
+          invocationKind: 'external_assistant',
+          title: 'External review',
+          model: 'model-review',
+          status: 'running',
+        },
+        {
+          id: 'sub-1',
+          parentId: 'root',
+          invocationKind: 'sub_agent',
+          title: 'Internal reviewer',
+          status: 'running',
+        },
+      ],
+    },
+  ];
 }
 
 const manifest: XpertExtensionViewManifest = {
@@ -211,6 +250,296 @@ describe('WorkbenchShell', () => {
     window.localStorage.clear();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
+
+  it('opens side chat from the guide without requiring a message reference', async () => {
+    mocks.listSlotViews.mockResolvedValue([]);
+    mocks.copyThread.mockResolvedValue({ thread_id: 'side-thread' });
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}>
+      <WorkbenchToggleButton />
+      <input aria-label="Draft" defaultValue="Keep my draft" />
+    </WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Side chat' }));
+    await screen.findByTestId('side-chat');
+    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1');
+    expect(mocks.sideChatProps?.referenceRequest).toBeUndefined();
+    expect(screen.getByLabelText('Draft')).toHaveValue('Keep my draft');
+    expect(screen.queryByRole('tab', { name: 'New tab' })).not.toBeInTheDocument();
+  });
+
+  it('creates independent guide tabs without reloading views or losing the draft', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+        <input aria-label="Draft" defaultValue="Keep my message" />
+      </WorkbenchShell>,
+    );
+    setObservedWidth(1200);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const source = await screen.findByTestId('remote-view');
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    const first = screen.getByRole('tab', { name: 'New tab' });
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(source).not.toBeVisible();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'first query' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    expect(screen.getAllByRole('tab', { name: 'New tab' })).toHaveLength(2);
+    expect(screen.getByRole('searchbox')).toHaveValue('');
+    fireEvent.click(first);
+    expect(screen.getByRole('searchbox')).toHaveValue('first query');
+    expect(mocks.remoteUnmounts).toBe(0);
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Close new tab' })[1],
+    );
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close views: Documents' }),
+    );
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Close new tab' })[0],
+    );
+    expect(screen.getByRole('tab', { name: 'New tab' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByLabelText('Draft')).toHaveValue('Keep my message');
+    fireEvent.click(screen.getByRole('button', { name: 'Close new tab' }));
+    expect(screen.getByLabelText('Open views')).toBeEnabled();
+  });
+
+  it('opens authorized tools and dynamic views from the guide and reuses existing tabs', async () => {
+    mocks.listSlotViews.mockResolvedValue([
+      manifest,
+      {
+        ...manifest,
+        key: 'studio',
+        title: 'Studio',
+        workbench: { openMode: 'on-demand', menu: { enabled: true } },
+      },
+      { ...manifest, key: 'hidden', title: 'Hidden view', visible: false },
+      {
+        ...manifest,
+        key: 'no-menu',
+        title: 'No menu view',
+        workbench: { openMode: 'on-demand', menu: { enabled: false } },
+      },
+    ]);
+    render(
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const source = await screen.findByTestId('remote-view');
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    expect(
+      screen.queryByRole('button', { name: 'Hidden view' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'No menu view' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Recommended' })).getByRole(
+        'button',
+        { name: 'Studio' },
+      ),
+    );
+    expect(screen.getByRole('tab', { name: 'Studio' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(
+      screen.queryByRole('tab', { name: 'New tab' }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    expect(
+      within(screen.getByRole('region', { name: 'Recommended' })).queryByRole(
+        'button',
+        { name: 'Documents' },
+      ),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
+    expect(screen.getAllByRole('tab', { name: 'Documents' })).toHaveLength(1);
+    expect(source).toBeVisible();
+    expect(mocks.remoteUnmounts).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Close new tab' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close views: Documents' }),
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'New tab' }));
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Recommended' })).getByRole(
+        'button',
+        { name: 'Documents' },
+      ),
+    );
+    expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  it('keeps recent files after close, reopens their evidence and preserves other preview frames', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await screen.findByTestId('remote-view');
+    await act(async () => {
+      await mocks.remoteViewProps?.onClientCommand(
+        'workbench.file.open',
+        {
+          name: 'Report',
+          url: 'https://example.org/report.pdf',
+          evidence: { text: 'Source passage', locator: { page: 3 } },
+        },
+        manifest,
+      );
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close views: Report' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    fireEvent.click(screen.getByRole('button', { name: /Report File/ }));
+    expect(screen.getByText('Source passage')).toBeVisible();
+    expect(
+      within(screen.getByRole('region', { name: 'Report' })).getByTitle(
+        'Report',
+      ),
+    ).toHaveAttribute('src', 'https://example.org/report.pdf#page=3');
+    const frame = within(
+      screen.getByRole('region', { name: 'Report' }),
+    ).getByTitle('Report');
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    const search = screen.getByRole('searchbox');
+    fireEvent.change(search, {
+      target: { value: 'https://example.org/site.html' },
+    });
+    fireEvent.submit(screen.getByRole('search'));
+    expect(screen.getByRole('tab', { name: 'site.html' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(frame).toBeInTheDocument();
+    expect(frame).not.toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    let recent = screen.getByRole('region', { name: 'Recently opened' });
+    expect(within(recent).getAllByRole('button')[0]).toHaveTextContent(
+      'site.html',
+    );
+    fireEvent.click(
+      within(recent).getByRole('button', { name: /Report File/ }),
+    );
+    expect(screen.getAllByRole('tab', { name: 'Report' })).toHaveLength(1);
+    expect(
+      within(screen.getByRole('region', { name: 'Report' })).getByTitle(
+        'Report',
+      ),
+    ).toBe(frame);
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    recent = screen.getByRole('region', { name: 'Recently opened' });
+    expect(within(recent).getAllByRole('button')).toHaveLength(2);
+    expect(within(recent).getAllByRole('button')[0]).toHaveTextContent(
+      'Report',
+    );
+  });
+
+  it.each([
+    'projectId',
+    'conversationId',
+    'organizationId',
+    'assistantId',
+  ] as const)(
+    'clears new tabs and recent files when %s changes',
+    async (field) => {
+      mocks.listSlotViews.mockResolvedValue([manifest]);
+      const onContext = vi.fn();
+      const tree = () => (
+        <WorkbenchShell
+          options={{ ...baseOptions, workbench: { enabled: true } }}
+          locale="en-US"
+          onRequestContextChange={onContext}
+        >
+          <WorkbenchToggleButton />
+        </WorkbenchShell>
+      );
+      const { rerender } = render(tree());
+      await waitFor(() =>
+        expect(screen.getByLabelText('Open views')).toBeEnabled(),
+      );
+      fireEvent.click(screen.getByLabelText('Open views'));
+      await screen.findByTestId('remote-view');
+      await act(async () => {
+        await mocks.remoteViewProps?.onClientCommand(
+          'workbench.file.open',
+          { name: 'Private file', url: 'https://example.org/private.pdf' },
+          manifest,
+        );
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      expect(
+        screen.getByRole('button', { name: /Private file File/ }),
+      ).toBeVisible();
+      mocks.stream[field] = 'new-scope';
+      rerender(tree());
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('tab', { name: 'New tab' }),
+        ).not.toBeInTheDocument(),
+      );
+      if (screen.queryByLabelText('Open views')) {
+        await waitFor(() =>
+          expect(screen.getByLabelText('Open views')).toBeEnabled(),
+        );
+        fireEvent.click(screen.getByLabelText('Open views'));
+      }
+      await screen.findByRole('tab', { name: 'Documents' });
+      fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+      expect(
+        screen.getByRole('region', { name: 'Recently opened' }),
+      ).toHaveTextContent(
+        'Files and websites opened in this conversation will appear here.',
+      );
+      expect(
+        screen.queryByRole('tab', { name: 'Private file' }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it('opens on-demand views only on a scoped live request and allows close/reopen', async () => {
     const timeline = {
@@ -495,30 +824,54 @@ describe('WorkbenchShell', () => {
   it('moves only external output into a live native tab and reopens it without creating a thread', () => {
     mocks.stream.messages = externalMessages();
     const onContext = vi.fn();
-    const tree = () => <WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={onContext}><ExternalTranscript /></WorkbenchShell>;
+    const tree = () => (
+      <WorkbenchShell
+        options={baseOptions}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <ExternalTranscript />
+      </WorkbenchShell>
+    );
     const { rerender } = render(tree());
     expect(screen.getByText('Main response')).toBeInTheDocument();
     expect(screen.getByText('Unchanged sub-agent output')).toBeInTheDocument();
     expect(screen.queryByText('External response')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
-    expect(screen.getByRole('tab', { name: 'External assistants' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View execution: External review' }),
+    );
+    expect(
+      screen.getByRole('tab', { name: 'External assistants' }),
+    ).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('External response')).toBeInTheDocument();
     expect(screen.getByText('model-review')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
-    expect(screen.getAllByRole('tab', { name: 'External assistants' })).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View execution: External review' }),
+    );
+    expect(
+      screen.getAllByRole('tab', { name: 'External assistants' }),
+    ).toHaveLength(1);
     mocks.stream.messages = externalMessages('External response updated');
     rerender(tree());
     expect(screen.getByText('External response updated')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close external assistants' }));
-    expect(screen.queryByText('External response updated')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close external assistants' }),
+    );
+    expect(
+      screen.queryByText('External response updated'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View execution: External review' }),
+    );
     expect(screen.getByText('External response updated')).toBeInTheDocument();
     expect(mocks.copyThread).not.toHaveBeenCalled();
     expect(mocks.listSlotViews).not.toHaveBeenCalled();
     mocks.stream.threadId = 'thread-2';
     mocks.stream.messages = [];
     rerender(tree());
-    expect(screen.queryByRole('tab', { name: 'External assistants' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('tab', { name: 'External assistants' }),
+    ).not.toBeInTheDocument();
   });
 
   it('keeps native details available while remote views load and after they fail', async () => {
@@ -603,22 +956,46 @@ describe('WorkbenchShell', () => {
     mocks.stream.messages = externalMessages('**Expert response**');
     const info = mocks.stream.messages[0].agentRuns![0];
     info.inputs = { input: 'Review this document' };
-    const tree = () => <WorkbenchShell options={baseOptions} locale="en-US" onRequestContextChange={vi.fn()}><ExternalTranscript /></WorkbenchShell>;
+    const tree = () => (
+      <WorkbenchShell
+        options={baseOptions}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <ExternalTranscript />
+      </WorkbenchShell>
+    );
     const { rerender } = render(tree());
-    fireEvent.click(screen.getByRole('button', { name: 'View execution: External review' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'View execution: External review' }),
+    );
     const panel = screen.getByRole('tabpanel', { name: 'External assistants' });
-    const transcript = panel.querySelector('[data-slot="chatkit-message-list"]')! as HTMLElement;
-    expect(within(transcript).getByText('Review this document')).toHaveClass('text-sm');
-    expect(within(transcript).getByText('Expert response').tagName).toBe('STRONG');
+    const transcript = panel.querySelector(
+      '[data-slot="chatkit-message-list"]',
+    )! as HTMLElement;
+    expect(within(transcript).getByText('Review this document')).toHaveClass(
+      'text-sm',
+    );
+    expect(within(transcript).getByText('Expert response').tagName).toBe(
+      'STRONG',
+    );
     // Only the input can be copied while the answer is still streaming.
-    expect(within(transcript).getAllByRole('button', { name: 'Copy to clipboard' })).toHaveLength(1);
+    expect(
+      within(transcript).getAllByRole('button', { name: 'Copy to clipboard' }),
+    ).toHaveLength(1);
     info.status = 'success';
     mocks.stream.messages = [...mocks.stream.messages];
     rerender(tree());
-    expect(within(transcript).getAllByRole('button', { name: 'Copy to clipboard' })).toHaveLength(2);
-    expect(within(transcript).queryByRole('button', { name: 'Regenerate response' })).not.toBeInTheDocument();
+    expect(
+      within(transcript).getAllByRole('button', { name: 'Copy to clipboard' }),
+    ).toHaveLength(2);
+    expect(
+      within(transcript).queryByRole('button', { name: 'Regenerate response' }),
+    ).not.toBeInTheDocument();
     expect(within(panel).queryByText('Main response')).not.toBeInTheDocument();
-    expect(within(panel).queryByText('Unchanged sub-agent output')).not.toBeInTheDocument();
+    expect(
+      within(panel).queryByText('Unchanged sub-agent output'),
+    ).not.toBeInTheDocument();
     expect(mocks.submit).not.toHaveBeenCalled();
   });
 
@@ -1003,31 +1380,50 @@ describe('WorkbenchShell', () => {
 
   it('remembers pane positions per assistant while narrow drawers leave the desktop preference intact', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
-    const tree = () => <WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>;
+    const tree = () => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>
+    );
     const first = render(tree());
     setObservedWidth(1200);
-    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
     fireEvent.click(screen.getByLabelText('Open views'));
     fireEvent.click(screen.getByLabelText('Swap left and right panes'));
     first.unmount();
     const second = render(tree());
     setObservedWidth(1200);
     await screen.findByRole('separator');
-    const root = second.container.querySelector('[data-chatkit-workbench-root]');
+    const root = second.container.querySelector(
+      '[data-chatkit-workbench-root]',
+    );
     expect(root).toHaveClass('flex-row-reverse');
     setObservedWidth(720);
     expect(root).not.toHaveClass('flex-row-reverse');
-    expect(screen.queryByLabelText('Swap left and right panes')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Swap left and right panes'),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Open views'));
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
     setObservedWidth(1200);
     expect(root).toHaveClass('flex-row-reverse');
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '540');
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '540',
+    );
     mocks.stream.assistantId = 'agent-2';
     second.rerender(tree());
     expect(root).not.toHaveClass('flex-row-reverse');
-    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
     mocks.stream.assistantId = 'agent-1';
     second.rerender(tree());
     expect(root).toHaveClass('flex-row-reverse');
@@ -1037,13 +1433,27 @@ describe('WorkbenchShell', () => {
   it('restores each assistant layout after remount, preserving chat width when the window changes', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     const onContext = vi.fn();
-    const tree = () => <WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US" onRequestContextChange={onContext}><WorkbenchToggleButton /><input aria-label="Draft message" /></WorkbenchShell>;
+    const tree = () => (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+      >
+        <WorkbenchToggleButton />
+        <input aria-label="Draft message" />
+      </WorkbenchShell>
+    );
     const first = render(tree());
     setObservedWidth(1200);
-    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
     fireEvent.click(screen.getByLabelText('Open views'));
     fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' });
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '556',
+    );
     fireEvent.click(screen.getByLabelText('Expand panel'));
     first.unmount();
 
@@ -1052,26 +1462,44 @@ describe('WorkbenchShell', () => {
     await screen.findByLabelText('Restore panel');
     expect(screen.getByLabelText('Draft message')).not.toBeVisible();
     fireEvent.click(screen.getByLabelText('Restore panel'));
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '556',
+    );
 
     mocks.stream.assistantId = 'agent-2';
     second.rerender(tree());
-    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
     expect(screen.queryByRole('separator')).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Open views'));
     fireEvent.keyDown(screen.getByRole('separator'), { key: 'End' });
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '920');
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '920',
+    );
     mocks.stream.assistantId = 'agent-1';
     second.rerender(tree());
-    await waitFor(() => expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556'));
+    await waitFor(() =>
+      expect(screen.getByRole('separator')).toHaveAttribute(
+        'aria-valuenow',
+        '556',
+      ),
+    );
     mocks.stream.threadId = 'another-thread';
     second.rerender(tree());
-    expect(screen.getByRole('separator')).toHaveAttribute('aria-valuenow', '556');
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '556',
+    );
     fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
     second.unmount();
     render(tree());
     setObservedWidth(1200);
-    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
     expect(screen.queryByRole('separator')).not.toBeInTheDocument();
   });
 
@@ -1419,6 +1847,7 @@ describe('WorkbenchShell', () => {
         expect(screen.getByLabelText('Open views')).toBeEnabled(),
       );
       fireEvent.click(screen.getByLabelText('Open views'));
+      fireEvent.click(await screen.findByRole('tab', { name: 'Documents' }));
       await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
       for (let i = 0; i < 2; i++) {
         let response!: Promise<unknown>;
@@ -1443,9 +1872,7 @@ describe('WorkbenchShell', () => {
           await screen.findByText('External response'),
         ).toBeInTheDocument();
         if (i === 0)
-          fireEvent.click(
-            screen.getByLabelText('Close external assistants'),
-          );
+          fireEvent.click(screen.getByLabelText('Close external assistants'));
       }
       expect(screen.getByLabelText('Draft')).toHaveValue('Keep my draft');
       expect(onClientCommand).not.toHaveBeenCalled();

@@ -110,6 +110,12 @@ function Panel() {
       locale="en-US"
       visible
       previews={[]}
+      newTabs={[]}
+      recent={[]}
+      onNewTab={noop}
+      onCloseNewTab={noop}
+      onNavigateNewTab={noop}
+      onPreviewFromNewTab={noop}
       viewQueries={{}}
       views={[]}
       activeView={null}

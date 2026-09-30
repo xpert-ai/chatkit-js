@@ -1,3 +1,5 @@
+import { useNativeWorkbench, NATIVE_PREFIX } from './native/useNativeWorkbench';
+import { NativeCloseDialog } from './native/NativeCloseDialog';
 import { useResourceCardNavigation } from './useResourceCardNavigation';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
 import { useExecutionFocus } from './useExecutionFocus';
@@ -60,6 +62,11 @@ import {
 
 import { useWorkbenchResize } from './useWorkbenchResize';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
+import {
+  isWorkbenchNewTab,
+  NEW_TAB_PREFIX,
+  useWorkbenchPages,
+} from './useWorkbenchPages';
 import { executeWorkbenchCommand, unsupportedCommand } from './client-commands';
 import {
   parseNavigation,
@@ -73,7 +80,9 @@ import { workbenchLayoutKey } from './layout-storage';
 import { WorkbenchDivider } from './WorkbenchDivider';
 
 const isNativeView = (key: string | null) =>
-  key === SIDE_CHAT_VIEW_KEY || key === EXTERNAL_ASSISTANTS_VIEW_KEY;
+  key === SIDE_CHAT_VIEW_KEY ||
+  key === EXTERNAL_ASSISTANTS_VIEW_KEY ||
+  Boolean(key?.startsWith(NATIVE_PREFIX));
 const NARROW_BREAKPOINT = 960;
 export type WorkbenchAssistantContext = {
   env?: Record<string, string>;
@@ -106,7 +115,8 @@ export function WorkbenchShell({
   const stream = useStreamContext();
   const parentMessenger = useParentMessenger();
   const remoteViewsEnabled = options?.workbench?.enabled === true;
-  const sideChatEnabled = options?.workbench?.sideChat?.enabled === true;
+  const sideChatEnabled =
+    options?.workbench?.sideChat?.enabled ?? remoteViewsEnabled;
   const externalAssistantsEnabled =
     options?.workbench?.externalAssistants?.enabled !== false;
   const workbenchMessages = React.useMemo(
@@ -138,7 +148,6 @@ export function WorkbenchShell({
   const rootRef = React.useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = React.useState(0);
   const [activeViewKey, setActiveViewKey] = React.useState<string | null>(null);
-  const [previews, setPreviews] = React.useState<WorkbenchPreview[]>([]);
   const [viewQueries, setViewQueries] = React.useState<
     Record<string, XpertViewQuery>
   >({});
@@ -174,6 +183,21 @@ export function WorkbenchShell({
     runtimeScope.projectId,
     runtimeScope.conversationId,
   ]);
+  const native = useNativeWorkbench(
+    JSON.stringify([viewScopeKey, authenticated, enabled]),
+  );
+  const {
+    previews,
+    newTabs,
+    recent,
+    reset: resetPages,
+    clearPreviews,
+    addNewTab,
+    closeNewTab,
+    openPreview: storePreview,
+    closePreview: removePreview,
+    visitPreview,
+  } = useWorkbenchPages(JSON.stringify([viewScopeKey, authenticated, enabled]));
   const { views, viewsScope, loading, error } = useWorkbenchViews({
     client: viewHosts,
     hostId: stream.assistantId,
@@ -196,7 +220,10 @@ export function WorkbenchShell({
         Boolean(stream.assistantId.trim()) &&
         stream.historyLoad?.status !== 'error' &&
         (stream.runtimeScopeReady === false ||
-          (remoteViewsEnabled && !hasExternalRuns && viewsScope !== viewScopeKey && !error))),
+          (remoteViewsEnabled &&
+            !hasExternalRuns &&
+            viewsScope !== viewScopeKey &&
+            !error))),
   );
   const {
     requestedOpen,
@@ -221,6 +248,43 @@ export function WorkbenchShell({
     onOpen: setOpen,
     setQueries: setViewQueries,
   });
+  const openPreview = React.useCallback(
+    (preview: WorkbenchPreview) => {
+      storePreview(preview);
+      setActiveViewKey(preview.key);
+      setOpen(true);
+    },
+    [storePreview, setOpen],
+  );
+  const createNewTab = () => {
+    const key = `${NEW_TAB_PREFIX}${createMessageId()}`;
+    addNewTab(key);
+    setActiveViewKey(key);
+    setOpen(true);
+  };
+  const selectTab = (key: string) => {
+    if (views.some((view) => view.key === key)) selectView(key);
+    else setActiveViewKey(key);
+    visitPreview(key);
+  };
+  const tabKeys = React.useMemo(
+    () => [
+      ...native.tabs.map((tab) => tab.key),
+      ...(externalViewOpen ? [EXTERNAL_ASSISTANTS_VIEW_KEY] : []),
+      ...(sideChat ? [SIDE_CHAT_VIEW_KEY] : []),
+      ...previews.map((preview) => preview.key),
+      ...scopedViews.map((view) => view.key),
+      ...newTabs,
+    ],
+    [native.tabs, externalViewOpen, sideChat, previews, scopedViews, newTabs],
+  );
+  const adjacentTab = React.useCallback(
+    (key: string) => {
+      const index = tabKeys.indexOf(key);
+      return tabKeys[index - 1] ?? tabKeys[index + 1] ?? null;
+    },
+    [tabKeys],
+  );
   const open =
     requestedOpen &&
     enabled &&
@@ -243,31 +307,53 @@ export function WorkbenchShell({
   }, []);
 
   React.useEffect(() => {
-    setPreviews([]);
+    resetPages();
     setViewQueries({});
-    setActiveViewKey((current) => (isNativeView(current) ? current : null));
+    setActiveViewKey((current) =>
+      isNativeView(current) && !current?.startsWith(NATIVE_PREFIX)
+        ? current
+        : null,
+    );
     setNotification(null);
     setHostEvent(null);
     contextsRef.current.clear();
     onRequestContextChange({});
-  }, [viewScopeKey, authenticated, remoteViewsEnabled, onRequestContextChange]);
+  }, [
+    viewScopeKey,
+    authenticated,
+    remoteViewsEnabled,
+    onRequestContextChange,
+    resetPages,
+  ]);
 
   React.useEffect(() => {
     if (views.length === 0) {
-      setPreviews([]);
+      clearPreviews();
       setViewQueries({});
-      setActiveViewKey((current) => (isNativeView(current) ? current : null));
+      setActiveViewKey((current) =>
+        isNativeView(current) || isWorkbenchNewTab(current) ? current : null,
+      );
       contextsRef.current.clear();
       onRequestContextChange({});
       return;
     }
     if (viewsScope !== viewScopeKey) return;
     setActiveViewKey((current) =>
-      isNativeView(current) || (current && views.some((view) => view.key === current))
+      isNativeView(current) ||
+      isWorkbenchNewTab(current) ||
+      current?.startsWith('chatkit.preview.') ||
+      (current && scopedViews.some((view) => view.key === current))
         ? current
         : (scopedViews[0]?.key ?? null),
     );
-  }, [views, scopedViews, viewsScope, viewScopeKey, onRequestContextChange]);
+  }, [
+    views,
+    scopedViews,
+    viewsScope,
+    viewScopeKey,
+    onRequestContextChange,
+    clearPreviews,
+  ]);
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -290,12 +376,10 @@ export function WorkbenchShell({
     ) {
       setExternalSession(null);
       if (activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY) {
-        setActiveViewKey(
-          sideChat ? SIDE_CHAT_VIEW_KEY : (scopedViews[0]?.key ?? null),
-        );
-        if (!sideChat && !scopedViews.length) {
-          dismiss();
-        }
+        const next =
+          tabKeys.find((key) => key !== EXTERNAL_ASSISTANTS_VIEW_KEY) ?? null;
+        setActiveViewKey(next);
+        if (!next) dismiss();
       }
     }
   }, [
@@ -303,8 +387,7 @@ export function WorkbenchShell({
     externalScope,
     externalSession,
     activeViewKey,
-    sideChat,
-    scopedViews,
+    tabKeys,
     dismiss,
   ]);
 
@@ -375,7 +458,7 @@ export function WorkbenchShell({
   });
 
   const askInSideChat = React.useCallback(
-    async (reference: ChatKitReference) => {
+    async (reference?: ChatKitReference) => {
       if (!sideChatEnabled) return;
       const sourceThreadId = stream.threadId?.trim();
       if (!sourceThreadId) {
@@ -402,16 +485,20 @@ export function WorkbenchShell({
           title:
             current?.sourceThreadId === sourceThreadId
               ? current.title
-              : (reference.type === 'thread'
-                  ? reference.label || reference.threadId
-                  : reference.text
-                )
-                  .trim()
-                  .slice(0, 32) || t('workbench.sideChat.title'),
-          referenceRequest: {
-            id: `${Date.now()}-${(reference.type === 'thread' ? reference.threadId : reference.text).slice(0, 24)}`,
-            reference,
-          },
+              : reference
+                ? (reference.type === 'thread'
+                    ? reference.label || reference.threadId
+                    : reference.text
+                  )
+                    .trim()
+                    .slice(0, 32) || t('workbench.sideChat.title')
+                : t('workbench.sideChat.title'),
+          referenceRequest: reference
+            ? {
+                id: `${Date.now()}-${(reference.type === 'thread' ? reference.threadId : reference.text).slice(0, 24)}`,
+                reference,
+              }
+            : undefined,
         }));
       } catch (copyError) {
         sideThreadBySourceRef.current.delete(sourceThreadId);
@@ -432,10 +519,18 @@ export function WorkbenchShell({
     enabled: remoteViewsEnabled && authenticated,
     ready: !loading && viewsScope === viewScopeKey,
     restore: (target) => {
-      if (target.target !== 'workbench.view' || !views.some((view) => view.key === target.viewKey)) return false;
-      setViewQueries((current) => ({ ...current, [target.viewKey]: {
-        selectionId: target.selectionId, parameters: target.parameters,
-      } }));
+      if (
+        target.target !== 'workbench.view' ||
+        !views.some((view) => view.key === target.viewKey)
+      )
+        return false;
+      setViewQueries((current) => ({
+        ...current,
+        [target.viewKey]: {
+          selectionId: target.selectionId,
+          parameters: target.parameters,
+        },
+      }));
       selectView(target.viewKey);
       setOpen(true);
       return true;
@@ -592,14 +687,7 @@ export function WorkbenchShell({
           setOpen(true);
           return true;
         },
-        openPreview: (preview) => {
-          setPreviews((current) => [
-            ...current.filter((item) => item.key !== preview.key),
-            preview,
-          ]);
-          setActiveViewKey(preview.key);
-          setOpen(true);
-        },
+        openPreview,
         revealChat: () => {
           setExpanded(false);
           if (isNarrow) setOpen(false);
@@ -628,6 +716,7 @@ export function WorkbenchShell({
     },
     [
       options?.request,
+      openPreview,
       views,
       selectView,
       setOpen,
@@ -675,7 +764,8 @@ export function WorkbenchShell({
     (enabled &&
       authenticated &&
       Boolean(stream.assistantId.trim()) &&
-      (Boolean(sideChat) || (remoteViewsEnabled && (!loading || views.length > 0))));
+      (Boolean(sideChat) ||
+        (remoteViewsEnabled && (!loading || views.length > 0))));
   const disabledReason = hasExternalRuns
     ? undefined
     : !stream.assistantId.trim()
@@ -700,12 +790,10 @@ export function WorkbenchShell({
     setSideChat(null);
     setSideChatOpening(false);
     setSideChatCloseDialogOpen(false);
-    const nextViewKey = externalViewOpen
-      ? EXTERNAL_ASSISTANTS_VIEW_KEY
-      : (scopedViews[0]?.key ?? null);
+    const nextViewKey = adjacentTab(SIDE_CHAT_VIEW_KEY);
     setActiveViewKey(nextViewKey);
     if (!nextViewKey) closeWorkbench();
-  }, [closeWorkbench, sideChat?.sourceThreadId, scopedViews, externalViewOpen]);
+  }, [closeWorkbench, sideChat?.sourceThreadId, adjacentTab]);
   const requestCloseSideChat = React.useCallback(() => {
     if (!sideChat) return;
     if (sideChatCloseConfirmationDisabled) {
@@ -746,9 +834,18 @@ export function WorkbenchShell({
       externalAssistantsEnabled,
       openExternalAssistant,
       openResourceCard: async (card, messageId) => {
-        const result = await executeClientCommand('workbench.navigation.open', card.data.open,
-          { key: card.data.open.viewKey }, { messageId, id: card.id });
-        if (result && typeof result === 'object' && 'success' in result && result.success === true)
+        const result = await executeClientCommand(
+          'workbench.navigation.open',
+          card.data.open,
+          { key: card.data.open.viewKey },
+          { messageId, id: card.id },
+        );
+        if (
+          result &&
+          typeof result === 'object' &&
+          'success' in result &&
+          result.success === true
+        )
           rememberResourceCard(card.data.open);
         return result;
       },
@@ -805,17 +902,78 @@ export function WorkbenchShell({
   const panelHost = useWorkbenchPanelHost();
   const panel = (
     <WorkbenchPanel
+      native={native}
+      sideChatEnabled={sideChatEnabled}
+      onOpenNative={(tool, fromTab) => {
+        if (tool === 'side-chat') {
+          void askInSideChat()
+            .then(() => {
+              if (fromTab) closeNewTab(fromTab);
+            })
+            .catch((error: unknown) =>
+              setNotification({
+                level: 'error',
+                message: getErrorMessage(error, t('workbench.files.failed')),
+              }),
+            );
+        } else {
+          if (fromTab) closeNewTab(fromTab);
+          setActiveViewKey(native.openTool(tool));
+          setOpen(true);
+        }
+      }}
+      onOpenNativeFile={(file, fromTab) => {
+        if (fromTab) closeNewTab(fromTab);
+        setActiveViewKey(native.openFile(file));
+        setOpen(true);
+      }}
+      onCloseNative={(key) => {
+        if (native.requestClose(key) && activeViewKey === key) {
+          const next = adjacentTab(key);
+          setActiveViewKey(next);
+          if (!next) closeWorkbench();
+        }
+      }}
       visible={open}
       previews={previews}
       viewQueries={viewQueries}
+      newTabs={newTabs}
+      recent={recent}
+      onNewTab={createNewTab}
+      onCloseNewTab={(key) => {
+        closeNewTab(key);
+        if (activeViewKey === key) {
+          const next = adjacentTab(key);
+          setActiveViewKey(next);
+          if (!next) closeWorkbench();
+        }
+      }}
+      onNavigateNewTab={(tabKey, viewKey) => {
+        if (!menuViews.some((view) => view.key === viewKey)) return;
+        closeNewTab(tabKey);
+        selectView(viewKey);
+      }}
+      onPreviewFromNewTab={(tabKey, preview) => {
+        closeNewTab(tabKey);
+        openPreview(preview);
+      }}
       onClosePreview={(key) => {
-        setPreviews((current) => current.filter((item) => item.key !== key));
-        if (activeViewKey === key) setActiveViewKey(scopedViews[0]?.key ?? null);
+        removePreview(key);
+        if (activeViewKey === key) {
+          const next = adjacentTab(key);
+          setActiveViewKey(next);
+          if (!next) closeWorkbench();
+        }
       }}
       views={scopedViews}
       availableViews={menuViews}
       onCloseView={(key) => {
-        if (closeView(key)) closeWorkbench();
+        closeView(key);
+        if (activeViewKey === key) {
+          const next = adjacentTab(key);
+          setActiveViewKey(next);
+          if (!next) closeWorkbench();
+        }
       }}
       activeView={activeView}
       activeViewKey={activeViewKey}
@@ -832,7 +990,7 @@ export function WorkbenchShell({
       }
       onCloseExternal={() => {
         setExternalSession(null);
-        const next = sideChat ? SIDE_CHAT_VIEW_KEY : (scopedViews[0]?.key ?? null);
+        const next = adjacentTab(EXTERNAL_ASSISTANTS_VIEW_KEY);
         setActiveViewKey(next);
         if (!next) closeWorkbench();
       }}
@@ -851,7 +1009,7 @@ export function WorkbenchShell({
       onRequestCloseSideChat={requestCloseSideChat}
       onToggleExpanded={() => setExpanded((current) => !current)}
       onReload={() => setReloadVersion((version) => version + 1)}
-      onSelect={selectView}
+      onSelect={selectTab}
       onNotify={(level, message) => {
         setNotification({ level, message });
         window.setTimeout(() => {
@@ -976,6 +1134,31 @@ export function WorkbenchShell({
         {panelHost.container &&
           (open || Boolean(sideChat) || externalViewOpen) &&
           createPortal(panel, panelHost.container)}
+        <NativeCloseDialog
+          open={Boolean(native.pending)}
+          onCancel={() => native.setPending(null)}
+          onDiscard={() => {
+            const key = native.pending;
+            if (!key) return;
+            native.discard(key);
+            if (activeViewKey === key) {
+              const next = adjacentTab(key);
+              setActiveViewKey(next);
+              if (!next) closeWorkbench();
+            }
+          }}
+          onSave={async () => {
+            const key = native.pending;
+            if (!key) return;
+            if (await native.saveAndClose(key)) {
+              if (activeViewKey === key) {
+                const next = adjacentTab(key);
+                setActiveViewKey(next);
+                if (!next) closeWorkbench();
+              }
+            }
+          }}
+        />
         <SideChatCloseDialog
           open={sideChatCloseDialogOpen}
           onOpenChange={setSideChatCloseDialogOpen}

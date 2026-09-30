@@ -151,7 +151,7 @@ export function WorkbenchTabs({
   };
 
   return (
-    <div ref={root} className="flex min-w-0 flex-1 items-center gap-1">
+    <div ref={root} className="flex min-w-0 flex-initial items-center gap-1">
       {edges.overflow && arrow(-1)}
       <div
         ref={viewport}

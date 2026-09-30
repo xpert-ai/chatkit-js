@@ -20,18 +20,22 @@ export function useWorkbenchViewTabs(options: {
   >;
 }) {
   const { views, scope, onSelect, onOpen, setQueries } = options;
-  const [opened, setOpened] = React.useState<{ scope: string; keys: string[] }>(
-    {
-      scope: '',
-      keys: [],
-    },
-  );
+  const [opened, setOpened] = React.useState<{
+    scope: string;
+    keys: string[];
+    closed: string[];
+  }>({
+    scope: '',
+    keys: [],
+    closed: [],
+  });
   const scopedViews = React.useMemo(
     () =>
       views.filter(
         (view) =>
-          view.workbench?.openMode !== 'on-demand' ||
-          (opened.scope === scope && opened.keys.includes(view.key)),
+          !(opened.scope === scope && opened.closed.includes(view.key)) &&
+          (view.workbench?.openMode !== 'on-demand' ||
+            (opened.scope === scope && opened.keys.includes(view.key))),
       ),
     [views, opened, scope],
   );
@@ -39,6 +43,10 @@ export function useWorkbenchViewTabs(options: {
     (key: string) => {
       setOpened((current) => ({
         scope,
+        closed:
+          current.scope === scope
+            ? current.closed.filter((item) => item !== key)
+            : [],
         keys: Array.from(
           new Set([...(current.scope === scope ? current.keys : []), key]),
         ),
@@ -73,24 +81,19 @@ export function useWorkbenchViewTabs(options: {
     ),
   });
 
-  // Auto-open views preserve their existing panel-close behavior. On-demand views
-  // leave the tab list; the caller closes the panel if no other tab remains.
+  // Closing a tab does not revoke access; it can be opened again from the guide.
   const closeView = React.useCallback(
     (key: string) => {
-      if (
-        views.find((view) => view.key === key)?.workbench?.openMode !==
-        'on-demand'
-      )
-        return true;
       setOpened((current) => ({
-        ...current,
-        keys: current.keys.filter((item) => item !== key),
+        scope,
+        keys:
+          current.scope === scope
+            ? current.keys.filter((item) => item !== key)
+            : [],
+        closed: [...(current.scope === scope ? current.closed : []), key],
       }));
-      const next = scopedViews.find((view) => view.key !== key)?.key ?? null;
-      onSelect(next);
-      return !next;
     },
-    [views, scopedViews, onSelect],
+    [scope],
   );
 
   return { scopedViews, selectView, closeView };
