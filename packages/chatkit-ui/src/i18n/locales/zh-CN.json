@@ -34,6 +34,18 @@
       "conversationRequired": "开始对话后即可使用",
       "disabled": "当前未启用侧边聊天"
     },
+    "browser": {
+      "placeholder": "搜索或输入网址",
+      "back": "后退",
+      "forward": "前进",
+      "reload": "刷新",
+      "more": "页面选项",
+      "home": "回到新标签页",
+      "history": "最近访问的网页",
+      "noHistory": "当前对话还没有访问过网页。",
+      "copyUrl": "复制链接",
+      "suggestions": "地址建议"
+    },
     "executionUnavailable": "当前对话中找不到指定执行记录。",
     "title": "视图",
     "description": "远程工作台视图",

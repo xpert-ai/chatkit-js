@@ -192,6 +192,9 @@ export function WorkbenchShell({
     previews,
     newTabs,
     recent,
+    browserHistory,
+    navigateBrowser,
+    moveBrowser,
     reset: resetPages,
     clearPreviews,
     addNewTab,
@@ -348,10 +351,16 @@ export function WorkbenchShell({
 
   React.useEffect(() => {
     if (views.length === 0) {
-      clearPreviews();
+      // An empty recommendation list must not erase address-bar navigation.
+      const unavailable = viewsScope !== viewScopeKey;
+      if (unavailable) clearPreviews();
       setViewQueries({});
       setActiveViewKey((current) =>
-        isNativeView(current) || isWorkbenchNewTab(current) ? current : null,
+        isNativeView(current) ||
+        isWorkbenchNewTab(current) ||
+        (!unavailable && current?.startsWith('chatkit.preview.'))
+          ? current
+          : null,
       );
       contextsRef.current.clear();
       onRequestContextChange({});
@@ -973,6 +982,9 @@ export function WorkbenchShell({
       viewQueries={viewQueries}
       newTabs={newTabs}
       recent={recent}
+      browserHistory={browserHistory}
+      onNavigateBrowser={navigateBrowser}
+      onMoveBrowser={moveBrowser}
       onNewTab={createNewTab}
       onCloseNewTab={(key) => {
         closeNewTab(key);
@@ -988,6 +1000,12 @@ export function WorkbenchShell({
         selectView(viewKey);
       }}
       onPreviewFromNewTab={(tabKey, preview) => {
+        if (preview.kind === 'browser') {
+          navigateBrowser(tabKey, preview);
+          setActiveViewKey(tabKey);
+          setOpen(true);
+          return;
+        }
         replaceNewTab(tabKey, preview.key);
         openPreview(preview);
       }}

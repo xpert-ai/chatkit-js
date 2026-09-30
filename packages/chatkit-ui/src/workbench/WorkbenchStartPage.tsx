@@ -6,12 +6,10 @@ import type { XpertWorkspaceFile } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
 import {
-  ArrowUpRight,
   File,
   Globe,
   Layers,
   Loader2,
-  Search,
   Folder,
   Terminal,
   MessageSquarePlus,
@@ -19,15 +17,21 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
-import { Input } from '../components/ui/input';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { useTheme } from '../providers/Theme';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
-import { parsePreview, type WorkbenchPreview } from './client-command-payload';
+import type { WorkbenchPreview } from './client-command-payload';
+import {
+  WorkbenchAddressBar,
+  type BrowserNavigation,
+  type AddressSuggestion,
+} from './WorkbenchAddressBar';
+import { resolveWorkbenchAddress } from './workbench-address';
 import { resolveManifestText } from './manifest-text';
 import type { RecentWorkbenchPreview } from './useWorkbenchPages';
 
 export function WorkbenchStartPage({
+  navigation,
   views,
   openedViewKeys = [],
   recentFiles = [],
@@ -44,6 +48,7 @@ export function WorkbenchStartPage({
   onSelectView,
   onOpenPreview,
 }: {
+  navigation?: BrowserNavigation;
   views: XpertExtensionViewManifest[];
   openedViewKeys?: string[];
   recentFiles?: RecentWorkspaceFile[];
@@ -63,7 +68,6 @@ export function WorkbenchStartPage({
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
   const [query, setQuery] = React.useState('');
-  const [invalidUrl, setInvalidUrl] = React.useState(false);
   const search = query.trim().toLocaleLowerCase(locale);
   const label = (view: XpertExtensionViewManifest) =>
     resolveManifestText(
@@ -101,7 +105,9 @@ export function WorkbenchStartPage({
     item.file.filePath.toLocaleLowerCase(locale).includes(search),
   );
   const recentItems = recent.filter((item) =>
-    item.preview.title.toLocaleLowerCase(locale).includes(search),
+    `${item.preview.title} ${item.preview.url}`
+      .toLocaleLowerCase(locale)
+      .includes(search),
   );
   const matches =
     tools.length +
@@ -122,65 +128,48 @@ export function WorkbenchStartPage({
       fallback={<Layers size={size} className="text-muted-foreground" />}
     />
   );
-  const urlQuery = /^[a-z][a-z\d+.-]*:\/\//i.test(query.trim());
+  const urlQuery = resolveWorkbenchAddress(query, apiUrl).kind !== 'search';
+  const suggestions: AddressSuggestion[] = [
+    ...recent.map(({ preview }) => ({
+      key: preview.key,
+      title: preview.title,
+      detail: preview.url,
+      history: preview.kind === 'browser',
+      icon: preview.kind === 'file' ? <File size={16} /> : undefined,
+      onSelect: () => onOpenPreview(preview),
+    })),
+    ...recentFiles.map(({ file }) => ({
+      key: `file:${file.filePath}`,
+      title: file.filePath.split('/').pop() ?? file.filePath,
+      detail: file.filePath,
+      icon: <File size={16} />,
+      onSelect: () => onOpenFile?.(file),
+    })),
+    ...views.map((view) => ({
+      key: `view:${view.key}`,
+      title: label(view),
+      detail: description(view),
+      icon: icon(view, 16),
+      onSelect: () => onSelectView(view.key),
+    })),
+  ];
   return (
     <div
       className="flex h-full min-h-0 flex-col"
       style={getSurfaceThemeStyle(theme)}
     >
-      <form
-        role="search"
-        aria-label={t('workbench.start.search')}
-        className="flex shrink-0 items-center gap-2 border-y px-4 py-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!query.trim()) return;
-          if (!urlQuery) return;
-          const preview = parsePreview(
-            'browser',
-            { url: query.trim() },
-            apiUrl,
-          );
-          if (!preview) {
-            setInvalidUrl(true);
-            return;
-          }
-          onOpenPreview(preview);
-        }}
-      >
-        <Search
-          size={16}
-          className="shrink-0 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <Input
-          type="search"
-          autoFocus
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setInvalidUrl(false);
-          }}
-          aria-label={t('workbench.start.search')}
-          placeholder={t('workbench.start.search')}
-          className="min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
-        />
-        {urlQuery && (
-          <button
-            type="submit"
-            className="shrink-0 rounded-[var(--chat-item-radius)] px-3 py-1.5 text-sm hover:bg-muted"
-          >
-            {t('workbench.start.openUrl')}
-          </button>
-        )}
-      </form>
+      <WorkbenchAddressBar
+        value={query}
+        onChange={setQuery}
+        apiUrl={apiUrl}
+        suggestions={suggestions}
+        onOpen={onOpenPreview}
+        onReload={onReload}
+        loading={loading}
+        navigation={navigation}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto w-full max-w-4xl space-y-9 px-5 py-7 sm:px-8">
-          {invalidUrl && (
-            <p role="alert" className="text-sm text-destructive">
-              {t('workbench.start.invalidUrl')}
-            </p>
-          )}
           {error && (
             <div
               role="alert"

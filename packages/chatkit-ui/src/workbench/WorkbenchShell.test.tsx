@@ -405,14 +405,14 @@ describe('WorkbenchShell', () => {
     const first = screen.getByRole('tab', { name: 'New tab' });
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(source).not.toBeVisible();
-    fireEvent.change(screen.getByRole('searchbox'), {
+    fireEvent.change(screen.getByRole('combobox'), {
       target: { value: 'first query' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
     expect(screen.getAllByRole('tab', { name: 'New tab' })).toHaveLength(2);
-    expect(screen.getByRole('searchbox')).toHaveValue('');
+    expect(screen.getByRole('combobox')).toHaveValue('');
     fireEvent.click(first);
-    expect(screen.getByRole('searchbox')).toHaveValue('first query');
+    expect(screen.getByRole('combobox')).toHaveValue('first query');
     expect(mocks.remoteUnmounts).toBe(0);
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Close new tab' })[1],
@@ -525,6 +525,82 @@ describe('WorkbenchShell', () => {
     ]);
   });
 
+  it('navigates websites in the same tab with back, forward, reload and home', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    const source = await screen.findByTestId('remote-view');
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    const middle = screen.getByRole('tab', { name: 'New tab' });
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    fireEvent.click(middle);
+    const navigate = (value: string) => {
+      fireEvent.change(screen.getByRole('combobox'), { target: { value } });
+      fireEvent.submit(screen.getByRole('search'));
+    };
+    navigate('example.test/a.html');
+    navigate('example.test/b.html');
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Documents', 'b.html', 'New tab']);
+    const frame = within(screen.getByRole('region', { name: 'b.html' })).getByTitle('b.html');
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    expect(frame).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'b.html' })).getByTitle('b.html')).toHaveAttribute('src', 'https://example.test/b.html');
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('combobox')).toHaveValue('https://example.test/a.html');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Page options' }), { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Recent websites' }));
+    fireEvent.click(await screen.findByRole('option', { name: /a.html/ }));
+    expect(screen.getByRole('combobox')).toHaveValue('https://example.test/a.html');
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('heading', { name: 'Common tools' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
+    expect(screen.getByRole('tab', { name: 'a.html' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Page options' }), { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Back to new tab' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Files / folders' }));
+    });
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Documents', 'Open file', 'New tab']);
+    expect(source).toBeInTheDocument();
+    expect(mocks.remoteUnmounts).toBe(0);
+  });
+
+  it('retains website history when refreshing a guide with no remote views', async () => {
+    mocks.listSlotViews.mockResolvedValue([]);
+    render(
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'example.test/a.html' } });
+    fireEvent.submit(screen.getByRole('search'));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    });
+    expect(screen.getByRole('button', { name: 'Forward' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /a.html Website/ })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
+    expect(screen.getByRole('combobox')).toHaveValue('https://example.test/a.html');
+  });
+
   it('keeps recent files after close, reopens their evidence and preserves other preview frames', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(
@@ -567,7 +643,7 @@ describe('WorkbenchShell', () => {
       screen.getByRole('region', { name: 'Report' }),
     ).getByTitle('Report');
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
-    const search = screen.getByRole('searchbox');
+    const search = screen.getByRole('combobox');
     fireEvent.change(search, {
       target: { value: 'https://example.org/site.html' },
     });

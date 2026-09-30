@@ -128,7 +128,7 @@ describe('WorkbenchStartPage', () => {
 
   it('filters names and descriptions without navigating on a plain-text search', () => {
     const props = setup();
-    const search = screen.getByRole('searchbox');
+    const search = screen.getByRole('combobox');
     fireEvent.change(search, { target: { value: 'VIDEOS' } });
     expect(screen.getByRole('button', { name: /Studio/ })).toBeVisible();
     expect(
@@ -145,7 +145,7 @@ describe('WorkbenchStartPage', () => {
 
   it('opens an HTTP(S) address and rejects local URLs and embedded credentials', () => {
     const props = setup();
-    const search = screen.getByRole('searchbox');
+    const search = screen.getByRole('combobox');
     for (const value of [
       'file:///etc/passwd',
       'https://user:password@example.test/',

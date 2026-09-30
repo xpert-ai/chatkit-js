@@ -16,7 +16,12 @@ import { useTheme } from '../providers/Theme';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
 import type { WorkbenchPreview } from './client-command-payload';
-import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
+import {
+  PreviewTabs,
+  WorkbenchPreviewContent,
+  WorkbenchBrowserPreview,
+} from './WorkbenchPreview';
+import type { WorkbenchBrowserHistory } from './useWorkbenchPages';
 import type {
   Client,
   XpertViewQuery,
@@ -72,6 +77,9 @@ type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
 
 type WorkbenchPanelProps = {
   tabOrder?: string[];
+  browserHistory?: Record<string, WorkbenchBrowserHistory>;
+  onNavigateBrowser?: (key: string, preview: WorkbenchPreview | null) => void;
+  onMoveBrowser?: (key: string, delta: number) => void;
   native?: ReturnType<typeof useNativeWorkbench>;
   onOpenNative?: (tool: NativeTool, fromTab?: string) => void;
   onOpenNativeFile?: (file: XpertWorkspaceFile, fromTab?: string) => void;
@@ -126,6 +134,9 @@ type WorkbenchPanelProps = {
 
 export function WorkbenchPanel({
   tabOrder,
+  browserHistory = {},
+  onNavigateBrowser,
+  onMoveBrowser,
   native,
   onOpenNative,
   onOpenNativeFile,
@@ -221,6 +232,16 @@ export function WorkbenchPanel({
     });
   }, [activeViewKey, frameScope, views]);
   const activePreview = previews.find((item) => item.key === activeViewKey);
+  const browserNavigation = (key: string) => {
+    const history = browserHistory[key];
+    return {
+      canBack: !!history && history.index > 0,
+      canForward: !!history && history.index < history.entries.length - 1,
+      onBack: () => onMoveBrowser?.(key, -1),
+      onForward: () => onMoveBrowser?.(key, 1),
+      onHome: () => onNavigateBrowser?.(key, null),
+    };
+  };
   return (
     <div
       className="flex h-full min-h-0 flex-col bg-background"
@@ -458,6 +479,7 @@ export function WorkbenchPanel({
             className="h-full min-h-0"
           >
             <WorkbenchStartPage
+              navigation={{ ...browserNavigation(key), onHome: undefined }}
               views={availableViews}
               openedViewKeys={views.map((view) => view.key)}
               recentFiles={native?.recent}
@@ -521,7 +543,17 @@ export function WorkbenchPanel({
             hidden={activeViewKey !== preview.key}
             className="h-full min-h-0"
           >
-            <WorkbenchPreviewContent preview={preview} />
+            {preview.kind === 'browser' ? (
+              <WorkbenchBrowserPreview
+                preview={preview}
+                recent={recent}
+                apiUrl={stream.apiUrl}
+                navigation={browserNavigation(preview.key)}
+                onNavigate={(next) => onNavigateBrowser?.(preview.key, next)}
+              />
+            ) : (
+              <WorkbenchPreviewContent preview={preview} />
+            )}
           </div>
         ))}
         {views

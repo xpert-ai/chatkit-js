@@ -34,6 +34,18 @@
       "conversationRequired": "Start a conversation to use this tool",
       "disabled": "Side chat is disabled"
     },
+    "browser": {
+      "placeholder": "Search or enter URL",
+      "back": "Back",
+      "forward": "Forward",
+      "reload": "Reload",
+      "more": "Page options",
+      "home": "Back to new tab",
+      "history": "Recent websites",
+      "noHistory": "No websites opened in this conversation yet.",
+      "copyUrl": "Copy link",
+      "suggestions": "Address suggestions"
+    },
     "executionUnavailable": "The requested execution is unavailable in this conversation.",
     "title": "Views",
     "description": "Remote workbench views",
