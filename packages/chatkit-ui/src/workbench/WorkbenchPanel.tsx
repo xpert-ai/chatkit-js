@@ -42,7 +42,6 @@ import {
   Minimize2,
   PanelRight,
   RotateCcw,
-  X,
   MessageSquarePlus,
   Bot,
   Globe,
@@ -56,6 +55,7 @@ import {
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
 import { WorkbenchTabs } from './WorkbenchTabs';
+import { WorkbenchTab } from './WorkbenchTab';
 import { resolveManifestText } from './manifest-text';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
@@ -246,70 +246,34 @@ export function WorkbenchPanel({
               />
             )}
             {externalViewOpen && (
-              <div
-                className={cn(
-                  'flex h-9 max-w-64 shrink-0 items-center rounded-lg',
-                  activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/60',
-                )}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  id={externalTabId}
-                  aria-controls={`${externalTabId}-panel`}
-                  aria-selected={activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY}
-                  onClick={() => onSelect(EXTERNAL_ASSISTANTS_VIEW_KEY)}
-                  className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                >
-                  <Bot size={17} aria-hidden="true" />
-                  <span className="truncate">
-                    {t('workbench.externalAssistants.title')}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onCloseExternal}
-                  aria-label={t('workbench.externalAssistants.close')}
-                  className="mr-1 rounded-lg p-1 text-muted-foreground hover:bg-background/80"
-                >
-                  <X size={15} />
-                </button>
-              </div>
+              <WorkbenchTab
+                label={t('workbench.externalAssistants.title')}
+                icon={<Bot size={16} />}
+                selected={activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY}
+                id={externalTabId}
+                panelId={`${externalTabId}-panel`}
+                onSelect={() => onSelect(EXTERNAL_ASSISTANTS_VIEW_KEY)}
+                close={{
+                  label: t('workbench.externalAssistants.close'),
+                  onClick: onCloseExternal,
+                }}
+              />
             )}
             {(sideChat || sideChatOpening) && (
-              <div
-                className={cn(
-                  'flex h-9 max-w-64 shrink-0 items-center rounded-xl transition-colors',
-                  activeViewKey === SIDE_CHAT_VIEW_KEY
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
-                  onClick={() => onSelect(SIDE_CHAT_VIEW_KEY)}
-                  className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                >
-                  <MessageSquarePlus size={17} className="shrink-0" />
-                  <span className="truncate">
-                    {sideChat?.title ?? t('workbench.sideChat.title')}
-                  </span>
-                </button>
-                {sideChat && activeViewKey === SIDE_CHAT_VIEW_KEY && (
-                  <button
-                    type="button"
-                    onClick={onRequestCloseSideChat}
-                    className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                    aria-label={`${t('workbench.close')}: ${t('workbench.sideChat.title')}`}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+              <WorkbenchTab
+                label={sideChat?.title ?? t('workbench.sideChat.title')}
+                icon={<MessageSquarePlus size={16} />}
+                selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
+                onSelect={() => onSelect(SIDE_CHAT_VIEW_KEY)}
+                close={
+                  sideChat && activeViewKey === SIDE_CHAT_VIEW_KEY
+                    ? {
+                        label: `${t('workbench.close')}: ${t('workbench.sideChat.title')}`,
+                        onClick: onRequestCloseSideChat,
+                      }
+                    : undefined
+                }
+              />
             )}
             <PreviewTabs
               previews={previews}
@@ -325,83 +289,44 @@ export function WorkbenchPanel({
                 locale,
               );
               return (
-                <div
+                <WorkbenchTab
                   key={view.key}
-                  className={cn(
-                    'flex h-10 max-w-64 shrink-0 items-center rounded-xl transition-colors',
-                    selected
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                  )}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    title={label}
-                    onClick={() => onSelect(view.key)}
-                    className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                  >
+                  label={label}
+                  selected={selected}
+                  onSelect={() => onSelect(view.key)}
+                  icon={
                     <IconDefinitionRenderer
                       icon={view.workbench?.menu?.icon ?? view.icon}
-                      size={17}
-                      className="text-muted-foreground"
-                      fallback={
-                        <PanelRight
-                          size={17}
-                          className="shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      }
+                      size={16}
+                      fallback={<PanelRight size={16} />}
                     />
-                    <span className="truncate">{label}</span>
-                  </button>
-                  {selected && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onCloseView ? onCloseView(view.key) : onClose()
-                      }
-                      className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                      aria-label={`${t('workbench.close')}: ${label}`}
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
+                  }
+                  close={
+                    selected
+                      ? {
+                          label: `${t('workbench.close')}: ${label}`,
+                          onClick: () =>
+                            onCloseView ? onCloseView(view.key) : onClose(),
+                        }
+                      : undefined
+                  }
+                />
               );
             })}
             {newTabs.map((key) => (
-              <div
+              <WorkbenchTab
                 key={key}
-                className={cn(
-                  'flex h-10 max-w-64 shrink-0 items-center rounded-[var(--chat-item-radius)]',
-                  activeViewKey === key
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/60',
-                )}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  id={key}
-                  aria-controls={`${key}-panel`}
-                  aria-selected={activeViewKey === key}
-                  onClick={() => onSelect(key)}
-                  className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                >
-                  <Globe size={17} className="shrink-0" />
-                  <span className="truncate">{t('workbench.newTab')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onCloseNewTab(key)}
-                  aria-label={t('workbench.closeNewTab')}
-                  className="mr-1.5 rounded-[var(--chat-item-radius)] p-1 text-muted-foreground hover:bg-background/80"
-                >
-                  <X size={15} />
-                </button>
-              </div>
+                label={t('workbench.newTab')}
+                icon={<Globe size={16} />}
+                selected={activeViewKey === key}
+                id={key}
+                panelId={`${key}-panel`}
+                onSelect={() => onSelect(key)}
+                close={{
+                  label: t('workbench.closeNewTab'),
+                  onClick: () => onCloseNewTab(key),
+                }}
+              />
             ))}
           </WorkbenchTabs>
         ) : (

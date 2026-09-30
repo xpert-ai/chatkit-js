@@ -4,7 +4,8 @@ import type {
   WorkspaceFileScope,
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
-import { File, Folder, Terminal, X } from 'lucide-react';
+import { File, Folder, Terminal } from 'lucide-react';
+import { WorkbenchTab } from '../WorkbenchTab';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { NativeTab, FileEditorHandle } from './useNativeWorkbench';
 import { WorkspaceFiles, fileName } from './WorkspaceFiles';
@@ -43,34 +44,23 @@ export function NativeWorkbenchTabs({
               ? Terminal
               : File;
         return (
-          <div
+          <WorkbenchTab
             key={tab.key}
-            className={`flex h-9 max-w-56 shrink-0 items-center rounded-[var(--chat-item-radius)] ${activeKey === tab.key ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60'}`}
+            label={title}
+            icon={<Icon size={16} />}
+            selected={activeKey === tab.key}
+            id={tab.key}
+            panelId={`${tab.key}-panel`}
+            onSelect={() => onSelect(tab.key)}
+            close={{
+              label: t('workbench.files.close', { name: title }),
+              onClick: () => onClose(tab.key),
+            }}
           >
-            <button
-              type="button"
-              role="tab"
-              id={tab.key}
-              aria-controls={`${tab.key}-panel`}
-              aria-selected={activeKey === tab.key}
-              className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-              onClick={() => onSelect(tab.key)}
-            >
-              <Icon size={16} className="shrink-0" />
-              <span className="truncate">{title}</span>
-              {dirty.includes(tab.key) && (
-                <span aria-label={t('workbench.files.unsavedLabel')}>•</span>
-              )}
-            </button>
-            <button
-              type="button"
-              className="mr-1 rounded-[var(--chat-item-radius)] p-1 hover:bg-background/80"
-              aria-label={t('workbench.files.close', { name: title })}
-              onClick={() => onClose(tab.key)}
-            >
-              <X size={14} />
-            </button>
-          </div>
+            {dirty.includes(tab.key) && (
+              <span aria-label={t('workbench.files.unsavedLabel')}>•</span>
+            )}
+          </WorkbenchTab>
         );
       })}
     </>

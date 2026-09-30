@@ -1,6 +1,6 @@
-import { ExternalLink, File, Globe, X } from 'lucide-react';
+import { ExternalLink, File, Globe } from 'lucide-react';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
-import { cn } from '../lib/utils';
+import { WorkbenchTab } from './WorkbenchTab';
 import type { WorkbenchPreview } from './client-command-payload';
 
 export function PreviewTabs({
@@ -16,39 +16,17 @@ export function PreviewTabs({
 }) {
   const { t } = useChatkitTranslation();
   return previews.map((preview) => (
-    <div
+    <WorkbenchTab
       key={preview.key}
-      className={cn(
-        'flex h-10 max-w-64 shrink-0 items-center rounded-xl',
-        activeKey === preview.key
-          ? 'bg-muted text-foreground'
-          : 'text-muted-foreground hover:bg-muted/60',
-      )}
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeKey === preview.key}
-        onClick={() => onSelect(preview.key)}
-        className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-        title={preview.title}
-      >
-        {preview.kind === 'file' ? (
-          <File size={17} className="shrink-0" />
-        ) : (
-          <Globe size={17} className="shrink-0" />
-        )}
-        <span className="truncate">{preview.title}</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onClose(preview.key)}
-        aria-label={`${t('workbench.close')}: ${preview.title}`}
-        className="mr-1.5 rounded-md p-1 text-muted-foreground hover:bg-background/80"
-      >
-        <X size={15} />
-      </button>
-    </div>
+      label={preview.title}
+      selected={activeKey === preview.key}
+      onSelect={() => onSelect(preview.key)}
+      icon={preview.kind === 'file' ? <File size={16} /> : <Globe size={16} />}
+      close={{
+        label: `${t('workbench.close')}: ${preview.title}`,
+        onClick: () => onClose(preview.key),
+      }}
+    />
   ));
 }
 
