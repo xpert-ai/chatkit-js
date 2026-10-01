@@ -7,6 +7,28 @@ import {
 } from './message-presentation';
 
 describe('message presentation policy', () => {
+  it('does not copy child assistant transcripts into the parent reply', () => {
+    expect(
+      getMessageBubbleText({
+        id: 'parent',
+        type: 'assistant',
+        executionId: 'root',
+        agentRuns: [
+          {
+            id: 'child',
+            parentId: 'root',
+            xpertId: 'writer',
+            invocationKind: 'external_assistant',
+          },
+        ],
+        content: [
+          { type: 'text', text: 'Parent start', executionId: 'root' },
+          { type: 'text', text: 'Separate child answer', executionId: 'child' },
+          { type: 'text', text: 'Parent conclusion', executionId: 'root' },
+        ],
+      }),
+    ).toBe('Parent start\n\nParent conclusion');
+  });
   it('preserves defaults and resolves explicit values before assistant defaults', () => {
     expect(resolveMessagePresentation()).toEqual({
       mode: 'transcript',

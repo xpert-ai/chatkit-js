@@ -1,3 +1,9 @@
+import {
+  getBubbleCompletionStatus,
+  getBubbleContentKind,
+  type MessagePresentationMode,
+} from './message-presentation';
+import { hasBubbleToolResult } from '../components/thread/messages/bubble-tool-results';
 import type {
   ChatKitReference,
   TMessageComponentMcpAppData,
@@ -77,9 +83,11 @@ export type MessageNavigationSourceMessage = Partial<
   references?: unknown;
   submittedInput?: unknown;
   runtimeCapabilityOptions?: unknown;
+  status?: string;
 };
 
 export type BuildMessageNavigationItemsOptions = {
+  mode?: MessagePresentationMode;
   labels: MessageNavigationLabels;
   language?: string;
   assistantTitle?: string | null;
@@ -95,6 +103,7 @@ type PendingUserNavigationItem = {
 };
 
 type CollectContentOptions = {
+  bubbles?: boolean;
   includeComponentText?: boolean;
 };
 
@@ -274,6 +283,16 @@ function collectContentItem(
   options: CollectContentOptions,
 ) {
   if (item === undefined || isNonTranscriptMessageContent(item)) return;
+  if (options.bubbles && getBubbleContentKind(item) === 'process') {
+    if (
+      typeof item !== 'string' &&
+      isComponentContent(item) &&
+      hasBubbleToolResult(item)
+    ) {
+      pushTag(draft, labels.attachment);
+    }
+    return;
+  }
   if (typeof item === 'string') {
     pushText(draft, item);
     return;
@@ -402,6 +421,8 @@ function buildMessageNavigationItemSummary(
   collectOptions: CollectContentOptions = {},
 ): MessageNavigationItem | null {
   const role = getMessageNavigationRole(message.type);
+  if (options.mode === 'bubbles' && role === 'tool') return null;
+  collectOptions = { ...collectOptions, bubbles: options.mode === 'bubbles' };
   const draft: NavigationDraft = {
     text: [],
     tags: [],
@@ -428,6 +449,11 @@ function buildMessageNavigationItemSummary(
     });
     const collectNode = (node: AgentRunRenderNode) => {
       pushTag(draft, getAgentRunTitle(node.info));
+      if (
+        collectOptions.bubbles &&
+        node.info.invocationKind === 'external_assistant'
+      )
+        return;
       node.entries.forEach(({ item }) =>
         collectContentItem(draft, item, labels, language, collectOptions),
       );
@@ -437,17 +463,35 @@ function buildMessageNavigationItemSummary(
       if (unit.type === 'agent') {
         collectNode(unit.node);
       } else {
-        collectContentItem(draft, unit.entry.item, labels, language, collectOptions);
+        collectContentItem(
+          draft,
+          unit.entry.item,
+          labels,
+          language,
+          collectOptions,
+        );
       }
     });
   } else {
     collectContent(draft, message.content, labels, language, collectOptions);
   }
-  collectReasoning(draft, message.reasoning, labels);
+  if (options.mode !== 'bubbles')
+    collectReasoning(draft, message.reasoning, labels);
   collectFiles(draft, message.fileAssets, labels.attachment);
   collectFiles(draft, message.attachments, labels.attachment);
   collectReferences(draft, message.references);
   collectRuntimeCapabilities(draft, message.runtimeCapabilityOptions);
+
+  // A resultless completed/paused reply still has a visible status bubble.
+  if (
+    options.mode === 'bubbles' &&
+    role === 'assistant' &&
+    draft.text.length === 0 &&
+    draft.tags.length === 0 &&
+    getBubbleCompletionStatus(message.status)
+  ) {
+    pushTag(draft, getTitle(role, labels, options.assistantTitle));
+  }
 
   const text = draft.text.map(normalizeWhitespace).filter(Boolean).join(' ');
   const preview =

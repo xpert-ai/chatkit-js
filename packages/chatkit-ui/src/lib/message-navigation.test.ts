@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { changesReceipt, deliveryReceipt, legacyReceipt } from '../test/file-activity-fixtures';
+import {
+  changesReceipt,
+  deliveryReceipt,
+  legacyReceipt,
+} from '../test/file-activity-fixtures';
 
 import {
   buildMessageNavigationItem,
@@ -25,28 +29,135 @@ const labels: MessageNavigationLabels = {
 };
 
 describe('message navigation extraction', () => {
+  it('keeps external assistant navigation sourced to its visible card', () => {
+    const item = buildMessageNavigationItem(
+      {
+        id: 'reply',
+        type: 'assistant',
+        executionId: 'root',
+        agentRuns: [
+          {
+            id: 'child',
+            parentId: 'root',
+            invocationKind: 'external_assistant',
+            xpertName: 'Reviewer',
+          },
+        ],
+        content: [
+          { type: 'text', text: 'Visible parent answer', executionId: 'root' },
+          {
+            type: 'text',
+            text: 'Hidden child transcript',
+            executionId: 'child',
+          },
+        ],
+      },
+      0,
+      { labels, mode: 'bubbles' },
+    );
+    expect(item?.preview).toBe('Visible parent answer');
+    expect(item?.tags).toEqual(['Reviewer']);
+  });
+  it('uses visible bubble text and excludes hidden reasoning / tools from navigation', () => {
+    const message = {
+      id: 'a',
+      type: 'assistant',
+      content: [
+        { type: 'text', text: 'Visible answer' },
+        {
+          type: 'component',
+          data: {
+            category: 'Tool',
+            title: 'Hidden tool',
+            output: 'Hidden output',
+          },
+        },
+      ],
+      reasoning: [{ type: 'reasoning', text: 'Hidden reasoning' }],
+    };
+    const item = buildMessageNavigationItem(message, 0, {
+      labels,
+      mode: 'bubbles',
+    });
+    expect(item?.preview).toBe('Visible answer');
+    expect(item?.tags).toEqual([]);
+    expect(
+      buildMessageNavigationItem(
+        { id: 't', type: 'tool', content: 'Hidden output' },
+        1,
+        { labels, mode: 'bubbles' },
+      ),
+    ).toBeNull();
+  });
+  it('retains a navigation target for a resultless but completed bubble reply', () => {
+    const items = buildMessageNavigationItems(
+      [
+        { id: 'q', type: 'user', content: 'Run a check' },
+        { id: 'a', type: 'assistant', status: 'success', content: [] },
+      ],
+      { labels, mode: 'bubbles' },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: 'q',
+      title: 'Run a check',
+      preview: 'Assistant',
+    });
+  });
   it('summarizes the correlated execution instead of its dispatch, with a legacy fallback', () => {
     const message = {
-      id: 'reply', type: 'assistant', executionId: 'root',
-      content: [{
-        id: 'call', type: 'component', executionId: 'root',
-        data: { category: 'Tool', status: 'success', title: 'Dispatch task' },
-      }],
-      agentRuns: [{
-        id: 'child', parentId: 'root', sourceToolCallId: 'call',
-        invocationKind: 'external_assistant' as const, xpertName: 'Reviewer',
-      }],
+      id: 'reply',
+      type: 'assistant',
+      executionId: 'root',
+      content: [
+        {
+          id: 'call',
+          type: 'component',
+          executionId: 'root',
+          data: { category: 'Tool', status: 'success', title: 'Dispatch task' },
+        },
+      ],
+      agentRuns: [
+        {
+          id: 'child',
+          parentId: 'root',
+          sourceToolCallId: 'call',
+          invocationKind: 'external_assistant' as const,
+          xpertName: 'Reviewer',
+        },
+      ],
     };
     const item = buildMessageNavigationItem(message, 0, { labels });
     expect(item?.tags).toEqual(['Reviewer']);
     expect(item?.preview).not.toContain('Dispatch task');
-    const legacy = buildMessageNavigationItem({ ...message, agentRuns: [] }, 0, { labels });
+    const legacy = buildMessageNavigationItem(
+      { ...message, agentRuns: [] },
+      0,
+      { labels },
+    );
     expect(legacy?.preview).toContain('Dispatch task');
   });
   it('excludes new and legacy file receipts from navigation text and tags', () => {
-    const plain = { id: 'reply', type: 'ai', content: [{ type: 'text', text: 'Your report is ready.' }] };
-    expect(buildMessageNavigationItem({ ...plain, content: [...plain.content, changesReceipt, deliveryReceipt, legacyReceipt] }, 0, { labels }))
-      .toEqual(buildMessageNavigationItem(plain, 0, { labels }));
+    const plain = {
+      id: 'reply',
+      type: 'ai',
+      content: [{ type: 'text', text: 'Your report is ready.' }],
+    };
+    expect(
+      buildMessageNavigationItem(
+        {
+          ...plain,
+          content: [
+            ...plain.content,
+            changesReceipt,
+            deliveryReceipt,
+            legacyReceipt,
+          ],
+        },
+        0,
+        { labels },
+      ),
+    ).toEqual(buildMessageNavigationItem(plain, 0, { labels }));
   });
   it('builds one navigation item for each user and assistant message pair', () => {
     const items = buildMessageNavigationItems(

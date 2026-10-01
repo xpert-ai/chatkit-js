@@ -45,6 +45,8 @@ export const knowledgeRetrieverComponentRenderer: ComponentMessageRenderer = {
   match: isKnowledgeRetrieverComponent,
   getTitle: () => KNOWLEDGE_RETRIEVER_TITLE,
   hasDetails: hasKnowledgeRetrieverDetails,
+  hasBubbleResult: (_content, data) =>
+    !data.error && getKnowledgeResults(data).length > 0,
   renderDetails: KnowledgeRetrieverDetails,
 };
 

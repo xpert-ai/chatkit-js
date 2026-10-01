@@ -560,6 +560,7 @@ export function WorkbenchPanel({
               organizationId={stream.organizationId}
               apiUrl={stream.apiUrl}
               mcpApps={options?.mcpApps}
+              messagePresentation={options?.messagePresentation}
               hasMore={stream.historyMessagePagination?.hasMore}
               loadingMore={stream.historyMessagePagination?.isLoadingMore}
               onLoadMore={() => {

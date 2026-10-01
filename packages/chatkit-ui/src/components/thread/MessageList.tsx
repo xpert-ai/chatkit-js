@@ -1,3 +1,11 @@
+import { PresentationScrollAnchor } from './PresentationScrollAnchor';
+import { MessageBubble } from './messages/message-bubble';
+import {
+  getMessageBubbleText,
+  getBubbleCompletionStatus,
+  resolveMessagePresentation,
+  type MessageActor,
+} from '../../lib/message-presentation';
 import type { ReactNode } from 'react';
 import type { ChatMessageInputCheckpoint, Message } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../../providers/Stream';
@@ -103,6 +111,8 @@ export type MessageListProps = {
   approval?: ReactNode;
   approvalToolCallId?: string;
   collapseProcess?: boolean;
+  messagePresentation?: ChatKitOptions['messagePresentation'];
+  assistantActor?: MessageActor;
   showActions?: boolean;
   /** Nested process entries reuse the parent answer's horizontal padding. */
   embedded?: boolean;
@@ -146,7 +156,9 @@ export type MessageListProps = {
 export function MessageList({
   approval,
   approvalToolCallId,
-  collapseProcess = false,
+  collapseProcess: legacyCollapseProcess = false,
+  messagePresentation,
+  assistantActor,
   showActions = true,
   embedded = false,
   messages,
@@ -175,6 +187,11 @@ export function MessageList({
   editing,
 }: MessageListProps) {
   const { t } = useChatkitTranslation();
+  const { mode, collapseProcess } = resolveMessagePresentation({
+    collapseProcess: legacyCollapseProcess,
+    ...messagePresentation,
+  });
+  const bubbles = mode === 'bubbles';
   const processGroups = collapseProcess
     ? groupAssistantProcessMessages(messages as AssistantMessageWithAgentRuns[])
     : new Map<number, number[]>();
@@ -209,375 +226,408 @@ export function MessageList({
       ? toolAnchor
       : lastAssistantIndex;
   return (
-    <div data-slot="chatkit-message-list" className="space-y-4">
-      {canLoadMoreMessages && (
-        <div className="flex items-center gap-3 py-1">
-          <div className="h-px min-w-8 flex-1 bg-border" />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onLoadMore}
-            disabled={isLoadingMoreMessages}
-            className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            {isLoadingMoreMessages
-              ? t('chat.loadingMoreMessages')
-              : t('chat.loadMoreMessages')}
-          </Button>
-          <div className="h-px min-w-8 flex-1 bg-border" />
-        </div>
-      )}
-      {messages.map((message, index) => {
-        if (foldedIndexes.has(index)) return null;
-        const processIndexes = processGroups.get(index);
-        const messageType = String(message.type);
-        const isHumanMessage =
-          messageType === 'human' || messageType === 'user';
-        const isAssistantMessage =
-          messageType === 'assistant' || messageType === 'ai';
-        const isStreamingMessage = isLoading && index === messages.length - 1;
-        const streamingStatus = isAssistantMessage
-          ? getAssistantStreamingStatus(
-              {
-                ...(message as ChatkitMessage),
-                lastStreamOutputAt,
-              },
-              isStreamingMessage,
-              { now: streamingNow },
-            )
-          : null;
-
-        if (
-          isAssistantMessage &&
-          !hasRenderableAssistantMessage(message as ChatkitMessage) &&
-          !(message as AssistantMessageWithAgentRuns).agentRuns?.length &&
-          !streamingStatus &&
-          !(approval && index === approvalIndex)
-        ) {
-          return null;
-        }
-
-        const messageContent =
-          typeof message.content === 'string'
-            ? message.content
-            : Array.isArray(message.content)
-              ? message.content
-                  .map((part) => formatMessageContent(part))
-                  .join('')
-              : formatMessageContent(message.content);
-        const hasPlainRenderableContent = messageContent.trim().length > 0;
-        const humanMessage = message as HumanMessageWithMeta;
-        const humanReferences = humanMessage.references ?? [];
-        const humanAttachments = getVisibleHumanAttachments(
-          [
-            ...(humanMessage.fileAssets ?? []),
-            ...(humanMessage.attachments ?? []),
-          ],
-          humanReferences,
-        );
-        const humanRuntimeCapabilityOptions = isHumanMessage
-          ? (humanMessage.runtimeCapabilityOptions ??
-            getRuntimeCapabilityOptionsForSelection(
-              getRecommendedRuntimeCapabilitiesSelection(
-                humanMessage.runtimeCapabilities,
-              ),
-              runtimeCapabilityOptions,
-            ))
-          : [];
-        const hasHumanAttachments =
-          isHumanMessage && humanAttachments.length > 0;
-        const isEditingMessage =
-          Boolean(message.id) && editing?.messageId === message.id;
-        const canEditMessage =
-          isHumanMessage &&
-          editing?.enabled &&
-          Boolean(message.id) &&
-          humanMessage.inputCheckpoint !== null &&
-          !humanMessage.followUpMode;
-        const canQuoteMessage =
-          enableQuotes && (isHumanMessage || isAssistantMessage);
-        const quoteSource = isHumanMessage
-          ? t('chat.youLabel')
-          : assistantTitle;
-        const messageNavigationId = getMessageNavigationItemId(
-          message as MessageNavigationSourceMessage,
-          index,
-        );
-
-        if (
-          !isAssistantMessage &&
-          !hasPlainRenderableContent &&
-          !hasHumanAttachments &&
-          humanRuntimeCapabilityOptions.length === 0 &&
-          humanReferences.length === 0
-        ) {
-          return null;
-        }
-
-        return (
-          <div
-            key={message.id ?? `${message.type}-${index}`}
-            ref={(node) => {
-              onMessageAnchor?.(messageNavigationId, node);
-              processIndexes?.forEach((processIndex) =>
-                onMessageAnchor?.(
-                  getMessageNavigationItemId(
-                    messages[processIndex],
-                    processIndex,
-                  ),
-                  node,
-                ),
-              );
-            }}
-            data-message-navigation-id={messageNavigationId}
-            data-execution-id={
-              'executionId' in message ? message.executionId : undefined
-            }
-            className={cn(
-              'group group/message flex gap-3',
-              isHumanMessage
-                ? 'justify-end'
-                : embedded
-                  ? 'justify-start'
-                  : 'justify-start -ml-1',
-            )}
-          >
-            <div
-              className={cn(
-                'flex flex-col overflow-hidden',
-                !embedded && 'px-3',
-                (isAssistantMessage || isEditingMessage) && 'min-w-0 flex-1',
-              )}
+    <PresentationScrollAnchor mode={mode}>
+      <div
+        data-slot="chatkit-message-list"
+        data-message-presentation={mode}
+        className="space-y-4"
+      >
+        {canLoadMoreMessages && (
+          <div className="flex items-center gap-3 py-1">
+            <div className="h-px min-w-8 flex-1 bg-border" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onLoadMore}
+              disabled={isLoadingMoreMessages}
+              className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
             >
-              {isEditingMessage && editing ? (
-                <MessageEditor
-                  key={message.id}
-                  initialText={messageContent}
-                  onCancel={editing.onCancel}
-                  onSave={(text) => editing.onSave(humanMessage, text)}
-                />
-              ) : (
-                <>
-                  <div
-                    {...(canQuoteMessage
-                      ? {
-                          'data-quote-message-id': message.id,
-                          'data-quote-source': quoteSource,
-                        }
-                      : {})}
-                    className={cn(
-                      'max-w-full rounded-2xl',
-                      isHumanMessage
-                        ? 'bg-primary text-primary-foreground px-4 py-2.5'
-                        : message.type === 'system'
-                          ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
-                          : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
-                    )}
-                  >
-                    {isAssistantMessage ? (
-                      <AssistantMessage
-                        collapseProcess={collapseProcess}
-                        processPrefix={
-                          processIndexes?.length ? (
-                            <MessageList
-                              messages={processIndexes.map(
-                                (processIndex) => messages[processIndex],
-                              )}
-                              lookupMessages={
-                                (lookupMessages ?? messages) as ChatkitMessage[]
-                              }
-                              assistantTitle={assistantTitle}
-                              organizationId={organizationId}
-                              apiUrl={apiUrl}
-                              mcpApps={mcpApps}
-                              enableQuotes={enableQuotes}
-                              showActions={false}
-                              embedded
-                            />
-                          ) : undefined
-                        }
-                        message={{
-                          ...(message as ChatkitMessage),
-                          type: 'assistant',
-                        }}
-                        messages={(
-                          lookupMessages ?? messages.slice(0, index + 1)
-                        ).map(
-                          (item) =>
-                            ({
-                              ...(item as ChatkitMessage),
-                              type:
-                                String(item.type) === 'ai'
-                                  ? 'assistant'
-                                  : item.type,
-                            }) as ChatkitMessage,
-                        )}
-                        isStreaming={isStreamingMessage}
-                        streamingStatus={streamingStatus}
-                        isThreadRunning={isThreadRunning}
-                        isThreadPaused={isThreadPaused}
-                        organizationId={organizationId}
-                        apiUrl={apiUrl}
-                        pet={pet}
-                        mcpApps={mcpApps}
-                      />
-                    ) : (
-                      <>
-                        {isHumanMessage &&
-                          humanRuntimeCapabilityOptions.length > 0 && (
-                            <HumanRuntimeCapabilityChips
-                              options={humanRuntimeCapabilityOptions}
-                            />
-                          )}
-                        {isHumanMessage && humanReferences.length > 0 && (
-                          <div className="mb-2 flex flex-wrap gap-1.5">
-                            {humanReferences.map((reference) => (
-                              <ReferenceChip
-                                key={getReferenceKey(reference)}
-                                reference={reference}
-                                variant="message"
-                              />
-                            ))}
-                          </div>
-                        )}
-                        {/* Show attachments for human messages */}
-                        {isHumanMessage && humanAttachments.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mb-2">
-                            {humanAttachments.map((file, fileIndex) => (
-                              <div
-                                key={fileIndex}
-                                className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
-                              >
-                                <FileText size={12} />
-                                <span className="max-w-[100px] truncate">
-                                  {file.originalName ?? file.id}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {Array.isArray(message.content) ? (
-                          message.content.map((part, partIndex) => (
-                            <p
-                              key={`${part.type}-${partIndex}`}
-                              className="wrap-break-word text-sm leading-relaxed"
-                            >
-                              {formatMessageContent(part)}
-                            </p>
-                          ))
-                        ) : (
-                          <span className="wrap-break-word text-sm leading-relaxed">
-                            {formatMessageContent(message.content)}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                  {/* Message actions - hidden during streaming, retry only for last AI message */}
-                  {showActions && (
-                    <MessageActions
-                      updatedAt={
-                        isAssistantMessage || isHumanMessage
-                          ? message.updatedAt
-                          : undefined
-                      }
-                      content={
-                        collapseProcess && isAssistantMessage
-                          ? (getFinalAnswerText(
-                              message as AssistantMessageWithAgentRuns,
-                            ) ?? messageContent)
-                          : messageContent
-                      }
-                      isAssistant={isAssistantMessage}
-                      skillUsages={
-                        isAssistantMessage
-                          ? mergeChatSkillUsages(
-                              ...(processIndexes ?? []).map((i) =>
-                                getMessageSkillUsages(messages[i]),
-                              ),
-                              getMessageSkillUsages(message),
-                            )
-                          : undefined
-                      }
-                      isStreaming={isStreamingMessage}
-                      alwaysVisible={
-                        isAssistantMessage && index === lastAssistantIndex
-                      }
-                      onActionTooltipOpen={onMessageActionTooltipOpen}
-                      branching={(message as ChatkitMessage).branching}
-                      isBranching={branchingMessageId === message.id}
-                      branchDisabled={Boolean(branchingMessageId)}
-                      onBranch={
-                        onBranch && message.id
-                          ? () => onBranch(message.id!)
-                          : undefined
-                      }
-                      onEdit={
-                        canEditMessage && editing
-                          ? () => editing.onStart(message.id!)
-                          : undefined
-                      }
-                      onRetry={
-                        onRetry &&
-                        isAssistantMessage &&
-                        !isLoading &&
-                        index === messages.length - 1
-                          ? () => onRetry(index)
-                          : undefined
-                      }
-                    />
-                  )}
-                  {index === approvalIndex && approval}
-                  {!showActions &&
-                    !isStreamingMessage &&
-                    (isAssistantMessage || isHumanMessage) && (
-                      <MessageTimestamp updatedAt={message.updatedAt} />
-                    )}
-                </>
-              )}
-            </div>
+              {isLoadingMoreMessages
+                ? t('chat.loadingMoreMessages')
+                : t('chat.loadMoreMessages')}
+            </Button>
+            <div className="h-px min-w-8 flex-1 bg-border" />
           </div>
-        );
-      })}
-      {approvalIndex < 0 && approval}
-      {/* Show loading indicator with minimum display time */}
-      {showLoadingDots &&
-        (() => {
-          const lastMessage = messages[messages.length - 1];
-          const lastMessageType = lastMessage ? String(lastMessage.type) : '';
-          const isLastMessageFromAI =
-            lastMessageType === 'ai' || lastMessageType === 'assistant';
-          const lastAssistantStatus = isLastMessageFromAI
+        )}
+        {messages.map((message, index) => {
+          if (foldedIndexes.has(index)) return null;
+          const processIndexes = processGroups.get(index);
+          const messageType = String(message.type);
+          if (bubbles && messageType === 'tool') return null;
+          const isHumanMessage =
+            messageType === 'human' || messageType === 'user';
+          const isAssistantMessage =
+            messageType === 'assistant' || messageType === 'ai';
+          const isStreamingMessage = isLoading && index === messages.length - 1;
+          const streamingStatus = isAssistantMessage
             ? getAssistantStreamingStatus(
                 {
-                  ...(lastMessage as ChatkitMessage),
+                  ...(message as ChatkitMessage),
                   lastStreamOutputAt,
                 },
-                isLoading,
+                isStreamingMessage,
                 { now: streamingNow },
               )
             : null;
-          if (lastAssistantStatus) return null;
-          const fallbackStreamingStatus = getAssistantStreamingStatus(
-            {
-              status: undefined,
-              reasoning: undefined,
-              lastStreamOutputAt,
-            },
-            isLoading,
-            { now: streamingNow },
+
+          if (
+            isAssistantMessage &&
+            !hasRenderableAssistantMessage(message as ChatkitMessage) &&
+            !(message as AssistantMessageWithAgentRuns).agentRuns?.length &&
+            !streamingStatus &&
+            !(bubbles && getBubbleCompletionStatus(message.status)) &&
+            !(approval && index === approvalIndex)
+          ) {
+            return null;
+          }
+
+          const messageContent =
+            typeof message.content === 'string'
+              ? message.content
+              : Array.isArray(message.content)
+                ? message.content
+                    .map((part) => formatMessageContent(part))
+                    .join('')
+                : formatMessageContent(message.content);
+          const hasPlainRenderableContent = messageContent.trim().length > 0;
+          const humanMessage = message as HumanMessageWithMeta;
+          const humanReferences = humanMessage.references ?? [];
+          const humanAttachments = getVisibleHumanAttachments(
+            [
+              ...(humanMessage.fileAssets ?? []),
+              ...(humanMessage.attachments ?? []),
+            ],
+            humanReferences,
           );
+          const humanRuntimeCapabilityOptions = isHumanMessage
+            ? (humanMessage.runtimeCapabilityOptions ??
+              getRuntimeCapabilityOptionsForSelection(
+                getRecommendedRuntimeCapabilitiesSelection(
+                  humanMessage.runtimeCapabilities,
+                ),
+                runtimeCapabilityOptions,
+              ))
+            : [];
+          const hasHumanAttachments =
+            isHumanMessage && humanAttachments.length > 0;
+          const isEditingMessage =
+            Boolean(message.id) && editing?.messageId === message.id;
+          const canEditMessage =
+            isHumanMessage &&
+            editing?.enabled &&
+            Boolean(message.id) &&
+            humanMessage.inputCheckpoint !== null &&
+            !humanMessage.followUpMode;
+          const canQuoteMessage =
+            enableQuotes && (isHumanMessage || isAssistantMessage);
+          const quoteSource = isHumanMessage
+            ? t('chat.youLabel')
+            : (assistantActor?.name ?? assistantTitle);
+          const messageNavigationId = getMessageNavigationItemId(
+            message as MessageNavigationSourceMessage,
+            index,
+          );
+
+          if (
+            !isAssistantMessage &&
+            !hasPlainRenderableContent &&
+            !hasHumanAttachments &&
+            humanRuntimeCapabilityOptions.length === 0 &&
+            humanReferences.length === 0
+          ) {
+            return null;
+          }
+
           return (
-            <div className="flex justify-start gap-3 -ml-2">
-              <div className="max-w-full rounded-2xl py-2.5">
-                <AssistantStreamingIndicator
-                  status={fallbackStreamingStatus ?? 'loading'}
-                />
+            <div
+              key={message.id ?? `${message.type}-${index}`}
+              ref={(node) => {
+                onMessageAnchor?.(messageNavigationId, node);
+                processIndexes?.forEach((processIndex) =>
+                  onMessageAnchor?.(
+                    getMessageNavigationItemId(
+                      messages[processIndex],
+                      processIndex,
+                    ),
+                    node,
+                  ),
+                );
+              }}
+              data-message-navigation-id={messageNavigationId}
+              data-actor-id={
+                isHumanMessage
+                  ? 'self'
+                  : isAssistantMessage
+                    ? assistantActor?.id
+                    : undefined
+              }
+              data-execution-id={
+                'executionId' in message ? message.executionId : undefined
+              }
+              className={cn(
+                'group group/message flex gap-3',
+                isHumanMessage
+                  ? 'justify-end'
+                  : embedded
+                    ? 'justify-start'
+                    : 'justify-start -ml-1',
+              )}
+            >
+              <div
+                className={cn(
+                  'flex flex-col',
+                  !bubbles && 'overflow-hidden',
+                  bubbles && isHumanMessage && 'max-w-[92%] sm:max-w-[80%]',
+                  !embedded && 'px-3',
+                  (isAssistantMessage || isEditingMessage) && 'min-w-0 flex-1',
+                )}
+              >
+                {isEditingMessage && editing ? (
+                  <MessageEditor
+                    key={message.id}
+                    initialText={messageContent}
+                    onCancel={editing.onCancel}
+                    onSave={(text) => editing.onSave(humanMessage, text)}
+                  />
+                ) : (
+                  <>
+                    <div
+                      data-human-bubble={isHumanMessage ? '' : undefined}
+                      data-system-bubble={
+                        message.type === 'system' ? '' : undefined
+                      }
+                      {...(canQuoteMessage
+                        ? {
+                            'data-quote-message-id': message.id,
+                            'data-quote-source': quoteSource,
+                          }
+                        : {})}
+                      className={cn(
+                        'max-w-full rounded-2xl',
+                        isHumanMessage
+                          ? 'bg-primary text-primary-foreground px-4 py-2.5'
+                          : message.type === 'system'
+                            ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
+                            : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
+                      )}
+                    >
+                      {isAssistantMessage ? (
+                        <AssistantMessage
+                          mode={mode}
+                          collapseProcess={collapseProcess}
+                          processPrefix={
+                            processIndexes?.length ? (
+                              <MessageList
+                                messages={processIndexes.map(
+                                  (processIndex) => messages[processIndex],
+                                )}
+                                lookupMessages={
+                                  (lookupMessages ??
+                                    messages) as ChatkitMessage[]
+                                }
+                                assistantTitle={assistantTitle}
+                                organizationId={organizationId}
+                                apiUrl={apiUrl}
+                                mcpApps={mcpApps}
+                                enableQuotes={enableQuotes}
+                                showActions={false}
+                                embedded
+                              />
+                            ) : undefined
+                          }
+                          message={{
+                            ...(message as ChatkitMessage),
+                            type: 'assistant',
+                          }}
+                          messages={(
+                            lookupMessages ?? messages.slice(0, index + 1)
+                          ).map(
+                            (item) =>
+                              ({
+                                ...(item as ChatkitMessage),
+                                type:
+                                  String(item.type) === 'ai'
+                                    ? 'assistant'
+                                    : item.type,
+                              }) as ChatkitMessage,
+                          )}
+                          isStreaming={isStreamingMessage}
+                          streamingStatus={streamingStatus}
+                          isThreadRunning={isThreadRunning}
+                          isThreadPaused={isThreadPaused}
+                          organizationId={organizationId}
+                          apiUrl={apiUrl}
+                          pet={pet}
+                          mcpApps={mcpApps}
+                        />
+                      ) : (
+                        <>
+                          {isHumanMessage &&
+                            humanRuntimeCapabilityOptions.length > 0 && (
+                              <HumanRuntimeCapabilityChips
+                                options={humanRuntimeCapabilityOptions}
+                              />
+                            )}
+                          {isHumanMessage && humanReferences.length > 0 && (
+                            <div className="mb-2 flex flex-wrap gap-1.5">
+                              {humanReferences.map((reference) => (
+                                <ReferenceChip
+                                  key={getReferenceKey(reference)}
+                                  reference={reference}
+                                  variant="message"
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {/* Show attachments for human messages */}
+                          {isHumanMessage && humanAttachments.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                              {humanAttachments.map((file, fileIndex) => (
+                                <div
+                                  key={fileIndex}
+                                  className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
+                                >
+                                  <FileText size={12} />
+                                  <span className="max-w-[100px] truncate">
+                                    {file.originalName ?? file.id}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {Array.isArray(message.content) ? (
+                            message.content.map((part, partIndex) => (
+                              <p
+                                key={`${part.type}-${partIndex}`}
+                                className="wrap-break-word text-sm leading-relaxed"
+                              >
+                                {formatMessageContent(part)}
+                              </p>
+                            ))
+                          ) : (
+                            <span className="wrap-break-word text-sm leading-relaxed">
+                              {formatMessageContent(message.content)}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {/* Message actions - hidden during streaming, retry only for last AI message */}
+                    {showActions && (
+                      <MessageActions
+                        updatedAt={
+                          isAssistantMessage || isHumanMessage
+                            ? message.updatedAt
+                            : undefined
+                        }
+                        content={
+                          bubbles && isAssistantMessage
+                            ? getMessageBubbleText(message as ChatkitMessage)
+                            : collapseProcess && isAssistantMessage
+                              ? (getFinalAnswerText(
+                                  message as AssistantMessageWithAgentRuns,
+                                ) ?? messageContent)
+                              : messageContent
+                        }
+                        isAssistant={isAssistantMessage}
+                        skillUsages={
+                          isAssistantMessage
+                            ? mergeChatSkillUsages(
+                                ...(processIndexes ?? []).map((i) =>
+                                  getMessageSkillUsages(messages[i]),
+                                ),
+                                getMessageSkillUsages(message),
+                              )
+                            : undefined
+                        }
+                        isStreaming={isStreamingMessage}
+                        alwaysVisible={
+                          isAssistantMessage && index === lastAssistantIndex
+                        }
+                        onActionTooltipOpen={onMessageActionTooltipOpen}
+                        branching={(message as ChatkitMessage).branching}
+                        isBranching={branchingMessageId === message.id}
+                        branchDisabled={Boolean(branchingMessageId)}
+                        onBranch={
+                          onBranch && message.id
+                            ? () => onBranch(message.id!)
+                            : undefined
+                        }
+                        onEdit={
+                          canEditMessage && editing
+                            ? () => editing.onStart(message.id!)
+                            : undefined
+                        }
+                        onRetry={
+                          onRetry &&
+                          isAssistantMessage &&
+                          !isLoading &&
+                          index === messages.length - 1
+                            ? () => onRetry(index)
+                            : undefined
+                        }
+                      />
+                    )}
+                    {index === approvalIndex && approval && (
+                      <MessageBubble mode={mode}>{approval}</MessageBubble>
+                    )}
+                    {!showActions &&
+                      !isStreamingMessage &&
+                      (isAssistantMessage || isHumanMessage) && (
+                        <MessageTimestamp updatedAt={message.updatedAt} />
+                      )}
+                  </>
+                )}
               </div>
             </div>
           );
-        })()}
-    </div>
+        })}
+        {approvalIndex < 0 && approval && (
+          <MessageBubble mode={mode}>{approval}</MessageBubble>
+        )}
+        {/* Show loading indicator with minimum display time */}
+        {showLoadingDots &&
+          (() => {
+            const lastMessage = messages[messages.length - 1];
+            const lastMessageType = lastMessage ? String(lastMessage.type) : '';
+            const isLastMessageFromAI =
+              lastMessageType === 'ai' || lastMessageType === 'assistant';
+            const lastAssistantStatus = isLastMessageFromAI
+              ? getAssistantStreamingStatus(
+                  {
+                    ...(lastMessage as ChatkitMessage),
+                    lastStreamOutputAt,
+                  },
+                  isLoading,
+                  { now: streamingNow },
+                )
+              : null;
+            if (lastAssistantStatus) return null;
+            const fallbackStreamingStatus = getAssistantStreamingStatus(
+              {
+                status: undefined,
+                reasoning: undefined,
+                lastStreamOutputAt,
+              },
+              isLoading,
+              { now: streamingNow },
+            );
+            return (
+              <div className="flex justify-start gap-3 -ml-2">
+                <MessageBubble
+                  mode={mode}
+                  kind="status"
+                  className="max-w-full py-2.5"
+                >
+                  <AssistantStreamingIndicator
+                    status={fallbackStreamingStatus ?? 'loading'}
+                  />
+                </MessageBubble>
+              </div>
+            );
+          })()}
+      </div>
+    </PresentationScrollAnchor>
   );
 }

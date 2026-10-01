@@ -26,6 +26,7 @@ export function ExternalAssistantView({
   organizationId,
   apiUrl,
   mcpApps,
+  messagePresentation,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -39,6 +40,7 @@ export function ExternalAssistantView({
   organizationId?: string;
   apiUrl?: string;
   mcpApps?: ChatKitOptions['mcpApps'];
+  messagePresentation?: ChatKitOptions['messagePresentation'];
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore: () => void;
@@ -146,6 +148,15 @@ export function ExternalAssistantView({
               messages={transcript}
               lookupMessages={messages}
               assistantTitle={title ?? undefined}
+              messagePresentation={messagePresentation}
+              assistantActor={{
+                id: run.info.xpertId
+                  ? `assistant:${run.info.xpertId}`
+                  : 'unknown:external-assistant',
+                kind: run.info.xpertId ? 'assistant' : 'unknown',
+                name: title ?? undefined,
+                avatar: run.info.avatar,
+              }}
               isLoading={isRunningRunStatus(run.info.status)}
               isThreadRunning={isRunningRunStatus(run.info.status)}
               organizationId={organizationId}

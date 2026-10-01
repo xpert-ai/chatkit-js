@@ -1,3 +1,5 @@
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import { resolveMessagePresentation } from '../../../lib/message-presentation';
 import * as React from 'react';
 import {
   buildMessageNavigationItems,
@@ -18,6 +20,7 @@ type ChatViewportOptions = Pick<
 > &
   Pick<ReturnType<typeof useChatAssistant>, 'assistantTitle'> &
   Pick<ReturnType<typeof useChatQuotes>, 'clearQuoteSelection'> & {
+    messagePresentation?: ChatKitOptions['messagePresentation'];
     messages: ReturnType<typeof useStreamContext>['messages'];
     viewportRef: React.RefObject<HTMLDivElement | null>;
   };
@@ -26,6 +29,7 @@ export function useChatViewport({
   t,
   assistantTitle,
   messageNavigationEnabled,
+  messagePresentation,
   messages,
   i18n,
   stream,
@@ -67,6 +71,7 @@ export function useChatViewport({
     [assistantTitle, t],
   );
 
+  const presentationMode = resolveMessagePresentation(messagePresentation).mode;
   const messageNavigationItems = React.useMemo(
     () =>
       messageNavigationEnabled
@@ -76,6 +81,7 @@ export function useChatViewport({
               labels: messageNavigationLabels,
               language: i18n.language,
               assistantTitle,
+              mode: presentationMode,
             },
           )
         : [],
@@ -84,6 +90,7 @@ export function useChatViewport({
       i18n.language,
       messageNavigationEnabled,
       messageNavigationLabels,
+      presentationMode,
       messages,
     ],
   );

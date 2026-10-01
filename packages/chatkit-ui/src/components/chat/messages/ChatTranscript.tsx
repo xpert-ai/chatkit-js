@@ -44,7 +44,10 @@ type ChatTranscriptProps = Pick<
   > &
   Pick<ReturnType<typeof useChatInput>, 'handlePromptClick'> &
   Pick<ReturnType<typeof useChatHost>, 'inlineApproval'> &
-  Pick<ReturnType<typeof useChatAssistant>, 'assistantTitle'> &
+  Pick<
+    ReturnType<typeof useChatAssistant>,
+    'assistantTitle' | 'assistantAvatar'
+  > &
   Pick<
     ReturnType<typeof useChatRunControl>,
     'isVisibleStreaming' | 'isPauseActive'
@@ -98,6 +101,7 @@ export function ChatTranscript({
   inlineApproval,
   options,
   assistantTitle,
+  assistantAvatar,
   isVisibleStreaming,
   currentThreadIsRunning,
   isPauseActive,
@@ -179,9 +183,13 @@ export function ChatTranscript({
         <MessageList
           approval={inlineApproval.card}
           approvalToolCallId={stream.pendingHITLRequest?.request.toolCallId}
-          collapseProcess={
-            options?.messagePresentation?.collapseProcess === true
-          }
+          messagePresentation={options?.messagePresentation}
+          assistantActor={{
+            id: `assistant:${stream.assistantId ?? 'current'}`,
+            kind: 'assistant',
+            name: assistantTitle,
+            avatar: assistantAvatar,
+          }}
           messages={messages}
           assistantTitle={assistantTitle}
           isLoading={isVisibleStreaming}

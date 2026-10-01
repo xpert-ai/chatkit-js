@@ -7,6 +7,10 @@ import {
 } from '@xpert-ai/chatkit-types';
 import type { ChatkitAvatarData } from '../components/ui/chatkit-avatar';
 import { isNonTranscriptMessageContent } from './message-content-presentation';
+import {
+  buildAssistantRenderTree,
+  type AssistantMessageWithAgentRuns,
+} from './agent-run-render-tree';
 
 export type MessagePresentationMode = NonNullable<
   ChatKitMessagePresentationOptions['mode']
@@ -98,11 +102,13 @@ export function buildMessagePresentation(
   });
 }
 
-export function getMessageBubbleText(message: Pick<ChatkitMessage, 'content'>) {
-  const content =
-    typeof message.content === 'string' ? [message.content] : message.content;
-  return content
-    .flatMap((item) => {
+export function getMessageBubbleText(message: AssistantMessageWithAgentRuns) {
+  // Child / external assistant cards own their reply. Do not copy their hidden
+  // transcript into the parent's text or attribute it to the parent author.
+  return buildAssistantRenderTree(message)
+    .units.flatMap((unit) => {
+      if (unit.type !== 'entry') return [];
+      const item = unit.entry.item;
       if (typeof item === 'string') return item.trim() ? [item] : [];
       return item.type === 'text' && item.text?.trim()
         ? [item.text as string]

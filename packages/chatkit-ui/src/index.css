@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './theme-surfaces.css';
+@import './message-bubbles.css';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter';
@@ -131,7 +132,12 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   --radius-composer-shell: var(--chat-panel-radius, var(--radius));
-  --radius-composer-editor: max(0px, calc(var(--chat-panel-radius, var(--radius)) - var(--spacing-composer-inset)));
+  --radius-composer-editor: max(
+    0px,
+    calc(
+      var(--chat-panel-radius, var(--radius)) - var(--spacing-composer-inset)
+    )
+  );
   --spacing-composer-inset: 2px;
   --shadow-composer-shell:
     0px 12px 24px -8px rgba(0, 0, 0, 0.02), 0px 2px 4px -4px rgba(0, 0, 0, 0.02);

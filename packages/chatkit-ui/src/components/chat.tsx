@@ -135,6 +135,7 @@ export function Chat({
   });
 
   const viewport = useChatViewport({
+    messagePresentation: options?.messagePresentation,
     ...session,
     ...assistant,
     ...quotes,
