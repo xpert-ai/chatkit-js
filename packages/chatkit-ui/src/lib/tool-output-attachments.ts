@@ -31,7 +31,7 @@ const toolOutputImageAttachmentSchema = z
     height: z.number().int().positive().max(100_000).optional(),
     title: boundedLabel.optional(),
     alt: boundedLabel.optional(),
-    source: z.enum(['knowledge-document', 'sandbox']),
+    source: z.enum(['knowledge-document', 'sandbox', 'tool']),
     modelDetail: z.enum(['auto', 'low', 'high']),
     anchors: toolOutputImageAnchorsSchema.optional(),
   })

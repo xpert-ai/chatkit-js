@@ -879,7 +879,8 @@
         "modelDetail": "Model detail: {{detail}}",
         "sources": {
           "knowledge-document": "Knowledge document",
-          "sandbox": "Sandbox"
+          "sandbox": "Sandbox",
+          "tool": "Tool image"
         }
       },
       "shell": {

@@ -879,7 +879,8 @@
         "modelDetail": "模型清晰度：{{detail}}",
         "sources": {
           "knowledge-document": "知识文档",
-          "sandbox": "沙箱"
+          "sandbox": "沙箱",
+          "tool": "工具图片"
         }
       },
       "shell": {
