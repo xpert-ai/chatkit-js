@@ -571,6 +571,14 @@ export type ChatKitMcpAppsOptions = {
   allowedDomains?: string[];
 };
 
+/** Rendering policy only; never changes messages, execution or model context. */
+export type ChatKitMessagePresentationOptions = {
+  /** Defaults to the existing transcript presentation. */
+  mode?: 'transcript' | 'bubbles';
+  /** Collapse the process before the final answer. Only applies to transcript. */
+  collapseProcess?: boolean;
+};
+
 export type ChatKitOptions = {
   /**
    * ChatKit iframe URL for web component integrations.
@@ -634,10 +642,7 @@ export type ChatKitOptions = {
   messageNavigation?: ChatKitMessageNavigationOptions;
 
   /** Message presentation only; never changes stored messages or model context. */
-  messagePresentation?: {
-    /** Collapse the process preceding each final assistant answer. Default: false. */
-    collapseProcess?: boolean;
-  };
+  messagePresentation?: ChatKitMessagePresentationOptions;
 
   /**
    * Optional Xpert Remote Views workbench.
