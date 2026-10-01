@@ -77,6 +77,7 @@ type ChatTranscriptProps = Pick<
     isSubmissionBlocked: boolean;
     isPromptEditDisabled: boolean;
     options: ChatKitOptions | null | undefined;
+    messagePresentation?: ChatKitOptions['messagePresentation'];
     currentThreadIsRunning: boolean;
   };
 
@@ -100,6 +101,7 @@ export function ChatTranscript({
   isPromptEditDisabled,
   inlineApproval,
   options,
+  messagePresentation,
   assistantTitle,
   assistantAvatar,
   isVisibleStreaming,
@@ -183,7 +185,9 @@ export function ChatTranscript({
         <MessageList
           approval={inlineApproval.card}
           approvalToolCallId={stream.pendingHITLRequest?.request.toolCallId}
-          messagePresentation={options?.messagePresentation}
+          messagePresentation={
+            messagePresentation ?? options?.messagePresentation
+          }
           assistantActor={{
             id: `assistant:${stream.assistantId ?? 'current'}`,
             kind: 'assistant',

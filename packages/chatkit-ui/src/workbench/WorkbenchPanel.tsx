@@ -552,6 +552,7 @@ export function WorkbenchPanel({
             className="h-full min-h-0"
           >
             <ExternalAssistantView
+              client={stream.client}
               runs={externalRuns}
               selectedId={selectedExternalId}
               onSelect={onSelectExternal}

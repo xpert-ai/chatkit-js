@@ -1,4 +1,8 @@
 import * as React from 'react';
+import type { Client } from '@xpert-ai/xpert-sdk';
+import { useAssistantInfo } from '../hooks/useAssistantInfo';
+import { readAssistantMessagePresentation } from '../lib/assistant-message-presentation';
+import { resolveMessagePresentation } from '../lib/message-presentation';
 import { ArrowLeft, Bot } from 'lucide-react';
 import type { ChatKitOptions, ChatkitMessage } from '@xpert-ai/chatkit-types';
 import { MessageList } from '../components/thread/MessageList';
@@ -27,6 +31,7 @@ export function ExternalAssistantView({
   apiUrl,
   mcpApps,
   messagePresentation,
+  client,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -41,12 +46,18 @@ export function ExternalAssistantView({
   apiUrl?: string;
   mcpApps?: ChatKitOptions['mcpApps'];
   messagePresentation?: ChatKitOptions['messagePresentation'];
+  client?: Client | null;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore: () => void;
 }) {
   const { t } = useChatkitTranslation();
   const run = runs.find((item) => item.id === selectedId);
+  const assistant = useAssistantInfo(client, run?.info.xpertId);
+  const presentation = resolveMessagePresentation(
+    messagePresentation,
+    readAssistantMessagePresentation(assistant?.config),
+  );
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const followRef = React.useRef(true);
@@ -148,7 +159,7 @@ export function ExternalAssistantView({
               messages={transcript}
               lookupMessages={messages}
               assistantTitle={title ?? undefined}
-              messagePresentation={messagePresentation}
+              messagePresentation={presentation}
               assistantActor={{
                 id: run.info.xpertId
                   ? `assistant:${run.info.xpertId}`

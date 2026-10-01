@@ -20,7 +20,7 @@ const options: ChatKitOptions = {
 chatkitElement.setOptions(options);
 ```
 
-`collapseProcess` 在气泡模式中暂不生效：工具前后的正文都会保留为独立气泡。改回 `mode: 'transcript'` 后恢复原来的过程折叠设置。未配置 mode 的已有宿主不改变行为。调用 `setOptions` 时继续提供完整 options，不能只传展示字段覆盖已有配置。
+`collapseProcess` 在气泡模式中暂不生效：工具前后的正文都会保留为独立气泡。改回 `mode: 'transcript'` 后恢复原来的过程折叠设置。未配置 mode 时读取 Assistant 的已发布默认值；Assistant 未配置时仍使用原始模式。调用 `setOptions` 时继续提供完整 options，不能只传展示字段覆盖已有配置。
 
 React 使用 `useChatKit({ ...baseOptions, messagePresentation: { mode } })`；Vue 使用同样的 options（运行时变化通过 ref / computed 提供）；原生 JS 使用 `createChatKit(options)` 创建，后续通过 `instance.element.setOptions(nextOptions)` 更新。没有新增框架专属属性。
 
@@ -42,7 +42,7 @@ React 使用 `useChatKit({ ...baseOptions, messagePresentation: { mode } })`；V
 
 同一消息只保留一组主操作。主回复复制按顺序组合当前发言者的正文，不复制推理、工具载荷或子助手正文；子助手正文在其独立视图中复制或选中引用。重试、编辑、分支仍定位原始消息。导航隐藏过程摘要，外部 Assistant 使用其可见卡片名称。
 
-主聊天、Workbench 最大化后的 Chat 标签页、侧边聊天和外部 Assistant 消息列表共用配置。侧边聊天继承 options，不增加额外的运行权限。
+主聊天、Workbench 最大化后的 Chat 标签页和侧边聊天读取当前 Assistant 的默认值。外部 Assistant 消息列表读取所选 Assistant 的默认值。宿主显式 options 对这些消息列表统一生效，侧边聊天不增加额外的运行权限。
 
 ## 生命周期与主题
 
@@ -81,9 +81,7 @@ pnpm dev:ui
 
 ### 平台 ClawXpert
 
-使用既有本地 Cloud、API 与本工作区 ChatKit UI，临时在 ClawXpert options 中启用 `mode: 'bubbles'`，未修改 Assistant 发布配置。验收后已恢复宿主配置，正式启用仍通过 options 显式选择。
-
-审核状态补充：用户要求查看实际效果后，已在本地 ClawXpert 的 `clawxpert-conversation-detail.component.ts` 中重新启用气泡模式，并保留为未提交改动供审核。此配置影响该本地宿主中的 ClawXpert 展示，ChatKit SDK 的默认模式仍为 `transcript`。
+首次验收使用既有本地 Cloud、API 与本工作区 ChatKit UI，临时在 ClawXpert options 中启用 `mode: 'bubbles'`，当时未修改 Assistant 发布配置。后续已移除宿主固定模式，改为下文的 Assistant 配置与发布流程；ChatKit SDK 的兜底模式仍为 `transcript`。
 
 1. 发起合成验收对话，观察真实请求的运行状态、逐块正文、列表与代码块。
 2. 观察实际外部 DOCX 助手调用及结果卡片；打开 Workbench 外部助手视图，确认其回复也使用气泡。
@@ -94,8 +92,27 @@ pnpm dev:ui
 
 本次平台会话的工具集合没有通用终端，实际调用了 DOCX 子助手并返回能力限制。没有将模型生成的“模拟验收总结”当作工具执行证据。审批、工具图片和 MCP 的保留由自动测试覆盖，本次没有逐项在真实服务中触发。真实长会话性能和所有浏览器 / 屏幕阅读器组合仍需后续专项覆盖。
 
-## 尚未启用的扩展
+## Assistant 配置与发布
 
-Assistant 配置默认值的服务端契约尚未确定，当前只有 options 生效。内部解析器已预留 defaults 参数，优先级为显式 options > Assistant defaults > transcript 默认值；未读取猜测的 Assistant 字段。
+Assistant 设置 Dialog 的「外观 → 消息展示模式」支持「跟随应用默认 / 原始模式 / 气泡模式」。设置自动写入草稿的 `team.options.messagePresentation.mode`；点击「保存并发布」会等待草稿保存完成，再发布当前 Assistant，保留其运行环境。选择「跟随应用默认」会移除 Assistant 覆盖值。保存或发布失败时保留草稿并显示错误，可以重试。
+
+发布成功后，平台通知同一组织、同一 Assistant 的当前 ChatKit，通过 `setOptions` 触发 SDK 重新读取已发布配置。刷新期间保留上一次配置，响应到达后原位切换展示模式，不重建 iframe、会话或输入框。其他组织或 Assistant 的发布不会触发当前会话刷新；显式宿主配置仍具有更高优先级。
+
+正式契约是 `TXpertOptions.messagePresentation?: { mode?: 'transcript' | 'bubbles' }`。现有 SDK 的 `client.assistants.get(id)` 返回 `config.options`，ChatKit 在 API 边界校验 `config.options.messagePresentation.mode`；不新增网络接口，不需要发布新版 SDK。
+
+优先级为：显式 ChatKit `options.messagePresentation.mode` > Assistant 已发布默认值 > `transcript`。只指定 `collapseProcess` 不会覆盖 Assistant 的 mode。桌面应用若显式设置了全局模式，会按此优先级覆盖 Assistant 默认值。
+
+Assistant 或 client 变化时立即清除旧默认值，并忽略旧请求的迟到响应。未配置、非法模式或首次请求失败时回退到宿主设置/原始模式；同一 Assistant 刷新失败时保留上一次读取成功的配置。配置异步加载后由现有展示模式切换机制保留消息位置与组件状态。
+
+本地联调须确认 iframe 服务来自当前工作树。只修改源码或发布 Assistant，仍加载另一个工作树/旧版本的 UI 时不会获得新行为。可将当前 `build:app` 产物安装到平台本地 `@xpert-ai/chatkit-ui/dist/app`，让 Cloud 使用 `/chatkit`；也可启动独立 UI 开发服务并配置 `VITE_CHATKIT_FRAME_URL` 指向它。不要覆盖其他工作树占用的服务。
+
+### 保存并发布验收（2026-10-01）
+
+- 在平台绑定的 Claw Xpert 中，修改模式后自动保存草稿，当前会话保持已发布的模式；点击「保存并发布」后当前列表立即切换。
+- 实测气泡 → 原始 → 气泡两次发布均成功，iframe URL（含 channelId）保持不变，会话历史仍在；最终保留已发布的气泡模式。
+- 本地验收使用当前工作树构建的 `/chatkit` 产物，未发布 npm 包，未发送新对话消息。
+- 平台保存/发布与宿主刷新测试 32 项、ChatKit 配置读取与优先级测试 5 项通过；Angular 编译、ChatKit 类型检查和 app 构建通过。
+
+## 尚未启用的扩展
 
 `MessageActor` 与 `PresentationSource` 区分作者、角色、原消息 / 块和执行 ID，但本期没有群聊协议、并行多 Assistant 调度、参与者目录或 @提及。不能把执行 ID 或相同显示名称当成跨会话作者身份。

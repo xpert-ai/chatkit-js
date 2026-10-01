@@ -51,6 +51,7 @@ import { useChatConversationActions } from './chat/session/useChatConversationAc
 import { useChatEnvironment } from './chat/session/useChatEnvironment';
 import { useChatRunControl } from './chat/session/useChatRunControl';
 import { useChatTaskSummary } from './chat/summary/useChatTaskSummary';
+import { resolveMessagePresentation } from '../lib/message-presentation';
 export type { ChatProps, ChatReferenceRequest } from './chat/types';
 export function Chat({
   className,
@@ -80,6 +81,10 @@ export function Chat({
   const branch = useChatBranchState({ ...session });
   const runControl = useChatRunControl({ ...branch, ...session });
   const assistant = useChatAssistant({ ...session, title, placeholder });
+  const messagePresentation = resolveMessagePresentation(
+    options?.messagePresentation,
+    assistant.assistantMessagePresentation,
+  );
   const feedback = useChatStreamingFeedback({ ...session, surface });
   const runtime = useRuntimeCapabilitiesState({
     client: session.stream.client,
@@ -135,7 +140,7 @@ export function Chat({
   });
 
   const viewport = useChatViewport({
-    messagePresentation: options?.messagePresentation,
+    messagePresentation,
     ...session,
     ...assistant,
     ...quotes,
@@ -448,6 +453,7 @@ export function Chat({
           isPromptEditDisabled={isPromptEditDisabled}
           options={options}
           currentThreadIsRunning={currentThreadIsRunning}
+          messagePresentation={messagePresentation}
         />
 
         <ChatQuoteActions {...quotes} {...session} />
