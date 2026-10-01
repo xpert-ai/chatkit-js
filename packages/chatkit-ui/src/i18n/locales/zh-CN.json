@@ -877,6 +877,8 @@
         "open": "查看{{title}}",
         "close": "关闭图片预览",
         "modelDetail": "模型清晰度：{{detail}}",
+        "embeddedImagePlaceholder": "[已省略 {{mimeType}} 图片数据]",
+        "embeddedImagesOmitted": "已省略 {{count}} 项内嵌图片数据。可用的图片附件会单独展示。",
         "sources": {
           "knowledge-document": "知识文档",
           "sandbox": "沙箱",

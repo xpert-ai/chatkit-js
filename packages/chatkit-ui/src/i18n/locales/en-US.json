@@ -877,6 +877,8 @@
         "open": "Open {{title}}",
         "close": "Close image preview",
         "modelDetail": "Model detail: {{detail}}",
+        "embeddedImagePlaceholder": "[{{mimeType}} image data omitted]",
+        "embeddedImagesOmitted": "Embedded image data omitted: {{count}}. Available image attachments are shown separately.",
         "sources": {
           "knowledge-document": "Knowledge document",
           "sandbox": "Sandbox",
