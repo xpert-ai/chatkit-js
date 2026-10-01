@@ -8,10 +8,17 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ToolOutputPresentation } from '@xpert-ai/chatkit-types';
+import type {
+  TMessageContentComponent,
+  ToolOutputPresentation,
+} from '@xpert-ai/chatkit-types';
 import { setLanguage } from '../../../i18n';
 import { ParentMessengerContext } from '../../../providers/ParentMessenger';
 import { DefaultToolCallOutput, ToolCallValueBlock } from './tool-call-output';
+import {
+  ToolComponentGroup,
+  type PartialStepData,
+} from './tool-component-group';
 
 const legacyOutput = [
   { type: 'text', text: 'Image prepared for inspection.' },
@@ -66,6 +73,53 @@ afterEach(() => {
 });
 
 describe('tool output image display', () => {
+  it('keeps image summaries and authorized previews connected through the tool group', async () => {
+    const sendCommand = vi.fn().mockResolvedValue({
+      previewUrl: 'https://assets.example/authorized.png',
+    });
+    const toolCall: TMessageContentComponent<PartialStepData> = {
+      type: 'component',
+      id: 'call',
+      executionId: 'execution',
+      data: {
+        category: 'Tool',
+        tool: 'prepare_image',
+        title: 'Prepare construction image',
+        status: 'success',
+        output: legacyOutput,
+        artifact: presentation,
+      },
+    };
+    const { container } = render(
+      <ParentMessengerContext.Provider value={messenger(sendCommand)}>
+        <ToolComponentGroup
+          hasFollowingItem={false}
+          isThreadRunning={false}
+          items={[toolCall]}
+        />
+      </ParentMessengerContext.Provider>,
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Prepare construction image' }),
+    );
+
+    expect(
+      screen.getByText(/Embedded image data omitted: 1/),
+    ).toBeInTheDocument();
+    expect(container.textContent).toContain('Image prepared for inspection.');
+    expect(container.innerHTML).not.toContain('PRIVATE_PIXELS');
+    expect(await screen.findByAltText('Construction detail')).toHaveAttribute(
+      'src',
+      'https://assets.example/authorized.png',
+    );
+    expect(sendCommand).toHaveBeenCalledWith('onToolOutputAttachmentPreview', {
+      attachment: presentation.attachments[0],
+      toolCallId: 'call',
+      executionId: 'execution',
+    });
+  });
+
   it('omits image bytes from tree, raw, and copy while preserving the useful text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });

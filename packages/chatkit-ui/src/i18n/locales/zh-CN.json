@@ -745,6 +745,12 @@
     "langGraphMessages": "LangGraph 消息..."
   },
   "message": {
+    "bubbles": {
+      "completed": "已完成",
+      "failed": "本次请求未能完成。",
+      "paused": "等待你的操作",
+      "interrupted": "回复已中断"
+    },
     "updatedAt": "更新于 {{time}}",
     "process": {
       "title": "处理过程",

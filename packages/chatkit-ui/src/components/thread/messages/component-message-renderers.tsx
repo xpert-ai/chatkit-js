@@ -43,6 +43,11 @@ export type ComponentMessageRenderer = {
     language: string,
   ) => string | null;
   renderDetails?: ComponentMessageDetailsRenderer;
+  /** True only for a parsed user-facing result, excluding raw output fallback. */
+  hasBubbleResult?: (
+    content: TMessageContentComponent,
+    data: ComponentMessagePartialStepData,
+  ) => boolean;
   hasDetails?: (
     content: TMessageContentComponent,
     data: ComponentMessagePartialStepData,

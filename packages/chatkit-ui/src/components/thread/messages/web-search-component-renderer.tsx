@@ -32,12 +32,16 @@ export const webSearchComponentRenderer: ComponentMessageRenderer = {
   presentation: 'grouped-step',
   match: isComputerWebSearchComponent,
   hasDetails: hasWebSearchSources,
+  hasBubbleResult: hasWebSearchSources,
   renderDetails: WebSearchToolCallOutput,
 };
 
 function normalizeToolToken(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
   return normalized || null;
 }
 

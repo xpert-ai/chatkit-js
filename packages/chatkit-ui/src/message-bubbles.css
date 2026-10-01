@@ -1,0 +1,72 @@
+/* Message surfaces inherit the same theme radius and density as Workbench. */
+[data-message-presentation='bubbles'] {
+  --chat-bubble-radius: var(--chat-panel-radius, var(--radius));
+  container-type: inline-size;
+}
+
+.chatkit-message-bubble {
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: var(
+    --chat-bubble-radius,
+    var(--chat-panel-radius, var(--radius))
+  );
+  background: var(--muted);
+  color: var(--chat-foreground);
+  padding: calc(0.75rem * var(--chat-density-scale, 1))
+    calc(1rem * var(--chat-density-scale, 1));
+  overflow-wrap: anywhere;
+}
+
+.chatkit-message-bubble[data-message-bubble='text'] {
+  max-width: 80%;
+}
+.chatkit-message-bubble[data-message-bubble='rich'] {
+  width: 100%;
+}
+.chatkit-message-bubble[data-message-bubble='status'] {
+  color: var(--muted-foreground);
+}
+.chatkit-message-bubble[hidden] {
+  display: none;
+}
+
+/* The bubble owns the outer surface; leaf content keeps its internal controls. */
+.chatkit-message-bubble > div > [data-slot='card'],
+.chatkit-message-bubble > [data-slot='card'],
+.chatkit-message-bubble > div > figure {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  border-radius: var(
+    --chat-bubble-radius,
+    var(--chat-panel-radius, var(--radius))
+  );
+}
+.chatkit-message-bubble pre,
+.chatkit-message-bubble .markdown-content {
+  min-width: 0;
+  max-width: 100%;
+}
+.chatkit-message-bubble .markdown-content > :first-child {
+  margin-top: 0;
+}
+.chatkit-message-bubble .markdown-content > :last-child {
+  margin-bottom: 0;
+}
+[data-message-presentation='bubbles'] [data-human-bubble],
+[data-message-presentation='bubbles'] [data-system-bubble] {
+  border-radius: var(--chat-bubble-radius);
+}
+@container (max-width: 480px) {
+  .chatkit-message-bubble[data-message-bubble='text'] {
+    max-width: 92%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-message-presentation='bubbles'] .animate-bounce,
+  [data-message-presentation='bubbles'] .animate-pulse {
+    animation: none;
+  }
+}

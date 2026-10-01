@@ -745,6 +745,12 @@
     "langGraphMessages": "LangGraph Messages..."
   },
   "message": {
+    "bubbles": {
+      "completed": "Completed",
+      "failed": "This request could not be completed.",
+      "paused": "Waiting for your input",
+      "interrupted": "Response interrupted"
+    },
     "updatedAt": "Updated {{time}}",
     "process": {
       "title": "Process",

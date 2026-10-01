@@ -1,4 +1,4 @@
-import { getDensitySpacing } from '../lib/theme-surfaces';
+import { getDensitySpacing, getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
 import type { ChatKitTheme, ColorScheme, GrayscaleOptions } from '@xpert-ai/chatkit-types';
 
@@ -439,6 +439,7 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
         ref={themeRef}
         className="h-full w-full bg-background text-foreground"
         style={{
+          ...getSurfaceThemeStyle(theme),
           ...(theme.typography?.fontFamily && { fontFamily: theme.typography.fontFamily }),
         }}
       >

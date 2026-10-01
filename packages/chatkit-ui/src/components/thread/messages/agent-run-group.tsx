@@ -1,4 +1,5 @@
 import * as React from 'react';
+import type { MessagePresentationMode } from '../../../lib/message-presentation';
 
 import {
   Bot,
@@ -99,8 +100,7 @@ function MiddlewareEventRow({ content }: { content: AgentEventContent }) {
         defaultValue: fallbackTitle,
       })
     : fallbackTitle;
-  const fallbackMessage =
-    readTrimmedString(content.message) || phase || null;
+  const fallbackMessage = readTrimmedString(content.message) || phase || null;
   const attempt =
     readDisplayToken(detailData.attempt) ?? readDisplayToken(eventData.attempt);
   const total =
@@ -177,7 +177,10 @@ export function formatStepDuration(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export function getAgentRunStatusConfig(status?: string | null, hasReply = false) {
+export function getAgentRunStatusConfig(
+  status?: string | null,
+  hasReply = false,
+) {
   const normalized = normalizeRunStatus(status);
   if (normalized === 'running') {
     return {
@@ -252,7 +255,9 @@ function AgentRunHeaderMetric({
   );
 }
 
-export function getAgentNodeUnits(node: AgentRunRenderNode): AssistantRenderUnit[] {
+export function getAgentNodeUnits(
+  node: AgentRunRenderNode,
+): AssistantRenderUnit[] {
   return [
     ...node.entries.map((entry) => ({
       type: 'entry' as const,
@@ -308,18 +313,17 @@ export function AgentEventRow({ content }: { content: AgentEventContent }) {
 }
 
 export function AgentRunGroup({
+  mode = 'transcript',
   node,
   hasFollowingItem,
   depth,
   renderUnits,
 }: {
+  mode?: MessagePresentationMode;
   node: AgentRunRenderNode;
   hasFollowingItem: boolean;
   depth: number;
-  renderUnits: (
-    units: AssistantRenderUnit[],
-    depth: number,
-  ) => React.ReactNode;
+  renderUnits: (units: AssistantRenderUnit[], depth: number) => React.ReactNode;
 }) {
   const { t } = useChatkitTranslation();
   const counts = getAgentRunCounts(node);
@@ -384,7 +388,7 @@ export function AgentRunGroup({
           ),
         }
       : null,
-    counts.tools > 0
+    mode !== 'bubbles' && counts.tools > 0
       ? {
           icon: Wrench,
           count: counts.tools,
@@ -394,7 +398,7 @@ export function AgentRunGroup({
           ),
         }
       : null,
-    counts.events > 0
+    mode !== 'bubbles' && counts.events > 0
       ? {
           icon: Info,
           count: counts.events,
@@ -425,7 +429,14 @@ export function AgentRunGroup({
   );
 
   return (
-    <div className={cn('border border-border/70 pl-2 rounded-lg', depth > 0 ? 'ml-1' : '-mx-2.5 shadow-sm')}>
+    <div
+      className={cn(
+        mode !== 'bubbles' && [
+          'border border-border/70 pl-2 rounded-lg',
+          depth > 0 ? 'ml-1' : '-mx-2.5 shadow-sm',
+        ],
+      )}
+    >
       <button
         type="button"
         className="group/agent group-agent flex w-full items-start justify-between gap-2 rounded-md px-0 py-1.5 text-left"
@@ -455,7 +466,7 @@ export function AgentRunGroup({
                 {formatStepDuration(duration)}
               </span>
             ) : null}
-            {node.info.inputs !== undefined ? (
+            {mode !== 'bubbles' && node.info.inputs !== undefined ? (
               <AgentRunHeaderMetric
                 icon={Braces}
                 label={t('message.agentRun.inputLabel')}

@@ -552,6 +552,7 @@ export function WorkbenchPanel({
             className="h-full min-h-0"
           >
             <ExternalAssistantView
+              client={stream.client}
               runs={externalRuns}
               selectedId={selectedExternalId}
               onSelect={onSelectExternal}
@@ -560,6 +561,7 @@ export function WorkbenchPanel({
               organizationId={stream.organizationId}
               apiUrl={stream.apiUrl}
               mcpApps={options?.mcpApps}
+              messagePresentation={options?.messagePresentation}
               hasMore={stream.historyMessagePagination?.hasMore}
               loadingMore={stream.historyMessagePagination?.isLoadingMore}
               onLoadMore={() => {

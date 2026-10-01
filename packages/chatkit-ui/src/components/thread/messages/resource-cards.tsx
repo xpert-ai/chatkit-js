@@ -1,3 +1,5 @@
+import { MessageBubble } from './message-bubble';
+import type { MessagePresentationMode } from '../../../lib/message-presentation';
 import * as React from 'react';
 import { Box, Loader2 } from 'lucide-react';
 import {
@@ -113,11 +115,19 @@ function ResourceCard({
   );
 }
 
-export function MessageResourceCards({ message }: { message: ChatkitMessage }) {
+export function MessageResourceCards({
+  message,
+  mode,
+}: {
+  message: ChatkitMessage;
+  mode?: MessagePresentationMode;
+}) {
   return (
     <div className="space-y-2">
       {messageResourceCards(message).map((card) => (
-        <ResourceCard key={card.id} card={card} messageId={message.id} />
+        <MessageBubble key={card.id} mode={mode}>
+          <ResourceCard card={card} messageId={message.id} />
+        </MessageBubble>
       ))}
     </div>
   );

@@ -4,6 +4,8 @@ import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 
 export function AssistantProcess({
+  enabled = true,
+  renderContent,
   process,
   children,
   running,
@@ -11,7 +13,9 @@ export function AssistantProcess({
   durationMs,
 }: {
   process: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
+  enabled?: boolean;
+  renderContent?: (expanded: boolean) => React.ReactNode;
   running: boolean;
   forceExpanded: boolean;
   durationMs?: number;
@@ -32,14 +36,19 @@ export function AssistantProcess({
           })
         : t('message.process.seconds', { seconds });
   return (
-    <div className="space-y-3" data-assistant-presentation="final-answer">
-      <div>
+    <div
+      className="space-y-3 in-data-[density=compact]:space-y-2 in-data-[density=spacious]:space-y-4"
+      data-assistant-presentation={enabled ? 'final-answer' : undefined}
+    >
+      <div hidden={!enabled}>
         <div className="border-b border-border/60 pb-2">
           <button
             type="button"
             className="group/process inline-flex max-w-full items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-expanded={expanded}
-            aria-controls={contentId}
+            aria-controls={
+              renderContent ? `${contentId} ${contentId}-content` : contentId
+            }
             aria-disabled={forceExpanded}
             onClick={() => {
               if (!forceExpanded) setUserExpanded(!expanded);
@@ -71,7 +80,16 @@ export function AssistantProcess({
           {process}
         </div>
       </div>
-      {children}
+      {renderContent ? (
+        <div
+          id={`${contentId}-content`}
+          className="space-y-3 in-data-[density=compact]:space-y-2 in-data-[density=spacious]:space-y-4"
+        >
+          {renderContent(expanded)}
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }
