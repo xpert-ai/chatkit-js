@@ -146,6 +146,8 @@ export function ContextUsageIndicator({
     });
   }, [scope, realtimeUsage, realtimeUsedContextSize]);
 
+  // The SDK refreshes credentials without changing the usage measurement.
+  // Refetch for data scope and run changes, not client-secret rotation.
   React.useEffect(() => {
     if (!hasApiConfiguration || !stream.client || !assistantReady) {
       return;
@@ -213,7 +215,6 @@ export function ContextUsageIndicator({
     assistantReady,
     hasApiConfiguration,
     scope,
-    stream.apiKey,
     stream.apiUrl,
     stream.client,
     stream.isLoading,

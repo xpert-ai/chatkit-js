@@ -136,6 +136,54 @@ describe('ContextUsageIndicator', () => {
     });
   });
 
+  it('does not refetch usage when an unrelated request rotates the client secret', async () => {
+    const stream = createStream({ threadId: 'thread-1' });
+    mockUseStreamContext.mockReturnValue(
+      stream as unknown as ReturnType<typeof useStreamContext>,
+    );
+    const { rerender } = render(<ContextUsageIndicator />);
+    await waitFor(() =>
+      expect(screen.getByTestId('progress-circle')).toHaveAttribute(
+        'data-value',
+        '10',
+      ),
+    );
+    expect(stream.client.threads.getContextUsage).toHaveBeenCalledTimes(1);
+
+    mockUseStreamContext.mockReturnValue({
+      ...stream,
+      apiKey: 'refreshed-secret',
+    } as unknown as ReturnType<typeof useStreamContext>);
+    rerender(<ContextUsageIndicator />);
+    expect(stream.client.threads.getContextUsage).toHaveBeenCalledTimes(1);
+    expect(stream.client.assistants.get).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('progress-circle')).toHaveAttribute(
+      'data-value',
+      '10',
+    );
+  });
+
+  it('loads usage when credentials become available after initialization', async () => {
+    const stream = createStream({ threadId: 'thread-1', apiKey: '' });
+    mockUseStreamContext.mockReturnValue(
+      stream as unknown as ReturnType<typeof useStreamContext>,
+    );
+    const { rerender } = render(<ContextUsageIndicator />);
+    expect(stream.client.threads.getContextUsage).not.toHaveBeenCalled();
+    mockUseStreamContext.mockReturnValue({
+      ...stream,
+      apiKey: 'initial-secret',
+    } as unknown as ReturnType<typeof useStreamContext>);
+    rerender(<ContextUsageIndicator />);
+    await waitFor(() =>
+      expect(screen.getByTestId('progress-circle')).toHaveAttribute(
+        'data-value',
+        '10',
+      ),
+    );
+    expect(stream.client.threads.getContextUsage).toHaveBeenCalledTimes(1);
+  });
+
   it('restores the last valid usage and its stale status after opening history', async () => {
     const stream = createStream({ threadId: 'thread-1' });
     stream.client.threads.getContextUsage.mockResolvedValue({
