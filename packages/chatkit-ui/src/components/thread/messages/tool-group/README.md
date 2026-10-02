@@ -8,8 +8,9 @@ types and helpers for other message renderers.
 - `status/` normalizes incremental step data, resolves running/paused/idle status,
   and manages elapsed or frozen duration labels.
 - `icons/` selects explicit icons, toolset avatars, and category fallbacks.
-- `details/` renders inputs, outputs, errors, attachments, copy actions, and custom
-  renderer details, including the existing sandbox shell card.
+- `details/` selects the input/output or custom renderer, including the existing
+  sandbox shell card. It reuses `../tool-call-output.tsx` for attachments, errors,
+  copy actions, and legacy embedded-image summaries.
 - `rows/` composes a single memoized tool-call row with its expansion state.
 - `types.ts` holds the shared partial-step and render-unit contracts.
 
