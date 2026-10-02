@@ -36,6 +36,7 @@ export function useChatRunControl({
   const canPauseRun = Boolean(
     stream.threadId &&
     pauseRunId &&
+    !stream.isThreadInterrupted &&
     (stream.isLoading || currentRunControl?.state === 'running'),
   );
 
@@ -57,7 +58,8 @@ export function useChatRunControl({
     runControlRequest?.threadId === stream.threadId &&
     runControlRequest.action === 'resume';
 
-  const isVisibleStreaming = stream.isLoading && !stream.isDisplayPaused;
+  const isVisibleStreaming =
+    stream.isLoading && !stream.isDisplayPaused && !stream.isThreadInterrupted;
   const handleComposerRunControl = async (action: 'pause' | 'resume') => {
     const sourceThreadId = stream.threadId;
     if (isChangingBranch || isRunPausing || isResumingRun) return;

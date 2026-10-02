@@ -740,6 +740,7 @@
     }
   },
   "thread": {
+    "waitingForInput": "等待你的输入或确认。",
     "errorToast": "发生错误，请重试。",
     "errorLabel": "错误：",
     "langGraphMessages": "LangGraph 消息..."

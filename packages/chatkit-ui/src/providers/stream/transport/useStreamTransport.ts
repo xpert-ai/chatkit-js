@@ -37,6 +37,7 @@ type StreamTransportOptions = Pick<
   ReturnType<typeof useStreamRunState>,
   | 'abortRef'
   | 'setIsLoading'
+  | 'setInterruptedThreadId'
   | 'isLoadingRef'
   | 'lastEventIdRef'
   | 'setError'
@@ -88,6 +89,7 @@ type StreamTransportOptions = Pick<
 export function useStreamTransport({
   abortRef,
   setIsLoading,
+  setInterruptedThreadId,
   isLoadingRef,
   additionalContext,
   conversationProject,
@@ -131,6 +133,7 @@ export function useStreamTransport({
       abortRef.current?.abort();
       abortRef.current = abortController;
       setIsLoading(true);
+      setInterruptedThreadId(null);
       isLoadingRef.current = true;
       let transportError: unknown = null;
       let runAccepted = false;
@@ -267,6 +270,9 @@ export function useStreamTransport({
               refreshConversationProject();
             },
             (status) => {
+              setInterruptedThreadId(
+                status === 'interrupted' ? nextThreadId : null,
+              );
               pauseRequestedRef.current =
                 status === 'pausing' || status === 'paused';
             },
@@ -280,23 +286,27 @@ export function useStreamTransport({
               abortRef.current !== abortController
             )
               break;
+            setInterruptedThreadId(nextThreadId);
             await handleInterrupt(interruptData);
           }
         }
       } catch (streamError) {
-        if (!shouldIgnoreStreamError(streamError, abortController.signal)) {
+        if (
+          abortRef.current === abortController &&
+          !shouldIgnoreStreamError(streamError, abortController.signal)
+        ) {
           transportError = streamError;
           setError(streamError);
         }
       } finally {
         const activeConversationId = conversationIdRef.current?.trim();
-        if (activeConversationId) {
+        if (activeConversationId && abortRef.current === abortController) {
           const reconciled = await reconcileLatestAssistantMessage(
             activeConversationId,
             nextThreadId,
             abortController.signal,
           );
-          if (reconciled && transportError) {
+          if (reconciled && transportError && !abortController.signal.aborted) {
             setError(null);
           }
         }

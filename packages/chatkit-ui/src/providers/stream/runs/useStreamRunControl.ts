@@ -17,6 +17,7 @@ type StreamRunControlOptions = Pick<
   ReturnType<typeof useStreamRunState>,
   | 'abortRef'
   | 'setIsLoading'
+  | 'setInterruptedThreadId'
   | 'isLoadingRef'
   | 'pauseRequestedRef'
   | 'setPausedDisplay'
@@ -34,6 +35,7 @@ export function useStreamRunControl({
   clearPendingRequestUserInput,
   clearPendingHITLRequest,
   setIsLoading,
+  setInterruptedThreadId,
   isLoadingRef,
   activeThreadIdRef,
   threadId,
@@ -55,6 +57,7 @@ export function useStreamRunControl({
       createAbortError('The HITL request was cancelled.'),
     );
     setIsLoading(false);
+    setInterruptedThreadId(null);
     isLoadingRef.current = false;
   }, [clearPendingHITLRequest, clearPendingRequestUserInput]);
 

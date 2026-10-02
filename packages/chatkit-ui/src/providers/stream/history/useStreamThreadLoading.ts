@@ -36,6 +36,7 @@ type StreamThreadLoadingOptions = Pick<
     ReturnType<typeof useStreamRunState>,
     | 'isLoadingRef'
     | 'setError'
+    | 'setInterruptedThreadId'
     | 'setPausedDisplay'
     | 'lastEventIdRef'
     | 'pauseRequestedRef'
@@ -82,6 +83,7 @@ export function useStreamThreadLoading({
   isLoadingRef,
   loadHistory,
   setError,
+  setInterruptedThreadId,
   setPausedDisplay,
   updateTodos,
   clearRuntimeActivities,
@@ -239,15 +241,17 @@ export function useStreamThreadLoading({
               : conversationDetail.operation,
             latestExecutionId,
           );
-        if (hasPendingHITL) return;
-
         const status = String(
           protocolThread?.status ??
             conversationDetail.status ??
             conversation.status ??
             '',
         ).toLowerCase();
-        if (status === 'interrupted' || status === 'paused') return;
+        setInterruptedThreadId(status === 'interrupted' ? threadId : null);
+        // Restore human interactions without reviving cancelled or historical
+        // interrupted runs. Ordinary long tasks remain busy and rejoin below.
+        if (status === 'interrupted' || status === 'paused' || hasPendingHITL)
+          return;
         const conversationMayBeRunning =
           !status ||
           status === 'running' ||
@@ -304,6 +308,7 @@ export function useStreamThreadLoading({
       runStream,
       disconnect,
       readConversationMessages,
+      setInterruptedThreadId,
       loadHistory,
       hydratePendingHITLRequestFromOperation,
       clearRuntimeActivities,

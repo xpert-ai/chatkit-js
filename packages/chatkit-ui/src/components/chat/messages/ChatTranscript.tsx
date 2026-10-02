@@ -124,6 +124,9 @@ export function ChatTranscript({
   saveEditedMessage,
   setMessageNavigationAnchor,
 }: ChatTranscriptProps) {
+  const needsUserInput = Boolean(
+    stream.pendingHITLRequest || stream.pendingRequestUserInput,
+  );
   return (
     <div
       data-slot="chatkit-chat-content"
@@ -197,11 +200,18 @@ export function ChatTranscript({
           messages={messages}
           assistantTitle={assistantTitle}
           isLoading={isVisibleStreaming}
-          isThreadRunning={currentThreadIsRunning}
-          isThreadPaused={isPauseActive}
+          isThreadRunning={
+            currentThreadIsRunning && !stream.isThreadInterrupted
+          }
+          isThreadPaused={isPauseActive || needsUserInput}
           lastStreamOutputAt={lastStreamOutputAtRef.current}
           streamingNow={streamingNow}
-          showLoadingDots={showLoadingDots && !stream.isDisplayPaused}
+          showLoadingDots={
+            showLoadingDots &&
+            !stream.isDisplayPaused &&
+            !stream.isThreadInterrupted &&
+            !needsUserInput
+          }
           organizationId={stream.organizationId}
           apiUrl={stream.apiUrl}
           pet={effectivePet}
@@ -241,6 +251,11 @@ export function ChatTranscript({
           }}
           onMessageAnchor={setMessageNavigationAnchor}
         />
+      )}
+      {needsUserInput && !stream.isDisplayPaused && (
+        <p role="status" className="mt-3 text-sm text-muted-foreground">
+          {t('thread.waitingForInput')}
+        </p>
       )}
     </div>
   );

@@ -30,6 +30,7 @@ type StreamLifecycleOptions = Pick<
     | 'pauseRequestedRef'
     | 'setPausedDisplay'
     | 'setIsLoading'
+    | 'setInterruptedThreadId'
     | 'setError'
     | 'shouldStartFreshAssistantMessageAfterSteerRef'
     | 'rememberActiveRunId'
@@ -75,6 +76,7 @@ export function useStreamLifecycle({
   pauseRequestedRef,
   setPausedDisplay,
   setIsLoading,
+  setInterruptedThreadId,
   setError,
   setPendingFollowUps,
   setAutoQueuedFollowUpIds,
@@ -138,6 +140,7 @@ export function useStreamLifecycle({
       abortRef.current?.abort();
       abortRef.current = null;
       setIsLoading(false);
+      setInterruptedThreadId(null);
       isLoadingRef.current = false;
       setError(null);
       clearPendingRequestUserInput(

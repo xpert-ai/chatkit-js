@@ -27,6 +27,9 @@ export function useStreamRunState({ values }: StreamRunStateOptions) {
   }, []);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [interruptedThreadId, setInterruptedThreadId] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState<unknown>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isLoadingRef = useRef(false);
@@ -71,6 +74,8 @@ export function useStreamRunState({ values }: StreamRunStateOptions) {
     isLoadingRef,
     lastEventIdRef,
     isLoading,
+    interruptedThreadId,
+    setInterruptedThreadId,
     setIsLoading,
     pauseRequestedRef,
     setPausedDisplay,

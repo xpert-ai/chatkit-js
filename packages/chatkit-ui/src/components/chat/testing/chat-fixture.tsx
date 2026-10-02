@@ -1,4 +1,5 @@
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
+import type { PendingHITLRequest } from '../../../lib/hitl';
 
 import React from 'react';
 
@@ -71,8 +72,9 @@ const mocks = vi.hoisted(() => {
       },
       pendingFollowUps: [],
       pendingRequestUserInput: null,
-      pendingHITLRequest: null,
+      pendingHITLRequest: null as PendingHITLRequest | null,
       isLoading: false,
+      isThreadInterrupted: false,
       isReady: true,
       error: null as unknown,
       selectedModelId: null as string | null,
@@ -595,7 +597,9 @@ export function setupChatTest() {
     };
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
+    mocks.stream.pendingHITLRequest = null;
     mocks.stream.isLoading = false;
+    mocks.stream.isThreadInterrupted = false;
     mocks.stream.error = null;
     mocks.stream.submit.mockResolvedValue(undefined);
     (mocks.stream as { threadGoal?: ThreadGoal | null }).threadGoal = null;

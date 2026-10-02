@@ -81,6 +81,8 @@ type StreamHistoryMessagesOptions = Pick<
     | 'rememberActiveRunId'
     | 'pauseRequestedRef'
     | 'pausedDisplayRef'
+    | 'setInterruptedThreadId'
+    | 'setError'
   > &
   Pick<
     ReturnType<typeof useStreamInterrupts>,
@@ -124,6 +126,8 @@ export function useStreamHistoryMessages({
   historyMessagePaginationRef,
   pausedDisplayRef,
   addAutoQueuedFollowUpIds,
+  setInterruptedThreadId,
+  setError,
 }: StreamHistoryMessagesOptions) {
   const readConversationMessages = useCallback(
     async (
@@ -382,7 +386,7 @@ export function useStreamHistoryMessages({
         attempt += 1
       ) {
         try {
-          const [conversation, response] = await Promise.all([
+          const [conversation, response, thread] = await Promise.all([
             client.conversations.get(recordId),
             client.conversations.searchMessages(recordId, {
               where: { role: 'ai', threadId: requestedThreadId },
@@ -390,6 +394,7 @@ export function useStreamHistoryMessages({
               limit: 1,
               offset: 0,
             }),
+            client.threads.get(requestedThreadId),
           ]);
           if (
             signal.aborted ||
@@ -421,8 +426,35 @@ export function useStreamHistoryMessages({
             }));
           }
 
-          const status = String(conversation.status ?? '').toLowerCase();
+          const status = String(
+            thread.status ?? conversation.status ?? '',
+          ).toLowerCase();
+          const interrupted = status === 'interrupted';
+          // An interruption can mean cancellation or human input. Neither
+          // keeps a completed transport alive or starts automatic polling.
+          setInterruptedThreadId(interrupted ? requestedThreadId : null);
+          if (!pauseRequestedRef.current) {
+            hydratePendingHITLRequestFromOperation(
+              interrupted
+                ? thread.operation !== undefined
+                  ? thread.operation
+                  : conversation.threadId === requestedThreadId
+                    ? conversation.operation
+                    : null
+                : null,
+              getLatestExecutionIdFromMessages(page.messages),
+            );
+          }
           if (status !== 'busy' && status !== 'running') {
+            if (status === 'error') {
+              if (
+                conversation.threadId === requestedThreadId &&
+                conversation.error
+              ) {
+                setError(new Error(conversation.error));
+              }
+              return false;
+            }
             setHistoryMessageLoadVersion((version) => version + 1);
             return true;
           }
@@ -438,6 +470,12 @@ export function useStreamHistoryMessages({
               '[chatkit-ui] Failed to reconcile the completed assistant message',
               reconciliationError,
             );
+            if (
+              conversationIdRef.current === recordId &&
+              activeThreadIdRef.current === requestedThreadId
+            ) {
+              setError(reconciliationError);
+            }
             return false;
           }
         }
@@ -446,7 +484,13 @@ export function useStreamHistoryMessages({
       }
       return false;
     },
-    [client, hydrateResumedRootExecutions],
+    [
+      client,
+      hydrateResumedRootExecutions,
+      hydratePendingHITLRequestFromOperation,
+      setInterruptedThreadId,
+      setError,
+    ],
   );
   return {
     reconcileLatestAssistantMessage,

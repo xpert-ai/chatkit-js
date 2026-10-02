@@ -37,6 +37,7 @@ type StreamFollowUpsOptions = Pick<
     | 'pausedDisplayRef'
     | 'submitRef'
     | 'isLoading'
+    | 'interruptedThreadId'
   > &
   Pick<ReturnType<typeof useStreamMessages>, 'valuesRef'> &
   Pick<
@@ -86,6 +87,7 @@ export function useStreamFollowUps({
   autoQueuedFollowUpIdsRef,
   steerPriorityFollowUpIdsRef,
   isLoading,
+  interruptedThreadId,
 }: StreamFollowUpsOptions) {
   const resolveConversationId = useCallback(
     async (nextThreadId: string) => {
@@ -229,6 +231,8 @@ export function useStreamFollowUps({
       if (
         !id ||
         isLoadingRef.current ||
+        (interruptedThreadId !== null &&
+          interruptedThreadId === activeThreadIdRef.current) ||
         pauseRequestedRef.current ||
         pausedDisplayRef.current ||
         autoQueuedFollowUpIdSet.has(id)
@@ -240,7 +244,7 @@ export function useStreamFollowUps({
         (item) => item.id === id && item.mode === 'queue',
       );
     },
-    [autoQueuedFollowUpIdSet],
+    [autoQueuedFollowUpIdSet, interruptedThreadId],
   );
 
   const sendPendingFollowUpNow = useCallback(
@@ -277,6 +281,7 @@ export function useStreamFollowUps({
         const current = await client.threads.get(target);
         if (
           activeThreadIdRef.current !== target ||
+          current.status === 'interrupted' ||
           current.status === 'pausing' ||
           current.status === 'paused'
         )
@@ -302,6 +307,8 @@ export function useStreamFollowUps({
     if (
       pausedDisplayRef.current ||
       queueDrainPromiseRef.current ||
+      (interruptedThreadId !== null &&
+        interruptedThreadId === activeThreadIdRef.current) ||
       isLoadingRef.current
     ) {
       return queueDrainPromiseRef.current ?? Promise.resolve();
@@ -324,6 +331,7 @@ export function useStreamFollowUps({
           const current = await client.threads.get(targetThreadId);
           if (
             activeThreadIdRef.current !== targetThreadId ||
+            current?.status === 'interrupted' ||
             current?.status === 'paused' ||
             current?.status === 'pausing'
           )
@@ -368,6 +376,7 @@ export function useStreamFollowUps({
     client,
     insertPendingFollowUpsIntoTranscript,
     removePendingFollowUps,
+    interruptedThreadId,
     threadId,
   ]);
 

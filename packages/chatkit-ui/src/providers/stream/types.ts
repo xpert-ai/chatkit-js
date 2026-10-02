@@ -148,6 +148,8 @@ export type StreamContextType = {
   pendingRequestUserInput: PendingRequestUserInput | null;
   pendingHITLRequest: PendingHITLRequest | null;
   isLoading: boolean;
+  /** Raw thread interruption, including cancellation; does not imply work is running or will resume. */
+  isThreadInterrupted?: boolean;
   /** Visible output is frozen while the backend finishes and checkpoints its step. */
   isDisplayPaused?: boolean;
   displayPause?: ThreadDisplayPause | null;

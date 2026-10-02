@@ -253,6 +253,12 @@ export const StreamSession = ({
   );
 
   const isDisplayPaused = runState.pausedDisplay?.threadId === scope.threadId;
+  const isThreadInterrupted =
+    runState.interruptedThreadId !== null &&
+    runState.interruptedThreadId === scope.threadId;
+  const hasPendingUserInput = Boolean(
+    interrupts.pendingHITLRequest || userInput.pendingRequestUserInput,
+  );
   const displayValues =
     isDisplayPaused && runState.pausedDisplay
       ? runState.pausedDisplay.values
@@ -294,8 +300,11 @@ export const StreamSession = ({
     pendingFollowUps: followUpState.pendingFollowUps,
     pendingRequestUserInput: userInput.pendingRequestUserInput,
     pendingHITLRequest: interrupts.pendingHITLRequest,
-    isLoading: runState.isLoading,
+    // Waiting for a decision may retain a local resolver, but is not execution.
+    isLoading:
+      runState.isLoading && !isThreadInterrupted && !hasPendingUserInput,
     isDisplayPaused,
+    isThreadInterrupted,
     displayPause: isDisplayPaused
       ? (runState.pausedDisplay?.pause ?? null)
       : null,
