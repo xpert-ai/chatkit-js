@@ -137,4 +137,30 @@ describe('Workbench view loading', () => {
     await waitFor(() => expect(result.current.error).toBe('Forbidden'));
     expect(result.current.views).toEqual([]);
   });
+  it('retains Assistant views while the next project scope is unresolved or loading, then applies new authorization', async () => {
+    const { props, listSlotViews } = setup();
+    const initial = { ...props, retentionKey: 'assistant-1' };
+    const { result, rerender } = renderHook(useWorkbenchViews, {
+      initialProps: initial,
+    });
+    await waitFor(() => expect(result.current.views).toEqual([manifest]));
+    const next = {
+      ...initial,
+      scopeKey: 'next-project',
+      runtimeScope: {
+        projectId: 'project-2',
+        conversationId: 'conversation-2',
+      },
+    };
+    rerender({ ...next, ready: false });
+    expect(result.current.views).toEqual([manifest]);
+    expect(result.current.viewsScope).toBe('scope-1');
+    const pending = deferred();
+    listSlotViews.mockReturnValueOnce(pending.promise);
+    rerender(next);
+    expect(result.current.views).toEqual([manifest]);
+    await act(async () => pending.resolve([]));
+    await waitFor(() => expect(result.current.viewsScope).toBe('next-project'));
+    expect(result.current.views).toEqual([]);
+  });
 });

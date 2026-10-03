@@ -8,6 +8,7 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 
 type ViewState = {
   scope: string | null;
+  retentionKey: string | null;
   views: XpertExtensionViewManifest[];
   loading: boolean;
   loaded: boolean;
@@ -15,17 +16,19 @@ type ViewState = {
 };
 const emptyState: ViewState = {
   scope: null,
+  retentionKey: null,
   views: [],
   loading: false,
   loaded: false,
   error: null,
 };
 
-/** Keep refreshes within a scope mounted; never reuse views across runtime scopes. */
+/** Keep Assistant views mounted while revalidating their new runtime context. */
 export function useWorkbenchViews({
   client,
   hostId,
   scopeKey,
+  retentionKey = scopeKey,
   runtimeScope,
   enabled,
   ready,
@@ -35,6 +38,7 @@ export function useWorkbenchViews({
   client: Pick<Client['viewHosts'], 'listSlotViews'>;
   hostId: string;
   scopeKey: string;
+  retentionKey?: string;
   runtimeScope: XpertViewRuntimeScopeInput;
   enabled: boolean;
   ready: boolean;
@@ -52,8 +56,8 @@ export function useWorkbenchViews({
     if (!ready) return;
     const controller = new AbortController();
     setState((previous) => ({
-      ...(previous.scope === scopeKey ? previous : emptyState),
-      scope: scopeKey,
+      ...(previous.retentionKey === retentionKey ? previous : emptyState),
+      retentionKey,
       loading: true,
       error: null,
     }));
@@ -80,6 +84,7 @@ export function useWorkbenchViews({
           );
         setState({
           scope: scopeKey,
+          retentionKey,
           views,
           loading: false,
           loaded: true,
@@ -99,7 +104,9 @@ export function useWorkbenchViews({
             error.status === 403 ||
             error.status === 404);
         setState((previous) => ({
-          ...(unavailable ? { ...emptyState, scope: scopeKey } : previous),
+          ...(unavailable
+            ? { ...emptyState, scope: scopeKey, retentionKey }
+            : previous),
           loading: false,
           error: message,
         }));
@@ -109,6 +116,7 @@ export function useWorkbenchViews({
     client,
     hostId,
     scopeKey,
+    retentionKey,
     runtimeScope,
     enabled,
     ready,
@@ -117,7 +125,8 @@ export function useWorkbenchViews({
     failureMessage,
   ]);
 
-  const current = enabled && state.scope === scopeKey ? state : emptyState;
+  const current =
+    enabled && state.retentionKey === retentionKey ? state : emptyState;
   return {
     views: current.views,
     viewsScope: current.loaded ? current.scope : null,

@@ -42,6 +42,7 @@ type RemoteViewFrameProps = {
   manifest: XpertExtensionViewManifest;
   hostId: string;
   runtimeScope?: XpertViewRuntimeScopeInput;
+  contextReady?: boolean;
   locale: string;
   title: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
@@ -66,6 +67,7 @@ export function RemoteViewFrame({
   initialQuery,
   hostId,
   runtimeScope,
+  contextReady = true,
   locale,
   title,
   hostEvent,
@@ -81,7 +83,7 @@ export function RemoteViewFrame({
   const [loading, setLoading] = React.useState(true);
   const instanceId = React.useMemo(
     () => `${manifest.key}:${createNonce()}`,
-    [manifest.key],
+    [manifest.key, html],
   );
   const sessionRef = React.useRef<XpertViewFileAccessSessionResult | null>(
     null,
@@ -92,6 +94,35 @@ export function RemoteViewFrame({
   const debounceRef = React.useRef(new Map<string, number>());
   const requestControllersRef = React.useRef(new Set<AbortController>());
   const activeRef = React.useRef(true);
+  const scopeKey = JSON.stringify([
+    runtimeScope?.projectId ?? null,
+    runtimeScope?.conversationId ?? null,
+  ]);
+  const contextRef = React.useRef({
+    key: scopeKey,
+    ready: contextReady,
+    revision: 0,
+    runtimeScope,
+  });
+  if (
+    contextRef.current.key !== scopeKey ||
+    contextRef.current.ready !== contextReady
+  ) {
+    contextRef.current = {
+      key: scopeKey,
+      ready: contextReady,
+      revision: contextRef.current.revision + 1,
+      runtimeScope,
+    };
+  }
+  const revision = contextRef.current.revision;
+  const [validatedRevision, setValidatedRevision] = React.useState(-1);
+  const blocked = !contextReady || loading || validatedRevision !== revision;
+  const initializedRef = React.useRef<{
+    instanceId: string;
+    revision: number;
+  } | null>(null);
+
   const remoteTheme = React.useMemo(() => {
     // themeRevision changes only after ThemeProvider has applied the latest
     // options.theme values to its root element.
@@ -131,7 +162,7 @@ export function RemoteViewFrame({
 
   React.useEffect(() => {
     const controller = new AbortController();
-    setHtml(null);
+    if (!contextReady) return;
     setError(null);
     setLoading(true);
     revokeSession();
@@ -148,6 +179,7 @@ export function RemoteViewFrame({
       .then((entry) => {
         if (controller.signal.aborted) return;
         setHtml(entry);
+        setValidatedRevision(revision);
         workbenchDebug.debug('entry.load.completed', {
           viewKey: manifest.key,
         });
@@ -172,14 +204,34 @@ export function RemoteViewFrame({
       controller.abort();
       revokeSession();
     };
-  }, [hostId, manifest.key, revokeSession, runtimeScope, t, viewHosts]);
+  }, [
+    hostId,
+    manifest.key,
+    revokeSession,
+    runtimeScope,
+    contextReady,
+    revision,
+    t,
+    viewHosts,
+  ]);
 
   const sendInit = React.useCallback(() => {
-    if (!frameRef.current?.contentWindow || !html) return;
+    if (
+      !frameRef.current?.contentWindow ||
+      !html ||
+      blocked ||
+      !contextRef.current.ready
+    )
+      return;
     const production = isProductionHost();
     sendToFrame('init', {
       manifest,
       payload: {},
+      runtimeScope: {
+        projectId: contextRef.current.runtimeScope?.projectId ?? null,
+        conversationId: contextRef.current.runtimeScope?.conversationId ?? null,
+      },
+      scopeRevision: contextRef.current.revision,
       initialQuery: { ...createInitialQuery(manifest), ...initialQuery },
       locale,
       theme: remoteTheme,
@@ -188,8 +240,21 @@ export function RemoteViewFrame({
         production,
       },
     });
+    initializedRef.current = {
+      instanceId,
+      revision: contextRef.current.revision,
+    };
     workbenchDebug.debug('bridge.init.sent', { viewKey: manifest.key });
-  }, [html, locale, manifest, remoteTheme, sendToFrame, initialQuery]);
+  }, [
+    html,
+    locale,
+    manifest,
+    remoteTheme,
+    sendToFrame,
+    initialQuery,
+    instanceId,
+    blocked,
+  ]);
 
   const ensureFileAccessSession = React.useCallback(
     async (signal: AbortSignal) => {
@@ -247,13 +312,25 @@ export function RemoteViewFrame({
       }, REMOTE_REQUEST_TIMEOUT_MS);
       try {
         const result = await operation(controller.signal);
-        if (!activeRef.current) return;
+        if (
+          !activeRef.current ||
+          controller.signal.aborted ||
+          revision !== contextRef.current.revision ||
+          !contextRef.current.ready
+        )
+          return;
         sendToFrame(responseType, {
           requestId: message.requestId,
+          scopeRevision: revision,
           [responseType === 'data' ? 'data' : 'result']: result,
         });
       } catch (requestError: unknown) {
-        if (!activeRef.current) return;
+        if (
+          !activeRef.current ||
+          revision !== contextRef.current.revision ||
+          !contextRef.current.ready
+        )
+          return;
         const requestMessage = timedOut
           ? t('workbench.errors.requestTimeout')
           : getErrorMessage(requestError, t('workbench.errors.requestFailed'));
@@ -272,10 +349,10 @@ export function RemoteViewFrame({
         requestControllersRef.current.delete(controller);
       }
     },
-    [manifest.key, onNotify, sendToFrame, t],
+    [manifest.key, onNotify, sendToFrame, t, revision],
   );
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const message = parseRemoteComponentMessage(event.data);
       if (!message || event.source !== frameRef.current?.contentWindow) return;
@@ -284,6 +361,19 @@ export function RemoteViewFrame({
         return;
       }
       if (message.instanceId !== instanceId) return;
+      if (
+        blocked ||
+        (message.scopeRevision !== undefined &&
+          message.scopeRevision !== revision)
+      ) {
+        if (message.requestId)
+          sendToFrame('error', {
+            requestId: message.requestId,
+            code: 'context_changed',
+            message: 'View context is changing. Retry in the current context.',
+          });
+        return;
+      }
 
       switch (message.type) {
         case 'resize':
@@ -395,6 +485,7 @@ export function RemoteViewFrame({
               );
             }
             const session = await ensureFileAccessSession(signal);
+            signal.throwIfAborted();
             return viewHosts.createFileAccessGrant(
               session.sessionId,
               {
@@ -436,6 +527,8 @@ export function RemoteViewFrame({
     return () => window.removeEventListener('message', handleMessage);
   }, [
     ensureFileAccessSession,
+    blocked,
+    revision,
     hostId,
     instanceId,
     manifest,
@@ -457,13 +550,52 @@ export function RemoteViewFrame({
     };
   }, []);
 
-  React.useEffect(() => {
-    if (!html) return;
-    sendInit();
-  }, [html, locale, remoteTheme, sendInit]);
+  React.useLayoutEffect(() => {
+    for (const controller of requestControllersRef.current) controller.abort();
+    requestControllersRef.current.clear();
+    debounceRef.current.clear();
+    revokeSession();
+    if (!contextReady) frameRef.current?.blur();
+  }, [revision, contextReady, revokeSession]);
 
   React.useEffect(() => {
-    if (!hostEvent || !html) return;
+    if (!html || blocked) return;
+    const initialized = initializedRef.current;
+    if (
+      initialized?.instanceId === instanceId &&
+      initialized.revision !== revision
+    ) {
+      sendToFrame('hostEvent', {
+        event: {
+          id: `${instanceId}:context:${revision}`,
+          type: 'view.context.changed',
+          source: 'chatkit',
+          receivedAt: new Date().toISOString(),
+          data: {
+            revision,
+            runtimeScope: {
+              projectId: runtimeScope?.projectId ?? null,
+              conversationId: runtimeScope?.conversationId ?? null,
+            },
+          },
+        },
+      });
+      initializedRef.current = { instanceId, revision };
+    } else {
+      sendInit();
+    }
+  }, [
+    html,
+    blocked,
+    instanceId,
+    revision,
+    runtimeScope,
+    sendInit,
+    sendToFrame,
+  ]);
+
+  React.useEffect(() => {
+    if (!hostEvent || !html || blocked) return;
     for (const subscription of manifest.hostEvents?.subscriptions ?? []) {
       if (!matchesHostEventSubscription(hostEvent, subscription)) continue;
       const actionType = subscription.action?.type ?? 'refresh';
@@ -493,9 +625,15 @@ export function RemoteViewFrame({
         event: createRemoteHostEvent(hostEvent),
       });
     }
-  }, [hostEvent, html, manifest.hostEvents?.subscriptions, sendToFrame]);
+  }, [
+    hostEvent,
+    html,
+    blocked,
+    manifest.hostEvents?.subscriptions,
+    sendToFrame,
+  ]);
 
-  if (loading) {
+  if (loading && !html) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         {t('workbench.loadingView')}
@@ -512,16 +650,20 @@ export function RemoteViewFrame({
   }
 
   return (
-    <iframe
-      ref={frameRef}
-      key={instanceId}
-      className="block h-full w-full border-0 bg-background"
-      title={title}
-      srcDoc={html}
-      referrerPolicy="no-referrer"
-      sandbox="allow-downloads allow-forms allow-modals allow-popups allow-scripts"
-      onLoad={sendInit}
-    />
+    <div className="relative h-full w-full" aria-busy={blocked}>
+      <iframe
+        ref={frameRef}
+        key={instanceId}
+        className="block h-full w-full border-0 bg-background"
+        title={title}
+        inert={blocked}
+        srcDoc={html}
+        referrerPolicy="no-referrer"
+        sandbox="allow-downloads allow-forms allow-modals allow-popups allow-scripts"
+        onLoad={sendInit}
+      />
+      {blocked && <div className="absolute inset-0" />}
+    </div>
   );
 }
 

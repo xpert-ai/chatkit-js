@@ -189,6 +189,7 @@ export function WorkbenchShell({
     client: viewHosts,
     hostId: stream.assistantId,
     scopeKey: viewScopeKey,
+    retentionKey: layoutKey ?? '',
     runtimeScope,
     enabled:
       remoteViewsEnabled && authenticated && Boolean(stream.assistantId.trim()),
@@ -230,7 +231,7 @@ export function WorkbenchShell({
 
   const { scopedViews, selectView, closeView } = useWorkbenchViewTabs({
     views,
-    scope: viewScopeKey,
+    scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
     projectId: stream.projectId,
     conversationId: stream.conversationId,
@@ -306,9 +307,10 @@ export function WorkbenchShell({
     resetPages();
     setViewQueries({});
     setActiveViewKey((current) =>
-      isNativeView(current) && !current?.startsWith(NATIVE_PREFIX)
-        ? current
-        : null,
+      current?.startsWith(NATIVE_PREFIX) ||
+      current?.startsWith('chatkit.preview.')
+        ? null
+        : current,
     );
     setNotification(null);
     setHostEvent(null);
@@ -462,7 +464,7 @@ export function WorkbenchShell({
   });
 
   const rememberResourceCard = useResourceCardNavigation({
-    scope: viewScopeKey,
+    scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
     ready: !loading && viewsScope === viewScopeKey,
     restore: (target) => {
@@ -537,7 +539,9 @@ export function WorkbenchShell({
       authenticated &&
       Boolean(stream.assistantId.trim()) &&
       (Boolean(sideChat) ||
-        (remoteViewsEnabled && (!loading || views.length > 0))));
+        (remoteViewsEnabled &&
+          viewsScope === viewScopeKey &&
+          (!loading || views.length > 0))));
 
   const disabledReason = hasExternalRuns
     ? undefined
@@ -798,6 +802,10 @@ export function WorkbenchShell({
       stream={stream}
       hostId={stream.assistantId}
       runtimeScope={runtimeScope}
+      contextReady={
+        stream.runtimeScopeReady !== false && viewsScope === viewScopeKey
+      }
+      reloadVersion={reloadVersion}
       locale={locale}
       hostEvent={hostEvent}
       viewHosts={viewHosts}

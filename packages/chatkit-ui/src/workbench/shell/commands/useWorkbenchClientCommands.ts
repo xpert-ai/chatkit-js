@@ -71,6 +71,16 @@ export function useWorkbenchClientCommands({
   onNavigate,
   openExecution,
 }: WorkbenchClientCommandsOptions) {
+  const contextKey = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    stream.assistantId,
+    stream.projectId,
+    stream.conversationId,
+  ]);
+  const currentContext = React.useRef({ key: contextKey });
+  if (currentContext.current.key !== contextKey)
+    currentContext.current = { key: contextKey };
   const publishContexts = React.useCallback(() => {
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
   }, [onRequestContextChange]);
@@ -82,6 +92,7 @@ export function useWorkbenchClientCommands({
       manifest: Pick<XpertExtensionViewManifest, 'key'>,
       resourceCard?: { messageId: string; id: string },
     ): Promise<unknown> => {
+      const context = currentContext.current;
       if (commandKey === ASSISTANT_CONTEXT_SET_COMMAND) {
         const parsed = parseContextSetPayload(payload);
         if (!parsed.key) {
@@ -217,6 +228,7 @@ export function useWorkbenchClientCommands({
       };
       return executeWorkbenchCommand(request, {
         apiUrl: stream.apiUrl,
+        isCurrent: () => currentContext.current === context,
         openView: (key, query) => {
           if (!views.some((view) => view.key === key)) return false;
           setViewQueries((current) => ({ ...current, [key]: query }));
@@ -234,7 +246,8 @@ export function useWorkbenchClientCommands({
           await new Promise<void>((resolve) =>
             requestAnimationFrame(() => resolve()),
           );
-          await parentMessenger.focusComposer();
+          if (currentContext.current === context)
+            await parentMessenger.focusComposer();
         },
         navigate: onNavigate,
         openExecution,

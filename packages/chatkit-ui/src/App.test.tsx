@@ -242,7 +242,8 @@ describe('App', () => {
     });
     fireEvent.click(screen.getByTestId('select-project'));
 
-    expect(screen.getByTestId('chat-draft')).toHaveValue('unsent draft');
+    // Reset the composer with the chat scope while Assistant-owned Views remain mounted.
+    expect(screen.getByTestId('chat-draft')).toHaveValue('');
 
     expect(StreamProvider).toHaveBeenLastCalledWith(
       expect.objectContaining({

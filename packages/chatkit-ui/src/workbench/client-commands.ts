@@ -15,6 +15,7 @@ import type { ComposerValuePayload } from '../lib/references';
 
 export type WorkbenchCommandHost = {
   apiUrl: string;
+  isCurrent?: () => boolean;
   openView: (key: string, query: XpertViewQuery) => boolean;
   openPreview: (preview: WorkbenchPreview) => void;
   revealChat: () => void;
@@ -41,10 +42,13 @@ export async function executeWorkbenchCommand(
   host: WorkbenchCommandHost,
 ): Promise<unknown> {
   const { commandKey, payload } = request;
+  const stale = () => ({ success: false, code: 'stale_context' });
+  if (host.isCurrent?.() === false) return stale();
   if (commandKey === 'assistant.composer.append_references') {
     const references = parseAppendReferences(payload);
     if (!references) return invalid();
     await host.updateComposer({ references, appendReferences: true });
+    if (host.isCurrent?.() === false) return stale();
     host.revealChat();
     // Do not ask the plugin to retry a reference already appended when focus fails.
     let focused = true;
@@ -94,6 +98,7 @@ export async function executeWorkbenchCommand(
         threadId: navigation.threadId,
         projectId: navigation.projectId,
       });
+      if (host.isCurrent?.() === false) return stale();
       // Only a context the embedded client cannot handle falls back to the host.
       if (result && (result.success || result.code !== 'unsupported'))
         return result;
@@ -136,6 +141,7 @@ export async function executeWorkbenchCommand(
         return invalid();
       if (!host.navigate) return unsupportedCommand(commandKey);
       const result = await host.forward(request);
+      if (host.isCurrent?.() === false) return stale();
       const session = parseNavigationSession(result);
       if (!session) {
         if (

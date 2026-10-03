@@ -115,6 +115,8 @@ type WorkbenchPanelProps = {
   stream: ReturnType<typeof useStreamContext>;
   hostId: string;
   runtimeScope: XpertViewRuntimeScopeInput;
+  contextReady?: boolean;
+  reloadVersion?: number;
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
   viewHosts: WorkbenchViewHostsClient;
@@ -173,6 +175,8 @@ export function WorkbenchPanel({
   stream,
   hostId,
   runtimeScope,
+  contextReady = true,
+  reloadVersion = 0,
   locale,
   hostEvent,
   viewHosts,
@@ -211,8 +215,7 @@ export function WorkbenchPanel({
     stream.apiUrl,
     stream.organizationId,
     hostId,
-    runtimeScope.projectId,
-    runtimeScope.conversationId,
+    reloadVersion,
   ]);
   const [visited, setVisited] = React.useState<{
     scope: string;
@@ -598,7 +601,12 @@ export function WorkbenchPanel({
           )
           .map((view) => (
             <div
-              key={JSON.stringify([frameScope, view.key])}
+              key={JSON.stringify([
+                frameScope,
+                view.key,
+                view.source,
+                view.view,
+              ])}
               hidden={view.key !== activeViewKey}
               className="h-full min-h-0"
             >
@@ -606,6 +614,7 @@ export function WorkbenchPanel({
                 manifest={view}
                 hostId={hostId}
                 runtimeScope={runtimeScope}
+                contextReady={contextReady}
                 locale={locale}
                 title={resolveManifestText(view.title, view.key, locale)}
                 hostEvent={hostEvent}

@@ -1,5 +1,11 @@
 import * as React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
@@ -113,14 +119,51 @@ describe('RemoteViewFrame', () => {
   });
 
   it('sends updated navigation selection and parameters to a retained view', async () => {
-    const props = { manifest, hostId: 'agent-1', locale: 'en-US', title: 'Documents', hostEvent: null, viewHosts: mocks.client.viewHosts, onNotify: vi.fn(), onClientCommand: vi.fn() };
-    const { rerender } = render(<RemoteViewFrame {...props} initialQuery={{ selectionId: 'first' }} />, { wrapper: ThemeProvider });
+    const props = {
+      manifest,
+      hostId: 'agent-1',
+      locale: 'en-US',
+      title: 'Documents',
+      hostEvent: null,
+      viewHosts: mocks.client.viewHosts,
+      onNotify: vi.fn(),
+      onClientCommand: vi.fn(),
+    };
+    const { rerender } = render(
+      <RemoteViewFrame {...props} initialQuery={{ selectionId: 'first' }} />,
+      { wrapper: ThemeProvider },
+    );
     const iframe = await screen.findByTitle('Documents');
-    const postMessage = vi.spyOn(getContentWindow(iframe as HTMLIFrameElement), 'postMessage');
+    const postMessage = vi.spyOn(
+      getContentWindow(iframe as HTMLIFrameElement),
+      'postMessage',
+    );
     fireEvent.load(iframe);
-    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'init', initialQuery: { page: 1, pageSize: 20, selectionId: 'first' } }), '*');
-    rerender(<RemoteViewFrame {...props} initialQuery={{ selectionId: 'second', parameters: { tab: 'review' } }} />);
-    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'init', initialQuery: { page: 1, pageSize: 20, selectionId: 'second', parameters: { tab: 'review' } } }), '*');
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'init',
+        initialQuery: { page: 1, pageSize: 20, selectionId: 'first' },
+      }),
+      '*',
+    );
+    rerender(
+      <RemoteViewFrame
+        {...props}
+        initialQuery={{ selectionId: 'second', parameters: { tab: 'review' } }}
+      />,
+    );
+    expect(postMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'init',
+        initialQuery: {
+          page: 1,
+          pageSize: 20,
+          selectionId: 'second',
+          parameters: { tab: 'review' },
+        },
+      }),
+      '*',
+    );
     expect(screen.getByTitle('Documents')).toBe(iframe);
   });
 
@@ -359,19 +402,150 @@ describe('RemoteViewFrame', () => {
     );
     expect(mocks.client.viewHosts.getData).toHaveBeenCalledTimes(1);
   });
+  it('keeps the iframe across conversation and project changes and broadcasts complete context without subscriptions', async () => {
+    const initialScope = { projectId: null, conversationId: null };
+    const { rerender } = render(renderFrameElement(undefined, initialScope));
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const originalWindow = iframe.contentWindow;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'init',
+        runtimeScope: initialScope,
+        scopeRevision: 0,
+      }),
+      '*',
+    );
+    const instanceId = post.mock.calls.at(-1)![0].instanceId;
+    for (const next of [
+      { projectId: null, conversationId: 'conversation-2' },
+      { projectId: 'project-2', conversationId: 'conversation-3' },
+    ]) {
+      post.mockClear();
+      rerender(renderFrameElement(undefined, next));
+      await waitFor(() =>
+        expect(post).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'hostEvent',
+            instanceId,
+            event: expect.objectContaining({
+              type: 'view.context.changed',
+              data: {
+                revision: expect.any(Number),
+                runtimeScope: next,
+              },
+            }),
+          }),
+          '*',
+        ),
+      );
+      expect(screen.getByTitle('Documents')).toBe(iframe);
+      expect(iframe.contentWindow).toBe(originalWindow);
+      expect(
+        post.mock.calls.filter(([message]) => message.type === 'init'),
+      ).toHaveLength(0);
+    }
+  });
+
+  it('blocks unresolved contexts, aborts old reads and rejects explicitly stale requests', async () => {
+    let finish!: (value: unknown) => void;
+    mocks.client.viewHosts.getData.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { rerender } = renderFrame();
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    const instanceId = post.mock.calls.at(-1)![0].instanceId;
+    const request = {
+      channel: REMOTE_COMPONENT_CHANNEL,
+      protocolVersion: 1,
+      instanceId,
+      type: 'requestData',
+      requestId: 'old-read',
+      scopeRevision: 0,
+    };
+    act(() => dispatchFrameMessage(iframe, request));
+    await waitFor(() =>
+      expect(mocks.client.viewHosts.getData).toHaveBeenCalledOnce(),
+    );
+    const signal = mocks.client.viewHosts.getData.mock.calls[0][4].signal;
+    post.mockClear();
+    rerender(renderFrameElement(undefined, runtimeScope, false));
+    expect(signal.aborted).toBe(true);
+    expect(screen.getByTitle('Documents')).toBe(iframe);
+    expect(iframe).toHaveAttribute('inert');
+    await act(async () => finish({ items: ['old'] }));
+    expect(post.mock.calls.some(([message]) => message.type === 'data')).toBe(
+      false,
+    );
+    expect(
+      post.mock.calls.some(([message]) => message.type === 'hostEvent'),
+    ).toBe(false);
+    const target = { projectId: 'project-2', conversationId: 'conversation-2' };
+    rerender(renderFrameElement(undefined, target));
+    await waitFor(() => expect(iframe).not.toHaveAttribute('inert'));
+    act(() =>
+      dispatchFrameMessage(iframe, { ...request, requestId: 'stale-command' }),
+    );
+    expect(mocks.client.viewHosts.getData).toHaveBeenCalledOnce();
+    const context = post.mock.calls.find(
+      ([message]) => message.type === 'hostEvent',
+    )![0].event.data;
+    act(() =>
+      dispatchFrameMessage(iframe, {
+        ...request,
+        requestId: 'new-read',
+        scopeRevision: context.revision,
+      }),
+    );
+    await waitFor(() =>
+      expect(mocks.client.viewHosts.getData).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      mocks.client.viewHosts.getData.mock.calls[1][4].runtimeScope,
+    ).toEqual(target);
+  });
+
+  it('removes the retained document when the target entry denies access', async () => {
+    const { rerender } = renderFrame();
+    const iframe = await screen.findByTitle('Documents');
+    mocks.client.viewHosts.getRemoteComponentEntry.mockRejectedValueOnce(
+      new Error('Forbidden'),
+    );
+    rerender(
+      renderFrameElement(undefined, {
+        projectId: 'forbidden',
+        conversationId: null,
+      }),
+    );
+    await screen.findByText('Forbidden');
+    expect(iframe.isConnected).toBe(false);
+  });
 });
 
 function renderFrame(theme?: ChatKitTheme) {
   return render(renderFrameElement(theme));
 }
 
-function renderFrameElement(theme?: ChatKitTheme) {
+function renderFrameElement(
+  theme?: ChatKitTheme,
+  scope: {
+    projectId: string | null;
+    conversationId: string | null;
+  } = runtimeScope,
+  contextReady = true,
+) {
   return (
     <ThemeProvider theme={theme}>
       <RemoteViewFrame
         manifest={manifest}
         hostId="agent-1"
-        runtimeScope={runtimeScope}
+        runtimeScope={scope}
+        contextReady={contextReady}
         locale="en-US"
         title="Documents"
         hostEvent={null}

@@ -16,6 +16,7 @@ export interface RemoteComponentMessage {
   instanceId?: string | null;
   type: string;
   requestId?: string;
+  scopeRevision?: number;
   query?: unknown;
   parameterKey?: unknown;
   search?: unknown;
@@ -60,6 +61,10 @@ export function parseRemoteComponentMessage(
     type,
     instanceId: readNullableString(value, 'instanceId'),
     requestId: readString(value, 'requestId'),
+    scopeRevision:
+      typeof Reflect.get(value, 'scopeRevision') === 'number'
+        ? Reflect.get(value, 'scopeRevision')
+        : undefined,
     query: Reflect.get(value, 'query'),
     parameterKey: Reflect.get(value, 'parameterKey'),
     search: Reflect.get(value, 'search'),

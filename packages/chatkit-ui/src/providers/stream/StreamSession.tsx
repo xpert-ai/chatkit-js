@@ -1,4 +1,10 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { createMissingApiConfigurationError } from '../../lib/api-config';
 import { createResumedRootExecutionHydrator } from '../../lib/resumed-root-executions';
 import {
@@ -35,6 +41,7 @@ export const StreamSession = ({
   projectId,
   projectSelection,
   initialThread,
+  runtimeKey,
   locale,
   additionalContext,
   threadStateMode,
@@ -50,6 +57,7 @@ export const StreamSession = ({
   projectId?: string;
   projectSelection?: ProjectSelection;
   initialThread?: string | null;
+  runtimeKey?: string | number;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
   threadStateMode: 'url' | 'memory';
@@ -114,6 +122,22 @@ export const StreamSession = ({
     ...activities,
     resetThreadOnMount,
   });
+
+  // Reset chat execution state without unmounting Assistant-owned Workbench views.
+  const bindingKey = JSON.stringify([
+    projectId,
+    projectSelection?.mode,
+    runtimeKey,
+  ]);
+  const previousBinding = useRef(bindingKey);
+  const bindingChanged = previousBinding.current !== bindingKey;
+  useLayoutEffect(() => {
+    if (previousBinding.current === bindingKey) return;
+    previousBinding.current = bindingKey;
+    scope.consumedInitialThreadRef.current = null;
+    scope.initialSelectedThreadRef.current = null;
+    lifecycle.reset(initialThread ?? null, []);
+  }, [bindingKey, initialThread, lifecycle.reset]);
 
   const conversationProject = useConversationProject({
     client: credentials.client,
@@ -277,6 +301,7 @@ export const StreamSession = ({
     projectId: conversationProject.projectId,
     projectScopeResolved: conversationProject.resolved,
     runtimeScopeReady:
+      !bindingChanged &&
       host.historyLoad.status !== 'loading' &&
       host.historyLoad.status !== 'error' &&
       (!initialHistoryThread ||
