@@ -5,8 +5,110 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import { createLangGraphEventState } from '../../langGraphEventMapper';
 import { applyStreamEvent } from '../../Stream';
+import type { StateType } from '../types';
 
 describe('persisted input identity', () => {
+  it.each(['Draft generated', ''])(
+    'keeps separate messages in the same execution, including an empty draft (%s)',
+    (draft) => {
+      let state: StateType = { messages: [] };
+      const setValues = (
+        next: StateType | ((previous: StateType) => StateType),
+      ) => {
+        state = typeof next === 'function' ? next(state) : next;
+      };
+      const events = createLangGraphEventState();
+      const emit = (
+        event: ChatMessageEventTypeEnum,
+        id: string,
+        content: string,
+      ) =>
+        applyStreamEvent(
+          {
+            event: 'message',
+            data: JSON.stringify({
+              type: ChatMessageTypeEnum.EVENT,
+              event,
+              data: { id, role: 'ai', executionId: 'evolution-run', content },
+            }),
+          },
+          setValues,
+          vi.fn(),
+          vi.fn(),
+          [],
+          events,
+        );
+
+      emit(ChatMessageEventTypeEnum.ON_MESSAGE_START, 'draft', draft);
+      emit(ChatMessageEventTypeEnum.ON_MESSAGE_END, 'draft', draft);
+      emit(ChatMessageEventTypeEnum.ON_MESSAGE_START, 'checks', 'Checking');
+      emit(ChatMessageEventTypeEnum.ON_MESSAGE_END, 'checks', 'Checks passed');
+      expect(
+        state.messages.map(({ id, content }) => ({ id, content })),
+      ).toEqual([
+        { id: 'draft', content: draft },
+        { id: 'checks', content: 'Checks passed' },
+      ]);
+
+      // A resumed Redis stream can replay an earlier phase after history is loaded.
+      emit(ChatMessageEventTypeEnum.ON_MESSAGE_START, 'draft', draft);
+      applyStreamEvent(
+        {
+          event: 'message',
+          data: JSON.stringify({
+            type: ChatMessageTypeEnum.MESSAGE,
+            data: 'Replayed draft text',
+          }),
+        },
+        setValues,
+        vi.fn(),
+        vi.fn(),
+        [],
+        events,
+      );
+      expect(
+        state.messages.find((message) => message.id === 'checks')?.content,
+      ).toBe('Checks passed');
+      emit(ChatMessageEventTypeEnum.ON_MESSAGE_END, 'draft', draft);
+      expect(
+        state.messages.map(({ id, content }) => ({ id, content })),
+      ).toEqual([
+        { id: 'draft', content: draft },
+        { id: 'checks', content: 'Checks passed' },
+      ]);
+    },
+  );
+
+  it('retains execution matching when legacy message-start events omit the message id', () => {
+    let state: StateType = {
+      messages: [
+        { id: 'reply', type: 'ai', content: 'Partial', executionId: 'run' },
+      ],
+    };
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_MESSAGE_START,
+          data: { role: 'ai', executionId: 'run' },
+        }),
+      },
+      (next) => {
+        state = typeof next === 'function' ? next(state) : next;
+      },
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0]).toMatchObject({
+      id: 'reply',
+      content: 'Partial',
+    });
+  });
+
   it('continues the same assistant message when a paused run gets a new execution id', () => {
     const state = {
       messages: [

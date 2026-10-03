@@ -61,13 +61,14 @@ import {
 import {
   appendMessageComponent,
   appendMessages,
-  appendStreamTextToLatest,
+  appendStreamTextToMessage,
   applyMessageData,
+  findAssistantMessageIndex,
   findLatestAssistantMessageIndex,
   isAssistantMessage,
   mergePreservedMessages,
   startFreshAssistantMessageIfNeeded,
-  updateLatestMessage,
+  updateAssistantMessage,
 } from '../messages/reducer';
 import type { ChatKitAIMessage, StateType } from '../types';
 import {
@@ -77,13 +78,18 @@ import {
   type StreamChunk,
 } from './envelope';
 
+type StreamEventState = LangGraphEventState & {
+  /** Message identity for deltas, including replay into already loaded history. */
+  activeMessageId?: string;
+};
+
 export function applyStreamEvent(
   chunk: StreamChunk,
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   setError: React.Dispatch<React.SetStateAction<unknown>>,
   sendEvent: ParentMessenger['sendEvent'],
   interrupts: unknown[],
-  langGraphEventState: LangGraphEventState,
+  langGraphEventState: StreamEventState,
   eventContext?: LangGraphEventContext,
   onExecutionId?: (executionId: string | undefined) => void,
   onThreadContextUsage?: (event: TThreadContextUsageEvent) => void,
@@ -132,8 +138,14 @@ export function applyStreamEvent(
 
   if (typeof parsed === 'string') {
     const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    if (shouldStartFreshAssistant)
+      langGraphEventState.activeMessageId = undefined;
     startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
-    appendStreamTextToLatest(setValues, parsed);
+    appendStreamTextToMessage(
+      setValues,
+      parsed,
+      langGraphEventState.activeMessageId,
+    );
     return;
   }
 
@@ -175,8 +187,14 @@ export function applyStreamEvent(
   if (payloadType === ChatMessageTypeEnum.MESSAGE) {
     if (typeof payload.data === 'string') {
       const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+      if (shouldStartFreshAssistant)
+        langGraphEventState.activeMessageId = undefined;
       startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
-      appendStreamTextToLatest(setValues, payload.data);
+      appendStreamTextToMessage(
+        setValues,
+        payload.data,
+        langGraphEventState.activeMessageId,
+      );
       return;
     }
 
@@ -202,8 +220,14 @@ export function applyStreamEvent(
       sendEvent('public_event', ['log', { ...message, name: 'component' }]);
     }
     const shouldStartFreshAssistant = consumeFreshAssistantSplit?.() ?? false;
+    if (shouldStartFreshAssistant)
+      langGraphEventState.activeMessageId = undefined;
     startFreshAssistantMessageIfNeeded(setValues, shouldStartFreshAssistant);
-    appendMessageComponent(setValues, message);
+    appendMessageComponent(
+      setValues,
+      message,
+      langGraphEventState.activeMessageId,
+    );
     return;
   }
 
@@ -320,6 +344,7 @@ export function applyStreamEvent(
         break;
       }
       case ChatMessageEventTypeEnum.ON_MESSAGE_START: {
+        langGraphEventState.activeMessageId = meta.id;
         if (executionId) {
           onExecutionId?.(executionId);
         }
@@ -351,13 +376,17 @@ export function applyStreamEvent(
           const messages = prev.messages ?? [];
           const shouldStartFreshAssistant =
             consumeFreshAssistantSplit?.() ?? false;
-          const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+          const lastAssistantIndex = findAssistantMessageIndex(
+            messages,
+            meta.id,
+          );
           const last =
             lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
           if (!shouldStartFreshAssistant && last && isAssistantMessage(last)) {
             if (
-              (executionId && last.executionId === executionId) ||
-              (meta.id && last.id === meta.id)
+              meta.id
+                ? last.id === meta.id
+                : executionId && last.executionId === executionId
             ) {
               const nextMessages = [...messages];
               const nextLast: ChatKitAIMessage = {
@@ -400,6 +429,7 @@ export function applyStreamEvent(
             // run; replacing it in place would insert the new response above
             // those items.
             if (
+              !last.executionId &&
               typeof last.content === 'string' &&
               last.content.length === 0 &&
               lastAssistantIndex === messages.length - 1
@@ -427,32 +457,36 @@ export function applyStreamEvent(
         ) {
           break;
         }
-        updateLatestMessage(setValues, (message) => {
-          return {
-            ...(message as ChatKitAIMessage),
-            ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
-            ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
-            ...(meta.status ? { status: meta.status } : {}),
-            ...(meta.agentRuns ? { agentRuns: meta.agentRuns } : {}),
-            ...(meta.id ? { id: meta.id } : {}),
-            ...(meta.type ? { type: meta.type } : {}),
-            ...(meta.branching ? { branching: meta.branching } : {}),
-            ...(meta.content !== undefined ? { content: meta.content } : {}),
-            ...(meta.references ? { references: meta.references } : {}),
-            ...(meta.submittedInput !== undefined
-              ? { submittedInput: meta.submittedInput }
-              : {}),
-            ...(meta.referenceComposition
-              ? { referenceComposition: meta.referenceComposition }
-              : {}),
-            ...(meta.runtimeCapabilities
-              ? { runtimeCapabilities: meta.runtimeCapabilities }
-              : {}),
-            ...(meta.clientToolCalls
-              ? { clientToolCalls: meta.clientToolCalls }
-              : {}),
-          };
-        });
+        updateAssistantMessage(
+          setValues,
+          (message) => {
+            return {
+              ...(message as ChatKitAIMessage),
+              ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
+              ...(meta.updatedAt ? { updatedAt: meta.updatedAt } : {}),
+              ...(meta.status ? { status: meta.status } : {}),
+              ...(meta.agentRuns ? { agentRuns: meta.agentRuns } : {}),
+              ...(meta.id ? { id: meta.id } : {}),
+              ...(meta.type ? { type: meta.type } : {}),
+              ...(meta.branching ? { branching: meta.branching } : {}),
+              ...(meta.content !== undefined ? { content: meta.content } : {}),
+              ...(meta.references ? { references: meta.references } : {}),
+              ...(meta.submittedInput !== undefined
+                ? { submittedInput: meta.submittedInput }
+                : {}),
+              ...(meta.referenceComposition
+                ? { referenceComposition: meta.referenceComposition }
+                : {}),
+              ...(meta.runtimeCapabilities
+                ? { runtimeCapabilities: meta.runtimeCapabilities }
+                : {}),
+              ...(meta.clientToolCalls
+                ? { clientToolCalls: meta.clientToolCalls }
+                : {}),
+            };
+          },
+          meta.id,
+        );
         break;
       }
       case ChatMessageEventTypeEnum.ON_INTERRUPT: {

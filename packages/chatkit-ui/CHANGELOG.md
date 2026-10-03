@@ -1,5 +1,56 @@
 # @xpert-ai/chatkit-ui
 
+## 0.8.0
+
+### Minor Changes
+
+- 2bea2b2: Support on-demand Workbench views opened through the view menu, navigation commands, or live Agent requests scoped to the active project and conversation. Allow closing and reopening these tabs while preserving automatic views and the existing Workbench slot. Upgrade xpert-sdk to 0.4.4 for the view-opening event contract and keep navigation events out of the transcript.
+
+### Patch Changes
+
+- dec1b39: Keep default available skills out of the composer unless explicitly selected or recommended by the active prompt. Preserve selected capabilities in submissions and remove redundant non-editable attributes from capability labels so the composer remains editable.
+- ce2d858: Preserve separate assistant messages within the same execution, and route streamed text, components, and replayed updates to the correct message. Keep existing pause and resume behavior compatible.
+
+  Hide empty agent errors and let an explicit null clear a previous error while preserving real failures.
+
+- 119a60b: Open execution records requested by Workbench views inside the current ChatKit conversation before asking the host to navigate. Preserve the composer and active thread, load older records through SDK pagination, and allow closed execution panels to reopen. Return unavailable or stale-scope errors without a redundant host navigation, while retaining compatibility with existing conversation navigation commands.
+- b9bcec6: Simplify MCP App headers by hiding the resource URI and MCP App badge. Set the embedded HTML root font size to 14px and provide standard MCP Apps theme variables.
+- d7b8c7e: Preserve active MCP App forms and RPC sessions when message streaming recreates unchanged component data.
+- b7a935a: Support tool-after interrupt continuation from MCP Apps and a Continue panel for tools without an App. Preserve image, audio, and file attachments during resume, and acknowledge continuation only after the server accepts the run. Server run acceptance requires a Content-Location response header exposed through CORS.
+  - @xpert-ai/chatkit-types@0.8.0
+  - @xpert-ai/chatkit-web-shared@0.8.0
+  - @xpert-ai/a2ui-react@0.8.0
+
+## 0.7.0
+
+### Minor Changes
+
+- 2fc0cd2: Add optional inline HITL approval cards anchored to the relevant Assistant tool
+  call. Expose generic host decision and settings callbacks through ChatKit options
+  and the Web Component bridge. Host-backed requests require acknowledgement before
+  resuming, with expiry, duplicate-submission and stale-thread protections. Preserve
+  the existing review panel for complex decisions and keep resource authorization
+  and native execution in the host.
+- 1159f04: Add opt-in `header.windowDrag` for Electron hosts. Chat and Workbench header whitespace supports native dragging and the OS title-bar double-click action. Interactive controls are excluded, and menus/dialogs suspend native hit regions.
+- eb210a6: Align all ChatKit workspace packages on a shared release version. Start from the
+  0.6.3 baseline and release 0.7.0 together, including framework adapters, widgets,
+  host automation, browser tooling, and Office/WPS add-ins. Keep future releases
+  synchronized through a fixed Changesets group; private packages remain private.
+
+### Patch Changes
+
+- 9523288: Show all conversations for the current Assistant by default, with explicit filters for the current project and conversations without a project. Ignore stale history search responses after changing scope. Emit thread load lifecycle events so the host can synchronize the URL and project after a successful history load, without reporting failed or superseded loads as complete.
+- 02959f7: Distinguish automatic project creation, no project, and an existing project in composer options, project change events, and chat requests. Respect explicit selections across rerenders and keep the bound conversation project visible and locked. Restore the saved project for historical conversations and synchronize project names and file browsing after automatic creation without interrupting an active run or clearing the draft.
+- 00d275d: Replace the Workbench view-tab scrollbar with overflow-aware left/right buttons supporting press-and-hold scrolling. Preserve trackpad scrolling, keyboard activation, and visibility of newly selected tabs.
+- f7b00e6: Upgrade the Xpert SDK dependency to 0.4.3, including explicit project selection types and sandbox runtime requests through the AI API.
+- Updated dependencies [02959f7]
+- Updated dependencies [2fc0cd2]
+- Updated dependencies [1159f04]
+- Updated dependencies [eb210a6]
+  - @xpert-ai/chatkit-types@0.7.0
+  - @xpert-ai/chatkit-web-shared@0.7.0
+  - @xpert-ai/a2ui-react@0.7.0
+
 ## 0.6.3
 
 ### Patch Changes

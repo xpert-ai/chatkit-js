@@ -7,6 +7,7 @@ import type {
 } from '@xpert-ai/chatkit-types';
 
 import {
+  hasAgentRunError,
   isAgentEventContent,
   isMiddlewareAgentRunInfo,
   readContentAgentKey,
@@ -119,7 +120,7 @@ export function isFailedRunStatus(status?: string | null) {
 }
 
 export function hasVisibleAgentRunDetails(info: AgentRunInfo) {
-  return info.error !== undefined;
+  return hasAgentRunError(info.error);
 }
 
 export function getAgentRunTitle(info: AgentRunInfo, fallback?: string) {

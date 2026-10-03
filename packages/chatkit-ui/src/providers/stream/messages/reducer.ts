@@ -136,6 +136,20 @@ export function findLatestAssistantMessageIndex(messages: ChatKitAIMessage[]) {
   return -1;
 }
 
+export function findAssistantMessageIndex(
+  messages: ChatKitAIMessage[],
+  messageId?: string,
+) {
+  const matchingIndex = messageId
+    ? messages.findIndex(
+        (message) => isAssistantMessage(message) && message.id === messageId,
+      )
+    : -1;
+  return matchingIndex >= 0
+    ? matchingIndex
+    : findLatestAssistantMessageIndex(messages);
+}
+
 export function getLatestExecutionIdFromMessages(messages: ChatKitAIMessage[]) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const executionId = messages[index]?.executionId?.trim();
@@ -284,14 +298,15 @@ export function appendStreamText(
   });
 }
 
-export function appendStreamTextToLatest(
+export function appendStreamTextToMessage(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   text: string,
+  messageId?: string,
 ) {
   if (!text) return;
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    const lastAssistantIndex = findAssistantMessageIndex(messages, messageId);
     if (lastAssistantIndex < 0) {
       const newMessage: ChatKitAIMessage = {
         id: createMessageId(),
@@ -322,13 +337,14 @@ export function appendStreamTextToLatest(
   });
 }
 
-export function updateLatestMessage(
+export function updateAssistantMessage(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   updater: (message: Message) => Message,
+  messageId?: string,
 ) {
   setValues((prev) => {
     const messages = prev.messages ?? [];
-    const lastAssistantIndex = findLatestAssistantMessageIndex(messages);
+    const lastAssistantIndex = findAssistantMessageIndex(messages, messageId);
     if (lastAssistantIndex < 0) return prev;
     const nextMessages = [...messages];
     nextMessages[lastAssistantIndex] = updater(
@@ -363,25 +379,30 @@ export function applyMessageData(
 export function appendMessageComponent(
   setValues: React.Dispatch<React.SetStateAction<StateType>>,
   content: TMessageContentComplex,
+  messageId?: string,
 ) {
-  updateLatestMessage(setValues, (lastM) => {
-    // Deep clone the message to avoid mutation issues with React Strict Mode
-    // React Strict Mode calls state updater twice, and appendMessageContent mutates the content array
-    const lastMessage = lastM as unknown as Record<string, unknown>;
-    const clonedMessage = {
-      ...lastMessage,
-      content: Array.isArray(lastMessage.content)
-        ? (lastMessage.content as Record<string, unknown>[]).map((item) => ({
-            ...item,
-          }))
-        : lastMessage.content,
-      reasoning: Array.isArray(lastMessage.reasoning)
-        ? (lastMessage.reasoning as Record<string, unknown>[]).map((r) => ({
-            ...r,
-          }))
-        : lastMessage.reasoning,
-    };
-    appendMessageContent(clonedMessage as any, content);
-    return clonedMessage as unknown as Message;
-  });
+  updateAssistantMessage(
+    setValues,
+    (lastM) => {
+      // Deep clone the message to avoid mutation issues with React Strict Mode
+      // React Strict Mode calls state updater twice, and appendMessageContent mutates the content array
+      const lastMessage = lastM as unknown as Record<string, unknown>;
+      const clonedMessage = {
+        ...lastMessage,
+        content: Array.isArray(lastMessage.content)
+          ? (lastMessage.content as Record<string, unknown>[]).map((item) => ({
+              ...item,
+            }))
+          : lastMessage.content,
+        reasoning: Array.isArray(lastMessage.reasoning)
+          ? (lastMessage.reasoning as Record<string, unknown>[]).map((r) => ({
+              ...r,
+            }))
+          : lastMessage.reasoning,
+      };
+      appendMessageContent(clonedMessage as any, content);
+      return clonedMessage as unknown as Message;
+    },
+    messageId,
+  );
 }
