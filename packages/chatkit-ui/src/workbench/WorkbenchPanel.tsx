@@ -1,7 +1,27 @@
-import { WorkbenchAvailableViews } from './WorkbenchAvailableViews';
+import {
+  NativeWorkbenchContent,
+  NativeWorkbenchTabs,
+} from './native/NativeWorkbenchViews';
+import type {
+  NativeTool,
+  useNativeWorkbench,
+} from './native/useNativeWorkbench';
+import type {
+  WorkspaceFileScope,
+  XpertWorkspaceFile,
+} from '@xpert-ai/xpert-sdk';
+import { WorkbenchStartPage } from './WorkbenchStartPage';
+import type { RecentWorkbenchPreview } from './useWorkbenchPages';
+import { useTheme } from '../providers/Theme';
+import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
 import type { WorkbenchPreview } from './client-command-payload';
-import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
+import {
+  PreviewTabs,
+  WorkbenchPreviewContent,
+  WorkbenchBrowserPreview,
+} from './WorkbenchPreview';
+import type { WorkbenchBrowserHistory } from './useWorkbenchPages';
 import type {
   Client,
   XpertViewQuery,
@@ -27,9 +47,11 @@ import {
   Minimize2,
   PanelRight,
   RotateCcw,
-  X,
   MessageSquarePlus,
+  MessageSquare,
   Bot,
+  Globe,
+  Plus,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -39,22 +61,40 @@ import {
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
 import { WorkbenchTabs } from './WorkbenchTabs';
+import { WorkbenchTab } from './WorkbenchTab';
 import { resolveManifestText } from './manifest-text';
 
 export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
+export const MAIN_CHAT_VIEW_KEY = 'chatkit.native.main-chat';
 
 export type SideChatSession = {
   sourceThreadId: string;
   threadId: string;
   title: string;
-  referenceRequest: ChatReferenceRequest;
+  referenceRequest?: ChatReferenceRequest;
 };
 
 type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
 
 type WorkbenchPanelProps = {
+  tabOrder?: string[];
+  mainChatHost?: React.Ref<HTMLDivElement>;
+  browserHistory?: Record<string, WorkbenchBrowserHistory>;
+  onNavigateBrowser?: (key: string, preview: WorkbenchPreview | null) => void;
+  onMoveBrowser?: (key: string, delta: number) => void;
+  native?: ReturnType<typeof useNativeWorkbench>;
+  onOpenNative?: (tool: NativeTool, fromTab?: string) => void;
+  onOpenNativeFile?: (file: XpertWorkspaceFile, fromTab?: string) => void;
+  onCloseNative?: (key: string) => void;
+  sideChatEnabled?: boolean;
   previews: WorkbenchPreview[];
+  newTabs: string[];
+  recent: RecentWorkbenchPreview[];
+  onNewTab: () => void;
+  onCloseNewTab: (key: string) => void;
+  onNavigateNewTab: (tabKey: string, viewKey: string) => void;
+  onPreviewFromNewTab: (tabKey: string, preview: WorkbenchPreview) => void;
   viewQueries: Record<string, XpertViewQuery>;
   onClosePreview: (key: string) => void;
   visible: boolean;
@@ -96,8 +136,24 @@ type WorkbenchPanelProps = {
 };
 
 export function WorkbenchPanel({
+  tabOrder,
+  mainChatHost,
+  browserHistory = {},
+  onNavigateBrowser,
+  onMoveBrowser,
+  native,
+  onOpenNative,
+  onOpenNativeFile,
+  onCloseNative,
+  sideChatEnabled,
   visible,
   previews,
+  newTabs,
+  recent,
+  onNewTab,
+  onCloseNewTab,
+  onNavigateNewTab,
+  onPreviewFromNewTab,
   viewQueries,
   onClosePreview,
   views,
@@ -133,7 +189,24 @@ export function WorkbenchPanel({
   onClientCommand,
 }: WorkbenchPanelProps) {
   const { t } = useChatkitTranslation();
+  const [fileRevision, refreshFiles] = React.useReducer(
+    (value) => value + 1,
+    0,
+  );
+  const fileScope = React.useMemo<WorkspaceFileScope | null>(
+    () =>
+      stream.projectId
+        ? stream.conversationId
+          ? { kind: 'conversation', conversationId: stream.conversationId }
+          : null
+        : stream.assistantId
+          ? { kind: 'assistant', assistantId: stream.assistantId }
+          : null,
+    [stream.projectId, stream.conversationId, stream.assistantId],
+  );
+  const { theme } = useTheme();
   const externalTabId = React.useId();
+  const mainChatTabId = React.useId();
   const frameScope = JSON.stringify([
     stream.apiUrl,
     stream.organizationId,
@@ -164,90 +237,98 @@ export function WorkbenchPanel({
     });
   }, [activeViewKey, frameScope, views]);
   const activePreview = previews.find((item) => item.key === activeViewKey);
+  const browserNavigation = (key: string) => {
+    const history = browserHistory[key];
+    return {
+      canBack: !!history && history.index > 0,
+      canForward: !!history && history.index < history.entries.length - 1,
+      onBack: () => onMoveBrowser?.(key, -1),
+      onForward: () => onMoveBrowser?.(key, 1),
+      onHome: () => onNavigateBrowser?.(key, null),
+    };
+  };
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div
+      className="flex h-full min-h-0 flex-col bg-background"
+      style={getSurfaceThemeStyle(theme)}
+    >
       <div
         data-slot="chatkit-workbench-header"
         className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2"
       >
-        {views.length > 0 ||
+        {mainChatHost ||
+        (native?.tabs.length ?? 0) > 0 ||
+        views.length > 0 ||
         previews.length > 0 ||
+        newTabs.length > 0 ||
         sideChat ||
         sideChatOpening ||
         externalViewOpen ? (
-          <WorkbenchTabs activeKey={activeViewKey}>
+          <WorkbenchTabs activeKey={activeViewKey} order={tabOrder}>
+            {mainChatHost && (
+              <WorkbenchTab
+                key={MAIN_CHAT_VIEW_KEY}
+                label={t('workbench.mainChat')}
+                icon={<MessageSquare size={16} />}
+                selected={activeViewKey === MAIN_CHAT_VIEW_KEY}
+                id={mainChatTabId}
+                panelId={`${mainChatTabId}-panel`}
+                onSelect={() => onSelect(MAIN_CHAT_VIEW_KEY)}
+              />
+            )}
+            {native &&
+              onCloseNative &&
+              native.tabs.map((tab) => (
+                <NativeWorkbenchTabs
+                  key={tab.key}
+                  tabs={[tab]}
+                  dirty={native.dirty}
+                  activeKey={activeViewKey}
+                  onSelect={onSelect}
+                  onClose={onCloseNative}
+                />
+              ))}
             {externalViewOpen && (
-              <div
-                className={cn(
-                  'flex h-9 max-w-64 shrink-0 items-center rounded-lg',
-                  activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/60',
-                )}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  id={externalTabId}
-                  aria-controls={`${externalTabId}-panel`}
-                  aria-selected={activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY}
-                  onClick={() => onSelect(EXTERNAL_ASSISTANTS_VIEW_KEY)}
-                  className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                >
-                  <Bot size={17} aria-hidden="true" />
-                  <span className="truncate">
-                    {t('workbench.externalAssistants.title')}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onCloseExternal}
-                  aria-label={t('workbench.externalAssistants.close')}
-                  className="mr-1 rounded-lg p-1 text-muted-foreground hover:bg-background/80"
-                >
-                  <X size={15} />
-                </button>
-              </div>
+              <WorkbenchTab
+                key={EXTERNAL_ASSISTANTS_VIEW_KEY}
+                label={t('workbench.externalAssistants.title')}
+                icon={<Bot size={16} />}
+                selected={activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY}
+                id={externalTabId}
+                panelId={`${externalTabId}-panel`}
+                onSelect={() => onSelect(EXTERNAL_ASSISTANTS_VIEW_KEY)}
+                close={{
+                  label: t('workbench.externalAssistants.close'),
+                  onClick: onCloseExternal,
+                }}
+              />
             )}
             {(sideChat || sideChatOpening) && (
-              <div
-                className={cn(
-                  'flex h-9 max-w-64 shrink-0 items-center rounded-xl transition-colors',
-                  activeViewKey === SIDE_CHAT_VIEW_KEY
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
-                  onClick={() => onSelect(SIDE_CHAT_VIEW_KEY)}
-                  className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                >
-                  <MessageSquarePlus size={17} className="shrink-0" />
-                  <span className="truncate">
-                    {sideChat?.title ?? t('workbench.sideChat.title')}
-                  </span>
-                </button>
-                {sideChat && activeViewKey === SIDE_CHAT_VIEW_KEY && (
-                  <button
-                    type="button"
-                    onClick={onRequestCloseSideChat}
-                    className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                    aria-label={`${t('workbench.close')}: ${t('workbench.sideChat.title')}`}
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+              <WorkbenchTab
+                key={SIDE_CHAT_VIEW_KEY}
+                label={sideChat?.title ?? t('workbench.sideChat.title')}
+                icon={<MessageSquarePlus size={16} />}
+                selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
+                onSelect={() => onSelect(SIDE_CHAT_VIEW_KEY)}
+                close={
+                  sideChat && activeViewKey === SIDE_CHAT_VIEW_KEY
+                    ? {
+                        label: `${t('workbench.close')}: ${t('workbench.sideChat.title')}`,
+                        onClick: onRequestCloseSideChat,
+                      }
+                    : undefined
+                }
+              />
             )}
-            <PreviewTabs
-              previews={previews}
-              activeKey={activeViewKey}
-              onSelect={onSelect}
-              onClose={onClosePreview}
-            />
+            {previews.map((preview) => (
+              <PreviewTabs
+                key={preview.key}
+                previews={[preview]}
+                activeKey={activeViewKey}
+                onSelect={onSelect}
+                onClose={onClosePreview}
+              />
+            ))}
             {views.map((view) => {
               const selected = view.key === activeViewKey;
               const label = resolveManifestText(
@@ -256,64 +337,63 @@ export function WorkbenchPanel({
                 locale,
               );
               return (
-                <div
+                <WorkbenchTab
                   key={view.key}
-                  className={cn(
-                    'flex h-10 max-w-64 shrink-0 items-center rounded-xl transition-colors',
-                    selected
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-                  )}
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={selected}
-                    title={label}
-                    onClick={() => onSelect(view.key)}
-                    className="flex h-full min-w-0 items-center gap-2 px-3 text-sm font-medium"
-                  >
+                  label={label}
+                  selected={selected}
+                  onSelect={() => onSelect(view.key)}
+                  icon={
                     <IconDefinitionRenderer
                       icon={view.workbench?.menu?.icon ?? view.icon}
-                      size={17}
-                      className="text-muted-foreground"
-                      fallback={
-                        <PanelRight
-                          size={17}
-                          className="shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      }
+                      size={16}
+                      fallback={<PanelRight size={16} />}
                     />
-                    <span className="truncate">{label}</span>
-                  </button>
-                  {selected && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onCloseView ? onCloseView(view.key) : onClose()
-                      }
-                      className="mr-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                      aria-label={`${t('workbench.close')}: ${label}`}
-                    >
-                      <X size={15} />
-                    </button>
-                  )}
-                </div>
+                  }
+                  close={
+                    selected
+                      ? {
+                          label: `${t('workbench.close')}: ${label}`,
+                          onClick: () =>
+                            onCloseView ? onCloseView(view.key) : onClose(),
+                        }
+                      : undefined
+                  }
+                />
               );
             })}
+            {newTabs.map((key) => (
+              <WorkbenchTab
+                key={key}
+                label={t('workbench.newTab')}
+                icon={<Globe size={16} />}
+                selected={activeViewKey === key}
+                id={key}
+                panelId={`${key}-panel`}
+                onSelect={() => onSelect(key)}
+                close={{
+                  label: t('workbench.closeNewTab'),
+                  onClick: () => onCloseNewTab(key),
+                }}
+              />
+            ))}
           </WorkbenchTabs>
         ) : (
           <div className="min-w-0 flex-1" />
         )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onNewTab}
+              aria-label={t('workbench.newTab')}
+              className="flex size-8 shrink-0 items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Plus size={18} aria-hidden="true" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t('workbench.newTab')}</TooltipContent>
+        </Tooltip>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <WorkbenchAvailableViews
-            views={availableViews.filter(
-              (view) => !views.some((opened) => opened.key === view.key),
-            )}
-            locale={locale}
-            onSelect={onSelect}
-          />
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -373,16 +453,84 @@ export function WorkbenchPanel({
         </div>
       )}
 
-      {error && activeView && (
-        <div role="alert" className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive">
-          <span className="flex-1">{error}</span>
-          <button type="button" onClick={onReload} className="rounded-md px-2 py-1 hover:bg-muted">
-            {t('workbench.retry')}
-          </button>
-        </div>
-      )}
+      {error &&
+        activeView &&
+        activeViewKey !== MAIN_CHAT_VIEW_KEY &&
+        !newTabs.includes(activeViewKey ?? '') && (
+          <div
+            role="alert"
+            className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive"
+          >
+            <span className="flex-1">{error}</span>
+            <button
+              type="button"
+              onClick={onReload}
+              className="rounded-md px-2 py-1 hover:bg-muted"
+            >
+              {t('workbench.retry')}
+            </button>
+          </div>
+        )}
 
       <div className="relative min-h-0 flex-1">
+        {mainChatHost && (
+          <div
+            id={`${mainChatTabId}-panel`}
+            role="tabpanel"
+            aria-labelledby={mainChatTabId}
+            hidden={activeViewKey !== MAIN_CHAT_VIEW_KEY}
+            className="h-full min-h-0"
+          >
+            <div ref={mainChatHost} className="contents" />
+          </div>
+        )}
+        {native && onOpenNativeFile && (
+          <NativeWorkbenchContent
+            tabs={native.tabs}
+            activeKey={activeViewKey}
+            visible={visible}
+            client={stream.client}
+            scope={fileScope}
+            conversationId={stream.conversationId}
+            projectId={stream.projectId}
+            register={native.register}
+            onOpenFile={onOpenNativeFile}
+            onPreviewFile={native.previewFile}
+            revision={fileRevision}
+            onSaved={refreshFiles}
+          />
+        )}
+        {newTabs.map((key) => (
+          <div
+            key={key}
+            id={`${key}-panel`}
+            role="tabpanel"
+            aria-labelledby={key}
+            hidden={activeViewKey !== key}
+            className="h-full min-h-0"
+          >
+            <WorkbenchStartPage
+              navigation={{ ...browserNavigation(key), onHome: undefined }}
+              views={availableViews}
+              openedViewKeys={views.map((view) => view.key)}
+              recentFiles={native?.recent}
+              onOpenTool={(tool) => onOpenNative?.(tool, key)}
+              onOpenFile={(file) => onOpenNativeFile?.(file, key)}
+              conversationReady={Boolean(
+                stream.threadId && stream.conversationId,
+              )}
+              sideChatEnabled={sideChatEnabled}
+              recent={recent}
+              locale={locale}
+              apiUrl={stream.apiUrl}
+              loading={loading}
+              error={error}
+              onReload={onReload}
+              onSelectView={(viewKey) => onNavigateNewTab(key, viewKey)}
+              onOpenPreview={(preview) => onPreviewFromNewTab(key, preview)}
+            />
+          </div>
+        ))}
         {sideChat && (
           <div
             hidden={activeViewKey !== SIDE_CHAT_VIEW_KEY}
@@ -404,6 +552,7 @@ export function WorkbenchPanel({
             className="h-full min-h-0"
           >
             <ExternalAssistantView
+              client={stream.client}
               runs={externalRuns}
               selectedId={selectedExternalId}
               onSelect={onSelectExternal}
@@ -412,6 +561,7 @@ export function WorkbenchPanel({
               organizationId={stream.organizationId}
               apiUrl={stream.apiUrl}
               mcpApps={options?.mcpApps}
+              messagePresentation={options?.messagePresentation}
               hasMore={stream.historyMessagePagination?.hasMore}
               loadingMore={stream.historyMessagePagination?.isLoadingMore}
               onLoadMore={() => {
@@ -426,7 +576,17 @@ export function WorkbenchPanel({
             hidden={activeViewKey !== preview.key}
             className="h-full min-h-0"
           >
-            <WorkbenchPreviewContent preview={preview} />
+            {preview.kind === 'browser' ? (
+              <WorkbenchBrowserPreview
+                preview={preview}
+                recent={recent}
+                apiUrl={stream.apiUrl}
+                navigation={browserNavigation(preview.key)}
+                onNavigate={(next) => onNavigateBrowser?.(preview.key, next)}
+              />
+            ) : (
+              <WorkbenchPreviewContent preview={preview} />
+            )}
           </div>
         ))}
         {views
@@ -456,7 +616,10 @@ export function WorkbenchPanel({
               />
             </div>
           ))}
-        {activePreview ? null : activeViewKey ===
+        {(mainChatHost && activeViewKey === MAIN_CHAT_VIEW_KEY) ||
+        native?.tabs.some((tab) => tab.key === activeViewKey) ||
+        newTabs.includes(activeViewKey ?? '') ||
+        activePreview ? null : activeViewKey ===
           EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===
           SIDE_CHAT_VIEW_KEY ? (
           !sideChat && sideChatOpening ? (

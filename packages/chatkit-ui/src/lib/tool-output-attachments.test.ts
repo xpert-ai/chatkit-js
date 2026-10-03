@@ -7,6 +7,25 @@ import { describe, expect, it } from 'vitest';
 const sha256 = 'a'.repeat(64);
 
 describe('tool output attachments', () => {
+  it('accepts generic tool images through the same immutable attachment protocol', () => {
+    expect(
+      parseToolOutputPresentation({
+        type: 'xpert.tool-output',
+        version: 1,
+        attachments: [
+          {
+            type: 'image',
+            source: 'tool',
+            artifactId: 'tool-image',
+            artifactVersionId: 'version',
+            sha256,
+            mimeType: 'image/png',
+            modelDetail: 'high',
+          },
+        ],
+      })?.attachments[0].source,
+    ).toBe('tool');
+  });
   it('accepts immutable image artifact descriptors without persisted URLs', () => {
     expect(
       parseToolOutputPresentation({

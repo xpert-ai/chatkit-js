@@ -499,6 +499,8 @@ export type ChatKitGoalAdapter = {
 };
 
 export type ChatKitWorkbenchClientCommandRequest = {
+  /** User-clicked persisted resource; hosts resolve its canonical target from message history. */
+  resourceCard?: { messageId: string; id: string };
   commandKey: string;
   payload?: unknown;
   hostType: 'agent';
@@ -527,9 +529,8 @@ export type ChatKitWorkbenchOptions = {
   enabled?: boolean;
 
   /**
-   * Show a vertical strip of available remote-view icons at the right edge of
-   * chat while the workbench is closed. Clicking an icon opens that view.
-   * Requires `workbench.enabled`. Disabled by default.
+   * @deprecated Views now open from the stacked-tabs button in the chat header.
+   * This option is retained for compatibility and no longer renders a view rail.
    */
   viewRail?: { enabled?: boolean };
 
@@ -568,6 +569,14 @@ export type ChatKitMcpAppsOptions = {
    * proxy URL hostname exactly.
    */
   allowedDomains?: string[];
+};
+
+/** Rendering policy only; never changes messages, execution or model context. */
+export type ChatKitMessagePresentationOptions = {
+  /** Defaults to the existing transcript presentation. */
+  mode?: 'transcript' | 'bubbles';
+  /** Collapse the process before the final answer. Only applies to transcript. */
+  collapseProcess?: boolean;
 };
 
 export type ChatKitOptions = {
@@ -633,10 +642,7 @@ export type ChatKitOptions = {
   messageNavigation?: ChatKitMessageNavigationOptions;
 
   /** Message presentation only; never changes stored messages or model context. */
-  messagePresentation?: {
-    /** Collapse the process preceding each final assistant answer. Default: false. */
-    collapseProcess?: boolean;
-  };
+  messagePresentation?: ChatKitMessagePresentationOptions;
 
   /**
    * Optional Xpert Remote Views workbench.

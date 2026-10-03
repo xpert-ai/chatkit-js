@@ -3,7 +3,7 @@ export const TOOL_OUTPUT_PRESENTATION_VERSION = 1 as const;
 
 export type ToolOutputImageMimeType = 'image/png' | 'image/jpeg' | 'image/webp';
 
-export type ToolOutputImageSource = 'knowledge-document' | 'sandbox';
+export type ToolOutputImageSource = 'knowledge-document' | 'sandbox' | 'tool';
 
 /**
  * Stable evidence anchors that are safe to persist in chat history.

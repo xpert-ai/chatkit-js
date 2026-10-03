@@ -1,7 +1,7 @@
 # Remote Views Workbench
 
 ChatKit can discover iframe-based Xpert extension views and display them in a
-right-side workbench. The feature is opt-in and remains disabled unless
+workbench that starts on the right. The feature is opt-in and remains disabled unless
 `workbench.enabled` is exactly `true`.
 
 ```ts
@@ -15,30 +15,50 @@ const options: ChatKitOptions = {
   },
   workbench: {
     enabled: true,
-    viewRail: { enabled: true },
     async onClientCommand(request) {
       // Only platform-specific operations need a host callback.
-      return { success: false, code: 'unsupported', commandKey: request.commandKey };
+      return {
+        success: false,
+        code: 'unsupported',
+        commandKey: request.commandKey,
+      };
     },
   },
 };
 ```
 
-`workbench.viewRail.enabled` optionally displays a compact vertical strip of view
-icons at the right edge of chat when the workbench is closed. It defaults to
-`false` and requires `workbench.enabled: true`. Hover or keyboard focus reveals
-the localized view name and description; clicking an icon opens that view
-directly, using the existing drawer on narrow screens. The rail disappears while
-the workbench is open and returns when it is closed. It uses the same authorized
-remote views, ordering, menu icons and labels as the workbench tabs. It does not
-reserve space when no views are available, and switching Assistant or runtime
-scope clears stale entries while loading the new views.
+The stacked-tabs button in the chat header shows the number of available menu
+views. Hover over it, or press Arrow Down while focused, to open a menu with each
+view's icon and localized name. Selecting a view opens it in the workbench,
+including on-demand views. Clicking the button directly restores the active
+view or opens the first available menu view.
+Switch views with the workbench tabs or open a new tab with **+**. On narrow screens,
+the same button opens the workbench drawer. The chat no longer reserves a
+right-side icon rail; `workbench.viewRail` is deprecated and ignored.
+
+The **New tab** guide shows Files / folders, Terminal and Side chat as common
+tools. More tools reserves an entry for future plugin and MCP Apps integrations.
+Recommended contains on-demand views and closed fixed views, followed by recently
+opened workspace files and website/file previews. It uses the same
+authorized, menu-visible manifests as the header menu, with localized labels and
+icons. Choose an item to replace the guide with that view or preview; an existing
+tab is reused. Fixed views can also be closed and reopened from Recommended.
+Multiple new tabs can be opened and closed independently, while
+visited views and previews remain mounted during tab switches.
+
+Search filters view names, descriptions and recent file titles. Enter an explicit
+HTTP(S) URL to open a sandboxed website preview. Recently opened records are
+deduplicated and ordered by last visit within each list (up to 30 workspace files
+and 20 website/file previews). They remain available after
+closing a preview, but are kept in memory only and cleared when the Assistant,
+organization, project, conversation or authentication scope changes. Loss of view
+access also clears file/website records.
 
 When restoring an existing thread, view discovery waits for its conversation and
 Project scope to finish loading, including conversations without a Project.
 ChatKit shows an initial loading state until that scope and its views are ready;
 the Web Component's `chatkit.ready` event still only reports iframe document load.
-Refreshing within the same scope preserves the rail, active view, previews and
+Refreshing within the same scope preserves the active view, previews and
 injected context. Transient refresh errors retain loaded views; denied access or
 a changed scope clears them. Background refreshes do not cover the chat again.
 
@@ -56,10 +76,14 @@ Within the same scope, switching views or opening a preview keeps visited remote
 frames mounted. Changing scope clears that visited-view cache, including hidden
 frames, and waits for fresh view discovery before opening new remote frames.
 
-On wide containers the workbench is a resizable split panel. Below 960px it
-opens as a right-side drawer. Maximizing hides chat at every width. Chat width
-and maximized state are saved per API / organization / Assistant in local
-storage; the active view remains local to the current mount.
+On wide containers the workbench is a resizable split panel. Hover over the divider
+or focus it with the keyboard to reveal the swap button at its center. Use it to
+exchange the chat and workbench positions without
+reloading either pane. Pointer and arrow-key resizing follow the new position.
+Chat width, pane positions and maximized state are saved per API / organization /
+Assistant in local storage; the active view remains local to the current mount.
+Below 960px, the workbench opens as a right-side drawer and leaves the saved desktop
+layout unchanged. Maximizing hides chat at every width.
 
 ## Theme
 
@@ -210,3 +234,97 @@ To focus an execution, pass `threadId`, `executionId`, and a new
 `executionFocusRequestId` in `request.context.env` for each explicit navigation.
 The request ID prevents ordinary rerenders from reopening the panel while allowing
 the user to open the same execution again after closing it.
+
+## Native files, terminal and editors
+
+Native tools use `Client.workbench`; there are no direct platform HTTP requests in
+the UI. Without a Project, files use the current Assistant workspace. With a
+Project, the conversation file API resolves the workspace on the server. File
+and terminal tabs are cleared when the runtime/authentication scope changes.
+Save drafts before changing Assistant, project or conversation.
+
+Files support folder browsing, search within the current folder, new text files
+(including parent paths), uploads, downloads (ZIP for folders) and confirmed
+deletion. Open files remain mounted when switching tabs. Closing a dirty file
+prompts to save, discard or cancel; page unload also warns about unsaved edits.
+Saving checks the current server bytes first and retains the local buffer on a
+conflict or failed write. This is a preflight check, not a server-side atomic lock.
+Download can export a draft for recovery.
+
+| File type                    | Workbench capability                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Text / code                  | CodeMirror editing, search, syntax modes, undo and save                                                                |
+| Markdown / HTML              | Source editing plus rendered preview; HTML uses a sandboxed iframe                                                     |
+| DOCX                         | ProseMirror text editing, basic formatting and original-package repacking                                              |
+| CSV / TSV / XLS              | Spreadsheet editing and export in the original format                                                                  |
+| XLSX                         | Cell values/formulas, preserving original package parts; unsupported structure/style changes block saving              |
+| PPTX                         | Slide/text editing, basic text formatting, moving elements, editing table cells, undo/redo and package-preserving save |
+| Images / PDF / audio / video | Browser-supported preview and download                                                                                 |
+| Other formats                | Download                                                                                                               |
+
+Office editors load lazily. Editable text is limited to 5 MiB and all previews to
+50 MiB; larger files remain downloadable. DOCX uses a continuous editing surface,
+not Word pagination. Office conversion is not a promise of full Microsoft Office
+feature compatibility.
+
+Terminal uses xterm and the existing `sandbox-terminal` Socket.IO protocol,
+including resize, input, disconnect/reconnect and disposal on close/scope changes.
+It requires a conversation with a sandbox provider that implements terminal
+sessions. Side chat copies the source execution thread and is enabled by default
+with Workbench; `workbench.sideChat.enabled: false` disables it explicitly.
+
+## SDK and server prerequisites
+
+The SDK source changes live in `xpert-sdk-js` (`Client.workbench`). Until a released
+SDK includes these methods, this repository applies
+`patches/@xpert-ai__xpert-sdk@0.5.0.patch` through pnpm, with the Socket.IO package
+extension declared in `pnpm-workspace.yaml`. Keep the patch and lockfile together;
+install with `pnpm install --frozen-lockfile`. Consumers need this patched SDK or
+a release containing the same API; the unpatched 0.5.0 package is insufficient.
+
+### Local testing without publishing the SDK
+
+The checked-in pnpm patch is enough for local development; publishing or linking
+the SDK is not required. Stop the existing ChatKit development server first, then
+run these commands from the `chatkit-js` repository root:
+
+```sh
+corepack pnpm install --frozen-lockfile
+corepack pnpm dev:ui:fresh
+```
+
+`dev:ui:fresh` verifies that the installed SDK exposes the Workbench file and
+terminal methods, then starts Vite on port 5173 with fresh dependency optimization.
+It fails if that port is occupied instead of silently switching ports. To check
+the installed SDK separately, run `corepack pnpm check:sdk`.
+
+The local Xpert host should use `VITE_CHATKIT_FRAME_URL=http://localhost:5173`.
+After restarting Vite, fully reload the host page (for example,
+`http://localhost:4300/chat/clawxpert/c`) to recreate the SDK client inside the
+iframe. Hot module replacement can retain an older client instance even after
+the installed package has been patched. On macOS Chrome, use Cmd+Shift+R.
+
+If `client.workbench` is undefined, check the installed SDK and reload the page
+before debugging the file API. Connection-refused and HTTP 401 errors are separate
+backend connectivity or authentication failures; rebuilding the SDK alone does
+not resolve them. Terminal authentication uses the SDK request hook so both HTTP
+and Socket.IO receive the current client secret and organization context.
+
+Deploy the matching Xpert changes before using the tools: the Assistant workspace
+routes accept the scoped interactive credential, the conversation file controller
+uses the existing workspace services, and the terminal guard accepts USER_XPERT
+client secrets in addition to JWT. Assistant/tenant/organization bindings and the
+existing project/user permissions remain enforced. Public and enterprise client
+secrets do not gain native workspace access.
+
+Sandbox service discovery runs in the background when restoring history; its
+loading and error state belongs to the runtime services panel and does not block
+Workbench readiness. The matching server treats service listing as passive:
+it authorizes the conversation, reads persisted services, and inspects only an
+existing runtime. Missing runtimes report active services as `lost`; discovery
+does not provision workspace directories or create/recover a sandbox. Terminal
+and explicit execution/start operations retain their on-demand runtime creation.
+Missing provider or workspace mapping configuration returns a structured 400
+error so the SDK does not repeatedly retry it.
+
+See [implementation and verification notes](./workbench-native-tools-plan.md).

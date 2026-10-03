@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { resizeWorkbench } from './split-resize';
+import type { WorkbenchLayout } from './layout-storage';
 
 export function useWorkbenchResize({
   rootRef,
@@ -7,6 +8,7 @@ export function useWorkbenchResize({
   resolvedPanelWidth,
   open,
   expanded,
+  workbenchSide,
   setPanelWidth,
   setExpanded,
 }: {
@@ -15,6 +17,7 @@ export function useWorkbenchResize({
   resolvedPanelWidth: number;
   open: boolean;
   expanded: boolean;
+  workbenchSide: WorkbenchLayout['workbenchSide'];
   setPanelWidth: React.Dispatch<React.SetStateAction<number | null>>;
   setExpanded: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
@@ -54,7 +57,9 @@ export function useWorkbenchResize({
       const handleMove = (moveEvent: PointerEvent) => {
         if (moveEvent.pointerId !== pointerId) return;
         const chatWidth =
-          rect.width - startingWidth + moveEvent.clientX - startX;
+          rect.width -
+          startingWidth +
+          (moveEvent.clientX - startX) * (workbenchSide === 'left' ? -1 : 1);
         const next = resizeWorkbench(chatWidth, rect.width);
         setPanelWidth(next.panelWidth);
         if (next.collapsed) {
@@ -68,14 +73,19 @@ export function useWorkbenchResize({
       window.addEventListener('blur', cancel);
       resizeCleanup.current = cleanup;
     },
-    [isNarrow, resolvedPanelWidth, rootRef, setPanelWidth, setExpanded],
+    [
+      isNarrow,
+      resolvedPanelWidth,
+      rootRef,
+      setPanelWidth,
+      setExpanded,
+      workbenchSide,
+    ],
   );
   React.useEffect(() => {
-    if (!open || expanded || isNarrow) {
-      resizeCleanup.current();
-      setResizing(false);
-    }
-  }, [open, expanded, isNarrow]);
+    resizeCleanup.current();
+    setResizing(false);
+  }, [open, expanded, isNarrow, workbenchSide]);
 
   return { resizing, startResize };
 }

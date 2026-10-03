@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sdkMocks = vi.hoisted(() => ({
   threadsCreate: vi.fn(),
+  threadsGet: vi.fn(),
   threadsDelete: vi.fn(),
   conversationsCreate: vi.fn(),
   conversationsGet: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
   class Client {
     threads = {
       create: sdkMocks.threadsCreate,
+      get: sdkMocks.threadsGet,
       delete: sdkMocks.threadsDelete,
     };
 
@@ -142,6 +144,7 @@ describe('first submission setup', () => {
   beforeEach(() => {
     queryState.value = null;
     sdkMocks.threadsCreate.mockReset();
+    sdkMocks.threadsGet.mockReset().mockResolvedValue({ status: 'idle' });
     sdkMocks.threadsDelete.mockReset();
     sdkMocks.conversationsCreate.mockReset();
     sdkMocks.conversationsGet.mockReset();

@@ -15,7 +15,12 @@ describe('assistant workbench layout storage', () => {
       'org-a',
       'assistant-a',
     );
-    const layout = { open: true, expanded: true, chatWidth: 520 };
+    const layout = {
+      open: true,
+      expanded: true,
+      chatWidth: 520,
+      workbenchSide: 'left' as const,
+    };
     writeWorkbenchLayout(key, layout);
     expect(
       readWorkbenchLayout(
@@ -35,6 +40,7 @@ describe('assistant workbench layout storage', () => {
         open: false,
         expanded: false,
         chatWidth: null,
+        workbenchSide: 'right',
       });
     expect(workbenchLayoutKey('/api/ai', 'org-a', '')).toBeNull();
   });
@@ -51,8 +57,30 @@ describe('assistant workbench layout storage', () => {
       open: false,
       expanded: false,
       chatWidth: null,
+      workbenchSide: 'right',
     });
   });
+
+  it.each([undefined, 'invalid', false])(
+    'defaults old or unrecognized pane positions to the right: %s',
+    (workbenchSide) => {
+      window.localStorage.setItem(
+        'layout-test',
+        JSON.stringify({
+          open: true,
+          expanded: false,
+          chatWidth: 520,
+          workbenchSide,
+        }),
+      );
+      expect(readWorkbenchLayout('layout-test')).toEqual({
+        open: true,
+        expanded: false,
+        chatWidth: 520,
+        workbenchSide: 'right',
+      });
+    },
+  );
 
   it('tolerates blocked storage and write quota errors', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
@@ -65,12 +93,14 @@ describe('assistant workbench layout storage', () => {
       open: false,
       expanded: false,
       chatWidth: null,
+      workbenchSide: 'right',
     });
     expect(() =>
       writeWorkbenchLayout('layout-test', {
         open: true,
         expanded: false,
         chatWidth: 600,
+        workbenchSide: 'left',
       }),
     ).not.toThrow();
   });

@@ -97,6 +97,12 @@ export function useWorkbenchLayout(
   const dismiss = React.useCallback(() => {
     update((layout) => ({ ...layout, open: false, expanded: false }), false);
   }, [update]);
+  const swapSides = React.useCallback(() => {
+    update((layout) => ({
+      ...layout,
+      workbenchSide: layout.workbenchSide === 'right' ? 'left' : 'right',
+    }));
+  }, [update]);
   const resolvedPanelWidth = clampPanelWidth(
     current.visible.chatWidth === null
       ? containerWidth * 0.55
@@ -108,6 +114,8 @@ export function useWorkbenchLayout(
     expanded: current.visible.expanded,
     restoring: current.restoring,
     resolvedPanelWidth,
+    workbenchSide: current.visible.workbenchSide,
+    swapSides,
     setOpen,
     setExpanded,
     setPanelWidth,
