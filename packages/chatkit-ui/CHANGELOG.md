@@ -1,5 +1,29 @@
 # @xpert-ai/chatkit-ui
 
+## 0.9.0
+
+### Minor Changes
+
+- 8c4adb8: Add opt-in `messagePresentation.mode: 'bubbles'` across chat and Workbench transcripts. Render content blocks and interactive results as themed bubbles while hiding ordinary process output. Preserve source message actions, approval controls, interactive component state, and scroll position when changing presentation. The default transcript presentation is unchanged.
+
+### Patch Changes
+
+- 6b230fb: Add validated persisted Resource Card message parts and a reply-bottom card renderer with explicit Workbench navigation. Repeated resources update within one reply, remain independent across replies, and do not enter transcript/model text. Explicit task-card navigation supports selection restoration, history and refresh. The host command request carries the persisted card identity for authorization.
+
+  Resource Cards appear together with file review receipts only after their Assistant reply stops streaming. Incoming cards remain in message state for completion, interruption and history recovery without mounting the card UI during output.
+
+- 28dda2b: Show compact summaries instead of embedded image data URLs in legacy tool results,
+  including JSON tree, raw, and copy views. Continue resolving immutable tool-output
+  image attachments through the trusted host for thumbnails and full previews.
+- 4051e5f: Add the generic `tool` image source to the shared immutable attachment contract,
+  attachment parser, and localized source labels.
+- Updated dependencies [6b230fb]
+- Updated dependencies [8c4adb8]
+- Updated dependencies [4051e5f]
+  - @xpert-ai/chatkit-types@0.9.0
+  - @xpert-ai/chatkit-web-shared@0.9.0
+  - @xpert-ai/a2ui-react@0.9.0
+
 ## 0.8.0
 
 ### Minor Changes
