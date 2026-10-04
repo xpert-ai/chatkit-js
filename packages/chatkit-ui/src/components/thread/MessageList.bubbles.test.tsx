@@ -277,8 +277,8 @@ describe('bubble message presentation', () => {
     },
   );
 
-  it('extracts declared image results without exposing tool input/output', () => {
-    render(
+  it('hides tool image artifacts without leaving an empty bubble or exposing tool output', () => {
+    const { container } = render(
       <MessageList
         messages={[
           {
@@ -312,9 +312,10 @@ describe('bubble message presentation', () => {
       />,
       { wrapper },
     );
-    expect(screen.getByAltText('Declared tool image')).toBeVisible();
+    expect(screen.queryByAltText('Declared tool image')).toBeNull();
+    expect(container.querySelector('[data-source-block-id="tool"]')).toBeNull();
     expect(screen.queryByText('private tool output')).toBeNull();
-    expect(screen.queryByText('message.bubbles.completed')).toBeNull();
+    expect(screen.getByText('message.bubbles.completed')).toBeVisible();
   });
 
   it('preserves historical app results without mounting the live app', () => {

@@ -8,7 +8,11 @@ import {
 } from 'lucide-react';
 
 import { getReferenceLabel, normalizeReferences } from '../../lib/references';
-import { cn, getRoundedClass } from '../../lib/utils';
+import {
+  cn,
+  getMenuItemRoundedClass,
+  getPanelRoundedClass,
+} from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
 import type { PendingFollowUp } from '../../lib/follow-ups';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
@@ -52,16 +56,8 @@ function useRoundedClasses() {
   const { theme } = useTheme();
 
   return {
-    top: theme.radius
-      ? {
-          pill: 'rounded-t-full',
-          round: 'rounded-t-xl',
-          soft: 'rounded-t-lg',
-          sharp: 'rounded-t-none',
-        }[theme.radius]
-      : 'rounded-t-lg',
-    panel: getRoundedClass(theme.radius, 'rounded-lg'),
-    control: getRoundedClass(theme.radius, 'rounded-md'),
+    panel: getPanelRoundedClass(theme.radius),
+    control: getMenuItemRoundedClass(theme.radius),
   };
 }
 
@@ -96,8 +92,8 @@ export function PendingFollowUps({
     <div
       className={cn(
         'space-y-2 mx-2 p-2 border border-border',
-        attachToComposer ? 'border-b-0' : null,
-        attachToComposer ? rounded.top : rounded.panel,
+        rounded.panel,
+        attachToComposer ? 'rounded-b-none border-b-0' : null,
         className,
       )}
     >
@@ -116,7 +112,7 @@ export function PendingFollowUps({
               key={item.id}
               className={cn(
                 'border border-border/50 bg-muted/15 px-2 py-1',
-                rounded.panel,
+                rounded.control,
               )}
             >
               <div className="flex items-start gap-2.5">

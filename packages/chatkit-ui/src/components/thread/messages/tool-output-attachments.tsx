@@ -7,6 +7,7 @@ import type {
   ToolOutputPresentation,
 } from '@xpert-ai/chatkit-types';
 import { ImageIcon, Loader2, RefreshCw, X } from 'lucide-react';
+import { isEqual } from 'lodash-es';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import {
@@ -25,14 +26,19 @@ function useToolOutputAttachmentPreview(
   request: ToolOutputAttachmentPreviewRequest,
 ) {
   const parentMessenger = React.useContext(ParentMessengerContext);
+  const sendCommand = parentMessenger?.sendCommand;
+  const isParentAvailable = parentMessenger?.isParentAvailable;
+  // Streaming reparses the same descriptor. Only changed request values should
+  // resolve a new preview; keep the full descriptor and execution scope intact.
+  const requestRef = React.useRef(request);
+  if (!isEqual(requestRef.current, request)) requestRef.current = request;
+  const stableRequest = requestRef.current;
   const [attempt, setAttempt] = React.useState(0);
   const [state, setState] = React.useState<PreviewState>({
     status: 'loading',
   });
-  const attachmentKey = toolOutputAttachmentKey(request.attachment);
-
   React.useEffect(() => {
-    if (!parentMessenger?.isParentAvailable) {
+    if (!isParentAvailable || !sendCommand) {
       setState({ status: 'error' });
       return;
     }
@@ -41,8 +47,7 @@ function useToolOutputAttachmentPreview(
     let refreshTimer: number | null = null;
     setState({ status: 'loading' });
 
-    void parentMessenger
-      .sendCommand('onToolOutputAttachmentPreview', request)
+    void sendCommand('onToolOutputAttachmentPreview', stableRequest)
       .then((response) => {
         if (cancelled) return;
         const preview = parseToolOutputAttachmentPreview(response);
@@ -73,7 +78,7 @@ function useToolOutputAttachmentPreview(
       cancelled = true;
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
     };
-  }, [attachmentKey, attempt, parentMessenger, request]);
+  }, [attempt, isParentAvailable, sendCommand, stableRequest]);
 
   return {
     state,
@@ -107,11 +112,11 @@ function ToolOutputImageAttachmentCard({
   executionId?: string;
 }) {
   const { t } = useChatkitTranslation();
-  const request = React.useMemo<ToolOutputAttachmentPreviewRequest>(
-    () => ({ attachment, toolCallId, executionId }),
-    [attachment, executionId, toolCallId],
-  );
-  const { state, fail, retry } = useToolOutputAttachmentPreview(request);
+  const { state, fail, retry } = useToolOutputAttachmentPreview({
+    attachment,
+    toolCallId,
+    executionId,
+  });
   const fallbackTitle = t('message.toolGroup.attachments.imageTitle', {
     index: index + 1,
   });
@@ -132,11 +137,18 @@ function ToolOutputImageAttachmentCard({
   ]
     .filter(Boolean)
     .join(' · ');
+  const previewStyle: React.CSSProperties = {
+    aspectRatio:
+      attachment.width && attachment.height
+        ? `${attachment.width} / ${attachment.height}`
+        : '16 / 9',
+  };
 
   if (state.status === 'loading') {
     return (
       <div
-        className="flex aspect-video min-w-0 items-center justify-center rounded-lg border border-border bg-background"
+        className="flex max-h-64 w-full max-w-96 min-w-0 items-center justify-center rounded-lg border border-border bg-background"
+        style={previewStyle}
         aria-label={t('message.toolGroup.attachments.loading', { title })}
       >
         <Loader2
@@ -149,7 +161,10 @@ function ToolOutputImageAttachmentCard({
 
   if (state.status === 'error') {
     return (
-      <div className="flex aspect-video min-w-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 text-center">
+      <div
+        className="flex max-h-64 w-full max-w-96 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 text-center"
+        style={previewStyle}
+      >
         <ImageIcon
           className="h-5 w-5 text-muted-foreground"
           aria-hidden="true"
@@ -174,20 +189,27 @@ function ToolOutputImageAttachmentCard({
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="group relative aspect-video min-w-0 overflow-hidden rounded-lg border border-border bg-background text-left shadow-sm transition hover:border-ring/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="group w-full max-w-96 min-w-0 overflow-hidden rounded-lg border border-border bg-background text-left shadow-sm transition-colors hover:border-ring/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           aria-label={t('message.toolGroup.attachments.open', { title })}
         >
-          <img
-            className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-            src={state.previewUrl}
-            alt={attachment.alt ?? title}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={fail}
-          />
-          <span className="absolute inset-x-0 bottom-0 bg-black/65 px-2 py-1.5 text-[11px] font-medium leading-4 text-white">
+          <span
+            className="block max-h-64 w-full overflow-hidden bg-muted/30"
+            style={previewStyle}
+          >
+            <img
+              className="h-full w-full object-contain"
+              src={state.previewUrl}
+              alt={attachment.alt ?? title}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={fail}
+            />
+          </span>
+          <span className="block border-t border-border px-3 py-2 text-xs font-medium leading-4 text-foreground">
             <span className="line-clamp-1">{title}</span>
-            <span className="block truncate text-white/70">{description}</span>
+            <span className="block truncate text-muted-foreground">
+              {description}
+            </span>
           </span>
         </button>
       </Dialog.Trigger>
@@ -241,7 +263,7 @@ export function ToolOutputAttachments({
 }) {
   return (
     <div
-      className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+      className="flex w-full min-w-0 flex-wrap items-start gap-3"
       data-testid="tool-output-attachments"
     >
       {presentation.attachments.map((attachment, index) => (
