@@ -218,7 +218,14 @@
     steps(var(--chatkit-inline-pet-frames)) infinite;
 }
 
+@keyframes chatkit-assistant-breathe {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-3px) rotate(1deg); }
+}
+.chatkit-assistant-character-motion { animation: chatkit-assistant-breathe 4s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
+  .chatkit-assistant-character-motion { animation: none; }
   .ck-tool-call-row-enter {
     animation: none;
   }

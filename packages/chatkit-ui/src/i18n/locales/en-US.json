@@ -988,5 +988,33 @@
     "settings": "Permission settings",
     "reject": "Deny",
     "approveOnce": "Allow once"
+  },
+  "assistantPresence": {
+    "open": "Open {{name}} details",
+    "customize": "Customize appearance",
+    "details": "Assistant details",
+    "close": "Close assistant details",
+    "approval": "Waiting for confirmation",
+    "failed": "Execution failed",
+    "thinking": "Thinking…",
+    "running": "Working…",
+    "loading": "Connecting…",
+    "idle": "Ready to help"
+  },
+  "assistantComputers": {
+    "title": "Computers",
+    "cloud": "Server Computer",
+    "local": "This computer",
+    "shell": "Local Shell",
+    "loading": "Checking status…",
+    "unavailable": "Unavailable for this assistant",
+    "running": "Running",
+    "starting": "Starting…",
+    "stopped": "Stopped",
+    "notStarted": "Not started",
+    "ready": "Connects on demand",
+    "connected": "Connected",
+    "disabled": "Disabled",
+    "error": "Status unavailable"
   }
 }

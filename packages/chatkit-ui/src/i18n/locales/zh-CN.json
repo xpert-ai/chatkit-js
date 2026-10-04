@@ -988,5 +988,33 @@
     "settings": "权限设置",
     "reject": "拒绝",
     "approveOnce": "允许一次"
+  },
+  "assistantPresence": {
+    "open": "查看 {{name}} 的详情",
+    "customize": "定制形象",
+    "details": "助理详情",
+    "close": "关闭助理详情",
+    "approval": "等待确认",
+    "failed": "执行失败",
+    "thinking": "正在思考…",
+    "running": "正在执行…",
+    "loading": "正在连接…",
+    "idle": "随时为你效劳"
+  },
+  "assistantComputers": {
+    "title": "电脑",
+    "cloud": "服务端电脑",
+    "local": "本机电脑",
+    "shell": "本机 Shell",
+    "loading": "正在查询状态…",
+    "unavailable": "当前助理不可用",
+    "running": "运行中",
+    "starting": "正在启动…",
+    "stopped": "已停止",
+    "notStarted": "尚未启动",
+    "ready": "按需连接",
+    "connected": "已连接",
+    "disabled": "已关闭",
+    "error": "无法获取状态"
   }
 }

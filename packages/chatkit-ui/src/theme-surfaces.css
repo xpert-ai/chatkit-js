@@ -1,5 +1,47 @@
 /* Surface sizes share one density scale: compact .75, normal 1, spacious 1.25.
    Explicit tokens on portal roots prevent dependence on DOM theme inheritance. */
+.chatkit-presence {
+  margin-top: calc(-0.25rem * var(--chat-density-scale, 1));
+  padding-bottom: calc(1.25rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-bubble {
+  padding: calc(0.5rem * var(--chat-density-scale, 1))
+    calc(1rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-dialog {
+  --presence-inset: calc(0.75rem * var(--chat-density-scale, 1));
+  top: var(--presence-inset);
+  right: var(--presence-inset);
+  width: min(23rem, calc(100% - 2 * var(--presence-inset)));
+}
+.chatkit-presence-header {
+  padding: calc(1rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-details {
+  padding-block: calc(0.5rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-customize {
+  margin-top: calc(0.5rem * var(--chat-density-scale, 1));
+  gap: calc(0.25rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-close {
+  padding: calc(0.375rem * var(--chat-density-scale, 1));
+  /* Keep the close action usable even at compact density and small type. */
+  min-width: max(24px, 1.875rem);
+  min-height: max(24px, 1.875rem);
+}
+.chatkit-presence-computers {
+  padding: calc(1rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-computers-heading {
+  margin-bottom: calc(0.5rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-computer-row {
+  padding: calc(0.75rem * var(--chat-density-scale, 1))
+    calc(0.5rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+}
 .chatkit-summary-section {
   padding: calc(0.75rem * var(--chat-density-scale, 1))
     calc(1rem * var(--chat-density-scale, 1));

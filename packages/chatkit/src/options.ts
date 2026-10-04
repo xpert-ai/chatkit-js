@@ -266,6 +266,8 @@ export type ChatKitPetSpriteAtlas = {
 export type ChatKitPetCharacter = {
   type: 'sprite-atlas';
   src: string;
+  /** v1: 8 × 9; v2: 8 × 11, with 16 directional poses in the final two rows. */
+  spriteVersionNumber?: 1 | 2;
   atlas?: ChatKitPetSpriteAtlas;
 };
 
@@ -518,6 +520,22 @@ export type ChatKitWorkbenchNavigationSession = {
   organizationId?: string;
 };
 
+/** Computer shortcuts in the Assistant details dialog. Remote targets use registered View keys. */
+export type ChatKitAssistantComputers = {
+  cloud?: { viewKey: string };
+  /** Host-reported local Shell state; opening emits assistant.computer.open with kind: local. */
+  local?: {
+    name?: string;
+    status:
+      | 'loading'
+      | 'unavailable'
+      | 'disabled'
+      | 'ready'
+      | 'connected'
+      | 'error';
+  };
+};
+
 export type ChatKitWorkbenchOptions = {
   /** Show external Assistant executions in a native workbench tab. Enabled by default. */
   externalAssistants?: { enabled?: boolean };
@@ -717,6 +735,15 @@ export type ChatKitOptions = {
    */
   header?: {
     enabled?: boolean;
+    /** Center the published Assistant character in bubble mode. Defaults to true. */
+    character?: {
+      enabled?: boolean;
+      /** Shows customization actions, emitted as the assistant.customize public effect. */
+      customizable?: boolean;
+      computers?: ChatKitAssistantComputers;
+      /** Honor an explicit reduced-animation preference in addition to the OS setting. */
+      reducedMotion?: boolean;
+    };
     /** Enable native Electron dragging/OS double-click behavior on unused chat and Workbench header space. Defaults to false. */
     windowDrag?: boolean;
 

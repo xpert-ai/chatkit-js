@@ -50,6 +50,7 @@ type ChatTaskSummaryOptions = Pick<
     viewportRef: React.RefObject<HTMLDivElement | null>;
     chatColumnRef: React.RefObject<HTMLDivElement | null>;
     layoutMaxWidth: string | number | undefined;
+    characterPresentation?: boolean;
   };
 
 export function useChatTaskSummary({
@@ -68,6 +69,7 @@ export function useChatTaskSummary({
   chatColumnRef,
   layoutMaxWidth,
   focusComposerAt,
+  characterPresentation = false,
 }: ChatTaskSummaryOptions) {
   const taskSummaryEnabled = options?.taskSummary?.enabled === true;
   const taskSummaryConversationId = stream.conversationId ?? null;
@@ -254,6 +256,10 @@ export function useChatTaskSummary({
   );
 
   React.useLayoutEffect(() => {
+    if (characterPresentation) {
+      setTaskSummaryDocked(true);
+      return;
+    }
     if (!taskSummaryEnabled) {
       setTaskSummaryDocked(false);
       return;
@@ -295,10 +301,11 @@ export function useChatTaskSummary({
       window.removeEventListener('resize', updateDockedState);
       resizeObserver?.disconnect();
     };
-  }, [layoutMaxWidth, taskSummaryEnabled]);
+  }, [layoutMaxWidth, taskSummaryEnabled, characterPresentation]);
 
   const taskSummaryAvailable = Boolean(
-    taskSummaryEnabled && stream.threadId && taskSummaryConversationId,
+    taskSummaryEnabled &&
+    (characterPresentation || (stream.threadId && taskSummaryConversationId)),
   );
 
   const handleTaskSummaryOpenChange = React.useCallback(
@@ -319,13 +326,18 @@ export function useChatTaskSummary({
   );
 
   React.useEffect(() => {
+    if (characterPresentation) {
+      setTaskSummaryOpen(false);
+      return;
+    }
     if (!taskSummaryDocked) {
       setTaskSummaryOpen(false);
     }
-  }, [taskSummaryDocked]);
+  }, [taskSummaryDocked, characterPresentation, stream.assistantId]);
 
   React.useEffect(() => {
     if (
+      characterPresentation ||
       !taskSummaryDocked ||
       !taskSummaryAvailable ||
       !taskSummaryConversationId ||
@@ -337,7 +349,12 @@ export function useChatTaskSummary({
     }
 
     setTaskSummaryOpen(true);
-  }, [taskSummaryAvailable, taskSummaryConversationId, taskSummaryDocked]);
+  }, [
+    taskSummaryAvailable,
+    taskSummaryConversationId,
+    taskSummaryDocked,
+    characterPresentation,
+  ]);
 
   const taskSummaryProps: TaskSummaryProps = {
     summary: taskSummary.summary,

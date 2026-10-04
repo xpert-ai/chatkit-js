@@ -1,3 +1,4 @@
+import { AssistantComputers } from './chat/header/AssistantComputers';
 import { ArrowDown } from 'lucide-react';
 import * as React from 'react';
 import { getComposerThreadReferences } from '../lib/composer-parts';
@@ -52,6 +53,12 @@ import { useChatEnvironment } from './chat/session/useChatEnvironment';
 import { useChatRunControl } from './chat/session/useChatRunControl';
 import { useChatTaskSummary } from './chat/summary/useChatTaskSummary';
 import { resolveMessagePresentation } from '../lib/message-presentation';
+import { CHATKIT_ASSISTANT_CUSTOMIZE_EFFECT } from '@xpert-ai/chatkit-types';
+import {
+  AssistantPresence,
+  AssistantSummaryDialog,
+  type AssistantPresenceProps,
+} from './chat/header/AssistantPresence';
 export type { ChatProps, ChatReferenceRequest } from './chat/types';
 export function Chat({
   className,
@@ -85,6 +92,11 @@ export function Chat({
     options?.messagePresentation,
     assistant.assistantMessagePresentation,
   );
+  const characterPresentation =
+    surface === 'main' &&
+    messagePresentation.mode === 'bubbles' &&
+    options?.header?.enabled !== false &&
+    options?.header?.character?.enabled !== false;
   const feedback = useChatStreamingFeedback({ ...session, surface });
   const runtime = useRuntimeCapabilitiesState({
     client: session.stream.client,
@@ -290,6 +302,7 @@ export function Chat({
   const models = useChatModels({ ...modelState, ...session, ...host });
   const layoutMaxWidth = options?.layout?.maxWidth;
   const summary = useChatTaskSummary({
+    characterPresentation,
     ...session,
     ...runtime,
     ...goal,
@@ -382,6 +395,33 @@ export function Chat({
 
     return { maxWidth: layoutMaxWidth };
   }, [layoutMaxWidth]);
+  const waitingForInput = !!(
+    session.stream.pendingHITLRequest || session.stream.pendingRequestUserInput
+  );
+  const presenceMotionId = React.useId();
+  const presence: AssistantPresenceProps = {
+    motionId: presenceMotionId,
+    avatar: assistant.assistantAvatar,
+    name: assistant.assistantTitle,
+    state: waitingForInput ? 'waiting' : petAutoState,
+    waitingForInput,
+    activity: summary.taskSummaryProps.summary.running[0]?.title,
+    reducedMotion: options?.header?.character?.reducedMotion,
+    open: summary.taskSummaryOpen,
+    onOpenChange: summary.handleTaskSummaryOpenChange,
+    onCustomize:
+      options?.header?.character?.customizable && session.stream.assistantId
+        ? () => {
+            host.parentMessenger.sendEvent('public_event', [
+              'effect',
+              {
+                name: CHATKIT_ASSISTANT_CUSTOMIZE_EFFECT,
+                data: { assistantId: session.stream.assistantId },
+              },
+            ]);
+          }
+        : undefined,
+  };
   return (
     <div
       className="relative flex h-full w-full min-w-0 bg-background"
@@ -403,6 +443,7 @@ export function Chat({
         )}
       >
         <ChatHeader
+          characterPresentation={characterPresentation}
           {...assistant}
           {...session}
           {...historyState}
@@ -418,6 +459,8 @@ export function Chat({
           headerMoreButtonRef={headerMoreButtonRef}
           restoreHeaderFocus={restoreHeaderFocus}
         />
+
+        {characterPresentation && <AssistantPresence {...presence} />}
 
         {viewport.showMessageNavigation && (
           <MessageNavigator
@@ -634,7 +677,32 @@ export function Chat({
         />
         <PetBridge pet={pet.effectivePet} state={petAutoState} />
       </UploadDroppedFiles>
-      {summary.taskSummaryAvailable &&
+      {characterPresentation && (
+        <AssistantSummaryDialog
+          presence={presence}
+          summary={summary.taskSummaryProps}
+          computers={
+            <AssistantComputers
+              computers={options?.header?.character?.computers}
+              onNavigate={() => summary.handleTaskSummaryOpenChange(false)}
+              onOpenLocal={() =>
+                host.parentMessenger.sendEvent('public_event', [
+                  'effect',
+                  {
+                    name: 'assistant.computer.open',
+                    data: {
+                      kind: 'local',
+                      assistantId: session.stream.assistantId,
+                    },
+                  },
+                ])
+              }
+            />
+          }
+        />
+      )}
+      {!characterPresentation &&
+        summary.taskSummaryAvailable &&
         summary.taskSummaryDocked &&
         summary.taskSummaryOpen && (
           <div className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80">
