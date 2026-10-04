@@ -121,6 +121,7 @@ export function RemoteViewFrame({
   const initializedRef = React.useRef<{
     instanceId: string;
     revision: number;
+    configurationKey: string;
   } | null>(null);
 
   const remoteTheme = React.useMemo(() => {
@@ -131,6 +132,15 @@ export function RemoteViewFrame({
       themeRootRef.current ?? frameRef.current ?? document.documentElement;
     return createRemoteTheme(element, isDarkMode);
   }, [isDarkMode, themeRevision, themeRootRef]);
+
+  // Revalidating a scope must not reset an already initialized remote view.
+  // Theme, navigation and manifest changes still require an updated init payload.
+  const configurationKey = JSON.stringify([
+    manifest,
+    initialQuery,
+    locale,
+    remoteTheme,
+  ]);
 
   const sendToFrame = React.useCallback(
     (type: string, body: Record<string, unknown> = {}) => {
@@ -243,6 +253,7 @@ export function RemoteViewFrame({
     initializedRef.current = {
       instanceId,
       revision: contextRef.current.revision,
+      configurationKey,
     };
     workbenchDebug.debug('bridge.init.sent', { viewKey: manifest.key });
   }, [
@@ -254,6 +265,7 @@ export function RemoteViewFrame({
     initialQuery,
     instanceId,
     blocked,
+    configurationKey,
   ]);
 
   const ensureFileAccessSession = React.useCallback(
@@ -563,8 +575,9 @@ export function RemoteViewFrame({
     const initialized = initializedRef.current;
     if (
       initialized?.instanceId === instanceId &&
-      initialized.revision !== revision
+      initialized.configurationKey === configurationKey
     ) {
+      if (initialized.revision === revision) return;
       sendToFrame('hostEvent', {
         event: {
           id: `${instanceId}:context:${revision}`,
@@ -580,7 +593,7 @@ export function RemoteViewFrame({
           },
         },
       });
-      initializedRef.current = { instanceId, revision };
+      initializedRef.current = { ...initialized, revision };
     } else {
       sendInit();
     }
@@ -589,6 +602,7 @@ export function RemoteViewFrame({
     blocked,
     instanceId,
     revision,
+    configurationKey,
     runtimeScope,
     sendInit,
     sendToFrame,

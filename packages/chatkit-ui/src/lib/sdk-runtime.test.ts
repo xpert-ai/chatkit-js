@@ -1,3 +1,5 @@
+// @vitest-environment node
+// SDK routing needs Node's matching Fetch/Blob implementations, not jsdom's Blob.
 import { Client } from '@xpert-ai/xpert-sdk';
 import { describe, expect, it, vi } from 'vitest';
 

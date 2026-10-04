@@ -448,6 +448,32 @@ describe('RemoteViewFrame', () => {
     }
   });
 
+  it('does not reinitialize a retained view when the same context is revalidated', async () => {
+    const { rerender } = renderFrame();
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    post.mockClear();
+
+    let finish!: (html: string) => void;
+    mocks.client.viewHosts.getRemoteComponentEntry.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    rerender(renderFrameElement(undefined, { ...runtimeScope }));
+    expect(iframe).toHaveAttribute('inert');
+    await act(async () => finish(iframe.srcdoc));
+
+    expect(iframe).not.toHaveAttribute('inert');
+    expect(screen.getByTitle('Documents')).toBe(iframe);
+    expect(
+      post.mock.calls.filter(
+        ([message]) => message.type === 'init' || message.type === 'hostEvent',
+      ),
+    ).toHaveLength(0);
+  });
+
   it('blocks unresolved contexts, aborts old reads and rejects explicitly stale requests', async () => {
     let finish!: (value: unknown) => void;
     mocks.client.viewHosts.getData.mockReturnValueOnce(
