@@ -7,6 +7,8 @@ export * from './locale.js';
 export * from './message.js';
 export * from './thread-reference.js';
 export * from './options.js';
+export * from './assistant-appearance.js';
+export * from './assistant-character.js';
 export * from './pet.js';
 export * from './task-summary.js';
 export * from './skill-usage.js';

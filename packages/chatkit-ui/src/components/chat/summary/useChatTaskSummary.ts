@@ -1,11 +1,7 @@
-import type {
-  ChatKitOptions,
-  ChatTaskSummaryOpenResourceEffect,
-  ChatTaskSummaryResourceReference,
-} from '@xpert-ai/chatkit-types';
-import { CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import { useTaskSummary } from '../../../hooks/useTaskSummary';
+import { useOpenTaskSummaryResource } from '../../../hooks/useOpenTaskSummaryResource';
 import {
   collectLiveTaskSummary,
   type TaskSummaryMessage,
@@ -50,6 +46,7 @@ type ChatTaskSummaryOptions = Pick<
     viewportRef: React.RefObject<HTMLDivElement | null>;
     chatColumnRef: React.RefObject<HTMLDivElement | null>;
     layoutMaxWidth: string | number | undefined;
+    characterPresentation?: boolean;
   };
 
 export function useChatTaskSummary({
@@ -63,11 +60,11 @@ export function useChatTaskSummary({
   messageNavigationAnchorsRef,
   disableAutoFollow,
   clearQuoteSelection,
-  parentMessenger,
   viewportRef,
   chatColumnRef,
   layoutMaxWidth,
   focusComposerAt,
+  characterPresentation = false,
 }: ChatTaskSummaryOptions) {
   const taskSummaryEnabled = options?.taskSummary?.enabled === true;
   const taskSummaryConversationId = stream.conversationId ?? null;
@@ -230,30 +227,16 @@ export function useChatTaskSummary({
     [clearQuoteSelection, disableAutoFollow, stream],
   );
 
-  const openTaskSummaryResource = React.useCallback(
-    (
-      resource: ChatTaskSummaryResourceReference,
-      messageId?: string,
-      resourceTitle?: string,
-    ) => {
-      const data: ChatTaskSummaryOpenResourceEffect = {
-        resource,
-        conversationId: taskSummaryConversationId ?? undefined,
-        messageId,
-        title: resourceTitle,
-      };
-      parentMessenger.sendEvent('public_event', [
-        'effect',
-        {
-          name: CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT,
-          data,
-        },
-      ]);
-    },
-    [parentMessenger, taskSummaryConversationId],
+  const openTaskSummaryResource = useOpenTaskSummaryResource(
+    taskSummary.summary.outputs,
+    taskSummaryConversationId ?? undefined,
   );
 
   React.useLayoutEffect(() => {
+    if (characterPresentation) {
+      setTaskSummaryDocked(true);
+      return;
+    }
     if (!taskSummaryEnabled) {
       setTaskSummaryDocked(false);
       return;
@@ -295,10 +278,11 @@ export function useChatTaskSummary({
       window.removeEventListener('resize', updateDockedState);
       resizeObserver?.disconnect();
     };
-  }, [layoutMaxWidth, taskSummaryEnabled]);
+  }, [layoutMaxWidth, taskSummaryEnabled, characterPresentation]);
 
   const taskSummaryAvailable = Boolean(
-    taskSummaryEnabled && stream.threadId && taskSummaryConversationId,
+    taskSummaryEnabled &&
+    (characterPresentation || (stream.threadId && taskSummaryConversationId)),
   );
 
   const handleTaskSummaryOpenChange = React.useCallback(
@@ -319,13 +303,18 @@ export function useChatTaskSummary({
   );
 
   React.useEffect(() => {
+    if (characterPresentation) {
+      setTaskSummaryOpen(false);
+      return;
+    }
     if (!taskSummaryDocked) {
       setTaskSummaryOpen(false);
     }
-  }, [taskSummaryDocked]);
+  }, [taskSummaryDocked, characterPresentation, stream.assistantId]);
 
   React.useEffect(() => {
     if (
+      characterPresentation ||
       !taskSummaryDocked ||
       !taskSummaryAvailable ||
       !taskSummaryConversationId ||
@@ -337,7 +326,12 @@ export function useChatTaskSummary({
     }
 
     setTaskSummaryOpen(true);
-  }, [taskSummaryAvailable, taskSummaryConversationId, taskSummaryDocked]);
+  }, [
+    taskSummaryAvailable,
+    taskSummaryConversationId,
+    taskSummaryDocked,
+    characterPresentation,
+  ]);
 
   const taskSummaryProps: TaskSummaryProps = {
     summary: taskSummary.summary,

@@ -8,9 +8,11 @@ import { File, Folder, Terminal } from 'lucide-react';
 import { WorkbenchTab } from '../WorkbenchTab';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { NativeTab, FileEditorHandle } from './useNativeWorkbench';
-import { WorkspaceFiles, fileName } from './WorkspaceFiles';
-import { WorkspaceFileEditor } from './WorkspaceFileEditor';
-const WorkbenchTerminal = React.lazy(() => import('./WorkbenchTerminal'));
+import { WorkspaceFiles, fileName } from './files/WorkspaceFiles';
+import { WorkspaceFileEditor } from './files/WorkspaceFileEditor';
+const WorkbenchTerminal = React.lazy(
+  () => import('./terminal/WorkbenchTerminal'),
+);
 
 export function NativeWorkbenchTabs({
   tabs,

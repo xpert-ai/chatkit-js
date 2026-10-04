@@ -2,11 +2,11 @@
 
 ## Types
 
-数据元素类型包括：`user_message` `assistant_message` `workflow` `widget`, 这个应该属于 ChatMessage entity 里的 type。
+Data item types include `user_message`, `assistant_message`, `workflow`, and `widget`. These should map to the type field of a ChatMessage entity.
 
 ### Event type
 
-包括 `thread.created` `thread.item.done` 等，这个应该属于 sse 流式输出定义的 event data type。
+Events include `thread.created` and `thread.item.done`. These should map to event data types in the SSE streaming protocol.
 
 ## Events
 
@@ -396,7 +396,7 @@ Response:
 }
 ```
 
-## Planing
+## Planning
 
 ```json
 {

@@ -792,7 +792,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('file contents')).toBeInTheDocument();
   });
 
-  it('renders immutable tool-output image artifacts before the raw output', () => {
+  it('keeps tool text output while hiding model-facing image artifacts', () => {
     renderAssistant([
       createToolComponent('knowledge_document_view_images', {
         output: {
@@ -821,7 +821,7 @@ describe('AssistantMessage tool components', () => {
       screen.getByRole('button', { name: /knowledge_document_view_images/ }),
     );
 
-    expect(screen.getByTestId('tool-output-attachments')).toBeInTheDocument();
+    expect(screen.queryByTestId('tool-output-attachments')).toBeNull();
     expect(
       screen.getByText(/The image will be attached to the next model step/),
     ).toBeInTheDocument();
@@ -1459,7 +1459,8 @@ describe('AssistantMessage tool components', () => {
     expect(command).toHaveClass(
       'whitespace-pre-wrap',
       'break-words',
-      'text-[13px]',
+      'text-[0.8125rem]',
+      'line-clamp-2',
       'leading-5',
       'in-data-[density=compact]:text-xs',
       'in-data-[density=compact]:leading-4',

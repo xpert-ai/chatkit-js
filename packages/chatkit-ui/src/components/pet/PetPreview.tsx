@@ -6,6 +6,7 @@ import { petSpriteAtlas } from './petSpriteAtlas';
 export type PetPreviewProps = {
   src: string;
   label: string;
+  spriteVersionNumber?: 1 | 2;
   className?: string;
 };
 
@@ -13,7 +14,7 @@ function escapeCssUrl(value: string): string {
   return value.replace(/["\\]/g, '\\$&');
 }
 
-export function PetPreview({ src, label, className }: PetPreviewProps) {
+export function PetPreview({ src, label, className, spriteVersionNumber = 1 }: PetPreviewProps) {
   const scale = 0.13;
   const width = petSpriteAtlas.cellWidth;
   const height = petSpriteAtlas.cellHeight;
@@ -37,7 +38,7 @@ export function PetPreview({ src, label, className }: PetPreviewProps) {
           backgroundImage: `url("${escapeCssUrl(src)}")`,
           backgroundRepeat: 'no-repeat',
           backgroundSize: `${petSpriteAtlas.columns * width}px ${
-            petSpriteAtlas.rows * height
+            (spriteVersionNumber === 2 ? 11 : petSpriteAtlas.rows) * height
           }px`,
           backgroundPosition: '0px 0px',
           imageRendering: 'auto',

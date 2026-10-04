@@ -30,6 +30,26 @@ function fixture(result: unknown = { success: false, code: 'unsupported' }) {
   return { host, execute };
 }
 describe('Workbench built-in commands', () => {
+  it('discards a navigation authorization that completes after the context changes', async () => {
+    const { host, execute } = fixture();
+    let current = true;
+    let complete!: (result: unknown) => void;
+    host.isCurrent = () => current;
+    host.forward = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const pending = execute('workbench.navigation.open', {
+      target: 'assistant.conversation',
+      conversationId: 'old',
+    });
+    current = false;
+    complete({ success: true, status: 'opened' });
+    expect(await pending).toEqual({ success: false, code: 'stale_context' });
+    expect(host.navigate).not.toHaveBeenCalled();
+  });
   it.each(['assistant.execution', 'assistant.conversation'])(
     'opens %s execution anchors internally without a host navigator',
     async (target) => {

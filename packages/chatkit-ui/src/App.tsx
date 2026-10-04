@@ -164,6 +164,11 @@ export function App({
 
   const chat = (
     <Chat
+      key={JSON.stringify([
+        navigation.revision ?? 'host',
+        activeProjectId,
+        projectSelection?.mode,
+      ])}
       className="flex-1"
       clientSecret={apiKey}
       options={activeOptions}
@@ -210,7 +215,7 @@ export function App({
           }}
         >
           <StreamProvider
-            key={navigation.revision ?? 'host'}
+            runtimeKey={navigation.revision ?? 'host'}
             threadStateMode={navigation.session ? 'memory' : 'url'}
             apiKey={apiKey}
             organizationId={

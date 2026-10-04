@@ -12,7 +12,6 @@ import {
 } from '../json-tree-view';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import type { ComponentMessageDetailsRendererProps } from './component-message-renderers';
-import { ToolOutputAttachments } from './tool-output-attachments';
 import { prepareToolOutputDisplay } from './tool-output-display';
 
 function ToolCallCopyButton({
@@ -142,10 +141,10 @@ export function ToolCallValueBlock({
 }
 
 export function DefaultToolCallOutput({
-  content,
   data,
 }: ComponentMessageDetailsRendererProps) {
   const { t } = useChatkitTranslation();
+  // Image artifacts are retained for model input, but do not opt into UI display.
   const presentation = parseToolOutputPresentation(data.artifact);
   const output = data.output ?? (presentation ? null : data.artifact) ?? null;
   const error = data.error ?? null;
@@ -161,21 +160,14 @@ export function DefaultToolCallOutput({
     );
   }
 
-  if (output === null && !presentation) return null;
+  if (output === null) return null;
 
   return (
     <div className="space-y-2">
       <div className="text-[11px] font-medium text-muted-foreground">
         {t('message.toolGroup.outputTitle')}
       </div>
-      {presentation ? (
-        <ToolOutputAttachments
-          presentation={presentation}
-          toolCallId={content.id}
-          executionId={content.executionId}
-        />
-      ) : null}
-      {output !== null ? <ToolCallValueBlock value={output} /> : null}
+      <ToolCallValueBlock value={output} />
     </div>
   );
 }

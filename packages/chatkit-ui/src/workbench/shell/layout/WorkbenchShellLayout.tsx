@@ -12,13 +12,13 @@ import { cn } from '../../../lib/utils';
 import { WorkbenchContext, type WorkbenchContextValue } from '../../context';
 import { NativeCloseDialog } from '../../native/NativeCloseDialog';
 import type { useNativeWorkbench } from '../../native/useNativeWorkbench';
-import { SideChatCloseDialog } from '../../SideChatCloseDialog';
+import { SideChatCloseDialog } from '../../side-chat/SideChatCloseDialog';
 import type { useInitialLoading } from '../../useInitialLoading';
 import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
 import type { useWorkbenchPanelHost } from '../../useWorkbenchPanelHost';
 import type { useWorkbenchResize } from '../../useWorkbenchResize';
 import { WorkbenchDivider } from '../../WorkbenchDivider';
-import type { SideChatSession } from '../../WorkbenchPanel';
+import type { SideChatSession } from '../../side-chat/types';
 import type { useWorkbenchSideChat } from '../side-chat/useWorkbenchSideChat';
 import type { useWorkbenchShellTabs } from '../tabs/useWorkbenchShellTabs';
 

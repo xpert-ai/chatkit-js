@@ -1,82 +1,71 @@
-# 对话目标（Conversation Goals）
+# Conversation Goals
 
-对话目标允许用户为 ChatKit 会话固定一个持久化的任务目标。目标不是普通的聊天消息，而是一个面向多轮协作的控制面：助手可以持续朝目标推进、汇报进度，并在适当时将目标标记为完成或阻塞。
+Conversation goals let users pin a persistent objective to a ChatKit conversation. A goal is a control for work across multiple turns, rather than a normal chat message: the assistant can keep making progress, report its status, and mark the goal complete or blocked when appropriate.
 
-该功能适用于需要跨多轮保持目标可见的长期任务，例如实现某个功能、排查问题、审查分支，或协调多个后续步骤。
+Goals suit longer tasks such as implementing a feature, investigating an issue, reviewing a branch, or coordinating several follow-up steps.
 
-## 用户体验
+## User experience
 
-当目标功能可用时，用户可以通过输入框下方的“目标”开关进入目标输入模式。此时输入框内容会被保存为当前会话目标，而不是作为普通消息提交。
+When goals are available, the **Goal** toggle below the composer enters goal-input mode. Text entered in this mode is saved as the conversation objective instead of being sent as a normal message.
 
-用户也可以通过 `/goal` 命令直接管理目标：
+Users can also manage goals with slash commands:
 
-- `/goal ship the feature`：创建或替换当前活跃目标。
-- `/goal edit ship the smaller version`：修改目标内容。
-- `/goal pause`：暂停目标。
-- `/goal resume`：恢复已暂停的目标。
-- `/goal clear`：从会话中移除目标。
+- `/goal ship the feature`: create or replace the active goal.
+- `/goal edit ship the smaller version`: update the objective.
+- `/goal pause`: pause the goal.
+- `/goal resume`: resume a paused goal.
+- `/goal clear`: remove the goal from the conversation.
 
-创建或编辑目标时，文本不会作为普通用户消息提交。ChatKit 会将其视为目标操作，在命令成功后清空输入框，并更新目标状态区域。
+Creating or editing a goal does not submit a normal user message. ChatKit clears the composer and updates the goal status after the operation succeeds.
 
-若当前没有会话，当命令或目标输入模式包含目标内容时，ChatKit 可以为新会话创建首个目标。暂停、恢复和清除操作则需要已有会话。
+If there is no conversation yet, a command or goal-input submission containing an objective can create the first goal in a new conversation. Pause, resume, and clear require an existing conversation.
 
-## 可用性
+## Availability
 
-目标是可选能力。仅当已连接的助手在运行时上报 `/goal` 命令时，ChatKit 才会暴露 `/goal`。这样可以确保该命令只出现在明确启用了目标工作流的助手中。
+Goals are optional. ChatKit exposes `/goal` only when the connected assistant advertises that command at runtime, so it appears only for assistants with an enabled goal workflow.
 
-若连接的客户端不支持目标控制，普通聊天仍可正常使用。此时 `/goal` 会显示不可用提示，而不会提交回退提示词。
+If the client does not support goal controls, normal chat still works. `/goal` reports that it is unavailable rather than submitting a substitute prompt.
 
-## 目标状态
+## Goal status
 
-当当前会话存在可用目标且目标正在运行时，ChatKit 会在输入框上方显示紧凑的状态区域。该状态区域跟随本轮目标运行存在：运行中保持展示，对话结束后消失。状态区域可展示：
+When an available goal is running, a compact status area appears above the composer. It stays visible during the goal run and disappears when the run ends. It can show the objective, status, elapsed time, and controls for editing, pausing, resuming, or clearing the goal.
 
-- 目标内容
-- 当前状态
-- 已用时间
-- 编辑、暂停/恢复、清除等控制项
+| Status           | Meaning                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `active`         | The assistant should continue working toward the objective.                         |
+| `paused`         | The goal is saved but should not drive more work.                                   |
+| `blocked`        | Progress requires user input or an external change.                                 |
+| `usage_limited`  | Reserved for usage limits; the backend does not yet enter this state automatically. |
+| `budget_limited` | Automatic continuation stopped at its safety limit.                                 |
+| `complete`       | The objective has been achieved.                                                    |
 
-支持的状态包括：
+Streamed goal updates are reflected in the UI. Clearing a goal removes its status area.
 
-- `active`：助手应继续朝目标推进。
-- `paused`：目标已保存，但不应继续驱动后续工作。
-- `blocked`：在没有用户输入或外部变更的情况下，助手无法取得有效进展。
-- `usage_limited`：预留给未来用量限制能力，当前后端尚未实现自动进入该状态。
-- `budget_limited`：因自动续跑达到安全上限而停止运行。
-- `complete`：目标已完成。
+## Assistant behavior
 
-后端流式推送的目标更新会实时反映到 UI 中。清除目标后，该会话的状态区域会被移除。
+An active goal supplies hidden conversation-level context. The assistant can inspect it and mark it complete or blocked when appropriate. User-facing pause, resume, edit, and clear operations remain under the user's control.
 
-## 助手行为
+If a goal remains active after a response, the assistant may automatically start another model call. Continuation stops when the goal is paused, blocked, complete, reaches its safety limit, or the current run uses plan mode.
 
-活跃目标会为助手提供隐藏的会话级目标上下文。助手可以查看当前目标，并在合适时将目标标记为完成或阻塞。面向用户的暂停、恢复、编辑和清除操作仍由用户控制。
+A prompt workflow changes how one message is submitted. A goal persists as conversation state and can guide multiple turns until it is resolved.
 
-若某次响应后目标仍处于活跃状态，助手可能会自动发起下一轮模型调用。以下情况会停止自动续跑：目标已暂停、阻塞、完成、达到自动续跑安全上限，或当前运行处于 plan 模式。
+## Compatibility
 
-因此 `/goal` 与一次性提示词工作流不同：提示词工作流只影响单条消息的提交方式，而目标会作为会话状态持久存在，并可引导多轮对话，直到目标被解决。
+- Assistants without a runtime `/goal` command do not expose goal behavior.
+- Clients without goal support retain normal chat behavior.
+- Other slash commands, runtime capability selection, and message submission remain available when goals are unavailable.
+- Hosts can integrate goal controls while retaining consistent user-facing `/goal` behavior.
 
-## 兼容性
+## Choosing an objective
 
-目标被设计为 ChatKit 的可选能力：
+A goal should be specific enough to distinguish active, complete, and blocked work.
 
-- 没有运行时 `/goal` 命令的助手不会展示目标相关行为。
-- 不支持目标的客户端仍保持普通聊天行为。
-- 当目标不可用时，现有斜杠命令、运行时能力选择以及普通消息提交仍可正常工作。
-- 宿主可以自行集成目标能力，同时保持面向用户的 `/goal` 行为一致。
+Suitable examples:
 
-## 产品边界
+- Implement the checkout error-handling change and verify the relevant tests.
+- Investigate why the import flow loses selected fields.
+- Review the current branch for regressions before committing.
 
-目标应服务于“有明确目标的任务”，而不是替代普通聊天消息。一个好的目标应足够具体，使助手能够判断它仍处于活跃、已完成还是阻塞状态。
+Use normal messages for requests such as explaining a file, interpreting an error, or drafting a short reply.
 
-适合作为目标的示例：
-
-- 实现结账错误处理改动，并验证相关测试。
-- 排查导入流程为何会丢失已选字段。
-- 在提交前审查当前分支是否存在回归问题。
-
-应保留为普通消息的示例：
-
-- 解释这个文件。
-- 这个错误是什么意思？
-- 帮我草拟一条简短回复。
-
-目标处于活跃状态时，用户仍可发送普通消息。这些消息会引导当前工作方向，但已保存的目标会作为持久目标保留，直到被编辑、暂停、完成、阻塞或清除。
+Users can send normal messages while a goal is active. These steer the ongoing work; the saved objective remains until it is edited, paused, completed, blocked, or cleared.

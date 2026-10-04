@@ -76,6 +76,7 @@ type ChatHeaderProps = Pick<
     chatColumnStyle: React.CSSProperties | undefined;
     headerMoreButtonRef: React.RefObject<HTMLButtonElement | null>;
     restoreHeaderFocus: (event: Event) => void;
+    characterPresentation?: boolean;
   };
 
 export function ChatHeader({
@@ -117,6 +118,7 @@ export function ChatHeader({
   setHistoryScope,
   handleSelectThread,
   handleDeleteThread,
+  characterPresentation = false,
 }: ChatHeaderProps) {
   return (
     surface === 'main' &&
@@ -128,10 +130,20 @@ export function ChatHeader({
         <div
           ref={chatColumnRef}
           data-slot="chatkit-chat-header"
-          className="mx-auto flex w-full items-center justify-between border-b p-2"
+          className={cn(
+            'mx-auto flex w-full items-center justify-between p-2',
+            !characterPresentation && 'border-b',
+          )}
           style={chatColumnStyle}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+          <div
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-3 overflow-hidden',
+              characterPresentation && 'invisible',
+            )}
+            aria-hidden={characterPresentation || undefined}
+            inert={characterPresentation || undefined}
+          >
             <div className="relative shrink-0">
               <ChatkitAvatar
                 avatar={assistantAvatar}

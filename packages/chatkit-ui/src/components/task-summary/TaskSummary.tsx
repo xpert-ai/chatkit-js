@@ -73,6 +73,7 @@ export function TaskSummaryTrigger({
       type="button"
       style={getSurfaceThemeStyle(theme)}
       className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
+      data-slot="task-summary-trigger"
       aria-label={t('taskSummary.open')}
       aria-expanded={open}
       onClick={displayMode === 'docked' ? () => setOpen(!open) : undefined}
@@ -134,7 +135,7 @@ export function TaskSummaryPanel({
   );
 }
 
-function TaskSummaryContent({
+export function TaskSummaryContent({
   summary,
   historyError,
   loadingSections = {},

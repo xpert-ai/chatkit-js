@@ -1,367 +1,113 @@
-# Integration Guide
+# Web Component Integration
 
-## 完整集成流程
+The package registers `xpertai-chatkit`, a custom element that hosts the ChatKit UI in an iframe. Configure it with the shared ChatKit options and let the built-in bridge manage initialization and callbacks. The old `xpert-chatkit` attributes and `chatkit:init` example protocol are not the current integration API.
 
-### 1. iframe 端修改（chatkit）
+## Install and mount
 
-iframe 需要监听 `chatkit:init` 消息，这个消息包含了 `clientSecret` 和 `styleConfig`：
-
-```typescript
-// 在 iframe 端 (chatkit 应用中)
-window.addEventListener('message', (event) => {
-  // 验证来源
-  if (event.origin !== expectedOrigin) return;
-
-  const message = event.data;
-
-  // 处理初始化消息
-  if (message.type === 'chatkit:init') {
-    const { clientSecret, styleConfig } = message;
-
-    // 使用 clientSecret 初始化会话
-    initializeSession(clientSecret);
-
-    // 应用样式配置（如果提供）
-    if (styleConfig) {
-      applyStyleConfig(styleConfig);
-    }
-  }
-});
-```
-
-### 2. 后端 API 要求
-
-后端需要提供一个 `/api/create-session` 端点：
-
-```typescript
-// POST /api/create-session
-// Request body: { assistantId?: string }
-// Response: { client_secret: string }
-
-app.post('/api/create-session', async (req, res) => {
-  const { assistantId } = req.body;
-
-  try {
-    // 创建会话并返回 client secret
-    const session = await createChatSession(assistantId);
-
-    res.json({
-      client_secret: session.clientSecret
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: error.message
-    });
-  }
-});
-```
-
-### 3. 使用 Web Component
-
-#### 基础使用
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <script type="module" src="path/to/xpert-chatkit.js"></script>
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100vh;
-    }
-
-    xpert-chatkit {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-  </style>
-</head>
-<body>
-  <xpert-chatkit
-    backend-url="https://your-backend.com"
-    chatkit-url="https://chatkit.xpert.ai"
-    assistant-id="assistant_123">
-  </xpert-chatkit>
-</body>
-</html>
-```
-
-#### 带样式配置
-
-```html
-<xpert-chatkit
-  backend-url="https://your-backend.com"
-  chatkit-url="https://chatkit.xpert.ai"
-  assistant-id="assistant_123"
-  style-config='{
-    "primaryColor": "#007bff",
-    "secondaryColor": "#6c757d",
-    "fontSize": "14px",
-    "borderRadius": "8px",
-    "fontFamily": "Inter, sans-serif"
-  }'>
-</xpert-chatkit>
-```
-
-#### 程序化使用
-
-```javascript
-// 动态创建
-const chatkit = document.createElement('xpert-chatkit');
-chatkit.setAttribute('backend-url', 'https://your-backend.com');
-chatkit.setAttribute('chatkit-url', 'https://chatkit.xpert.ai');
-chatkit.setAttribute('assistant-id', 'assistant_123');
-
-// 设置样式
-chatkit.updateStyleConfig({
-  primaryColor: '#007bff',
-  fontSize: '16px'
-});
-
-document.body.appendChild(chatkit);
-```
-
-### 4. 消息协议
-
-#### Web Component → iframe
-
-```typescript
-interface ChatkitInitMessage {
-  type: 'chatkit:init';
-  clientSecret: string;
-  styleConfig?: {
-    primaryColor?: string;
-    secondaryColor?: string;
-    fontSize?: string;
-    borderRadius?: string;
-    fontFamily?: string;
-    // ... 其他样式配置
-  };
-}
-```
-
-消息在以下时机发送：
-- iframe onload 事件触发时
-- client secret 成功获取后
-
-### 5. 样式配置 Schema
-
-样式配置是一个灵活的 JSON 对象，具体支持的字段由 iframe 端决定。常见字段包括：
-
-```typescript
-interface StyleConfig {
-  // 颜色
-  primaryColor?: string;
-  secondaryColor?: string;
-  backgroundColor?: string;
-  textColor?: string;
-
-  // 字体
-  fontSize?: string;
-  fontFamily?: string;
-  lineHeight?: string;
-
-  // 间距
-  padding?: string;
-  margin?: string;
-
-  // 边框
-  borderRadius?: string;
-  borderColor?: string;
-  borderWidth?: string;
-
-  // 阴影
-  boxShadow?: string;
-
-  // 其他自定义字段
-  [key: string]: unknown;
-}
-```
-
-### 6. 错误处理
-
-Web Component 会自动处理以下错误：
-
-- **网络错误**: 无法连接到后端 API
-- **认证错误**: 后端返回 4xx/5xx 错误
-- **配置错误**: 缺少必需的属性
-
-错误会：
-1. 在控制台输出（带 `[xpert-chatkit]` 前缀）
-2. 在界面上显示错误信息
-
-### 7. 安全考虑
-
-#### CORS 配置
-
-后端需要正确配置 CORS：
-
-```javascript
-app.use(cors({
-  origin: ['https://your-frontend.com'],
-  credentials: true
-}));
-```
-
-#### postMessage 安全
-
-iframe 端应该验证消息来源：
-
-```typescript
-window.addEventListener('message', (event) => {
-  // 只接受来自可信来源的消息
-  const trustedOrigins = [
-    'https://your-frontend.com',
-    'http://localhost:3000' // 开发环境
-  ];
-
-  if (!trustedOrigins.includes(event.origin)) {
-    console.warn('Untrusted message origin:', event.origin);
-    return;
-  }
-
-  // 处理消息...
-});
-```
-
-### 8. 开发和调试
-
-#### 本地开发
-
-```bash
-# 1. 构建 web component
-cd packages/web-component
-npm run build
-
-# 2. 使用示例页面测试
-# 打开 example.html 在浏览器中
-```
-
-#### 调试 postMessage
-
-在浏览器控制台中监听消息：
-
-```javascript
-window.addEventListener('message', (event) => {
-  console.log('Message received:', event);
-  console.log('Origin:', event.origin);
-  console.log('Data:', event.data);
-});
-```
-
-### 9. 生产部署
-
-#### 构建
-
-```bash
-npm run build
-```
-
-#### CDN 部署
-
-将 `dist/xpert-chatkit.js` 部署到 CDN：
-
-```html
-<!-- ES Module -->
-<script type="module" src="https://cdn.example.com/xpert-chatkit.js"></script>
-
-<!-- UMD (传统方式) -->
-<script src="https://cdn.example.com/xpert-chatkit.umd.cjs"></script>
-```
-
-#### NPM 发布
-
-```bash
-npm publish
-```
-
-使用者可以通过 npm 安装：
-
-```bash
+```sh
 npm install @xpert-ai/chatkit-web-component
 ```
 
-```javascript
+The following JavaScript is intended for a bundled application:
+
+```js
 import '@xpert-ai/chatkit-web-component';
+
+await customElements.whenDefined('xpertai-chatkit');
+
+const element = document.createElement('xpertai-chatkit');
+const options = {
+  frameUrl: 'https://your-ui.example.com/chatkit/index.html',
+  api: {
+    apiUrl: 'https://your-xpert.example.com/api',
+    xpertId: 'your-assistant-id',
+    async getClientSecret(currentClientSecret) {
+      // Your backend issues or refreshes a scoped ChatKit session.
+      const response = await fetch('/api/chatkit/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentClientSecret }),
+      });
+      if (!response.ok) throw new Error('Unable to create a ChatKit session');
+      const session = await response.json();
+      return {
+        secret: session.client_secret,
+        organizationId: session.organizationId,
+      };
+    },
+  },
+  theme: { colorScheme: 'light', radius: 'round' },
+};
+
+// Register handlers and set complete options before mounting.
+element.addEventListener('chatkit.ready', () => {
+  console.log('ChatKit frame loaded');
+});
+element.addEventListener('chatkit.error', (event) => {
+  console.error(event.detail.error.message);
+});
+element.setOptions({ ...options });
+document.getElementById('chatkit-root').appendChild(element);
 ```
 
-### 10. 浏览器兼容性
+Give the container an explicit size:
 
-支持所有现代浏览器：
-- Chrome/Edge 54+
-- Firefox 63+
-- Safari 10.1+
+```css
+#chatkit-root {
+  width: 100%;
+  height: 100dvh;
+}
 
-对于旧浏览器，需要添加 polyfill：
-
-```html
-<script src="https://unpkg.com/@webcomponents/webcomponentsjs@2/webcomponents-loader.js"></script>
-<script type="module" src="xpert-chatkit.js"></script>
-```
-
-## 常见问题
-
-### Q: 如何更新样式配置？
-
-A: 目前样式配置只在初始化时应用一次。如果需要动态更新，需要重新创建组件：
-
-```javascript
-const oldChatkit = document.querySelector('xpert-chatkit');
-oldChatkit.remove();
-
-const newChatkit = document.createElement('xpert-chatkit');
-// 设置新的属性...
-```
-
-### Q: 如何处理会话过期？
-
-A: Web Component 会在每次加载时创建新的会话。如果需要会话持久化，需要在后端实现会话管理。
-
-### Q: 可以在 React/Vue/Angular 中使用吗？
-
-A: 可以！Web Component 可以在任何框架中使用：
-
-**React:**
-```jsx
-function App() {
-  return (
-    <xpert-chatkit
-      backend-url="https://api.example.com"
-      chatkit-url="https://chatkit.xpert.ai"
-      assistant-id="assistant_123"
-    />
-  );
+xpertai-chatkit {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 ```
 
-**Vue:**
-```vue
-<template>
-  <xpert-chatkit
-    backend-url="https://api.example.com"
-    chatkit-url="https://chatkit.xpert.ai"
-    assistant-id="assistant_123"
-  />
-</template>
+`frameUrl` identifies the deployed ChatKit UI, not the platform API. It must be a nonempty URL supplied before initialization. A different frame URL requires a new element after initialization. Serve a UI bundle compatible with the shared types and wrapper packages.
+
+## Backend authentication
+
+`/api/chatkit/session` above is an example host endpoint, not an endpoint implemented by the Web Component. The host backend authenticates the user and obtains the authorized ChatKit session through the platform's SDK. The callback receives the current secret or `null`, so it can issue or refresh credentials.
+
+`getClientSecret` may return a secret string or an object with `secret` and optional `organizationId`, `xpertId`, or `assistantId`. Returning the organization context allows ChatKit to send the corresponding organization header. Never treat a display title or client-supplied organization ID as proof of access; preserve server authorization.
+
+Keep platform credentials on the backend and return only the scoped session credential. Do not log client secrets or bridge payloads. Configure CORS and iframe embedding policy for the actual host and UI origins.
+
+## Runtime configuration
+
+Call `setOptions` with the full next configuration, retaining authentication callbacks and other settings:
+
+```js
+element.setOptions({
+  ...options,
+  theme: { ...options.theme, colorScheme: 'dark' },
+});
 ```
 
-**Angular:**
-```typescript
-// app.module.ts
-import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+Theme and other supported option changes are sent through the existing bridge without replacing the iframe. Arbitrary CSS-like `style-config` fields are not the supported theme contract. See [ChatKit options](../chatkit/src/options.ts) for valid settings and [updating the client during a response](../../docs/guides/update-client-during-response.md) for runtime behavior.
 
-@NgModule({
-  schemas: [CUSTOM_ELEMENTS_SCHEMA]
-})
-```
+## Events, commands, and cleanup
 
-```html
-<xpert-chatkit
-  backend-url="https://api.example.com"
-  chatkit-url="https://chatkit.xpert.ai"
-  assistant-id="assistant_123">
-</xpert-chatkit>
-```
+The element exposes events including `chatkit.ready`, `chatkit.error`, `chatkit.response.start`, `chatkit.response.end`, and `chatkit.thread.change`. A ready event means the frame loaded; it does not prove backend authentication or a successful Agent run.
+
+Public commands and callbacks are handled by the component's capability-aware messenger. Hosts should not implement a second raw `postMessage` initialization protocol. The bridge serializes transferable options and routes function callbacks to the host; cross-origin frames remain isolated.
+
+Remove the element when its owning view is disposed. Its disconnect lifecycle releases bridge and overlay resources. If using the JavaScript helper, call the helper's `destroy()` method. Recreate the element when switching to a different UI deployment.
+
+## Frameworks and distribution
+
+React, Vue, and Angular can use their dedicated ChatKit wrappers, all sharing the same options contract. A plain JavaScript host can use `@xpert-ai/chatkit-js`; see [Framework-agnostic integration](../../docs/guides/framework-agnostic-integration.md). Frameworks embedding the element directly must allow the `xpertai-chatkit` custom element and pass options as a JavaScript object, not serialized HTML attributes containing callbacks.
+
+The build emits an ES module, a UMD bundle, and TypeScript declarations in `dist/`. Import the npm package through a bundler, or deploy the built browser bundle to an approved static host. Package publication follows the repository [release workflow](../../docs/release.md).
+
+Use a modern browser supporting custom elements, Shadow DOM, and the APIs required by the embedded UI. A custom-element polyfill alone is not evidence of compatibility with the complete ChatKit app; validate the actual target browsers.
+
+## Troubleshooting
+
+- **Unregistered element:** confirm the package import ran and wait for `customElements.whenDefined('xpertai-chatkit')`.
+- **Blank iframe:** check container height, `frameUrl`, HTTP status, and embedding policy. The URL must serve ChatKit rather than a host SPA fallback.
+- **Authentication failure:** inspect the host session endpoint status and scoped organization context without logging credentials. Do not replace a missing session with a fallback prompt.
+- **Options appear unchanged:** provide complete options and confirm the UI bundle supports them. Updating wrapper types alone does not update a deployed iframe.
+- **Changing frame URL throws:** create a new element for a different frame deployment.

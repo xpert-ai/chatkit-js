@@ -73,7 +73,7 @@ afterEach(() => {
 });
 
 describe('tool output image display', () => {
-  it('keeps image summaries and authorized previews connected through the tool group', async () => {
+  it('preserves tool text without resolving or displaying image artifacts in the tool group', () => {
     const sendCommand = vi.fn().mockResolvedValue({
       previewUrl: 'https://assets.example/authorized.png',
     });
@@ -109,15 +109,8 @@ describe('tool output image display', () => {
     ).toBeInTheDocument();
     expect(container.textContent).toContain('Image prepared for inspection.');
     expect(container.innerHTML).not.toContain('PRIVATE_PIXELS');
-    expect(await screen.findByAltText('Construction detail')).toHaveAttribute(
-      'src',
-      'https://assets.example/authorized.png',
-    );
-    expect(sendCommand).toHaveBeenCalledWith('onToolOutputAttachmentPreview', {
-      attachment: presentation.attachments[0],
-      toolCallId: 'call',
-      executionId: 'execution',
-    });
+    expect(container.querySelector('img')).toBeNull();
+    expect(sendCommand).not.toHaveBeenCalled();
   });
 
   it('omits image bytes from tree, raw, and copy while preserving the useful text', async () => {
@@ -149,38 +142,35 @@ describe('tool output image display', () => {
     }
   });
 
-  it('uses the existing authorized attachment preview alongside sanitized legacy output', async () => {
-    const sendCommand = vi.fn().mockResolvedValue({
-      previewUrl: 'https://assets.example/authorized.png',
-    });
-    const { container } = render(
-      <ParentMessengerContext.Provider value={messenger(sendCommand)}>
-        <DefaultToolCallOutput
-          content={{
-            type: 'component',
-            id: 'call',
-            executionId: 'execution',
-            data: { category: 'Tool' },
-          }}
-          data={{ output: legacyOutput, artifact: presentation }}
-        />
-      </ParentMessengerContext.Provider>,
-    );
-    expect(
-      await screen.findByRole('button', { name: 'Open Construction detail' }),
-    ).toBeInTheDocument();
-    expect(screen.getByAltText('Construction detail')).toHaveAttribute(
-      'src',
-      'https://assets.example/authorized.png',
-    );
-    expect(sendCommand).toHaveBeenCalledWith('onToolOutputAttachmentPreview', {
-      attachment: presentation.attachments[0],
-      toolCallId: 'call',
-      executionId: 'execution',
-    });
-    expect(screen.getByText(/Tool image ·/)).toBeInTheDocument();
-    expect(container.innerHTML).not.toContain('PRIVATE_PIXELS');
-  });
+  it.each(['sandbox', 'knowledge-document', 'tool'] as const)(
+    'hides %s image artifacts even when the tool has no text output',
+    (source) => {
+      const sendCommand = vi.fn();
+      const { container } = render(
+        <ParentMessengerContext.Provider value={messenger(sendCommand)}>
+          <DefaultToolCallOutput
+            content={{
+              type: 'component',
+              id: 'call',
+              executionId: 'execution',
+              data: { category: 'Tool' },
+            }}
+            data={{
+              artifact: {
+                ...presentation,
+                attachments: presentation.attachments.map((attachment) => ({
+                  ...attachment,
+                  source,
+                })),
+              },
+            }}
+          />
+        </ParentMessengerContext.Provider>,
+      );
+      expect(container).toBeEmptyDOMElement();
+      expect(sendCommand).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not authorize arbitrary output or invalid attachment data as an image preview', () => {
     const sendCommand = vi.fn();
@@ -211,7 +201,7 @@ describe('tool output image display', () => {
     expect(container.innerHTML).not.toContain('PRIVATE_PIXELS');
   });
 
-  it('localizes the image summary and generic tool source in Chinese', async () => {
+  it('localizes the omitted image summary in Chinese without resolving previews', () => {
     setLanguage('zh-CN');
     const sendCommand = vi.fn().mockResolvedValue({
       previewUrl: 'https://assets.example/authorized.png',
@@ -229,6 +219,7 @@ describe('tool output image display', () => {
       </ParentMessengerContext.Provider>,
     );
     expect(screen.getByText(/已省略 1 项内嵌图片数据/)).toBeInTheDocument();
-    expect(await screen.findByText(/工具图片 ·/)).toBeInTheDocument();
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(sendCommand).not.toHaveBeenCalled();
   });
 });

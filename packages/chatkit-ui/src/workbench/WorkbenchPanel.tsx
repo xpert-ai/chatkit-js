@@ -10,17 +10,13 @@ import type {
   WorkspaceFileScope,
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
-import { WorkbenchStartPage } from './WorkbenchStartPage';
+import { WorkbenchStartPage } from './start-page/WorkbenchStartPage';
 import type { RecentWorkbenchPreview } from './useWorkbenchPages';
 import { useTheme } from '../providers/Theme';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
 import type { WorkbenchPreview } from './client-command-payload';
-import {
-  PreviewTabs,
-  WorkbenchPreviewContent,
-  WorkbenchBrowserPreview,
-} from './WorkbenchPreview';
+import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
 import type { WorkbenchBrowserHistory } from './useWorkbenchPages';
 import type {
   Client,
@@ -30,17 +26,15 @@ import type {
   XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import { StreamProvider, useStreamContext } from '../providers/Stream';
-import { Chat, type ChatReferenceRequest } from '../components/chat';
+import type { useStreamContext } from '../providers/Stream';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { cn } from '../lib/utils';
-import { WorkbenchContext, disabledWorkbenchContext } from './context';
-import { ExternalAssistantView } from './ExternalAssistantView';
+import { ExternalAssistantView } from './external-assistant/ExternalAssistantView';
 import {
   EXTERNAL_ASSISTANTS_VIEW_KEY,
   type ExternalAssistantRun,
   type toWorkbenchMessages,
-} from './external-assistant-runs';
+} from './external-assistant/external-assistant-runs';
 import {
   Loader2,
   Maximize2,
@@ -59,20 +53,19 @@ import {
   TooltipTrigger,
 } from '../components/ui/tooltip';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
-import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
+import {
+  RemoteViewFrame,
+  type RemoteViewHostsClient,
+} from './remote-view/RemoteViewFrame';
 import { WorkbenchTabs } from './WorkbenchTabs';
 import { WorkbenchTab } from './WorkbenchTab';
 import { resolveManifestText } from './manifest-text';
+import { WorkbenchBrowserPreview } from './browser-preview/WorkbenchBrowserPreview';
+import { SideChatView } from './side-chat/SideChatView';
+import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 
-export const SIDE_CHAT_VIEW_KEY = 'chatkit.native.side-chat';
+export { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 export const MAIN_CHAT_VIEW_KEY = 'chatkit.native.main-chat';
-
-export type SideChatSession = {
-  sourceThreadId: string;
-  threadId: string;
-  title: string;
-  referenceRequest?: ChatReferenceRequest;
-};
 
 type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
@@ -115,6 +108,8 @@ type WorkbenchPanelProps = {
   stream: ReturnType<typeof useStreamContext>;
   hostId: string;
   runtimeScope: XpertViewRuntimeScopeInput;
+  contextReady?: boolean;
+  reloadVersion?: number;
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
   viewHosts: WorkbenchViewHostsClient;
@@ -173,6 +168,8 @@ export function WorkbenchPanel({
   stream,
   hostId,
   runtimeScope,
+  contextReady = true,
+  reloadVersion = 0,
   locale,
   hostEvent,
   viewHosts,
@@ -211,8 +208,7 @@ export function WorkbenchPanel({
     stream.apiUrl,
     stream.organizationId,
     hostId,
-    runtimeScope.projectId,
-    runtimeScope.conversationId,
+    reloadVersion,
   ]);
   const [visited, setVisited] = React.useState<{
     scope: string;
@@ -573,8 +569,14 @@ export function WorkbenchPanel({
         {previews.map((preview) => (
           <div
             key={preview.key}
-            hidden={activeViewKey !== preview.key}
-            className="h-full min-h-0"
+            hidden={preview.kind !== 'html' && activeViewKey !== preview.key}
+            aria-hidden={activeViewKey !== preview.key || undefined}
+            inert={activeViewKey !== preview.key}
+            className={
+              preview.kind === 'html' && activeViewKey !== preview.key
+                ? 'invisible absolute inset-0 h-full min-h-0 pointer-events-none'
+                : 'h-full min-h-0'
+            }
           >
             {preview.kind === 'browser' ? (
               <WorkbenchBrowserPreview
@@ -598,7 +600,12 @@ export function WorkbenchPanel({
           )
           .map((view) => (
             <div
-              key={JSON.stringify([frameScope, view.key])}
+              key={JSON.stringify([
+                frameScope,
+                view.key,
+                view.source,
+                view.view,
+              ])}
               hidden={view.key !== activeViewKey}
               className="h-full min-h-0"
             >
@@ -606,6 +613,7 @@ export function WorkbenchPanel({
                 manifest={view}
                 hostId={hostId}
                 runtimeScope={runtimeScope}
+                contextReady={contextReady}
                 locale={locale}
                 title={resolveManifestText(view.title, view.key, locale)}
                 hostEvent={hostEvent}
@@ -652,57 +660,5 @@ export function WorkbenchPanel({
         )}
       </div>
     </div>
-  );
-}
-
-function SideChatView({
-  session,
-  options,
-  stream,
-}: {
-  session: SideChatSession;
-  options?: ChatKitOptions | null;
-  stream: ReturnType<typeof useStreamContext>;
-}) {
-  const sideChatOptions = React.useMemo<ChatKitOptions | null>(() => {
-    if (!options) return null;
-    return {
-      ...options,
-      initialThread: session.threadId,
-      header: { ...options.header, enabled: false },
-      history: { ...options.history, enabled: false },
-      taskSummary: { ...options.taskSummary, enabled: false },
-      workbench: {
-        ...options.workbench,
-        enabled: false,
-        sideChat: { enabled: false },
-        externalAssistants: { enabled: false },
-      },
-      pet: false,
-    };
-  }, [options, session.threadId]);
-
-  return (
-    <WorkbenchContext.Provider value={disabledWorkbenchContext}>
-      <StreamProvider
-        apiKey={stream.apiKey}
-        getClientSecret={stream.refreshClientSecret}
-        organizationId={stream.organizationId}
-        apiUrl={stream.apiUrl}
-        xpertId={stream.assistantId}
-        projectId={stream.projectId}
-        initialThread={session.threadId}
-        threadStateMode="memory"
-        hostIntegration={false}
-      >
-        <Chat
-          className="h-full"
-          clientSecret={stream.apiKey}
-          options={sideChatOptions}
-          surface="side"
-          referenceRequest={session.referenceRequest}
-        />
-      </StreamProvider>
-    </WorkbenchContext.Provider>
   );
 }

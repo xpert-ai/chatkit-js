@@ -1,57 +1,15 @@
 import type { ChatKitPetCharacter } from '@xpert-ai/chatkit-types';
 
-const PUBLIC_PETS = [
-  {
-    id: 'batmeme',
-    label: 'Batmeme',
-    previewSrc: '/pets/batmeme/spritesheet.webp',
-  },
-  {
-    id: 'boba',
-    label: 'Boba',
-    previewSrc: '/pets/boba/spritesheet.webp',
-  },
-  {
-    id: 'bolt',
-    label: 'Bolt',
-    previewSrc: '/pets/bolt/spritesheet.webp',
-  },
-  {
-    id: 'einstein',
-    label: 'Einstein',
-    previewSrc: '/pets/einstein/spritesheet.webp',
-  },
-  {
-    id: 'lando-2',
-    label: 'Lando',
-    previewSrc: '/pets/lando-2/spritesheet.webp',
-  },
-  {
-    id: 'mini-sama',
-    label: 'Mini Sama',
-    previewSrc: '/pets/mini-sama/spritesheet.webp',
-  },
-  {
-    id: 'miso',
-    label: 'Miso',
-    previewSrc: '/pets/miso/spritesheet.webp',
-  },
-  {
-    id: 'noir-webling',
-    label: 'Noir Webling',
-    previewSrc: '/pets/noir-webling/spritesheet.webp',
-  },
-  {
-    id: 'nukey',
-    label: 'Nukey',
-    previewSrc: '/pets/nukey/spritesheet.webp',
-  },
-  {
-    id: 'steve',
-    label: 'Steve',
-    previewSrc: '/pets/steve/spritesheet.webp',
-  },
-] as const;
+const metadata = import.meta.glob<{ id: string; displayName: string; spriteVersionNumber?: 1 | 2 }>(
+  '../../../public/pets/*/pet.json',
+  { eager: true, import: 'default' },
+);
+const PUBLIC_PETS = Object.values(metadata).map((pet) => ({
+  id: pet.id,
+  label: pet.displayName,
+  spriteVersionNumber: pet.spriteVersionNumber,
+  previewSrc: `/pets/${pet.id}/spritesheet.webp`,
+}));
 
 export type ChatKitIncludedPetId = (typeof PUBLIC_PETS)[number]['id'];
 
@@ -69,6 +27,7 @@ export const INCLUDED_PET_OPTIONS: readonly ChatKitIncludedPetOption[] = [
     character: {
       type: 'sprite-atlas',
       src: pet.previewSrc,
+      spriteVersionNumber: pet.spriteVersionNumber,
     } as const,
     previewSrc: pet.previewSrc,
   })),
@@ -81,10 +40,12 @@ export function getIncludedPetOption(
 }
 
 export function getIncludedPetCharacter(id: string): ChatKitPetCharacter {
-  return getIncludedPetOption(id)?.character ?? {
-    type: 'sprite-atlas',
-    src: '/pets/boba/spritesheet.webp',
-  };
+  return (
+    getIncludedPetOption(id)?.character ?? {
+      type: 'sprite-atlas',
+      src: '/pets/boba/spritesheet.webp',
+    }
+  );
 }
 
 export function getIncludedPetIdByCharacter(

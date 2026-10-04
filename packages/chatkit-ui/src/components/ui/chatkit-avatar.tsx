@@ -1,12 +1,14 @@
 import * as React from 'react';
 
 import type { Assistant } from '@xpert-ai/xpert-sdk';
+import { parseAssistantAppearance, type AssistantAppearance } from '@xpert-ai/chatkit-types';
 
 import { cn, getRoundedClass } from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
 import { Avatar, AvatarFallback, AvatarImage } from './avatar';
 
 export type ChatkitAvatarData = {
+  appearance?: AssistantAppearance;
   background?: string;
   emoji?: {
     colons?: string;
@@ -68,6 +70,7 @@ export function normalizeChatkitAvatar(rawAvatar: unknown): ChatkitAvatarData | 
 
   const emojiRecord = asRecord(avatarRecord.emoji);
   const avatar: ChatkitAvatarData = {
+    appearance: parseAssistantAppearance(avatarRecord.appearance),
     background: getNonEmptyString(avatarRecord.background),
     url: getNonEmptyString(avatarRecord.url),
     useNotoColor: Boolean(avatarRecord.useNotoColor),
@@ -81,7 +84,7 @@ export function normalizeChatkitAvatar(rawAvatar: unknown): ChatkitAvatarData | 
     };
   }
 
-  return avatar.url || avatar.background || avatar.emoji?.id || avatar.emoji?.unified ? avatar : null;
+  return avatar.appearance || avatar.url || avatar.background || avatar.emoji?.id || avatar.emoji?.unified ? avatar : null;
 }
 
 export function extractAssistantAvatar(assistant: Assistant): ChatkitAvatarData | null {
@@ -116,21 +119,20 @@ export function ChatkitAvatar({
   const emojiStyle = avatar?.useNotoColor
     ? { fontFamily: '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif' }
     : undefined;
-  const fallbackStyle = {
-    ...(avatar?.background ? { background: avatar.background } : {}),
-  };
-
   return (
-    <Avatar className={cn(roundedClass, className)} style={style} {...props}>
+    <Avatar
+      className={cn('[container-type:inline-size]', roundedClass, className)}
+      style={{ background: avatar?.background, ...style }}
+      {...props}
+    >
       {avatar?.url ? (
         <AvatarImage className={imageClassName} src={avatar.url} alt={label} />
       ) : null}
       <AvatarFallback
-        className={cn(roundedClass, 'text-sm font-medium text-foreground', fallbackClassName)}
-        style={fallbackStyle}
+        className={cn('rounded-[inherit] text-sm font-medium text-foreground', avatar?.background && 'bg-transparent', fallbackClassName)}
       >
         {emojiCharacter ? (
-          <span className="text-[1.1em] leading-none" style={emojiStyle}>
+          <span className="text-[50cqi] leading-none" style={emojiStyle}>
             {emojiCharacter}
           </span>
         ) : (

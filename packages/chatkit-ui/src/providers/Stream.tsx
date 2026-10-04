@@ -65,6 +65,7 @@ export const StreamProvider: React.FC<{
   projectId?: string;
   projectSelection?: ProjectSelection;
   initialThread?: string | null;
+  runtimeKey?: string | number;
   locale?: string | null;
   additionalContext?: Record<string, unknown>;
   threadStateMode?: 'url' | 'memory';
@@ -79,6 +80,7 @@ export const StreamProvider: React.FC<{
   projectId,
   projectSelection,
   initialThread,
+  runtimeKey,
   locale,
   additionalContext,
   threadStateMode = 'url',
@@ -87,7 +89,12 @@ export const StreamProvider: React.FC<{
 }) => {
   const assistantId = xpertId?.trim() || 'your-xpert-id';
   const normalizedProjectId = projectId?.trim() || undefined;
-  const streamScopeKey = `${assistantId}\u0000${normalizedProjectId ?? ''}\u0000${projectSelection?.mode ?? ''}`;
+  const streamScopeKey = JSON.stringify([
+    apiUrl,
+    organizationId,
+    assistantId,
+    Boolean(apiKey?.trim()),
+  ]);
   const previousStreamScopeKeyRef = useRef(streamScopeKey);
   const resetThreadOnMount =
     previousStreamScopeKeyRef.current !== streamScopeKey;
@@ -111,6 +118,7 @@ export const StreamProvider: React.FC<{
       threadStateMode={threadStateMode}
       hostIntegration={hostIntegration}
       resetThreadOnMount={resetThreadOnMount}
+      runtimeKey={runtimeKey}
       getClientSecret={getClientSecret}
     >
       {children}

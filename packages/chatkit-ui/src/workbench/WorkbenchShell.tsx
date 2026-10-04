@@ -1,3 +1,4 @@
+import { createFileChangeReview } from './file-review/file-change-review';
 import type {
   XpertRemoteViewHostEventMessage,
   XpertViewQuery,
@@ -13,11 +14,12 @@ import {
   type WorkbenchPreview,
 } from './client-command-payload';
 import type { WorkbenchContextValue } from './context';
+import { createHtmlArtifactPreview } from './html-preview/html-artifact-preview';
 import {
   collectExternalAssistantRuns,
   EXTERNAL_ASSISTANTS_VIEW_KEY,
   toWorkbenchMessages,
-} from './external-assistant-runs';
+} from './external-assistant/external-assistant-runs';
 import {
   CHATKIT_INTERNAL_PARENT_EVENT,
   normalizeChatKitHostEvent,
@@ -29,7 +31,7 @@ import {
   type WorkbenchAssistantContext,
   type WorkbenchShellProps,
 } from './shell/types';
-import { isSideChatCloseConfirmationDisabled } from './SideChatCloseDialog';
+import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDialog';
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
@@ -44,12 +46,8 @@ import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
 import { useWorkbenchResize } from './useWorkbenchResize';
 import { useWorkbenchViews } from './useWorkbenchViews';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
-import {
-  MAIN_CHAT_VIEW_KEY,
-  SIDE_CHAT_VIEW_KEY,
-  WorkbenchPanel,
-  type SideChatSession,
-} from './WorkbenchPanel';
+import { MAIN_CHAT_VIEW_KEY, WorkbenchPanel } from './WorkbenchPanel';
+import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
@@ -189,6 +187,7 @@ export function WorkbenchShell({
     client: viewHosts,
     hostId: stream.assistantId,
     scopeKey: viewScopeKey,
+    retentionKey: layoutKey ?? '',
     runtimeScope,
     enabled:
       remoteViewsEnabled && authenticated && Boolean(stream.assistantId.trim()),
@@ -230,7 +229,7 @@ export function WorkbenchShell({
 
   const { scopedViews, selectView, closeView } = useWorkbenchViewTabs({
     views,
-    scope: viewScopeKey,
+    scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
     projectId: stream.projectId,
     conversationId: stream.conversationId,
@@ -306,9 +305,10 @@ export function WorkbenchShell({
     resetPages();
     setViewQueries({});
     setActiveViewKey((current) =>
-      isNativeView(current) && !current?.startsWith(NATIVE_PREFIX)
-        ? current
-        : null,
+      current?.startsWith(NATIVE_PREFIX) ||
+      current?.startsWith('chatkit.preview.')
+        ? null
+        : current,
     );
     setNotification(null);
     setHostEvent(null);
@@ -462,7 +462,7 @@ export function WorkbenchShell({
   });
 
   const rememberResourceCard = useResourceCardNavigation({
-    scope: viewScopeKey,
+    scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
     ready: !loading && viewsScope === viewScopeKey,
     restore: (target) => {
@@ -537,7 +537,9 @@ export function WorkbenchShell({
       authenticated &&
       Boolean(stream.assistantId.trim()) &&
       (Boolean(sideChat) ||
-        (remoteViewsEnabled && (!loading || views.length > 0))));
+        (remoteViewsEnabled &&
+          viewsScope === viewScopeKey &&
+          (!loading || views.length > 0))));
 
   const disabledReason = hasExternalRuns
     ? undefined
@@ -597,6 +599,45 @@ export function WorkbenchShell({
       askInSideChat,
       externalAssistantsEnabled,
       openExternalAssistant,
+      openHtmlArtifact: (resource, title) => {
+        if (!enabled || !authenticated || !stream.conversationId) return false;
+        const conversationId = stream.conversationId;
+        openPreview(
+          createHtmlArtifactPreview(
+            resource,
+            title,
+            (signal) =>
+              stream.client.workbench.downloadArtifact(
+                conversationId,
+                resource,
+                { signal },
+              ),
+            t('workbench.preview.htmlUnavailable'),
+            async (reference) => {
+              await parentMessenger.updateComposer({
+                appendReferences: true,
+                references: [reference],
+              });
+              setExpanded(false);
+              if (isNarrow) setOpen(false);
+              await parentMessenger.focusComposer();
+            },
+          ),
+        );
+        return true;
+      },
+      openFileReview: (resource) => {
+        if (!enabled || !authenticated || !stream.conversationId) return false;
+        openPreview(
+          createFileChangeReview(
+            stream.client,
+            stream.conversationId,
+            resource,
+            t('fileActivity.review'),
+          ),
+        );
+        return true;
+      },
       openResourceCard: async (card, messageId) => {
         const result = await executeClientCommand(
           'workbench.navigation.open',
@@ -630,6 +671,14 @@ export function WorkbenchShell({
     }),
     [
       executeClientCommand,
+      openPreview,
+      parentMessenger.updateComposer,
+      parentMessenger.focusComposer,
+      isNarrow,
+      authenticated,
+      stream.client,
+      stream.conversationId,
+      t,
       rememberResourceCard,
       askInSideChat,
       externalAssistantsEnabled,
@@ -798,6 +847,10 @@ export function WorkbenchShell({
       stream={stream}
       hostId={stream.assistantId}
       runtimeScope={runtimeScope}
+      contextReady={
+        stream.runtimeScopeReady !== false && viewsScope === viewScopeKey
+      }
+      reloadVersion={reloadVersion}
       locale={locale}
       hostEvent={hostEvent}
       viewHosts={viewHosts}

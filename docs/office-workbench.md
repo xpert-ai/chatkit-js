@@ -1,37 +1,35 @@
-# ChatKit Office 编辑架构
+# Office Editing in Workbench
 
-ChatKit 是唯一新增能力的入口；Angular 编辑器仅作为迁移时的行为参考，不再复制或维护第二套 UI。
+ChatKit owns the Office editing UI. The Angular editors served as behavioral references during migration; they are not a second implementation of new ChatKit features.
 
-## 实施顺序
+## Save lifecycle
 
-1. 统一保存协议：编辑器负责导出，Workbench 负责 SDK 鉴权、作用域、冲突检查、持久化与关闭确认。仅服务器保存成功后确认编辑器的保存基线；下载不算保存。
-2. DOCX：接入官方 React 编辑器，替换手工拼装的连续 ProseMirror 文档。使用成熟排版引擎负责分页和工具栏，减少本项目需要维护的编辑器代码。
-3. PPTX：在现有 OOXML 保留式读写核心上提供 React 画布交互，将画布、对象属性、放映与状态管理拆开，避免移植 Angular 大组件。
-4. XLSX：保留 Univer，修复初始化与保存基线；根据保存能力配置菜单与命令，后续先扩展写入能力，再开放相应 UI。
-5. 逐步建立真实 Office 样本的编辑—保存—重开回归；高级能力独立验收，不以按钮数量代表兼容性。
+Editors export their content. Workbench handles SDK authentication, scope, conflict checks, persistence, and confirmation before closing unsaved files. The editor's saved baseline advances only after the server confirms a successful save. Downloading a file does not mark it as saved.
 
-## 当前实现
+DOCX uses the official React editor for pagination and toolbar behavior. PPTX combines the existing OOXML-preserving reader/writer with separate React canvas, property, presentation, and state modules. XLSX retains Univer with menus and commands restricted to operations supported by the writer.
 
-| 类型 | 引擎与能力                                                                                                                                            | 边界                                                                                                     |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| DOCX | `@docx-editor.dev/react` / `core` 2.23.0；分页、标尺、字体/段落排版、表格与图片、导航查找、中文界面、主题、工作区保存                                 | 使用 Apache 2.0 基础包；不接入商业批注、修订、协同模块；未配置的 PDF/Markdown 转换与打印入口隐藏         |
-| PPTX | 当前保留式 OOXML 核心；画布双击文本、键盘微调、旋转对象缩放、字体/颜色/对齐、图片/形状/表格、复制删除、图层、幻灯片排序、缩放、静态放映预览、撤销重做 | 不是 PowerPoint 全功能替代；文本框按段落编辑，放映不执行动画时间线；图表数据、复杂组合和母版编辑仍未开放 |
-| XLSX | Univer 0.25.1 + `@xpert-ai/artifact-tool/xlsx`；内容/公式编辑与计算，保留原 OOXML，保存成功后推进基线                                                 | 格式、工作表/行列结构、合并、冻结等写入尚未实现；菜单隐藏且命令阻断，导出仍做最后校验                    |
+## Supported formats
 
-DOCX 字体使用同源打包的开源替代字体按需加载，不连接外部字体服务。Vite 开发预打包排除字体与核心包，保持字体和 HarfBuzz WASM 的相对资源 URL；生产构建由 Vite 生成带哈希的资源。中文字体的精确分页仍取决于文档字体可用性，需要专门的中西文真实样本回归。Office 编辑器保持按文件类型懒加载。
+| Format | Engine and capabilities                                                                                                                                                                                                           | Limits                                                                                                                                                                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DOCX   | `@docx-editor.dev/react` / `core` 2.23.0; pagination, rulers, font and paragraph formatting, tables, images, navigation/search, Chinese localization, themes, and workspace save                                                  | Uses the Apache 2.0 base package. Commercial comments, revision tracking, and collaboration are not integrated. Unconfigured PDF/Markdown conversion and printing controls are hidden. |
+| PPTX   | OOXML-preserving core; double-click text editing, keyboard nudging, resizing rotated objects, font/color/alignment, images/shapes/tables, duplication/deletion, layers, slide ordering, zoom, static slideshow preview, undo/redo | Not a full PowerPoint replacement. Text boxes are edited by paragraph; slideshows do not run animation timelines. Chart data, complex groups, and master editing are not exposed.      |
+| XLSX   | Univer 0.25.1 and `@xpert-ai/artifact-tool/xlsx`; cell content/formula editing and calculation, preservation of original OOXML, baseline updates after successful saves                                                           | Style, sheet/row/column structure, merge, and freeze writes are not implemented. Menus are hidden, commands are blocked, and export performs a final validation.                       |
 
-## 下一阶段的准入条件
+Office editors load lazily by file type. DOCX fonts are bundled open-source substitutes loaded on demand from the same origin, without an external font service. Vite excludes font and core packages from development prebundling to preserve relative font and HarfBuzz WASM URLs; production builds emit hashed assets. Exact CJK pagination still depends on font availability and needs dedicated real-document regression coverage.
 
-- XLSX：扩展 OOXML 写入器对样式、行列、工作表、合并的增量写入；先验证公式引用、图表、验证规则与命名区域不损坏，再解除对应命令限制。不能使用“重建为新工作簿”冒充保留式保存。
-- PPTX：保留段落内混合 run 样式的富文本编辑、组合对象、母版与图表编辑需要各自的模型/序列化契约；动画播放需要独立播放器与浏览器验证。
-- 文档审阅/多人协作：独立评估许可和服务端协议后接入；不要在三种编辑器里各自实现网络持久化。
-- 保存：目前是保存前下载比较，不能消除比较后到写入之间的并发窗口；服务端提供版本号/ETag 条件写入后，在 SDK 与公共文件宿主统一实现原子冲突控制。
-- 性能：记录各类型的首次打开、解析/布局、导出耗时；仅在确认主线程瓶颈后引入 Worker，避免无证据地增加框架与消息同步成本。
+## Extension requirements and limitations
 
-## 验证
+- **XLSX:** add incremental OOXML writes for styles, rows/columns, sheets, and merges before exposing their commands. Verify that formula references, charts, validation rules, and named ranges survive. Rebuilding a workbook from scratch is not preservation-based saving.
+- **PPTX:** mixed-run rich text, groups, masters, and chart editing need their own model and serialization contracts. Animation playback needs a separate player and browser validation.
+- **Review and collaboration:** assess licensing and server protocols independently. Keep network persistence in the shared host rather than duplicating it in each editor.
+- **Save conflicts:** the current download-and-compare check cannot close the race between comparison and writing. Atomic protection requires server version/ETag conditional writes, implemented through the SDK and shared file host.
+- **Performance:** measure initial open, parsing/layout, and export for each format. Introduce workers only when measurements identify a main-thread bottleneck.
 
-- 组件测试：Office 保存失败不清除脏状态；保存成功确认基线；PPTX 输入、撤销、重做、插入、复制、排序、调整大小与重开。
-- OOXML 回归：保留图片、表格、数据验证和公式/图表缓存；复制包含新增对象的幻灯片后仍可重新读取。
-- 浏览器验收：使用本地 SDK fixture 验证 DOCX 分页/编辑/保存/重开、PPTX 操作、XLSX 可编辑范围及主题适配。真实组织后端访问需要另行在可访问的会话下验收。
+## Verification
 
-上游参考：[React 集成](https://www.docx-editor.dev/docs/2.x/react/props)、[加载和保存](https://www.docx-editor.dev/docs/2.x/guides/loading-and-saving)。
+Component tests cover dirty-state retention on save failure, saved-baseline acknowledgement, and PPTX input, undo/redo, insertion, duplication, ordering, resizing, and reopening. OOXML regressions cover preservation of images, tables, data validation, formula/chart caches, and slides duplicated after inserting new objects.
+
+Local browser acceptance used an SDK fixture for DOCX pagination/edit/save/reopen, PPTX operations, XLSX editing boundaries, and themes. Real organization access requires separate acceptance in an authorized session. Advanced features need individual edit/save/reopen checks with real Office files; the number of visible controls is not evidence of format compatibility.
+
+Upstream references: [React integration](https://www.docx-editor.dev/docs/2.x/react/props) and [loading and saving](https://www.docx-editor.dev/docs/2.x/guides/loading-and-saving).

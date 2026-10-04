@@ -213,7 +213,7 @@ export function SettingsSheet({
                           className="min-h-10 py-1.5 pl-2 pr-8"
                         >
                           <span className="flex min-w-0 items-center gap-2">
-                            <PetPreview src={pet.previewSrc} label={label} />
+                            <PetPreview src={pet.previewSrc} label={label} spriteVersionNumber={pet.character.spriteVersionNumber} />
                             <span className="min-w-0 truncate">{label}</span>
                           </span>
                         </SelectItem>

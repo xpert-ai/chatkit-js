@@ -130,6 +130,13 @@ export const DEFAULT_PET_SIZE = {
   height: petSpriteAtlas.cellHeight,
 };
 
+/** v2's 16 poses are clockwise from up; a central dead zone restores idle. */
+export function petLookFrame(dx: number, dy: number, deadZone = 12) {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) <= deadZone) return null;
+  const index = (Math.round(Math.atan2(dx, -dy) / (Math.PI / 8)) + 16) % 16;
+  return { row: 9 + Math.floor(index / 8), column: index % 8 };
+}
+
 export const DEFAULT_PET_BOUNDS_PADDING: ChatKitPetBoundsPadding = {
   top: 0,
   right: 0,
@@ -170,6 +177,7 @@ function mergeFrameAnimation(
 
 export function mergePetSpriteAtlas(
   override?: ChatKitPetSpriteAtlas,
+  spriteVersionNumber: 1 | 2 = 1,
 ): PetSpriteAtlasDefinition {
   const animations = {} as Record<
     ChatKitPetAnimationName,
@@ -185,7 +193,7 @@ export function mergePetSpriteAtlas(
 
   return {
     columns: override?.columns ?? petSpriteAtlas.columns,
-    rows: override?.rows ?? petSpriteAtlas.rows,
+    rows: override?.rows ?? (spriteVersionNumber === 2 ? 11 : petSpriteAtlas.rows),
     cellWidth: override?.cellWidth ?? petSpriteAtlas.cellWidth,
     cellHeight: override?.cellHeight ?? petSpriteAtlas.cellHeight,
     animations,
@@ -249,7 +257,7 @@ export function resolvePetCharacter(
   return {
     kind: 'atlas',
     src: character.src,
-    atlas: mergePetSpriteAtlas(character.atlas),
+    atlas: mergePetSpriteAtlas(character.atlas, character.spriteVersionNumber),
   };
 }
 

@@ -1,4 +1,8 @@
-import type { ChatKitWorkbenchNavigationSession } from '@xpert-ai/chatkit-types';
+import type { FileChangeReviewOptions } from './file-review/file-change-review';
+import type {
+  ChatKitQuoteReference,
+  ChatKitWorkbenchNavigationSession,
+} from '@xpert-ai/chatkit-types';
 import type {
   WorkbenchOpenFile,
   WorkbenchOpenFileEvidence,
@@ -9,10 +13,17 @@ import { parseViewQuery } from './protocol';
 
 export type WorkbenchPreview = {
   key: string;
-  kind: 'file' | 'browser';
+  kind: 'file' | 'browser' | 'html' | 'review';
   title: string;
   url: string;
   file?: WorkbenchOpenFile;
+  /** In-memory loader for an immutable HTML delivery; never a mutable workspace path. */
+  review?: FileChangeReviewOptions;
+  html?: {
+    load: (signal: AbortSignal) => Promise<{ blob: Blob; name: string }>;
+    identity?: { artifactId: string; artifactVersionId: string };
+    onAnnotate?: (reference: ChatKitQuoteReference) => Promise<void>;
+  };
 };
 export type NavigationSession = ChatKitWorkbenchNavigationSession;
 export type NavigationPayload = {

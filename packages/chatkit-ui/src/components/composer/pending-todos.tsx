@@ -12,7 +12,7 @@ import {
   type TodoItemStatus,
   type TodoListSnapshot,
 } from '../../lib/todos';
-import { cn, getRoundedClass } from '../../lib/utils';
+import { cn, getPanelRoundedClass } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { useTheme } from '../../providers/Theme';
 
@@ -21,22 +21,6 @@ export type PendingTodosProps = {
   attachToComposer?: boolean;
   className?: string;
 };
-
-function useRoundedClasses() {
-  const { theme } = useTheme();
-
-  return {
-    top: theme.radius
-      ? {
-          pill: 'rounded-t-full',
-          round: 'rounded-t-xl',
-          soft: 'rounded-t-lg',
-          sharp: 'rounded-t-none',
-        }[theme.radius]
-      : 'rounded-t-lg',
-    panel: getRoundedClass(theme.radius, 'rounded-lg'),
-  };
-}
 
 function TodoStatusIcon({ status }: { status: TodoItemStatus }) {
   if (status === 'completed') {
@@ -60,7 +44,9 @@ export function PendingTodos({
   className,
 }: PendingTodosProps) {
   const { t } = useChatkitTranslation();
-  const rounded = useRoundedClasses();
+  const { theme } = useTheme();
+  // Multi-row panels use bounded corners, even when controls use the pill preset.
+  const rounded = getPanelRoundedClass(theme.radius);
   const listId = React.useId();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
 
@@ -79,8 +65,8 @@ export function PendingTodos({
       aria-live="polite"
       className={cn(
         'mx-2 border border-border bg-background/95 px-3 py-3 shadow-sm',
-        attachToComposer ? 'border-b-0' : null,
-        attachToComposer ? rounded.top : rounded.panel,
+        rounded,
+        attachToComposer ? 'rounded-b-none border-b-0' : null,
         className,
       )}
     >
