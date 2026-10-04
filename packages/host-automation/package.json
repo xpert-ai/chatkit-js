@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-host-automation",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Host page automation tools for Xpert ChatKit client tools",
   "sideEffects": false,
   "type": "module",
