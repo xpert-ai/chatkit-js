@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ProjectSelection } from './stream/types';
 
 import { StreamSession } from './stream/StreamSession';
@@ -89,11 +89,24 @@ export const StreamProvider: React.FC<{
 }) => {
   const assistantId = xpertId?.trim() || 'your-xpert-id';
   const normalizedProjectId = projectId?.trim() || undefined;
+  const hasClientSecret = Boolean(apiKey?.trim());
+  const [credentialSession, setCredentialSession] = useState({
+    hasClientSecret,
+    generation: 0,
+  });
+  if (credentialSession.hasClientSecret !== hasClientSecret) {
+    // Initial credentials must preserve host callbacks. Clearing credentials
+    // still replaces the session so a signed-out host cannot retain its views.
+    setCredentialSession({
+      hasClientSecret,
+      generation: credentialSession.generation + (hasClientSecret ? 0 : 1),
+    });
+  }
   const streamScopeKey = JSON.stringify([
     apiUrl,
     organizationId,
     assistantId,
-    Boolean(apiKey?.trim()),
+    credentialSession.generation,
   ]);
   const previousStreamScopeKeyRef = useRef(streamScopeKey);
   const resetThreadOnMount =
