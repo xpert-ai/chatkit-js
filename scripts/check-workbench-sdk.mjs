@@ -13,6 +13,7 @@ const methods = [
   'saveBinaryFile',
   'deleteFile',
   'downloadFile',
+  'downloadArtifact',
   'connectTerminal',
 ];
 

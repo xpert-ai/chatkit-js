@@ -6,6 +6,7 @@ import { resolveLocalizedText } from '../../../i18n/localized-text';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 import { formatDisplayValue } from '../json-tree-view';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import type { ComponentMessagePartialStepData } from './component-message-renderers';
 
 type ShellStepData = ComponentMessagePartialStepData;
@@ -38,7 +39,7 @@ type SandboxShellExitSource = {
 };
 
 const SANDBOX_SHELL_TEXT_CLASS =
-  'text-[13px] leading-5 in-data-[density=compact]:text-xs in-data-[density=compact]:leading-4 in-data-[density=spacious]:text-sm in-data-[density=spacious]:leading-6';
+  'text-[0.8125rem] leading-5 in-data-[density=compact]:text-xs in-data-[density=compact]:leading-4 in-data-[density=spacious]:text-sm in-data-[density=spacious]:leading-6';
 const SANDBOX_SHELL_SECTION_GAP_CLASS =
   'mt-2 in-data-[density=compact]:mt-1.5 in-data-[density=spacious]:mt-3';
 
@@ -334,19 +335,36 @@ export function SandboxShellToolCallCard({
       </div>
       <div
         className={cn(
-          'group/shell-copy relative min-w-0',
+          'group/shell-copy relative min-w-0 shrink-0',
           SANDBOX_SHELL_SECTION_GAP_CLASS,
         )}
       >
-        <pre
-          className={cn(
-            'whitespace-pre-wrap break-words pr-8 font-mono text-foreground in-data-[density=compact]:pr-6 in-data-[density=spacious]:pr-10',
-            SANDBOX_SHELL_TEXT_CLASS,
-          )}
-          data-slot="sandbox-shell-command"
-        >
-          {formattedCommand}
-        </pre>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <pre
+              className={cn(
+                'line-clamp-2 cursor-help whitespace-pre-wrap break-words pr-8 font-mono text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 in-data-[density=compact]:pr-6 in-data-[density=spacious]:pr-10',
+                SANDBOX_SHELL_TEXT_CLASS,
+              )}
+              data-slot="sandbox-shell-command"
+              tabIndex={0}
+            >
+              {formattedCommand}
+            </pre>
+          </TooltipTrigger>
+          <TooltipContent
+            side="top"
+            align="start"
+            sideOffset={6}
+            className={cn(
+              'max-h-[min(24rem,50vh)] max-w-[min(40rem,calc(100vw_-_2rem))] overflow-auto whitespace-pre-wrap break-words bg-popover font-mono text-left text-wrap text-popover-foreground shadow-md ring-1 ring-border',
+              SANDBOX_SHELL_TEXT_CLASS,
+            )}
+            hideArrow
+          >
+            {formattedCommand}
+          </TooltipContent>
+        </Tooltip>
         <ShellCopyButton value={command} className={copyButtonClassName} />
       </div>
       {output ? (

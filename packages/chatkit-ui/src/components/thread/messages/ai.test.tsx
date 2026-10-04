@@ -1459,7 +1459,8 @@ describe('AssistantMessage tool components', () => {
     expect(command).toHaveClass(
       'whitespace-pre-wrap',
       'break-words',
-      'text-[13px]',
+      'text-[0.8125rem]',
+      'line-clamp-2',
       'leading-5',
       'in-data-[density=compact]:text-xs',
       'in-data-[density=compact]:leading-4',

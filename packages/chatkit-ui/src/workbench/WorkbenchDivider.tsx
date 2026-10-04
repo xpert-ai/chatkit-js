@@ -37,7 +37,7 @@ export function WorkbenchDivider({
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
   return (
-    <div className="group/divider relative z-20 w-0.5 shrink-0">
+    <div className="group/divider relative z-20 w-[1px] shrink-0">
       <div
         role="separator"
         aria-orientation="vertical"

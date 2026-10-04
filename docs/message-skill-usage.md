@@ -1,58 +1,20 @@
 # Message skill usage
 
-## Implementation plan
+The **Skills** control in an assistant message footer lists registered skills whose main instructions were successfully loaded while producing that answer. This is a runtime observation, not a claim that the model followed every instruction. Selecting, installing, listing, or unsuccessfully reading a skill does not count as using it.
 
-Add a Skills control to each assistant message footer, with a popover listing the
-skills whose main instructions were successfully loaded while producing that
-message. This is a runtime observation, not a claim that the model followed every
-instruction. Selecting, installing, listing, or unsuccessfully reading a skill
-does not count as using it.
+## Behavior and boundaries
 
-### Scope and data flow
+- Multiple successful skill loads appear together; repeated reads of the same identity produce one row.
+- Reference-file reads, failed reads, and merely selected skills do not add observations.
+- History preserves the list, while subsequent messages do not inherit unrelated observations.
+- The footer supports hover, keyboard focus, click/touch pinning, and Escape.
+- Titles and origin labels are display data, never executable instructions. Records contain no local paths or file contents, and client metadata cannot create authoritative observations.
 
-1. Extend the shared ChatKit task summary contract with optional `skillUsages`.
-   Each record snapshots the skill identity, display name, version, origin,
-   tool call, execution, and load time. Do not send local paths or file contents.
-2. Instrument the built-in Xpert skills middleware after a successful
-   `read_skill_file` read of a registered skill's `SKILL.md`. Cover runtime resource,
-   sandbox, and fallback reads. Do not infer usage by parsing shell commands.
-3. Attach the observation to the existing tool component event. Keep attribution
-   on the assistant message and persist it in the existing JSON task summary.
-   Merge all skill observations; the latest contribution must not hide earlier
-   skills. Deduplicate repeated reads without mixing separate messages.
-4. Preserve the optional field through live streaming and history normalization.
-   Render a localized, keyboard-accessible message footer popover showing names
-   and actual origins. Older messages without observations remain unchanged.
-5. Verify successful/failed/main/reference-file reads, duplicate and multi-skill
-   aggregation, message isolation, history restoration, and footer interactions.
+The built-in tool observes registered `SKILL.md` reads through runtime resources, sandbox reads, and fallback reads. It does not infer usage from shell commands or reconstruct observations for old messages. A future direct instruction-injection path would need to emit the same contract.
 
-### Boundaries
+Platform instrumentation and persistence belong to `xpert`; shared contracts and the React UI belong to `chatkit-js`. The feature needs no database migration or new SDK endpoint.
 
-- Platform changes belong in `xpert`; shared contracts and React UI belong in
-  `chatkit-js`. No database migration or SDK endpoint is required.
-- Existing conversation-reference work is outside this change. Do not alter its
-  behavior or local API/Cloud processes.
-- This first version observes registered skills read through the built-in tool.
-  It cannot retrospectively reconstruct usage for old messages or arbitrary shell
-  reads. A future direct instruction-injection path must emit the same contract.
-- Skill titles and origin labels are display data, never executable instructions.
-  Client-submitted metadata must not create authoritative skill observations.
-
-## Acceptance criteria
-
-- Two successfully read skills appear together under the corresponding answer.
-- Repeated reads show a single row; reference files and failed reads add no row.
-- Merely selecting a skill does not display it as used.
-- Reloading history retains the list; later answers do not inherit the list.
-- The control supports pointer, keyboard, Escape, and touch/click interaction.
-- Names and origin labels are localized appropriately; no filesystem paths leak.
-
-## Progress
-
-- Plan recorded before implementation.
-- Implemented shared contract, runtime observations, persistence and footer UI.
-
-## Implemented protocol
+## Protocol and data flow
 
 `TChatTaskSummaryContribution` retains `version: 1` and adds an optional
 `skillUsages: ChatSkillUsage[]`. The record contains `skillId`, `name`, `version`,
@@ -80,21 +42,24 @@ footer using the existing human-turn/execution grouping rules.
 
 ## Integration and release
 
-1. Publish the shared types and ChatKit UI changes together using
-   `.changeset/message-skill-usage.md` and the normal package release workflow.
+1. Publish compatible shared types and ChatKit UI packages through the normal
+   repository release workflow.
 2. Update Xpert's resolved `@xpert-ai/chatkit-types` dependency and lockfile to the
    actual published version containing this contract, then rebuild API/Cloud with
    the corresponding UI version. Do not assume an existing registry version
-contains unpublished source changes.
+   contains unpublished source changes.
 3. Merge platform changes from `xpert` into `xpert-pro` together with those package
    updates. No schema migration or SDK endpoint changes are required.
 
-Local checks use the workspace's existing linked ChatKit packages; they do not
-prove that a fresh registry install contains the new exports. This change does not
-publish packages. The initial implementation did not restart API/Cloud; the live
-acceptance run below subsequently rebuilt the app and restarted its local Cloud.
+The implementation-time local checks used linked ChatKit packages; they did not
+prove that a fresh registry install contained the new exports. No packages were
+published during those checks. The initial implementation did not restart API/Cloud;
+the live acceptance run below subsequently rebuilt the app and restarted its local Cloud.
 
-## Validation
+## Implementation-time validation
+
+These are historical results from the implementation checkpoint, not a new run
+against the current revision.
 
 - ChatKit UI: 996 tests passed in the initial full regression, followed by passing
   tests for the two additional history-restoration/process-group cases.

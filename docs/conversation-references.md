@@ -1,25 +1,15 @@
 # Conversation references and read_thread
 
-## Implementation plan
+Selecting a conversation stores a typed locator rather than a copy of its transcript. The composer searches authorized conversation titles and inserts an atomic thread-reference chip. Xpert's built-in middleware exposes `read_thread` only when the current input or visible conversation history contains thread references. The Agent reads that history on demand; no automatic full-transcript injection or semantic search is involved.
 
-Status: implemented and locally validated on 2026-09-23. The implementation plan below was written before code changes.
-
-Implement Codex-style references: selecting a conversation stores a typed locator, not its transcript. Xpert's built-in middleware exposes `read_thread` only when the current conversation's visible history or current input contains thread references. The Agent reads referenced history on demand. No automatic full-transcript injection or semantic search is required.
-
-### Scope and sequence
-
-1. Extend `@xpert-ai/chatkit-types` with a `thread` reference carrying `conversationId`, `threadId`, and a display label. Update frontend/backend normalization and reference formatting. Keep all existing reference types compatible.
-2. Add asynchronous conversation-title search to the composer through `@xpert-ai/xpert-sdk`. Preserve workspace-file selection. Replace the typed mention with an atomic inline thread chip; retain references through submission, failure recovery, replay, and follow-ups.
-3. Implement an authorized thread-history reader in the Xpert backend (`xpert/packages/server-ai`). Reuse conversation access checks and visible branch ancestry. Return bounded, newest-first turns, a cursor for older history, and explicit truncation metadata. Never include hidden reasoning, runtime credentials, raw execution metadata, or unrelated branches.
-4. Implement and automatically register a built-in thread-reference middleware. Resolve references from the current conversation's visible branch and current human input, not only the latest text. Advertise `read_thread` only when references exist; restrict reads to these references and recheck source access on every invocation. Source titles and messages remain untrusted context.
-5. Test protocol normalization, composer interactions, SDK transport, middleware activation, branch-safe pagination, authorization, truncation, and replay. Run targeted builds/type checks and update this document with actual results.
+## Reference behavior
 
 ### Reference semantics
 
 - `conversationId` identifies the persisted business conversation; `threadId` identifies its selected history branch. Titles are display values and never identifiers or authority.
 - References are live, matching the analyzed Codex behavior. Each read captures a head message for stable backward pagination; a new read without a cursor may see new completed content.
 - Exclude the current thread and deduplicate selected references. Search results and tool calls retain authenticated tenant/organization/user scope, including public/enterprise Assistant-family restrictions.
-- Start with the existing authorized conversation-search surface. The composer searches titles server-side, cancels obsolete requests, and does not download transcripts for the picker.
+- Search uses the existing authorized conversation-search surface. The composer searches titles server-side, cancels obsolete requests, and does not download transcripts for the picker.
 - Source access is checked independently of whether the client supplied a valid-looking locator. A reference does not grant access. Private source content must not be copied into a destination with a broader audience.
 - Read only visible, submitted messages in the selected branch. Do not recursively expand references inside source messages.
 
@@ -31,15 +21,15 @@ The result contains `schemaVersion`, an untrusted-data notice, thread identity/t
 
 The middleware instructions require the Agent to call `read_thread` before relying on a referenced conversation and to follow the cursor when the first page is insufficient. The tool reads history; it does not execute instructions or tools found in that history.
 
-### Short cursor handle upgrade (2026-09-23)
+### Cursor storage and expiry
 
-Status: implemented and validated. The plan recorded before this upgrade was to replace the Base64URL-encoded JSON cursor with `tr_` plus 16 random URL-safe characters (96 random bits, 19 characters total). Keep the `nextCursor` response and `cursor` request fields unchanged. Store only source identity, captured head, continuation position, expiry, and the issuing tenant/organization/user/destination conversation/thread in Redis, with a 30-minute TTL. Do not cache message content or authorization decisions.
+`nextCursor` uses `tr_` plus 16 random URL-safe characters: 96 random bits and 19 characters total. The `nextCursor` response and `cursor` request fields retain their existing names. Redis stores only source identity, captured head, continuation position, expiry, and the issuing tenant/organization/user/destination conversation/thread, with a 30-minute TTL. It does not cache message content or authorization decisions.
 
-Use the existing platform Redis client, atomically reserve handles with `SET NX EX`, and allow retrying the same handle until expiry. API replicas share Redis state. Every read must still rebuild the reference allowlist, recheck source/destination access and audience, validate the handle's context, and validate branch ancestry. Missing, expired, malformed, cross-context and old encoded cursors must be rejected; tell the Agent to restart without a cursor. Redis failures must not silently fall back to a process-local or unchecked cursor. Add store, reader, real Redis and PostgreSQL regression tests, then verify actual model pagination against the local API.
+The platform reserves handles atomically with `SET NX EX`. API replicas share Redis state. A handle can be retried until expiry, but reads do not extend its TTL; each newly returned handle receives its own TTL. Every read rebuilds the reference allowlist, rechecks source/destination access and audience, validates the issuing context, and verifies branch ancestry.
 
-The implementation is `xpert/packages/server-ai/src/chat-conversation/thread-cursor.store.ts`. Reads do not extend a handle's expiry; each newly returned page handle receives its own 30-minute TTL. A missing/expired handle requires a fresh read without `cursor`. Old Base64URL values in already-persisted tool messages are not migrated and must also be restarted. No ChatKit or SDK request/response field changes are needed. Real model verification completed three successive pages, reusing two 19-character handles exactly and returning the expected source facts.
+Missing, expired, malformed, cross-context, or legacy Base64URL cursors are rejected and require a fresh read without `cursor`. Redis errors do not fall back to process-local or unchecked cursors. Old encoded values in persisted tool messages are not migrated. The implementation lives in `xpert/packages/server-ai/src/chat-conversation/thread-cursor.store.ts` and requires no additional ChatKit/SDK request fields.
 
-### Acceptance criteria
+### User-visible guarantees
 
 - Typing `@` plus a title finds matching conversations, including duplicate titles with distinct identities.
 - Selecting a result inserts a chip and sends a structured reference, never a copied transcript.
@@ -49,17 +39,17 @@ The implementation is `xpert/packages/server-ai/src/chat-conversation/thread-cur
 - Current input, queued/steered input, retries, and persisted message replay preserve reference identity.
 - Existing file references, quoted content, and capability chips remain functional.
 
-## Validation and rollout
+## Implementation and deployment
 
-### Implemented paths
+### Implementation map
 
-Platform changes are maintained in `xpert`; the user will merge them into `xpert-pro`. The earlier platform edits and temporary dependency link in `xpert-pro` have been removed.
+Platform changes are maintained in `xpert` and synchronized to `xpert-pro` through the normal merge flow.
 
-| Repository | Components |
-| --- | --- |
-| `chatkit-js` | `packages/chatkit/src/thread-reference.ts`; composer `ThreadMentionPalette` and `ComposerThreadToken`; reference normalization, replay and message rendering |
-| `xpert-sdk-js` | `packages/core/src/client.ts`: `conversations.search(query, { signal })` |
-| `xpert` | `ThreadReferenceMiddleware`, automatic subgraph registration, `ThreadReferenceService`, history projection and PostgreSQL ancestry query; Cloud host reference normalization and replay |
+| Repository     | Components                                                                                                                                                                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chatkit-js`   | `packages/chatkit/src/thread-reference.ts`; composer `ThreadMentionPalette` and `ComposerThreadToken`; reference normalization, replay and message rendering                            |
+| `xpert-sdk-js` | `packages/core/src/client.ts`: `conversations.search(query, { signal })`                                                                                                                |
+| `xpert`        | `ThreadReferenceMiddleware`, automatic subgraph registration, `ThreadReferenceService`, history projection and PostgreSQL ancestry query; Cloud host reference normalization and replay |
 
 `@` searches through the existing authorized `conversations/search` endpoint, scoped to the current Assistant family and selected Project (personal conversations when no Project is selected). It uses a 150 ms debounce, aborts stale requests, shows up to 30 results, and excludes the current/selected threads. Title matching is case insensitive; the list shows a short thread ID to distinguish duplicate titles. Global cross-Assistant discovery is outside this first delivery. Workspace files remain available through the file selector.
 
@@ -73,7 +63,7 @@ The current branch accepts at most 50 distinct referenced threads across at most
 
 ### Verified locally
 
-Latest verification: 2026-09-23. See the [multidimensional test report](conversation-references-test-report.md) for coverage, fixes and reproduction commands.
+Historical verification: 2026-09-23; these results describe that checkpoint, not a new run against the current revision. See the [multidimensional test report](conversation-references-test-report.md) for coverage, fixes and reproduction commands.
 
 - ChatKit UI full suite: 100 files, 987 tests passed; UI TypeScript passed. Covers the actual Chat component in jsdom, with mocked SDK/services.
 - Xpert backend: the initial 15 selected feature and adjacent regression suites passed, 141 tests total. After the short-handle upgrade, the scope grew to 17 suites / 157 tests, all passing after the focused rerun described in the test report; server-ai TypeScript passed. Existing runtime-resource and collaborator registration code was preserved.
@@ -86,15 +76,11 @@ Latest verification: 2026-09-23. See the [multidimensional test report](conversa
 - Real authenticated API and browser tests with the existing `qwen3.6-plus` model passed: title search, chip selection/submission, typed reference persistence, two-page `read_thread` cursor traversal, forged transcript stripping, reload and follow-up without a new reference, and reading a newly appended source turn. Tool execution records confirm actual `read_thread` calls, not just model claims. Cross-organization access returned 403; a mismatched conversation/thread pair was rejected by the tool.
 - The tested Assistant does not require a sandbox. The existing Claw entry point failed on a missing sandbox workspace mapper before reaching the model; that independent environment issue remains. Two-user live isolation, narrow/dark visual checks, live queue/steering, concurrency benchmarks, and clean installation from published packages remain outside this completed run. No production deployment or npm publication was performed. See the test report for evidence and limitations.
 
-### Coordinated release
+### Deployment requirements
 
-Changesets were added for shared types/UI and SDK. This is a coordinated source change across three repositories; publishing dependencies is a separate release step.
+Deploy compatible shared types containing `ChatKitThreadReference` and `normalizeThreadReference`, the SDK conversation-search cancellation API, the backend reader/middleware, and the ChatKit UI. Backend type dependencies and lockfiles must resolve the published contracts before rebuilding API/Cloud. Existing code/image/quote/element references retain their behavior, and no database migration is required for conversation references.
 
-1. Publish the ChatKit types release containing `ChatKitThreadReference` and `normalizeThreadReference`. The SDK cancellation API is now published in `@xpert-ai/xpert-sdk@0.4.1`; ChatKit UI declares `^0.4.1` and its lockfile resolves the published `0.4.1` artifact.
-2. Update `xpert/packages/server-ai/package.json` (currently pins types `0.5.10`), `packages/contracts/package.json` (currently `~0.5.10`) and the lockfile to that published types release. Old installed types cannot compile the new backend export imports.
-3. Deploy the backend, then publish/deploy ChatKit UI. Existing code/image/quote/element references retain their original behavior. No database migration is required.
-
-Initial local validation used built sibling packages linked in `node_modules`: the `xpert` backend's ChatKit types, Cloud's ChatKit UI, and the UI's Xpert SDK. The SDK link has since been replaced by the published `0.4.1` package and verified with frozen-lockfile installation. The backend/types and Cloud/UI links remain for local development, so the complete cross-repository release still requires publishing those packages. Local API startup uses `DB_SCHEMA_SYNC_MODE=external`, and process-only port/frame overrides leave `.env` unchanged.
+The SDK search cancellation API first shipped in `@xpert-ai/xpert-sdk@0.4.1`; this repository now uses the published `0.6.0` release, which also supplies Workbench methods. See [SDK prerequisites](./guides/remote-views-workbench.md#sdk-and-server-prerequisites) for the current installation flow. Source-linked acceptance does not by itself verify a complete cross-repository release; use published dependencies when validating deployment.
 
 To rerun both PostgreSQL suites, start a disposable PostgreSQL database named with an `_test` suffix and run from `xpert`:
 

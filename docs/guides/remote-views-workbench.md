@@ -255,7 +255,7 @@ Download can export a draft for recovery.
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Text / code                  | CodeMirror editing, search, syntax modes, undo and save                                                                |
 | Markdown / HTML              | Source editing plus rendered preview; HTML uses a sandboxed iframe                                                     |
-| DOCX                         | ProseMirror text editing, basic formatting and original-package repacking                                              |
+| DOCX                         | Paginated document editing with formatting, tables, images, and workspace save                                         |
 | CSV / TSV / XLS              | Spreadsheet editing and export in the original format                                                                  |
 | XLSX                         | Cell values/formulas, preserving original package parts; unsupported structure/style changes block saving              |
 | PPTX                         | Slide/text editing, basic text formatting, moving elements, editing table cells, undo/redo and package-preserving save |
@@ -263,9 +263,9 @@ Download can export a draft for recovery.
 | Other formats                | Download                                                                                                               |
 
 Office editors load lazily. Editable text is limited to 5 MiB and all previews to
-50 MiB; larger files remain downloadable. DOCX uses a continuous editing surface,
-not Word pagination. Office conversion is not a promise of full Microsoft Office
-feature compatibility.
+50 MiB; larger files remain downloadable. See [Office editing](../office-workbench.md)
+for supported operations, preservation guarantees, and format-specific limitations.
+The editors do not claim full Microsoft Office feature compatibility.
 
 Terminal uses xterm and the existing `sandbox-terminal` Socket.IO protocol,
 including resize, input, disconnect/reconnect and disposal on close/scope changes.
@@ -275,26 +275,25 @@ with Workbench; `workbench.sideChat.enabled: false` disables it explicitly.
 
 ## SDK and server prerequisites
 
-The SDK source changes live in `xpert-sdk-js` (`Client.workbench`). Until a released
-SDK includes these methods, this repository applies
-`patches/@xpert-ai__xpert-sdk@0.5.0.patch` through pnpm, with the Socket.IO package
-extension declared in `pnpm-workspace.yaml`. Keep the patch and lockfile together;
-install with `pnpm install --frozen-lockfile`. Consumers need this patched SDK or
-a release containing the same API; the unpatched 0.5.0 package is insufficient.
+Workbench requires `@xpert-ai/xpert-sdk` 0.6.0 or later. This release provides
+`Client.workbench` file and terminal methods, immutable artifact downloads, and
+remote View context events. Socket.IO is included as an SDK dependency; no pnpm
+patch or package extension is required. Install the checked-in dependency versions
+with `corepack pnpm install --frozen-lockfile`.
 
-### Local testing without publishing the SDK
+### Local testing with the released SDK
 
-The checked-in pnpm patch is enough for local development; publishing or linking
-the SDK is not required. Stop the existing ChatKit development server first, then
-run these commands from the `chatkit-js` repository root:
+Use the published SDK package for local development. After upgrading from a
+patched version, stop the existing ChatKit development server, then run these
+commands from the `chatkit-js` repository root:
 
 ```sh
 corepack pnpm install --frozen-lockfile
 corepack pnpm dev:ui:fresh
 ```
 
-`dev:ui:fresh` verifies that the installed SDK exposes the Workbench file and
-terminal methods, then starts Vite on port 5173 with fresh dependency optimization.
+`dev:ui:fresh` verifies that the installed SDK exposes the Workbench file,
+artifact-download, and terminal methods, then starts Vite on port 5173 with fresh dependency optimization.
 It fails if that port is occupied instead of silently switching ports. To check
 the installed SDK separately, run `corepack pnpm check:sdk`.
 
@@ -302,7 +301,7 @@ The local Xpert host should use `VITE_CHATKIT_FRAME_URL=http://localhost:5173`.
 After restarting Vite, fully reload the host page (for example,
 `http://localhost:4300/chat/clawxpert/c`) to recreate the SDK client inside the
 iframe. Hot module replacement can retain an older client instance even after
-the installed package has been patched. On macOS Chrome, use Cmd+Shift+R.
+the installed package has been updated. On macOS Chrome, use Cmd+Shift+R.
 
 If `client.workbench` is undefined, check the installed SDK and reload the page
 before debugging the file API. Connection-refused and HTTP 401 errors are separate
@@ -327,4 +326,4 @@ and explicit execution/start operations retain their on-demand runtime creation.
 Missing provider or workspace mapping configuration returns a structured 400
 error so the SDK does not repeatedly retry it.
 
-See [implementation and verification notes](./workbench-native-tools-plan.md).
+See [Native Workbench tools and file views](./workbench-native-tools.md).
