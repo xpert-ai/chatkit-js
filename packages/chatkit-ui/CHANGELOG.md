@@ -1,5 +1,45 @@
 # @xpert-ai/chatkit-ui
 
+## 0.10.0
+
+### Minor Changes
+
+- 2875454: Add configurable Assistant appearance types, character rendering, and support for
+  extensible pet catalogs and v2 sprite atlases. Show the Assistant's published
+  avatar and live activity above bubble conversations, with animated transitions to
+  a non-modal details dialog that includes customization and computer shortcuts.
+  Honor reduced motion and scale dialog spacing with the theme's font size and
+  density.
+- 2875454: Handle HTML artifact previews and file-change review inside ChatKit Workbench.
+  Add isolated HTML previews with annotations, downloads, source inspection, and
+  developer panels, plus file-change navigation and diffs. Route supported task
+  summary resources to these native views through the Xpert SDK without requiring
+  the host application to implement the preview or review flow.
+- 2875454: Upgrade to the published `@xpert-ai/xpert-sdk` 0.6.0 release for Workbench files,
+  terminals, artifact downloads, and remote-view context events. Remove the local
+  SDK patch and supplementary dependency configuration. Make shell-command text
+  follow the base font size, limit its inline preview to two lines with the full
+  command available on hover or keyboard focus, and use a one-pixel Workbench
+  divider.
+- 2875454: Use bounded, theme-aware corners for Todo and pending follow-up panels. Keep tool
+  image previews stable during streamed text updates and size thumbnails to fit
+  their content. Stop automatically displaying ordinary tool image artifacts in
+  transcripts and bubbles, while retaining the underlying artifacts and explicitly
+  supported user-facing result renderers.
+
+### Patch Changes
+
+- cdfe147: Preserve mounted Assistant Workbench views when switching conversations or projects, revalidate access in the target context, and notify retained views through `view.context.changed`. Cancel obsolete requests and file-access sessions, and prevent late navigation results from affecting the new context. Reset chat state and the composer on project changes without recreating the Workbench views.
+- 880deca: Preserve history callbacks and mounted views when client credentials first become
+  available or rotate, while still resetting the session when credentials are
+  cleared or the organization changes. Avoid redundant remote-view initialization
+  after context validation, without suppressing theme or navigation updates. Run
+  SDK routing tests with matching native Fetch and Blob implementations on Node 24.
+- Updated dependencies [2875454]
+  - @xpert-ai/chatkit-types@0.10.0
+  - @xpert-ai/chatkit-web-shared@0.10.0
+  - @xpert-ai/a2ui-react@0.10.0
+
 ## 0.9.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-types
 
+## 0.10.0
+
+### Minor Changes
+
+- 2875454: Add configurable Assistant appearance types, character rendering, and support for
+  extensible pet catalogs and v2 sprite atlases. Show the Assistant's published
+  avatar and live activity above bubble conversations, with animated transitions to
+  a non-modal details dialog that includes customization and computer shortcuts.
+  Honor reduced motion and scale dialog spacing with the theme's font size and
+  density.
+
 ## 0.9.0
 
 ### Minor Changes
