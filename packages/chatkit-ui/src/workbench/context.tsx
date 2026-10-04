@@ -1,5 +1,10 @@
 import * as React from 'react';
-import type { ChatKitReference, TMessageContentResourceCard } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitReference,
+  FileChangeResource,
+  FileChangeSetResource,
+  TMessageContentResourceCard,
+} from '@xpert-ai/chatkit-types';
 import { Loader2 } from 'lucide-react';
 import {
   WorkbenchViewMenu,
@@ -15,7 +20,17 @@ import {
 } from '../components/ui/tooltip';
 
 export type WorkbenchContextValue = {
-  openResourceCard?: (card: TMessageContentResourceCard, messageId: string) => Promise<unknown>;
+  openResourceCard?: (
+    card: TMessageContentResourceCard,
+    messageId: string,
+  ) => Promise<unknown>;
+  openHtmlArtifact?: (
+    resource: { artifactId: string; artifactVersionId: string },
+    title: string,
+  ) => boolean;
+  openFileReview?: (
+    resource: FileChangeResource | FileChangeSetResource,
+  ) => boolean;
   enabled: boolean;
   open: boolean;
   loading: boolean;
@@ -82,9 +97,7 @@ export function WorkbenchToggleButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex h-8 w-8">
-          {button}
-        </span>
+        <span className="inline-flex h-8 w-8">{button}</span>
       </TooltipTrigger>
       <TooltipContent side="bottom">{tooltip}</TooltipContent>
     </Tooltip>

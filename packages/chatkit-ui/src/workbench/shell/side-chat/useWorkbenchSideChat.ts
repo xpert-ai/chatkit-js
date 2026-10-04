@@ -2,9 +2,12 @@ import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import type { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import type { useStreamContext } from '../../../providers/Stream';
-import { persistSideChatCloseConfirmationDisabled } from '../../SideChatCloseDialog';
+import { persistSideChatCloseConfirmationDisabled } from '../../side-chat/SideChatCloseDialog';
 import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
-import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from '../../WorkbenchPanel';
+import {
+  SIDE_CHAT_VIEW_KEY,
+  type SideChatSession,
+} from '../../side-chat/types';
 import type { useWorkbenchShellTabs } from '../tabs/useWorkbenchShellTabs';
 
 type WorkbenchSideChatOptions = Pick<

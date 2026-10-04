@@ -15,6 +15,8 @@ import type { StateType } from '../providers/Stream';
 
 const mocks = vi.hoisted(() => ({
   listSlotViews: vi.fn(),
+  updateComposer: vi.fn(),
+  focusComposer: vi.fn(),
   submit: vi.fn(),
   copyThread: vi.fn(),
   deleteThread: vi.fn(),
@@ -50,7 +52,8 @@ const mocks = vi.hoisted(() => ({
         copy: vi.fn(),
         delete: vi.fn(),
       },
-      workbench: { listFiles: vi.fn() },
+      workbench: { listFiles: vi.fn(), downloadArtifact: vi.fn() },
+      conversations: { listTaskSummaryItems: vi.fn() },
     },
     apiKey: 'cs-x-secret',
     apiUrl: '/api/ai',
@@ -89,15 +92,17 @@ vi.mock('../components/chat', () => ({
 vi.mock('../hooks/useParentMessenger', () => ({
   useParentMessenger: () => ({
     isParentAvailable: false,
+    updateComposer: mocks.updateComposer,
+    focusComposer: mocks.focusComposer,
     sendCommand: vi.fn(),
   }),
 }));
 
-vi.mock('./native/WorkbenchTerminal', () => ({
+vi.mock('./native/terminal/WorkbenchTerminal', () => ({
   default: () => <div data-testid="terminal">Terminal content</div>,
 }));
 
-vi.mock('./RemoteViewFrame', () => ({
+vi.mock('./remote-view/RemoteViewFrame', () => ({
   RemoteViewFrame: (props: {
     title: string;
     onClientCommand: (
@@ -122,10 +127,10 @@ import {
   WorkbenchToggleButton,
   useWorkbench,
 } from './WorkbenchShell';
-import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './SideChatCloseDialog';
+import { SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY } from './side-chat/SideChatCloseDialog';
 import { workbenchLayoutKey, writeWorkbenchLayout } from './layout-storage';
 import { AssistantMessage } from '../components/thread/messages/ai';
-import { toWorkbenchMessages } from './external-assistant-runs';
+import { toWorkbenchMessages } from './external-assistant/external-assistant-runs';
 import { ThemeProvider } from '../providers/Theme';
 
 const render = (ui: React.ReactElement) =>
@@ -218,6 +223,12 @@ const baseOptions = {
 class ResizeObserverMock {
   constructor(private callback: ResizeObserverCallback) {}
   observe(element: Element) {
+    if (element.getAttribute('data-testid') === 'html-preview-viewport') {
+      Object.defineProperties(element, {
+        clientWidth: { value: 800, configurable: true },
+        clientHeight: { value: 600, configurable: true },
+      });
+    }
     if (element.hasAttribute('data-chatkit-workbench-root')) {
       mocks.resizeCallback = this.callback;
     }
@@ -229,6 +240,8 @@ class ResizeObserverMock {
 export function setupWorkbenchTests() {
   beforeEach(() => {
     mocks.listSlotViews.mockReset();
+    mocks.updateComposer.mockReset().mockResolvedValue(undefined);
+    mocks.focusComposer.mockReset().mockResolvedValue(undefined);
     mocks.submit.mockReset();
     mocks.copyThread.mockReset();
     mocks.deleteThread.mockReset();

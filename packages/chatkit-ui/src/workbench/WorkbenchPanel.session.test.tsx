@@ -61,8 +61,10 @@ vi.mock('../components/chat', () => ({
     return null;
   },
 }));
-vi.mock('./RemoteViewFrame', () => ({ RemoteViewFrame: () => null }));
-vi.mock('./ExternalAssistantView', () => ({
+vi.mock('./remote-view/RemoteViewFrame', () => ({
+  RemoteViewFrame: () => null,
+}));
+vi.mock('./external-assistant/ExternalAssistantView', () => ({
   ExternalAssistantView: () => null,
 }));
 

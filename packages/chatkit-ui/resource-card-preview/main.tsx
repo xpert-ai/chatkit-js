@@ -18,7 +18,7 @@ import {
 } from '../src/workbench/context';
 import { executeWorkbenchCommand } from '../src/workbench/client-commands';
 import { useResourceCardNavigation } from '../src/workbench/useResourceCardNavigation';
-import { RemoteViewFrame } from '../src/workbench/RemoteViewFrame';
+import { RemoteViewFrame } from '../src/workbench/remote-view/RemoteViewFrame';
 import { ThemeProvider } from '../src/providers/Theme';
 import { setLanguage } from '../src/i18n';
 import './style.css';

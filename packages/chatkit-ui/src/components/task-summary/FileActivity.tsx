@@ -6,14 +6,13 @@ import * as React from 'react';
 import { FileDiff, ExternalLink } from 'lucide-react';
 import { FileTypeIcon } from './FileTypeIcon';
 import {
-  CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT,
   type ChatkitMessage,
   type ChatFileChange,
   type ChatTaskSummaryResourceReference,
 } from '@xpert-ai/chatkit-types';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { collectLiveTaskSummary } from '../../lib/task-summary';
-import { ParentMessengerContext } from '../../providers/ParentMessenger';
+import { useOpenTaskSummaryResource } from '../../hooks/useOpenTaskSummaryResource';
 
 type OpenResource = (
   resource: ChatTaskSummaryResourceReference,
@@ -79,7 +78,6 @@ export function MessageFileActivity({
 }) {
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
-  const messenger = React.useContext(ParentMessengerContext);
   const stream = React.useContext(StreamContext);
   const summary = collectLiveTaskSummary({
     messages: [
@@ -99,14 +97,10 @@ export function MessageFileActivity({
     ],
   });
   const outputs = summary.outputs.filter((item) => item.origin === 'tool');
-  const open: OpenResource = (resource, messageId, title) =>
-    messenger?.sendEvent('public_event', [
-      'effect',
-      {
-        name: CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT,
-        data: { resource, messageId, title },
-      },
-    ]);
+  const open = useOpenTaskSummaryResource(
+    outputs,
+    stream?.conversationId ?? undefined,
+  );
   const incomplete =
     summary.fileChangeCoverage === 'unavailable' ||
     summary.fileChangeCoverage === 'partial';
@@ -151,7 +145,14 @@ export function MessageFileActivity({
         );
       })}
       {summary.fileChanges.length > 0 && (
-        <FileChangeCard changes={summary.fileChanges} messageId={message.id} conversationId={stream?.conversationId} client={stream?.client} isLoading={stream?.isLoading} onOpenResource={open} />
+        <FileChangeCard
+          changes={summary.fileChanges}
+          messageId={message.id}
+          conversationId={stream?.conversationId}
+          client={stream?.client}
+          isLoading={stream?.isLoading}
+          onOpenResource={open}
+        />
       )}
     </div>
   );

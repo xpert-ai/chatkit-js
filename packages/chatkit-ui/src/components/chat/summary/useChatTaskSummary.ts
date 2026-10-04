@@ -1,11 +1,7 @@
-import type {
-  ChatKitOptions,
-  ChatTaskSummaryOpenResourceEffect,
-  ChatTaskSummaryResourceReference,
-} from '@xpert-ai/chatkit-types';
-import { CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT } from '@xpert-ai/chatkit-types';
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import { useTaskSummary } from '../../../hooks/useTaskSummary';
+import { useOpenTaskSummaryResource } from '../../../hooks/useOpenTaskSummaryResource';
 import {
   collectLiveTaskSummary,
   type TaskSummaryMessage,
@@ -64,7 +60,6 @@ export function useChatTaskSummary({
   messageNavigationAnchorsRef,
   disableAutoFollow,
   clearQuoteSelection,
-  parentMessenger,
   viewportRef,
   chatColumnRef,
   layoutMaxWidth,
@@ -232,27 +227,9 @@ export function useChatTaskSummary({
     [clearQuoteSelection, disableAutoFollow, stream],
   );
 
-  const openTaskSummaryResource = React.useCallback(
-    (
-      resource: ChatTaskSummaryResourceReference,
-      messageId?: string,
-      resourceTitle?: string,
-    ) => {
-      const data: ChatTaskSummaryOpenResourceEffect = {
-        resource,
-        conversationId: taskSummaryConversationId ?? undefined,
-        messageId,
-        title: resourceTitle,
-      };
-      parentMessenger.sendEvent('public_event', [
-        'effect',
-        {
-          name: CHATKIT_TASK_SUMMARY_OPEN_RESOURCE_EFFECT,
-          data,
-        },
-      ]);
-    },
-    [parentMessenger, taskSummaryConversationId],
+  const openTaskSummaryResource = useOpenTaskSummaryResource(
+    taskSummary.summary.outputs,
+    taskSummaryConversationId ?? undefined,
   );
 
   React.useLayoutEffect(() => {

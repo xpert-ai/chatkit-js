@@ -1,15 +1,15 @@
 import * as React from 'react';
-import { EXTERNAL_ASSISTANTS_VIEW_KEY } from '../../external-assistant-runs';
+import { EXTERNAL_ASSISTANTS_VIEW_KEY } from '../../external-assistant/external-assistant-runs';
 import type { useNativeWorkbench } from '../../native/useNativeWorkbench';
 import type { useWorkbenchPages } from '../../useWorkbenchPages';
 import { useWorkbenchTabOrder } from '../../useWorkbenchTabOrder';
 import type { useWorkbenchViews } from '../../useWorkbenchViews';
 import type { useWorkbenchViewTabs } from '../../useWorkbenchViewTabs';
+import { MAIN_CHAT_VIEW_KEY } from '../../WorkbenchPanel';
 import {
-  MAIN_CHAT_VIEW_KEY,
   SIDE_CHAT_VIEW_KEY,
   type SideChatSession,
-} from '../../WorkbenchPanel';
+} from '../../side-chat/types';
 
 type WorkbenchShellTabsOptions = {
   native: ReturnType<typeof useNativeWorkbench>;
