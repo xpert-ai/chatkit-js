@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-types
 
+## 0.11.0
+
+### Minor Changes
+
+- 6c68e83: Add an optional realtime voice host bridge, dialing in the assistant appearance
+  dialog, persistent call controls above the dialog, and durable Call ended timeline
+  receipts with duration. Float the panels inside the chat viewport and retain mute
+  and hangup controls when the appearance dialog closes.
+
 ## 0.10.0
 
 ### Minor Changes
