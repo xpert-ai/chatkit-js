@@ -1070,5 +1070,25 @@
     "connected": "已连接",
     "disabled": "已关闭",
     "error": "无法获取状态"
+  },
+  "voiceCall": {
+    "title": "语音通话",
+    "dial": "拨打电话",
+    "connecting": "正在拨号…",
+    "listening": "正在聆听",
+    "speaking": "正在说话",
+    "muted": "麦克风已静音",
+    "ended": "通话已结束",
+    "error": "通话中断",
+    "close": "关闭通话面板",
+    "mute": "静音麦克风",
+    "unmute": "取消静音",
+    "muteAction": "静音",
+    "unmuteAction": "取消静音",
+    "interrupt": "打断回复",
+    "hangUp": "挂断",
+    "open": "打开对话",
+    "tasksContinue": "已接受的任务会在通话结束后继续执行。",
+    "commandFailed": "通话操作未完成，请重试。"
   }
 }

@@ -1070,5 +1070,25 @@
     "connected": "Connected",
     "disabled": "Disabled",
     "error": "Status unavailable"
+  },
+  "voiceCall": {
+    "title": "Voice call",
+    "dial": "Call",
+    "connecting": "Calling…",
+    "listening": "Listening",
+    "speaking": "Speaking",
+    "muted": "Microphone muted",
+    "ended": "Call ended",
+    "error": "Call interrupted",
+    "close": "Close call panel",
+    "mute": "Mute microphone",
+    "unmute": "Unmute microphone",
+    "muteAction": "Mute",
+    "unmuteAction": "Unmute",
+    "interrupt": "Interrupt speech",
+    "hangUp": "Hang up",
+    "open": "Open conversation",
+    "tasksContinue": "Accepted tasks continue after the call.",
+    "commandFailed": "Could not complete the call action. Please retry."
   }
 }

@@ -7,6 +7,7 @@ import { useParentMessenger } from './useParentMessenger';
 
 const headers =
   '[data-slot="chatkit-chat-header-container"], [data-slot="chatkit-workbench-header"]';
+const floatingNoDrag = '[data-window-no-drag]';
 const controls =
   'button, a, input, textarea, select, [role="button"], [role="tab"], [tabindex], [contenteditable="true"], [data-window-no-drag]';
 const overlays =
@@ -32,6 +33,7 @@ export function useWindowDragRegions(enabled: boolean) {
         visible,
       );
       const regions: WindowDragRect[] = [];
+      const floatingSurfaces = document.querySelectorAll(floatingNoDrag);
       if (!blocked)
         for (const header of document.querySelectorAll(headers)) {
           if (!visible(header)) continue;
@@ -46,7 +48,16 @@ export function useWindowDragRegions(enabled: boolean) {
               height: Math.min(height, 96, box.bottom) - y,
             },
           ].filter((rect) => rect.width > 0 && rect.height > 0);
-          for (const control of header.querySelectorAll(controls)) {
+          // The character can share the header's grid row without being a
+          // descendant of its drag surface. Keep overlapping controls clickable.
+          const scope = header.closest('[data-window-drag-scope]') ?? header;
+          // Persistent floating panels live outside the header scope. Exclude
+          // their entire surface from the host's native drag overlay as well.
+          const exclusions = new Set([
+            ...scope.querySelectorAll(controls),
+            ...floatingSurfaces,
+          ]);
+          for (const control of exclusions) {
             if (!visible(control)) continue;
             const rect = control.getBoundingClientRect();
             areas = areas.flatMap((area) =>
@@ -79,8 +90,8 @@ export function useWindowDragRegions(enabled: boolean) {
       resize.disconnect();
       resize.observe(document.documentElement);
       document
-        .querySelectorAll(headers)
-        .forEach((header) => resize.observe(header));
+        .querySelectorAll(`${headers}, ${floatingNoDrag}`)
+        .forEach((surface) => resize.observe(surface));
       schedule();
     };
     const mutations = new MutationObserver(observe);

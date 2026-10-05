@@ -125,7 +125,10 @@ export function ChatHeader({
     options?.header?.enabled !== false && (
       <div
         data-slot="chatkit-chat-header-container"
-        className="sticky top-0 z-10 w-full shrink-0 bg-background"
+        className={cn(
+          'sticky top-0 z-10 w-full shrink-0 bg-background',
+          characterPresentation && 'col-start-1 row-start-1 self-start',
+        )}
       >
         <div
           ref={chatColumnRef}
@@ -178,7 +181,7 @@ export function ChatHeader({
               />
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-1">
             {(!petDisabled || history?.enabled !== false) && (
               <DropdownMenu>
                 <Tooltip>

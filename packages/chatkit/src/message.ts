@@ -256,6 +256,7 @@ export type TMessageContentReasoning = {
  * Enhance {@link MessageContentComplex} in Langchain.js
  */
 export type TMessageContentComplex = (
+  | import('./realtime-voice').CallEndedContent
   | TMessageContentText
   | TMessageContentReasoning
   | MessageContentImageUrl

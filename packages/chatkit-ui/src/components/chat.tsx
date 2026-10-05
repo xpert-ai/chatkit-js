@@ -1,3 +1,7 @@
+import {
+  mergeCompletedCalls,
+  useRealtimeVoice,
+} from './chat/voice/useRealtimeVoice';
 import { AssistantComputers } from './chat/header/AssistantComputers';
 import { ArrowDown } from 'lucide-react';
 import * as React from 'react';
@@ -94,9 +98,15 @@ export function Chat({
   );
   const characterPresentation =
     surface === 'main' &&
-    messagePresentation.mode === 'bubbles' &&
+    (messagePresentation.mode === 'bubbles' || !!options?.realtimeVoice) &&
     options?.header?.enabled !== false &&
     options?.header?.character?.enabled !== false;
+  const voice = useRealtimeVoice({
+    options: surface === 'main' ? options?.realtimeVoice : undefined,
+    assistantId: session.stream.assistantId,
+    threadId: session.stream.threadId,
+    avatar: assistant.assistantAvatar,
+  });
   const feedback = useChatStreamingFeedback({ ...session, surface });
   const runtime = useRuntimeCapabilitiesState({
     client: session.stream.client,
@@ -138,8 +148,17 @@ export function Chat({
   const files = useChatFiles({ ...draft, ...session, referenceRequest });
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const messages = React.useMemo(
-    () => session.stream.messages ?? [],
-    [session.stream.messages],
+    () =>
+      mergeCompletedCalls(
+        session.stream.messages ?? [],
+        options?.realtimeVoice?.completed,
+        session.stream.threadId,
+      ),
+    [
+      session.stream.messages,
+      options?.realtimeVoice?.completed,
+      session.stream.threadId,
+    ],
   );
 
   const quotes = useChatQuotes({
@@ -442,25 +461,34 @@ export function Chat({
           className,
         )}
       >
-        <ChatHeader
-          characterPresentation={characterPresentation}
-          {...assistant}
-          {...session}
-          {...historyState}
-          {...branch}
-          {...pet}
-          {...conversation}
-          {...summary}
-          {...host}
-          surface={surface}
-          options={options}
-          chatColumnRef={chatColumnRef}
-          chatColumnStyle={chatColumnStyle}
-          headerMoreButtonRef={headerMoreButtonRef}
-          restoreHeaderFocus={restoreHeaderFocus}
-        />
+        <div
+          data-window-drag-scope=""
+          className={
+            characterPresentation
+              ? 'pointer-events-none sticky top-0 z-10 grid w-full shrink-0'
+              : 'contents'
+          }
+        >
+          <ChatHeader
+            characterPresentation={characterPresentation}
+            {...assistant}
+            {...session}
+            {...historyState}
+            {...branch}
+            {...pet}
+            {...conversation}
+            {...summary}
+            {...host}
+            surface={surface}
+            options={options}
+            chatColumnRef={chatColumnRef}
+            chatColumnStyle={chatColumnStyle}
+            headerMoreButtonRef={headerMoreButtonRef}
+            restoreHeaderFocus={restoreHeaderFocus}
+          />
 
-        {characterPresentation && <AssistantPresence {...presence} />}
+          {characterPresentation && <AssistantPresence {...presence} />}
+        </div>
 
         {viewport.showMessageNavigation && (
           <MessageNavigator
@@ -680,6 +708,7 @@ export function Chat({
       {characterPresentation && (
         <AssistantSummaryDialog
           presence={presence}
+          voice={voice}
           summary={summary.taskSummaryProps}
           computers={
             <AssistantComputers

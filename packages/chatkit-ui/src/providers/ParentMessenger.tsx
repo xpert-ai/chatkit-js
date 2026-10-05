@@ -34,6 +34,7 @@ import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
 import { createMessageId } from '../lib/utils';
 
 type CommandMessageMap = {
+  onRealtimeVoiceCommand: import('@xpert-ai/chatkit-types').RealtimeVoiceCommand;
   onApprovalDecision: import('@xpert-ai/chatkit-types').ApprovalDecisionRequest;
   onApprovalAction: import('@xpert-ai/chatkit-types').ApprovalActionRequest;
   onConnectWorkspaceConnector: WorkspaceConnectorConnectRequest;
