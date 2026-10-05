@@ -170,6 +170,7 @@ describe('RemoteViewFrame', () => {
   it('forwards options.theme tokens and resends init after the theme changes', async () => {
     const lightTheme: ChatKitTheme = {
       colorScheme: 'light',
+      typography: { baseSize: 16 },
       color: {
         accent: { primary: '#2563eb', level: 2 },
         surface: {
@@ -180,6 +181,7 @@ describe('RemoteViewFrame', () => {
     };
     const darkTheme: ChatKitTheme = {
       colorScheme: 'dark',
+      typography: { baseSize: 18 },
       color: {
         accent: { primary: '#60a5fa', level: 2 },
         surface: {
@@ -200,6 +202,7 @@ describe('RemoteViewFrame', () => {
           theme: expect.objectContaining({
             mode: 'light',
             tokens: expect.objectContaining({
+              densityRootFontSize: '16px',
               colorBackground: '#fef3c7',
               colorPrimary: '#2563eb',
             }),
@@ -218,6 +221,7 @@ describe('RemoteViewFrame', () => {
           theme: expect.objectContaining({
             mode: 'dark',
             tokens: expect.objectContaining({
+              densityRootFontSize: '18px',
               colorBackground: '#111827',
               colorPrimary: '#60a5fa',
             }),
