@@ -1,15 +1,58 @@
+import type * as React from 'react';
 import { Blob as NodeBlob } from 'node:buffer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageFileActivity } from '../../components/task-summary/FileActivity';
 import { setupWorkbenchTests, fixture } from '../WorkbenchShell.test-fixture';
 import { createFileChangeReview } from './file-change-review';
-import { diffRows } from './file-change-diff';
+import { createReviewDiff } from './review-diff-model';
+import type { FileDiffMetadata } from '@pierre/diffs';
 import { Client } from '@xpert-ai/xpert-sdk';
 import {
   countFileChangeLines,
   type FileChangeReport,
   type FileChangeResource,
 } from '@xpert-ai/chatkit-types';
+
+// jsdom lacks constructable stylesheets used by Pierre's Shadow DOM. Browser QA
+// exercises the actual renderer; these integration tests verify its input and controls.
+vi.mock('@pierre/diffs/react', () => ({
+  Virtualizer: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className: string;
+  }) => <div className={className}>{children}</div>,
+  FileDiff: ({
+    fileDiff,
+    options,
+  }: {
+    fileDiff: FileDiffMetadata;
+    options: {
+      diffStyle: string;
+      expandUnchanged: boolean;
+      lineDiffType: string;
+    };
+  }) => (
+    <div
+      data-testid="pierre-diff"
+      data-layout={options.diffStyle}
+      data-full-file={options.expandUnchanged}
+      data-word-diff={options.lineDiffType}
+    >
+      {fileDiff.deletionLines.map((line, index) => (
+        <div key={`before-${index}`} data-diff-kind="removed">
+          {line.trimEnd()}
+        </div>
+      ))}
+      {fileDiff.additionLines.map((line, index) => (
+        <div key={`after-${index}`} data-diff-kind="added">
+          {line.trimEnd()}
+        </div>
+      ))}
+    </div>
+  ),
+}));
 
 const {
   render,
@@ -74,6 +117,7 @@ describe('ChatKit native change review', () => {
   setupWorkbenchTests();
   beforeEach(() => {
     vi.stubGlobal('Blob', NodeBlob);
+    Element.prototype.scrollIntoView = vi.fn();
     mocks.listSlotViews.mockResolvedValue([]);
     mocks.stream.client.workbench.downloadArtifact
       .mockReset()
@@ -108,12 +152,28 @@ describe('ChatKit native change review', () => {
     expect(
       mocks.stream.client.workbench.downloadArtifact,
     ).toHaveBeenCalledTimes(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Side by side' }));
-    expect(screen.getByRole('button', { name: 'Inline' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Switch diff layout to side by side',
+      }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Version details' }));
+    expect(screen.getByTestId('pierre-diff')).toHaveAttribute(
+      'data-layout',
+      'split',
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Switch diff layout to inline' }),
+    );
+    expect(screen.getByTestId('pierre-diff')).toHaveAttribute(
+      'data-layout',
+      'unified',
+    );
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Review options' }), {
+      key: 'Enter',
+    });
+    fireEvent.click(
+      await screen.findByRole('menuitemcheckbox', { name: 'Version details' }),
+    );
     expect(screen.getAllByText(/SHA-256/)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }));
     expect(container.querySelector('[data-diff-kind="added"]')).toBeNull();
@@ -122,6 +182,48 @@ describe('ChatKit native change review', () => {
       screen.getByRole('button', { name: 'Review src/index.html' }),
     );
     expect(screen.getAllByRole('tab', { name: 'Review' })).toHaveLength(1);
+  });
+  it('filters and jumps to files, copies paths, and opens the saved snapshot in a tab', async () => {
+    const clipboard = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: clipboard },
+    });
+    render(ui());
+    setObservedWidth(1200);
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    await screen.findByText('new');
+    fireEvent.click(screen.getByRole('button', { name: 'Changed files' }));
+    const filter = screen.getByRole('textbox', { name: 'Filter files…' });
+    fireEvent.change(filter, { target: { value: 'missing' } });
+    expect(screen.getByText('No matching files')).toBeInTheDocument();
+    expect(screen.getByText('new')).toBeInTheDocument();
+    fireEvent.change(filter, { target: { value: 'index' } });
+    expect(
+      screen.getByRole('navigation', { name: 'Changed files' }),
+    ).toHaveTextContent('index.html');
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to file' }));
+    const search = screen.getByRole('combobox', { name: 'Jump to file' });
+    fireEvent.change(search, { target: { value: 'index' } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+    await waitFor(() =>
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument(),
+    );
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: 'File options: src/index.html' }),
+      { key: 'Enter' },
+    );
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy path' }));
+    await waitFor(() =>
+      expect(clipboard).toHaveBeenCalledWith('src/index.html'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open file in tab' }));
+    expect(
+      await screen.findByRole('tab', { name: 'index.html' }),
+    ).toBeInTheDocument();
+    expect(
+      mocks.stream.client.workbench.downloadArtifact,
+    ).toHaveBeenCalledTimes(2);
   });
   it('paginates conversation changes and keeps unavailable/binary files visible', async () => {
     mocks.stream.client.conversations.listTaskSummaryItems
@@ -142,8 +244,13 @@ describe('ChatKit native change review', () => {
     setObservedWidth(1200);
     fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
     await screen.findByText('new');
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Change scope' }), {
+      key: 'Enter',
+    });
     fireEvent.click(
-      screen.getByRole('button', { name: 'Conversation changes' }),
+      await screen.findByRole('menuitemradio', {
+        name: 'Conversation changes',
+      }),
     );
     expect(
       await screen.findByText(/This saved change is unavailable/),
@@ -215,7 +322,8 @@ describe('immutable review loading and bounded diff', () => {
       'c',
       single,
       'Review',
-    ).review!;
+    ).review;
+    if (!options) throw new Error('Expected review options');
     expect(
       (await options.load('selected', new AbortController().signal))[0].report,
     ).toEqual(first);
@@ -232,28 +340,34 @@ describe('immutable review loading and bounded diff', () => {
       ['gone\n', ''],
       ['a\r\n', 'a\n'],
     ]) {
-      const rows = diffRows(before, after)!;
       const report: FileChangeReport = {
         ...first,
         before: revision(before),
         after: revision(after),
       };
+      const diff = createReviewDiff(report);
+      if (!diff) throw new Error('Expected a parsed diff');
       expect(countFileChangeLines(report)).toEqual({
         status: 'ready',
-        added: rows.filter((r) => !r.equal && r.after).length,
-        removed: rows.filter((r) => !r.equal && r.before).length,
+        added: diff.hunks.reduce((sum, hunk) => sum + hunk.additionLines, 0),
+        removed: diff.hunks.reduce((sum, hunk) => sum + hunk.deletionLines, 0),
       });
-      expect(rows.flatMap((r) => (r.before ? [r.before.text] : []))).toEqual(
-        before
-          ? before.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n')
-          : [],
-      );
-      expect(rows.flatMap((r) => (r.after ? [r.after.text] : []))).toEqual(
-        after
-          ? after.replace(/\r\n/g, '\n').replace(/\n$/, '').split('\n')
-          : [],
-      );
+      expect(diff.deletionLines.join('')).toBe(before.replace(/\r\n/g, '\n'));
+      expect(diff.additionLines.join('')).toBe(after.replace(/\r\n/g, '\n'));
     }
-    expect(diffRows('a\n'.repeat(3000), 'b\n'.repeat(3000))).toBeNull();
+    expect(
+      createReviewDiff({
+        ...first,
+        before: revision('a\n'.repeat(7000)),
+        after: revision('b\n'.repeat(7000)),
+      }),
+    ).toBeNull();
+    const whitespace = {
+      ...first,
+      before: revision('  same\n'),
+      after: revision('same  \n'),
+    };
+    expect(createReviewDiff(whitespace)?.hunks.length).toBeGreaterThan(0);
+    expect(createReviewDiff(whitespace, true)?.hunks).toHaveLength(0);
   });
 });
