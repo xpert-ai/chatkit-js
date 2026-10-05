@@ -1,3 +1,5 @@
+import { isCallEndedContent } from '@xpert-ai/chatkit-types';
+import { CallEndedMessage } from './messages/call-ended';
 import { PresentationScrollAnchor } from './PresentationScrollAnchor';
 import { MessageBubble } from './messages/message-bubble';
 import {
@@ -252,6 +254,21 @@ export function MessageList({
         )}
         {messages.map((message, index) => {
           if (foldedIndexes.has(index)) return null;
+          const call = Array.isArray(message.content)
+            ? message.content.find(isCallEndedContent)
+            : undefined;
+          if (call)
+            return (
+              <div
+                key={message.id ?? index}
+                data-message-id={message.id}
+                ref={(node) => {
+                  if (message.id) onMessageAnchor?.(message.id, node);
+                }}
+              >
+                <CallEndedMessage call={call} />
+              </div>
+            );
           const processIndexes = processGroups.get(index);
           const messageType = String(message.type);
           if (bubbles && messageType === 'tool') return null;

@@ -16,6 +16,7 @@ export type FileReviewEntry = {
 };
 export type FileChangeReviewOptions = {
   selected: FileChangeResource | FileChangeSetResource;
+  openFile?: (entry: FileReviewEntry) => void;
   load: (
     scope: 'selected' | 'conversation',
     signal: AbortSignal,
@@ -28,6 +29,7 @@ export function createFileChangeReview(
   conversationId: string,
   selected: FileChangeResource | FileChangeSetResource,
   title: string,
+  openPreview?: (preview: WorkbenchPreview) => void,
 ): WorkbenchPreview {
   return {
     key: `chatkit.preview.review:${conversationId}`,
@@ -36,6 +38,19 @@ export function createFileChangeReview(
     url: '',
     review: {
       selected,
+      openFile: openPreview
+        ? (entry) => {
+            const snapshot = entry.report?.after ?? entry.report?.before;
+            if (snapshot?.text === undefined) return;
+            openPreview({
+              key: `chatkit.preview.review-file:${conversationId}:${entry.key}:${snapshot.sha256}`,
+              kind: 'file',
+              title: entry.path.split('/').pop() || title,
+              url: '',
+              snapshot: { path: entry.path, text: snapshot.text },
+            });
+          }
+        : undefined,
       load: async (scope, signal) => {
         const targets: {
           workspacePath: string;

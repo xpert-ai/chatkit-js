@@ -686,6 +686,9 @@ export type ChatKitOptions = {
    */
   pet?: boolean | ChatKitPetOptions;
 
+  /** Realtime voice controls in the assistant's appearance panel. */
+  realtimeVoice?: import('./realtime-voice').RealtimeVoiceOptions;
+
   /**
    * The ID of the thread to show when ChatKit is mounted or opened for the first time.
    * Passing `null` will show the new thread view.

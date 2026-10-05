@@ -1,57 +1,56 @@
 import * as React from 'react';
+import { FileDiff } from '@pierre/diffs/react';
+import { createReviewDiff } from './review-diff-model';
+import { importSelectors } from './review-imports';
 import type { FileChangeReport } from '@xpert-ai/chatkit-types';
+import { useTheme } from '../../providers/Theme';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import { diffRows, type DiffLine } from './file-change-diff';
+import type { ReviewSettings } from './review-presentation';
 
 const CodeEditor = React.lazy(() => import('../code-editor/CodeEditor'));
+
 export function FileChangeDiff({
   report,
   sideBySide,
-  wrap,
-  whitespace,
+  settings,
 }: {
   report: FileChangeReport;
   sideBySide: boolean;
-  wrap: boolean;
-  whitespace: boolean;
+  settings: ReviewSettings;
 }) {
   const { t } = useChatkitTranslation();
-  const rows = React.useMemo(
-    () => diffRows(report.before?.text ?? '', report.after?.text ?? ''),
-    [report],
+  const { isDarkMode } = useTheme();
+  const diff = React.useMemo(
+    () => createReviewDiff(report, settings.hideWhitespace),
+    [report, settings.hideWhitespace],
   );
-  const text = (value: string) =>
-    whitespace ? value.replace(/ /g, '·').replace(/\t/g, '→   ') : value;
-  const cell = (
-    line: DiffLine | undefined,
-    kind: 'equal' | 'added' | 'removed',
-    key: string,
-  ) => (
-    <div
-      key={key}
-      data-diff-kind={line ? kind : 'empty'}
-      className={`flex min-w-0 ${kind === 'added' && line ? 'bg-green-500/10' : kind === 'removed' && line ? 'bg-red-500/10' : ''}`}
-    >
-      <span
-        aria-hidden="true"
-        className="w-12 shrink-0 select-none border-r px-2 text-right text-muted-foreground"
-      >
-        {line?.number}
-      </span>
-      <span aria-hidden="true" className="w-5 shrink-0 select-none text-center">
-        {line ? (kind === 'added' ? '+' : kind === 'removed' ? '−' : ' ') : ''}
-      </span>
-      <code
-        className={`min-w-0 flex-1 pr-3 ${wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre'}`}
-      >
-        {line ? text(line.text) || ' ' : ' '}
-      </code>
-    </div>
-  );
-  if (!rows)
+  const options = React.useMemo(() => {
+    const split = sideBySide && !!report.before && !!report.after;
+    const selectors =
+      settings.hideImports && /\.[cm]?[jt]sx?$/i.test(report.workspacePath)
+        ? [
+            ...importSelectors(report.before?.text ?? '', 'deletions', split),
+            ...importSelectors(report.after?.text ?? '', 'additions', split),
+          ]
+        : [];
+    return {
+      theme: { light: 'pierre-light' as const, dark: 'pierre-dark' as const },
+      themeType: isDarkMode ? ('dark' as const) : ('light' as const),
+      diffStyle: sideBySide ? ('split' as const) : ('unified' as const),
+      overflow: settings.wrap ? ('wrap' as const) : ('scroll' as const),
+      diffIndicators: 'bars' as const,
+      disableFileHeader: true,
+      expandUnchanged: settings.fullFile,
+      lineDiffType: settings.wordDiff ? ('word' as const) : ('none' as const),
+      hunkSeparators: 'line-info' as const,
+      enableLineSelection: true,
+      unsafeCSS: `:host { --diffs-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; --diffs-font-size: 14px; --diffs-line-height: 24px; } [data-diffs] { border-radius: 0; }${selectors.length ? `${selectors.join(',')} { font-size: 0; } ${selectors.map((value) => value + ' *').join(',')} { font-size: 0 !important; } ${selectors.map((value) => value + '::after').join(',')} { content: '…'; font-size: 13px; opacity: .5; }` : ''}`,
+    };
+  }, [isDarkMode, sideBySide, settings, report]);
+  if (!diff)
     return (
       <div>
-        <p className="px-3 py-2 text-xs text-muted-foreground">
+        <p className="p-3 text-sm text-muted-foreground">
           {t('workbench.review.largeDiff')}
         </p>
         <div className="grid h-96 grid-cols-2 divide-x">
@@ -70,44 +69,19 @@ export function FileChangeDiff({
         </div>
       </div>
     );
+  if (!diff.hunks.length && !settings.fullFile)
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        {t('workbench.review.unchanged')}
+      </p>
+    );
   return (
     <div
-      className="max-h-[36rem] overflow-auto font-mono text-xs leading-6"
-      tabIndex={0}
+      className="review-diff"
       aria-label={t('workbench.review.diff')}
+      data-layout={options.diffStyle}
     >
-      <div className={wrap ? 'min-w-0' : 'min-w-max'}>
-        {sideBySide && (
-          <div className="grid grid-cols-2 divide-x border-b bg-muted px-2 text-muted-foreground">
-            <span>{t('workbench.review.before')}</span>
-            <span>{t('workbench.review.after')}</span>
-          </div>
-        )}
-        {rows.map((row, index) =>
-          sideBySide ? (
-            <div key={index} className="grid grid-cols-2 divide-x">
-              {cell(row.before, row.equal ? 'equal' : 'removed', 'before')}
-              {cell(row.after, row.equal ? 'equal' : 'added', 'after')}
-            </div>
-          ) : (
-            <React.Fragment key={index}>
-              {row.equal ? (
-                cell(row.after, 'equal', 'equal')
-              ) : (
-                <>
-                  {row.before && cell(row.before, 'removed', 'before')}
-                  {row.after && cell(row.after, 'added', 'after')}
-                </>
-              )}
-            </React.Fragment>
-          ),
-        )}
-        {!rows.length && (
-          <p className="p-3 text-muted-foreground">
-            {t('workbench.review.unchanged')}
-          </p>
-        )}
-      </div>
+      <FileDiff fileDiff={diff} options={options} />
     </div>
   );
 }

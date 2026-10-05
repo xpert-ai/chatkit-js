@@ -1,4 +1,13 @@
-import { act, renderHook, cleanup } from '@testing-library/react';
+import {
+  act,
+  renderHook,
+  cleanup,
+  render,
+  fireEvent,
+  screen,
+} from '@testing-library/react';
+import type { RealtimeVoiceCall } from '@xpert-ai/chatkit-types';
+import { VoiceCallPanel } from '../components/chat/voice/VoiceCallPanel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const sendEvent = vi.hoisted(() => vi.fn());
 vi.mock('./useParentMessenger', () => ({
@@ -54,6 +63,101 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('frame header hit regions', () => {
+  it.each(['listening', 'ended', 'error'] as const)(
+    'excludes a %s call panel outside the header scope and restores dragging after dismissal',
+    async (state) => {
+      const call: RealtimeVoiceCall = {
+        id: 'call-1',
+        assistantId: 'assistant-1',
+        threadId: null,
+        name: 'Bosi',
+        state,
+        muted: false,
+      };
+      const command = vi.fn();
+      const view = render(
+        <VoiceCallPanel call={call} avatar={null} command={command} />,
+      );
+      const panel = screen.getByRole('complementary', { name: 'Voice call' });
+      box(panel, 300, 8, 190, 220);
+      renderHook(() => useWindowDragRegions(true));
+      await act(() => vi.advanceTimersByTimeAsync(32));
+      const draggable = (x: number, y: number) =>
+        sendEvent.mock.calls
+          .at(-1)![1]
+          .regions.some(
+            (rect: { x: number; y: number; width: number; height: number }) =>
+              x >= rect.x &&
+              x < rect.x + rect.width &&
+              y >= rect.y &&
+              y < rect.y + rect.height,
+          );
+      expect(draggable(100, 24)).toBe(true);
+      expect(draggable(320, 24)).toBe(false);
+      expect(draggable(470, 24)).toBe(false);
+      expect(draggable(320, 100)).toBe(false);
+      if (state === 'listening') {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Mute microphone' }),
+        );
+        expect(command).toHaveBeenLastCalledWith({
+          type: 'mute',
+          callId: 'call-1',
+          muted: true,
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Hang up' }));
+        expect(command).toHaveBeenLastCalledWith({
+          type: 'end',
+          callId: 'call-1',
+        });
+      } else {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Close call panel' }),
+        );
+        expect(command).toHaveBeenLastCalledWith({
+          type: 'dismiss',
+          callId: 'call-1',
+        });
+      }
+      view.unmount();
+      await act(() => vi.advanceTimersByTimeAsync(32));
+      expect(draggable(320, 24)).toBe(true);
+    },
+  );
+
+  it('keeps a character sharing the header row clickable without extending the drag surface into the transcript', async () => {
+    document.body.innerHTML = `
+      <div data-window-drag-scope>
+        <header data-slot="chatkit-chat-header-container"><button>Settings</button></header>
+        <div data-slot="assistant-presence"><button>Assistant details</button></div>
+      </div>`;
+    box(document.querySelector('header')!, 0, 0, 500, 56);
+    box(document.querySelector('header button')!, 450, 8, 32, 32);
+    box(document.querySelector('[data-window-drag-scope]')!, 0, 0, 500, 144);
+    const character = document.querySelector(
+      '[data-slot="assistant-presence"] button',
+    )!;
+    box(character, 180, 8, 140, 116);
+
+    renderHook(() => useWindowDragRegions(true));
+    await act(() => vi.advanceTimersByTimeAsync(32));
+    const regions = sendEvent.mock.calls.at(-1)![1].regions;
+    const draggable = (x: number, y: number) =>
+      regions.some(
+        (rect: { x: number; y: number; width: number; height: number }) =>
+          x >= rect.x &&
+          x < rect.x + rect.width &&
+          y >= rect.y &&
+          y < rect.y + rect.height,
+      );
+    expect(draggable(100, 24)).toBe(true);
+    expect(draggable(400, 24)).toBe(true);
+    expect(draggable(250, 24)).toBe(false);
+    expect(draggable(466, 24)).toBe(false);
+    expect(draggable(100, 80)).toBe(false);
+    expect(draggable(250, 100)).toBe(false);
+  });
+
   it('includes both gutters around a centered chat column without covering controls or another pane', async () => {
     document.body.innerHTML = `
       <header data-slot="chatkit-chat-header-container">

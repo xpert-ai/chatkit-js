@@ -634,6 +634,7 @@ export function WorkbenchShell({
             stream.conversationId,
             resource,
             t('fileActivity.review'),
+            openPreview,
           ),
         );
         return true;

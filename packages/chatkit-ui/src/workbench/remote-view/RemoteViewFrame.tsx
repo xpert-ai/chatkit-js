@@ -822,8 +822,11 @@ function createRemoteTheme(
       colorChart3: readThemeColor(style, '--chart-3', primary),
       colorChart4: readThemeColor(style, '--chart-4', destructive),
       colorChart5: readThemeColor(style, '--chart-5', accentForeground),
-      radiusSm: `calc(${radius} - 4px)`,
-      radiusMd: `calc(${radius} - 2px)`,
+      // rem values inside the isolated view must use the host document root size.
+      densityRootFontSize:
+        getComputedStyle(document.documentElement).fontSize || '16px',
+      radiusSm: `max(0px, calc(${radius} - 4px))`,
+      radiusMd: `max(0px, calc(${radius} - 2px))`,
       radiusLg: radius,
       fontSizeXs: readThemeValue(
         style,

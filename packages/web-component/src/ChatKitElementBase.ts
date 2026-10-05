@@ -131,6 +131,14 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     target: () => this.#frame?.contentWindow ?? null,
     targetOrigin: window.location.origin,
     handlers: {
+      onRealtimeVoiceCommand: (
+        input: import('@xpert-ai/chatkit-types').RealtimeVoiceCommand,
+      ) => {
+        const voice = this.#opts?.realtimeVoice;
+        if (!voice || (input.type === 'start' && !voice.enabled))
+          throw new IntegrationError('Realtime voice is unavailable.');
+        return voice.onCommand(input);
+      },
       onFileInputClick: ({
         inputAttributes,
       }: {

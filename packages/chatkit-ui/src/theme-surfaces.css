@@ -1,14 +1,19 @@
 /* Surface sizes share one density scale: compact .75, normal 1, spacious 1.25.
    Explicit tokens on portal roots prevent dependence on DOM theme inheritance. */
 .chatkit-presence {
-  margin-top: calc(-0.25rem * var(--chat-density-scale, 1));
+  padding-top: calc(0.5rem * var(--chat-density-scale, 1));
   padding-bottom: calc(1.25rem * var(--chat-density-scale, 1));
 }
-.chatkit-presence-bubble {
-  padding: calc(0.5rem * var(--chat-density-scale, 1))
-    calc(1rem * var(--chat-density-scale, 1));
+.chatkit-presence-trigger {
+  /* The avatar extends into the name card without offsetting the trigger. */
+  grid-template-rows: calc(5rem - 0.75rem * var(--chat-density-scale, 1)) auto;
 }
-.chatkit-presence-dialog {
+.chatkit-presence-bubble {
+  padding: calc(0.75rem * var(--chat-density-scale, 1))
+    calc(1rem * var(--chat-density-scale, 1))
+    calc(0.5rem * var(--chat-density-scale, 1));
+}
+.chatkit-presence-stack {
   --presence-inset: calc(0.75rem * var(--chat-density-scale, 1));
   top: var(--presence-inset);
   right: var(--presence-inset);

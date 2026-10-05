@@ -19,6 +19,8 @@ export type WorkbenchPreview = {
   file?: WorkbenchOpenFile;
   /** In-memory loader for an immutable HTML delivery; never a mutable workspace path. */
   review?: FileChangeReviewOptions;
+  /** Saved review content; never read from the mutable workspace. */
+  snapshot?: { path: string; text: string };
   html?: {
     load: (signal: AbortSignal) => Promise<{ blob: Blob; name: string }>;
     identity?: { artifactId: string; artifactVersionId: string };

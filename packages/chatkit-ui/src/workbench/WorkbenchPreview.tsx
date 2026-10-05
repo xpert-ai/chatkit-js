@@ -1,11 +1,17 @@
 import * as React from 'react';
-import { FileChangeReview } from './file-review/FileChangeReview';
+import { ReviewFileContent } from './file-review/ReviewFileContent';
 import { HtmlArtifactPreview } from './html-preview/HtmlArtifactPreview';
 import { File, Globe, FileDiff } from 'lucide-react';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { WorkbenchTab } from './WorkbenchTab';
 import type { WorkbenchPreview } from './client-command-payload';
 import { UrlPreviewContent } from './url-preview/UrlPreviewContent';
+
+const FileChangeReview = React.lazy(() =>
+  import('./file-review/FileChangeReview').then((module) => ({
+    default: module.FileChangeReview,
+  })),
+);
 
 export function PreviewTabs({
   previews,
@@ -47,8 +53,17 @@ export function WorkbenchPreviewContent(props: {
   toolbar?: React.ReactNode;
   reloadKey?: number;
 }) {
+  const { t } = useChatkitTranslation();
+  if (props.preview.snapshot)
+    return <ReviewFileContent {...props.preview.snapshot} />;
   if (props.preview.kind === 'review' && props.preview.review)
-    return <FileChangeReview options={props.preview.review} />;
+    return (
+      <React.Suspense
+        fallback={<p className="p-4 text-sm">{t('workbench.loading')}</p>}
+      >
+        <FileChangeReview options={props.preview.review} />
+      </React.Suspense>
+    );
   if (props.preview.kind === 'html' && props.preview.html)
     return (
       <HtmlArtifactPreview
