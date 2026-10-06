@@ -55,7 +55,7 @@
     "@xpert-ai/artifact-tool": "0.1.0",
     "@xpert-ai/chatkit-types": "workspace:~",
     "@xpert-ai/chatkit-web-shared": "workspace:~",
-    "@xpert-ai/xpert-sdk": "^0.6.0",
+    "@xpert-ai/xpert-sdk": "^0.7.0",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
     "class-variance-authority": "^0.7.1",

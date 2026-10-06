@@ -1,3 +1,4 @@
+import { useThreadActivitySubscription } from './activity/useThreadActivitySubscription';
 import {
   useEffect,
   useLayoutEffect,
@@ -245,6 +246,26 @@ export const StreamSession = ({
     projectId,
     initialThread,
     apiUrl,
+  });
+
+  useThreadActivitySubscription({
+    ...messages,
+    ...runState,
+    ...transport,
+    client: credentials.client,
+    threadId: scope.threadId ?? null,
+    conversationId: scope.conversationId,
+    enabled:
+      runtimeActivitiesEnabled &&
+      !bindingChanged &&
+      host.historyLoad.status !== 'loading' &&
+      host.historyLoad.status !== 'error',
+    scopeKey: JSON.stringify([
+      assistantId,
+      projectId,
+      bindingKey,
+      credentials.runtimeOrganizationId,
+    ]),
   });
 
   const submission = useStreamSubmission({

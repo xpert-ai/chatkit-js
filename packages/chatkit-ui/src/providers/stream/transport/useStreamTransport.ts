@@ -1,5 +1,5 @@
 import type { Config } from '@xpert-ai/xpert-sdk';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { resolveFollowUpConsumedIds } from '../../../lib/follow-up-consumed';
 import { getPendingSteerFollowUpIds } from '../../../lib/follow-ups';
 import { normalizeRequestContextAndConfig } from '../../../lib/request-options';
@@ -47,7 +47,10 @@ type StreamTransportOptions = Pick<
 > &
   Pick<
     ReturnType<typeof useStreamScope>,
-    'connectorBindingIdsRef' | 'updateConversationId' | 'conversationIdRef'
+    | 'connectorBindingIdsRef'
+    | 'updateConversationId'
+    | 'conversationIdRef'
+    | 'threadId'
   > &
   Pick<ReturnType<typeof useStreamCredentials>, 'client'> &
   Pick<
@@ -88,6 +91,7 @@ type StreamTransportOptions = Pick<
 
 export function useStreamTransport({
   abortRef,
+  threadId,
   setIsLoading,
   setInterruptedThreadId,
   isLoadingRef,
@@ -121,6 +125,15 @@ export function useStreamTransport({
   markPendingFollowUpsAsQueued,
   projectId,
 }: StreamTransportOptions) {
+  const replayState = useRef(
+    new Map<
+      string,
+      { cursor?: string; state: ReturnType<typeof createLangGraphEventState> }
+    >(),
+  );
+  useEffect(() => {
+    replayState.current.clear();
+  }, [client, assistantId, projectId, threadId]);
   const runStream = useCallback(
     async (
       nextThreadId: string,
@@ -129,13 +142,27 @@ export function useStreamTransport({
       runId?: string,
       preservedMessages?: ChatKitAIMessage[],
     ) => {
+      // Never let discovery steal a locally submitted or already joined output consumer.
+      if (options?.joinExistingThread && runId && isLoadingRef.current) return;
+      const replayKey = `${nextThreadId}:${runId ?? ''}`;
+      const previous =
+        options?.joinExistingThread && lastEventIdRef.current
+          ? replayState.current.get(replayKey)
+          : undefined;
+      const langGraphEventState =
+        previous?.state ?? createLangGraphEventState();
+      const cursor = previous?.cursor;
       const abortController = new AbortController();
       abortRef.current?.abort();
       abortRef.current = abortController;
+      if (options?.joinExistingThread && runId) rememberActiveRunId(runId);
       setIsLoading(true);
       setInterruptedThreadId(null);
       isLoadingRef.current = true;
       let transportError: unknown = null;
+      let streamCompleted = false;
+      let streamingRunId = runId;
+      let receivedOutput = false;
       let runAccepted = false;
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
@@ -159,6 +186,7 @@ export function useStreamTransport({
           options?.joinExistingThread && runId
             ? client.runs.joinStream(nextThreadId, runId, {
                 signal: abortController.signal,
+                lastEventId: cursor,
               })
             : client.runs.stream(nextThreadId, assistantId, {
                 input: scopedInput ?? null,
@@ -177,7 +205,6 @@ export function useStreamTransport({
               });
 
         const interrupts: unknown[] = [];
-        const langGraphEventState = createLangGraphEventState();
         const eventContext: LangGraphEventContext = {
           threadId: nextThreadId,
           input: scopedInput,
@@ -188,8 +215,38 @@ export function useStreamTransport({
             abortRef.current !== abortController
           )
             break;
+          if (!receivedOutput) {
+            receivedOutput = true;
+            setError(null);
+          }
           if (chunk?.id) {
             lastEventIdRef.current = String(chunk.id);
+            if (streamingRunId)
+              replayState.current.set(`${nextThreadId}:${streamingRunId}`, {
+                cursor: String(chunk.id),
+                state: langGraphEventState,
+              });
+          }
+          if (chunk.event === 'complete' || chunk.data?.type === 'complete')
+            streamCompleted = true;
+          if (chunk.data?.type === 'stream_start') {
+            // Preserve the loaded snapshot until a complete replay is available.
+            if (options?.joinExistingThread && runId && !cursor) {
+              setValues((value) => ({
+                ...value,
+                messages: value.messages.filter(
+                  (message) =>
+                    message.executionId !== runId ||
+                    !['ai', 'assistant'].includes(message.type),
+                ),
+              }));
+            }
+            continue;
+          }
+          if (chunk.data?.type === 'stream_resync') {
+            streamCompleted = true;
+            replayState.current.delete(replayKey);
+            break;
           }
           applyStreamEvent(
             chunk as StreamChunk,
@@ -201,6 +258,12 @@ export function useStreamTransport({
             eventContext,
             (executionId) => {
               if (executionId) {
+                streamingRunId = executionId;
+                if (chunk.id)
+                  replayState.current.set(`${nextThreadId}:${executionId}`, {
+                    cursor: String(chunk.id),
+                    state: langGraphEventState,
+                  });
                 rememberActiveRunId(executionId);
               }
             },
@@ -300,11 +363,16 @@ export function useStreamTransport({
         }
       } finally {
         const activeConversationId = conversationIdRef.current?.trim();
-        if (activeConversationId && abortRef.current === abortController) {
+        if (
+          activeConversationId &&
+          abortRef.current === abortController &&
+          (!options?.joinExistingThread || streamCompleted)
+        ) {
           const reconciled = await reconcileLatestAssistantMessage(
             activeConversationId,
             nextThreadId,
             abortController.signal,
+            runId,
           );
           if (reconciled && transportError && !abortController.signal.aborted) {
             setError(null);
