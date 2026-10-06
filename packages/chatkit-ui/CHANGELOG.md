@@ -1,5 +1,21 @@
 # @xpert-ai/chatkit-ui
 
+## 0.11.1
+
+### Patch Changes
+
+- 41eb96a: Keep observing the selected conversation after an answer ends. Automatically
+  join background runs, reconcile quickly completed answers, and update task
+  resource cards without refreshing. Resume each run with its own cursor and
+  preserve pause and conversation-switch boundaries.
+  Refresh task cards independently while an asynchronous answer is still streaming.
+
+  Upgrade to the published `@xpert-ai/xpert-sdk` 0.7.0 release for the thread activity
+  API and remove the temporary SDK 0.6.0 patch.
+  - @xpert-ai/chatkit-types@0.11.1
+  - @xpert-ai/chatkit-web-shared@0.11.1
+  - @xpert-ai/a2ui-react@0.11.1
+
 ## 0.11.0
 
 ### Minor Changes
