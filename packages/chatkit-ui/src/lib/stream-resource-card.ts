@@ -1,5 +1,6 @@
 import {
   upsertResourceCardContent,
+  parseResourceCardContent,
   type TMessageContentResourceCard,
 } from '@xpert-ai/chatkit-types';
 
@@ -11,7 +12,8 @@ export function applyResourceCard<T extends CardMessage>(
   card: TMessageContentResourceCard,
 ): T[] {
   if (!card.messageId) return messages;
-  return messages.map((message) => {
+  let changed = false;
+  const result = messages.map((message) => {
     if (
       message.id !== card.messageId ||
       !['ai', 'assistant'].includes(message.type)
@@ -22,6 +24,13 @@ export function applyResourceCard<T extends CardMessage>(
       : message.content
         ? [{ type: 'text', text: message.content }]
         : [];
+    const existing = parts.find(
+      (part) => parseResourceCardContent(part)?.id === card.id,
+    );
+    if (existing && JSON.stringify(existing) === JSON.stringify(card))
+      return message;
+    changed = true;
     return { ...message, content: upsertResourceCardContent(parts, card) };
   });
+  return changed ? result : messages;
 }

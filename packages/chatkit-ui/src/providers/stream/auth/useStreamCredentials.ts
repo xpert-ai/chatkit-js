@@ -155,7 +155,8 @@ export function useStreamCredentials({
             organizationId:
               runtimeOrganizationIdRef.current?.trim() || undefined,
           }),
-          () => lastEventIdRef.current,
+          // Run cursors belong to each transport, never to unrelated thread subscriptions.
+          () => null,
         ),
       }),
     [apiUrl, fetchWithClientSecretRefresh, locale],

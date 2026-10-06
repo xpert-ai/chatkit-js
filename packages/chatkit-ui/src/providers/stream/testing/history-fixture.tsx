@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   queryThread: null as string | null,
   isParentAvailable: false,
   getThread: vi.fn(),
+  watchActivity: vi.fn(),
   getRun: vi.fn(),
   releaseDisplayPause: vi.fn(),
   getConversation: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
   class Client {
     threads = {
       get: mocks.getThread,
+      watchActivity: mocks.watchActivity,
       releaseDisplayPause: mocks.releaseDisplayPause,
     };
     conversations = {
@@ -160,6 +162,7 @@ export function setupHistoryTests() {
     mocks.getThread.mockImplementation(async (id: string) => ({
       metadata: { id: `conversation-${id}` },
     }));
+    mocks.watchActivity.mockReset().mockImplementation(async function* () {});
     mocks.getConversation.mockImplementation(async (id: string) => ({
       id,
       status: 'idle',

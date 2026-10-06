@@ -378,6 +378,7 @@ export function useStreamHistoryMessages({
       recordId: string,
       requestedThreadId: string,
       signal: AbortSignal,
+      executionId?: string,
     ) => {
       let consecutiveFailures = 0;
       for (
@@ -389,9 +390,13 @@ export function useStreamHistoryMessages({
           const [conversation, response, thread] = await Promise.all([
             client.conversations.get(recordId),
             client.conversations.searchMessages(recordId, {
-              where: { role: 'ai', threadId: requestedThreadId },
+              where: {
+                role: 'ai',
+                threadId: requestedThreadId,
+                ...(executionId ? { executionId } : {}),
+              },
               order: { createdAt: 'DESC' },
-              limit: 1,
+              limit: executionId ? 100 : 1,
               offset: 0,
             }),
             client.threads.get(requestedThreadId),
@@ -445,7 +450,7 @@ export function useStreamHistoryMessages({
               getLatestExecutionIdFromMessages(page.messages),
             );
           }
-          if (status !== 'busy' && status !== 'running') {
+          if (executionId || (status !== 'busy' && status !== 'running')) {
             if (status === 'error') {
               if (
                 conversation.threadId === requestedThreadId &&
