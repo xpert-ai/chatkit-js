@@ -1,11 +1,14 @@
 import { useThreadActivitySubscription } from './activity/useThreadActivitySubscription';
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from 'react';
+import type { AgentRunInfo } from '../../lib/agent-runs';
+import { reconcileAgentRun } from './messages/reconcile-agent-run';
 import { createMissingApiConfigurationError } from '../../lib/api-config';
 import { createResumedRootExecutionHydrator } from '../../lib/resumed-root-executions';
 import {
@@ -73,6 +76,17 @@ export const StreamSession = ({
   });
 
   const messages = useStreamMessages();
+  const reconcileExecution = useCallback(
+    (threadId: string, run: AgentRunInfo) => {
+      if (scope.activeThreadIdRef.current !== threadId) return;
+      messages.setValues((previous) =>
+        scope.activeThreadIdRef.current === threadId
+          ? reconcileAgentRun(previous, run)
+          : previous,
+      );
+    },
+    [scope.activeThreadIdRef, messages.setValues],
+  );
   const runState = useStreamRunState();
   const followUpState = useStreamFollowUpState({ ...messages });
   const userInput = useStreamUserInput();
@@ -354,6 +368,7 @@ export const StreamSession = ({
     loadThread: threadLoading.loadThread,
     loadConversationMessages: history.loadConversationMessages,
     loadMoreConversationMessages: history.loadMoreConversationMessages,
+    reconcileAgentRun: reconcileExecution,
     submit: submission.submit,
     stop: controls.stop,
     activeRunId: runState.activeRunId,

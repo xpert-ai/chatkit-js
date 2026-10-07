@@ -166,6 +166,8 @@ export type StreamContextType = {
     threadId?: string,
   ) => Promise<ChatKitAIMessage[]>;
   loadMoreConversationMessages: () => Promise<ChatKitAIMessage[]>;
+  /** Reconcile an already-known execution without interrupting the parent stream. */
+  reconcileAgentRun?: (threadId: string, run: AgentRunInfo) => void;
   submit: (
     values?: StreamRunInput | null,
     options?: StreamSubmitOptions,

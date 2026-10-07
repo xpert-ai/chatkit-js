@@ -87,6 +87,11 @@
       "clientCommandUnavailable": "未配置客户端命令 {{commandKey}} 的处理器。"
     },
     "externalAssistants": {
+      "cancel": "取消执行",
+      "cancelRun": "取消执行：{{name}}",
+      "cancelling": "正在取消…",
+      "cancelRequested": "已请求取消",
+      "cancelFailed": "取消执行失败，请重试。",
       "title": "外部助手",
       "openRun": "查看执行：{{name}}",
       "back": "返回执行列表",
@@ -900,7 +905,13 @@
         "replied": "已回复",
         "pending": "等待中",
         "interrupted": "已中断",
-        "timeout": "已超时"
+        "timeout": "已超时",
+        "business_accepted": "已验收",
+        "business_already_completed": "已完成，无需重复",
+        "business_not_claimed": "未领取",
+        "business_blocked": "受阻",
+        "business_failed": "任务失败",
+        "business_incomplete": "未验收"
       },
       "counts": {
         "messages": {

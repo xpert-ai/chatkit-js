@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
       },
       workbench: { listFiles: vi.fn(), downloadArtifact: vi.fn() },
       conversations: { listTaskSummaryItems: vi.fn() },
+      runs: { get: vi.fn() },
     },
     apiKey: 'cs-x-secret',
     apiUrl: '/api/ai',
@@ -258,6 +259,13 @@ export function setupWorkbenchTests() {
     mocks.remoteUnmounts = 0;
     mocks.stream.reset.mockReset();
     mocks.stream.client.workbench.listFiles.mockReset().mockResolvedValue([]);
+    mocks.stream.client.runs.get
+      .mockReset()
+      .mockImplementation(async (threadId: string, runId: string) => ({
+        run_id: runId,
+        thread_id: threadId,
+        status: 'running',
+      }));
     mocks.stream.isLoading = false;
     mocks.stream.apiKey = 'cs-x-secret';
     mocks.stream.apiUrl = '/api/ai';

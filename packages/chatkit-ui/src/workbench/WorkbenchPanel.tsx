@@ -549,6 +549,8 @@ export function WorkbenchPanel({
           >
             <ExternalAssistantView
               client={stream.client}
+              threadId={stream.threadId}
+              onRunUpdate={stream.reconcileAgentRun}
               runs={externalRuns}
               selectedId={selectedExternalId}
               onSelect={onSelectExternal}

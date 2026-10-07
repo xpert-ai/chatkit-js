@@ -10,6 +10,7 @@ import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 import { formatStepDuration, getAgentRunStatusConfig } from './agent-run-group';
 import { ChatkitAvatar } from '../../ui/chatkit-avatar';
+import { ExternalAssistantCancelButton } from './external-assistant-cancel-button';
 
 export function ExternalAssistantAvatar({ info }: { info: AgentRunInfo }) {
   const { t } = useChatkitTranslation();
@@ -33,16 +34,25 @@ export function AgentRunStatus({ info }: { info: AgentRunInfo }) {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [running]);
-  const config = getAgentRunStatusConfig(info.status);
+  const config = getAgentRunStatusConfig(
+    info.status,
+    false,
+    info.businessOutcome,
+  );
   const StatusIcon = config.icon;
   const duration = getAgentRunDuration(info, now);
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
       role="status"
+      title={info.businessOutcome?.message}
     >
       <StatusIcon
-        className={cn('h-3.5 w-3.5', config.spin && 'animate-spin')}
+        className={cn(
+          'h-3.5 w-3.5',
+          config.iconClass,
+          config.spin && 'animate-spin',
+        )}
         aria-hidden="true"
       />
       {t(`message.agentRun.status.${config.labelKey}`, {
@@ -61,25 +71,41 @@ export function AgentRunStatus({ info }: { info: AgentRunInfo }) {
 export function ExternalAssistantRunRow({
   info,
   onOpen,
+  onCancel,
+  cancelPending,
+  cancelRequested,
 }: {
   info: AgentRunInfo;
   onOpen: (id: string) => void;
+  onCancel?: () => void;
+  cancelPending?: boolean;
+  cancelRequested?: boolean;
 }) {
   const { t } = useChatkitTranslation();
   const title = getAgentRunTitle(info, t('message.agentRun.defaultTitle'));
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(info.id)}
-      aria-label={t('workbench.externalAssistants.openRun', { name: title })}
-      className="group flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ExternalAssistantAvatar info={info} />
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">
-        {title}
-      </span>
-      <AgentRunStatus info={info} />
-      <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-    </button>
+    <div className="flex min-w-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onOpen(info.id)}
+        aria-label={t('workbench.externalAssistants.openRun', { name: title })}
+        className="group flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ExternalAssistantAvatar info={info} />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {title}
+        </span>
+        <AgentRunStatus info={info} />
+        <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+      </button>
+      {onCancel && isRunningRunStatus(info.status) && (
+        <ExternalAssistantCancelButton
+          name={title ?? ''}
+          onCancel={onCancel}
+          pending={cancelPending}
+          requested={cancelRequested}
+        />
+      )}
+    </div>
   );
 }

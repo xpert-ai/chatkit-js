@@ -1,4 +1,8 @@
 import * as React from 'react';
+import { ExternalAssistantCancelButton } from '../../components/thread/messages/external-assistant-cancel-button';
+import { useCancelExternalAssistant } from './useCancelExternalAssistant';
+import { useExternalAssistantRunSync } from './useExternalAssistantRunSync';
+import type { AgentRunInfo } from '../../lib/agent-runs';
 import type { Client } from '@xpert-ai/xpert-sdk';
 import { useAssistantInfo } from '../../hooks/useAssistantInfo';
 import { readAssistantMessagePresentation } from '../../lib/assistant-message-presentation';
@@ -23,7 +27,7 @@ import {
 } from './external-assistant-runs';
 
 export function ExternalAssistantView({
-  runs,
+  runs: sourceRuns,
   selectedId,
   onSelect,
   messages,
@@ -32,6 +36,8 @@ export function ExternalAssistantView({
   mcpApps,
   messagePresentation,
   client,
+  threadId,
+  onRunUpdate,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -47,11 +53,21 @@ export function ExternalAssistantView({
   mcpApps?: ChatKitOptions['mcpApps'];
   messagePresentation?: ChatKitOptions['messagePresentation'];
   client?: Client | null;
+  threadId?: string | null;
+  onRunUpdate?: (threadId: string, run: AgentRunInfo) => void;
   hasMore?: boolean;
   loadingMore?: boolean;
   onLoadMore: () => void;
 }) {
   const { t } = useChatkitTranslation();
+  const { runs, refresh } = useExternalAssistantRunSync({
+    client,
+    threadId,
+    runs: sourceRuns,
+    active,
+    onRunUpdate,
+  });
+  const cancellation = useCancelExternalAssistant(client, threadId, refresh);
   const run = runs.find((item) => item.id === selectedId);
   const assistant = useAssistantInfo(client, run?.info.xpertId);
   const presentation = resolveMessagePresentation(
@@ -136,7 +152,28 @@ export function ExternalAssistantView({
             className="mx-auto max-w-3xl space-y-4"
             data-external-assistant-execution={run.id}
           >
-            <AgentRunStatus info={run.info} />
+            <div className="flex items-center justify-between gap-2">
+              <AgentRunStatus info={run.info} />
+              {cancellation.available &&
+                isRunningRunStatus(run.info.status) && (
+                  <ExternalAssistantCancelButton
+                    name={title ?? ''}
+                    onCancel={() => {
+                      void cancellation.cancel(run.info);
+                    }}
+                    pending={cancellation.request(run.id)?.pending}
+                    requested={Boolean(
+                      cancellation.request(run.id) &&
+                      !cancellation.request(run.id)?.error,
+                    )}
+                  />
+                )}
+            </div>
+            {cancellation.request(run.id)?.error && (
+              <p role="alert" className="text-sm text-destructive">
+                {cancellation.request(run.id)?.error}
+              </p>
+            )}
             {run.info.error != null && (
               <pre
                 role="alert"
@@ -183,11 +220,29 @@ export function ExternalAssistantView({
         ) : (
           <div className="mx-auto max-w-3xl space-y-2">
             {runs.map((item) => (
-              <ExternalAssistantRunRow
-                key={item.id}
-                info={item.info}
-                onOpen={onSelect}
-              />
+              <div key={item.id}>
+                <ExternalAssistantRunRow
+                  info={item.info}
+                  onOpen={onSelect}
+                  onCancel={
+                    cancellation.available
+                      ? () => {
+                          void cancellation.cancel(item.info);
+                        }
+                      : undefined
+                  }
+                  cancelPending={cancellation.request(item.id)?.pending}
+                  cancelRequested={Boolean(
+                    cancellation.request(item.id) &&
+                    !cancellation.request(item.id)?.error,
+                  )}
+                />
+                {cancellation.request(item.id)?.error && (
+                  <p role="alert" className="px-2 text-sm text-destructive">
+                    {cancellation.request(item.id)?.error}
+                  </p>
+                )}
+              </div>
             ))}
             {!runs.length && (
               <p className="text-sm text-muted-foreground">

@@ -87,6 +87,11 @@
       "clientCommandUnavailable": "No handler is configured for client command {{commandKey}}."
     },
     "externalAssistants": {
+      "cancel": "Cancel",
+      "cancelRun": "Cancel execution: {{name}}",
+      "cancelling": "Cancelling…",
+      "cancelRequested": "Cancellation requested",
+      "cancelFailed": "Could not cancel the execution. Please try again.",
       "title": "External assistants",
       "openRun": "View execution: {{name}}",
       "back": "Back to executions",
@@ -900,7 +905,13 @@
         "replied": "Replied",
         "pending": "Pending",
         "interrupted": "Interrupted",
-        "timeout": "Timed out"
+        "timeout": "Timed out",
+        "business_accepted": "Accepted",
+        "business_already_completed": "Already completed",
+        "business_not_claimed": "Not claimed",
+        "business_blocked": "Blocked",
+        "business_failed": "Task failed",
+        "business_incomplete": "Not accepted"
       },
       "counts": {
         "messages": {
