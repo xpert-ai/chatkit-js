@@ -150,9 +150,11 @@ export type StreamContextType = {
   isLoading: boolean;
   /** Raw thread interruption, including cancellation; does not imply work is running or will resume. */
   isThreadInterrupted?: boolean;
-  /** Visible output is frozen while the backend finishes and checkpoints its step. */
+  /** @deprecated Output stays live while pausing; always false. */
   isDisplayPaused?: boolean;
+  /** @deprecated Legacy display snapshots are ignored; always null. */
   displayPause?: ThreadDisplayPause | null;
+  /** @deprecated No display freeze remains to release. */
   resumeDisplay: () => Promise<void>;
   isReady: boolean;
   error: unknown;
@@ -164,11 +166,13 @@ export type StreamContextType = {
     threadId?: string,
   ) => Promise<ChatKitAIMessage[]>;
   loadMoreConversationMessages: () => Promise<ChatKitAIMessage[]>;
+  /** Reconcile an already-known execution without interrupting the parent stream. */
+  reconcileAgentRun?: (threadId: string, run: AgentRunInfo) => void;
   submit: (
     values?: StreamRunInput | null,
     options?: StreamSubmitOptions,
   ) => Promise<void>;
-  stop: () => void;
+  stop: (runId?: string) => Promise<void>;
   /** Current stream execution id, or null until the first assistant event. */
   activeRunId: string | null;
   pauseRun: (runId: string) => Promise<void>;

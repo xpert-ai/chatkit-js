@@ -17,6 +17,31 @@ import {
 
 describe('Chat slash commands and shortcuts', () => {
   setupChatTest();
+  it('inserts only a workflow invocation and submits the raw command with user args on manual send', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [],
+      plugins: [],
+      subAgents: [],
+      commands: [{
+        name: 'bid-technical-outline',
+        label: '自主编制技术标目录',
+        kind: 'prompt_workflow',
+        action: { type: 'insert_invocation', template: '/bid-technical-outline ' },
+      }],
+    });
+    renderChat();
+    await waitFor(() => expect(screen.getByTestId('runtime-capabilities-ready')).toHaveTextContent('ready'));
+    setComposerText(screen.getByRole('textbox'), '/bid-tech');
+    const option = await screen.findByRole('button', { name: '自主编制技术标目录' });
+    fireEvent.mouseDown(option);
+    await waitFor(() => expect(screen.getByRole('textbox').textContent?.trim()).toBe('/bid-technical-outline'));
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    setComposerText(screen.getByRole('textbox'), '/bid-technical-outline 只编制目录');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input.input).toBe('/bid-technical-outline 只编制目录');
+  });
+
   it('executes host slash commands with args as submitted prompts', async () => {
     renderChat({
       composer: {

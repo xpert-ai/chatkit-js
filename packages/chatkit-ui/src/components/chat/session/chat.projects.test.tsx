@@ -16,15 +16,19 @@ import {
 
 describe('Chat project scope', () => {
   setupChatTest();
-  it('keeps the current Project visible and locked after the conversation starts', async () => {
+  it('switches from an existing conversation without changing its stored scope or Connectors', async () => {
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.connectorBindingIds = ['binding-1'];
+    const onProjectChange = vi.fn();
+    const onConnectorsChange = vi.fn();
     render(
       <Chat
         clientSecret="secret"
         options={baseChatOptions}
         activeProjectId="project-1"
         projectsEnabled
-        onProjectChange={vi.fn()}
+        onProjectChange={onProjectChange}
+        onConnectorsChange={onConnectorsChange}
       />,
     );
     await act(async () => {
@@ -32,14 +36,43 @@ describe('Chat project scope', () => {
       await Promise.resolve();
     });
 
-    expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
+    expect(screen.getByTestId('project-selector')).toHaveTextContent(
+      'project-1',
+    );
     expect(
       document.querySelector('[data-slot="composer-project-rail"]'),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('project-locked')).toHaveTextContent('project-1');
+    expect(screen.queryByTestId('project-locked')).not.toBeInTheDocument();
     expect(
       document.querySelector('[data-slot="composer-input-shell"]'),
     ).not.toHaveClass('pb-composer-inset');
+    fireEvent.click(screen.getByTestId('project-selector'));
+    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined);
+    expect(mocks.stream.setConnectorBindingIds).not.toHaveBeenCalled();
+    expect(onConnectorsChange).not.toHaveBeenCalled();
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    expect(mocks.stream.threadId).toBe('thread-1');
+  });
+
+  it('respects an explicitly locked host Project even with a navigation callback', async () => {
+    mocks.stream.threadId = 'thread-1';
+    render(
+      <Chat
+        clientSecret="secret"
+        options={{
+          ...baseChatOptions,
+          composer: { projects: { locked: true } },
+        }}
+        activeProjectId="project-1"
+        projectsEnabled
+        onProjectChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('project-selector')).not.toBeInTheDocument();
+    expect(screen.getByTestId('project-locked')).toHaveTextContent('project-1');
+    await act(async () => {
+      await Promise.resolve();
+    });
   });
 
   it('does not show Project selection for an existing no-Project conversation', async () => {
@@ -94,7 +127,9 @@ describe('Chat project scope', () => {
         onProjectChange={onProjectChange}
       />,
     );
-    expect(screen.getByTestId('project-locked')).toHaveTextContent('project-b');
+    expect(screen.getByTestId('project-selector')).toHaveTextContent(
+      'project-b',
+    );
     fireEvent.keyDown(
       screen.getByRole('button', { name: 'chat.moreActions' }),
       { key: 'Enter' },

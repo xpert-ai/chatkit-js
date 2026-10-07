@@ -1,3 +1,4 @@
+import { WorkbenchContext, disabledWorkbenchContext } from '../../../workbench/context';
 import * as React from 'react';
 import type { TMessageComponentMcpAppData } from '@xpert-ai/chatkit-types';
 import {
@@ -121,6 +122,43 @@ describe('McpAppMessage host controls', () => {
     expect(await screen.findByTitle('Example App')).toBe(iframe);
     expect(mocks.getResource).toHaveBeenCalledTimes(1);
     expect(mocks.teardown).not.toHaveBeenCalled();
+  });
+
+  it('refreshes through the declared server tool without remounting, mutation replay or chat submission', async () => {
+    mocks.getResource.mockResolvedValueOnce({ text: '<main>settings</main>', title: { en_US: 'Project settings', zh_Hans: '项目设置' }, refresh: { toolName: 'read_settings', arguments: { refresh: true } } });
+    mocks.rpc.mockResolvedValueOnce({ result: { content: [{ type: 'text', text: '{"revision":5}' }] } });
+    render(<McpAppMessage data={data} messageId="message-1" />);
+    const iframe = asIframe(await screen.findByTitle('Project settings'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: iframe.contentWindow, data: { jsonrpc: '2.0', method: 'ui/initialize', id: 'init', params: {} } })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'message.mcpApp.refresh' })); });
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ id: 'init', result: expect.objectContaining({ hostContext: expect.objectContaining({ toolInfo: expect.objectContaining({ tool: expect.objectContaining({ title: 'Project settings', description: undefined }) }) }) }) }), '*');
+    expect(mocks.rpc).toHaveBeenCalledWith('app-1', expect.objectContaining({ method: 'tools/call', params: { name: 'read_settings', arguments: { refresh: true } } }), expect.any(Object));
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: 'ui/notifications/tool-result', params: { content: [{ type: 'text', text: '{"revision":5}' }] } }), '*');
+    expect(screen.getByTitle('Project settings')).toBe(iframe);
+    expect(mocks.getResource).toHaveBeenCalledTimes(1);
+    expect(mocks.submit).not.toHaveBeenCalled();
+    mocks.rpc.mockResolvedValueOnce({ error: { code: -32000, message: 'unavailable' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'message.mcpApp.refresh' })); });
+    expect(screen.getByRole('alert')).toHaveTextContent('message.mcpApp.refreshFailed');
+    expect(screen.getByTitle('Project settings')).toBe(iframe);
+    mocks.rpc.mockResolvedValueOnce({ result: { content: [] } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'message.mcpApp.refresh' })); });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('opens project links through the Workbench host without exposing session credentials', async () => {
+    const openProject = vi.fn().mockResolvedValue({ success: true, session: { clientSecret: 'host-only' } });
+    render(<WorkbenchContext.Provider value={{ ...disabledWorkbenchContext, enabled: true, openProject }}><McpAppMessage data={data}/></WorkbenchContext.Provider>);
+    const iframe = asIframe(await screen.findByTitle('Example App'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    const open = vi.spyOn(window, 'open');
+    await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: iframe.contentWindow, data: { jsonrpc: '2.0', method: 'ui/open-link', id: 'open', params: { url: 'xpert://project/12345678-1234-4234-8234-123456789abc?viewKey=platform.project-tasks__timeline' } } })); });
+    expect(openProject).toHaveBeenCalledWith('12345678-1234-4234-8234-123456789abc', 'platform.project-tasks__timeline');
+    expect(post).toHaveBeenCalledWith({ jsonrpc: '2.0', id: 'open', result: {} }, '*');
+    expect(open).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it('requires visible approval and retries the exact tool call with approvalId', async () => {

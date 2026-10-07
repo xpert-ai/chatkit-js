@@ -1,3 +1,5 @@
+import { parseAgentExecutionOutcome } from './agent-execution-outcome';
+import type { TAgentExecutionOutcome } from '@xpert-ai/chatkit-types';
 import {
   ChatMessageEventTypeEnum,
   type TMessageContentComplex,
@@ -10,6 +12,7 @@ import {
 } from '../components/ui/chatkit-avatar';
 
 export type AgentRunInfo = {
+  businessOutcome?: TAgentExecutionOutcome;
   id: string;
   isRoot?: boolean;
   parentId?: string;
@@ -185,6 +188,9 @@ export function normalizeAgentRunInfo(
   const startedAt = readTrimmedString(value.startedAt);
   const endedAt = readTrimmedString(value.endedAt);
   const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  const businessOutcome = parseAgentExecutionOutcome(
+    value.businessOutcome ?? metadata?.businessOutcome,
+  );
   const invocationKind = value.invocationKind ?? metadata?.invocationKind;
   const sourceToolCallId =
     readTrimmedString(value.sourceToolCallId) ??
@@ -202,6 +208,7 @@ export function normalizeAgentRunInfo(
 
   return {
     id,
+    ...(businessOutcome ? { businessOutcome } : {}),
     ...(value.isRoot === true ? { isRoot: true } : {}),
     ...(sourceToolCallId ? { sourceToolCallId } : {}),
     ...(invocationKind === 'external_assistant' ||
@@ -250,6 +257,7 @@ export function mergeAgentRunInfo(
     avatar: incoming.avatar ?? previous.avatar,
     title: incoming.title ?? previous.title,
     status: incoming.status ?? previous.status,
+    businessOutcome: incoming.businessOutcome ?? previous.businessOutcome,
     elapsedTime: incoming.elapsedTime ?? previous.elapsedTime,
     // An omitted field is a partial update; null explicitly clears the error.
     error: incoming.error !== undefined ? incoming.error : previous.error,

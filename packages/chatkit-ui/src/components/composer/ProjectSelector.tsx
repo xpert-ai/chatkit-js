@@ -37,6 +37,7 @@ export type ProjectSelectorProps = {
   activeProjectId?: string | null;
   selection?: ProjectSelection;
   autoNewEnabled?: boolean;
+  autoNewMode?: 'on-send' | 'after-confirmation';
   allowNone?: boolean;
   disabled?: boolean;
   locked?: boolean;
@@ -58,6 +59,7 @@ export function ProjectSelector({
   activeProjectId,
   selection,
   autoNewEnabled = false,
+  autoNewMode = 'on-send',
   allowNone = true,
   disabled = false,
   locked = false,
@@ -433,7 +435,7 @@ export function ProjectSelector({
               {activeProject?.name ??
                 activeLabel ??
                 (selection?.mode === 'auto-new'
-                  ? t('composer.projects.autoNew')
+                  ? t(autoNewMode === 'after-confirmation' ? 'composer.projects.confirmNew' : 'composer.projects.autoNew')
                   : selection?.mode === 'none'
                     ? t('composer.projects.none')
                     : undefined) ??
@@ -695,7 +697,7 @@ export function ProjectSelector({
                         }}
                       >
                         <span className="flex-1">
-                          {t('composer.projects.autoNew')}
+                          {t(autoNewMode === 'after-confirmation' ? 'composer.projects.confirmNew' : 'composer.projects.autoNew')}
                         </span>
                         {!activeProjectId && selection?.mode === 'auto-new' ? (
                           <Check className="size-4 shrink-0" />

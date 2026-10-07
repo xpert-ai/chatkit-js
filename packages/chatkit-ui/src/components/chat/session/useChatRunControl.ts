@@ -4,9 +4,12 @@ import type { useChatEnvironment } from './useChatEnvironment';
 
 type ChatRunControlOptions = Pick<
   ReturnType<typeof useChatBranchState>,
-  'branchState' | 'isChangingBranch' | 'activeBranchRef'
-> &
-  Pick<ReturnType<typeof useChatEnvironment>, 'stream'>;
+  'isChangingBranch' | 'activeBranchRef'
+> & {
+  branchState: Pick<ReturnType<typeof useChatBranchState>['branchState'], 'current' | 'refresh'>;
+  stream: Pick<ReturnType<typeof useChatEnvironment>['stream'],
+    'threadId' | 'isLoading' | 'activeRunId' | 'isThreadInterrupted' | 'stop' | 'pauseRun' | 'resumeRun'>;
+};
 
 export function useChatRunControl({
   branchState,
@@ -15,7 +18,7 @@ export function useChatRunControl({
   activeBranchRef,
 }: ChatRunControlOptions) {
   const [runControlRequest, setRunControlRequest] = React.useState<{
-    action: 'pause' | 'resume';
+    action: 'pause' | 'resume' | 'stop';
     threadId: string;
     runId: string;
   } | null>(null);
@@ -26,12 +29,17 @@ export function useChatRunControl({
     message: string;
   } | null>(null);
 
+  const errorGenerationRef = React.useRef(0);
+  const clearRunControlError = React.useCallback(() => {
+    errorGenerationRef.current += 1;
+    setRunControlError(null);
+  }, []);
+  React.useEffect(clearRunControlError, [stream.threadId, clearRunControlError]);
+
   const currentRunControl = branchState.current?.runControl;
-  const pauseRunId =
-    stream.activeRunId ??
-    currentRunControl?.executionId ??
-    stream.displayPause?.executionId ??
-    null;
+  const pauseRunId = stream.isLoading
+    ? stream.activeRunId ?? currentRunControl?.executionId ?? null
+    : currentRunControl?.executionId ?? stream.activeRunId ?? null;
 
   const canPauseRun = Boolean(
     stream.threadId &&
@@ -46,38 +54,46 @@ export function useChatRunControl({
     branchState.current?.status === 'pausing';
 
   const isRunPaused = branchState.current?.status === 'paused';
-  const canRevealPausedDisplay =
-    Boolean(stream.displayPause) &&
-    ['idle', 'error', 'interrupted'].includes(
-      branchState.current?.status ?? '',
-    );
-
-  // Switch the control as soon as output pauses, before checkpointing finishes.
-  const isPauseActive = isRunPausing || isRunPaused || stream.isDisplayPaused;
+  const isPauseActive = isRunPausing || isRunPaused;
+  const isStoppingRun =
+    runControlRequest?.threadId === stream.threadId &&
+    runControlRequest.action === 'stop';
+  const canStopRun = Boolean(
+    stream.threadId &&
+    pauseRunId &&
+    (stream.isLoading ||
+      ['busy', 'pausing', 'paused'].includes(
+        branchState.current?.status ?? '',
+      )),
+  );
   const isResumingRun =
     runControlRequest?.threadId === stream.threadId &&
     runControlRequest.action === 'resume';
 
-  const isVisibleStreaming =
-    stream.isLoading && !stream.isDisplayPaused && !stream.isThreadInterrupted;
-  const handleComposerRunControl = async (action: 'pause' | 'resume') => {
+  const isVisibleStreaming = stream.isLoading && !stream.isThreadInterrupted;
+  const handleComposerRunControl = async (
+    action: 'pause' | 'resume' | 'stop',
+  ) => {
     const sourceThreadId = stream.threadId;
-    if (isChangingBranch || isRunPausing || isResumingRun) return;
-    if (action === 'resume') {
-      if (
-        !sourceThreadId ||
-        (!canRevealPausedDisplay &&
-          (!isRunPaused || !currentRunControl?.pauseId))
-      )
-        return;
-    } else {
-      if (isRunPaused) return;
-      if (!sourceThreadId || !pauseRunId) return;
-    }
-    if (!sourceThreadId) return;
-    if (runControlRequestRef.current?.threadId === sourceThreadId) return;
+    if (
+      !sourceThreadId ||
+      !pauseRunId ||
+      isChangingBranch ||
+      isStoppingRun ||
+      isResumingRun
+    )
+      return;
+    if (action === 'resume' && (!isRunPaused || !currentRunControl?.pauseId))
+      return;
+    if (action === 'pause' && (isRunPaused || isRunPausing)) return;
+    if (action === 'stop' && !canStopRun) return;
+    // Stopping remains available even while a pause HTTP request is pending.
+    if (
+      action !== 'stop' &&
+      runControlRequestRef.current?.threadId === sourceThreadId
+    )
+      return;
     const runId = pauseRunId;
-    if (!runId) return;
     const request = {
       action,
       threadId: sourceThreadId,
@@ -85,22 +101,21 @@ export function useChatRunControl({
     };
     runControlRequestRef.current = request;
     setRunControlRequest(request);
-    setRunControlError(null);
+    clearRunControlError();
+    const errorGeneration = errorGenerationRef.current;
     try {
-      if (action === 'resume' && canRevealPausedDisplay) {
-        await stream.resumeDisplay();
+      if (action === 'stop') {
+        await stream.stop(request.runId);
       } else if (action === 'resume' && currentRunControl?.pauseId) {
         await stream.resumeRun(request.runId, currentRunControl.pauseId);
       } else {
         await stream.pauseRun(request.runId);
       }
-      if (activeBranchRef.current === sourceThreadId) {
-        await branchState.refresh();
-      }
     } catch (error) {
       if (
         activeBranchRef.current === sourceThreadId &&
-        runControlRequestRef.current === request
+        runControlRequestRef.current === request &&
+        errorGenerationRef.current === errorGeneration
       ) {
         setRunControlError({
           threadId: sourceThreadId,
@@ -108,6 +123,8 @@ export function useChatRunControl({
         });
       }
     } finally {
+      if (activeBranchRef.current === sourceThreadId)
+        await branchState.refresh();
       if (runControlRequestRef.current === request) {
         runControlRequestRef.current = null;
         setRunControlRequest(null);
@@ -121,9 +138,11 @@ export function useChatRunControl({
     isVisibleStreaming,
     isPauseActive,
     runControlError,
+    clearRunControlError,
     canPauseRun,
     handleComposerRunControl,
-    canRevealPausedDisplay,
+    canStopRun,
+    isStoppingRun,
     currentRunControl,
   };
 }

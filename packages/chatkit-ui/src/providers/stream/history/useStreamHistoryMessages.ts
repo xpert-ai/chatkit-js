@@ -1,11 +1,9 @@
-import type { ThreadDisplayPause } from '@xpert-ai/xpert-sdk';
 import type { Thread } from '@xpert-ai/xpert-sdk';
 import { useCallback } from 'react';
 import {
   getAutoDrainQueuedFollowUpIds,
   type PendingFollowUp,
 } from '../../../lib/follow-ups';
-import { parsePausedDisplaySnapshot } from '../../../lib/paused-display-snapshot';
 import type { createResumedRootExecutionHydrator } from '../../../lib/resumed-root-executions';
 import type { useRuntimeActivities } from '../../runtime-activities';
 import type { HistoryRequest } from '../../useThreadHistory';
@@ -77,10 +75,8 @@ type StreamHistoryMessagesOptions = Pick<
   > &
   Pick<
     ReturnType<typeof useStreamRunState>,
-    | 'setPausedDisplay'
     | 'rememberActiveRunId'
     | 'pauseRequestedRef'
-    | 'pausedDisplayRef'
     | 'setInterruptedThreadId'
     | 'setError'
   > &
@@ -113,7 +109,6 @@ export function useStreamHistoryMessages({
   pendingFollowUpsRef,
   setAutoQueuedFollowUpIds,
   setPendingFollowUps,
-  setPausedDisplay,
   rememberActiveRunId,
   setThreadId,
   valuesRef,
@@ -124,7 +119,6 @@ export function useStreamHistoryMessages({
   loadHistory,
   captureHistoryRequest,
   historyMessagePaginationRef,
-  pausedDisplayRef,
   addAutoQueuedFollowUpIds,
   setInterruptedThreadId,
   setError,
@@ -135,7 +129,6 @@ export function useStreamHistoryMessages({
       requestedThreadId: string | undefined,
       request: HistoryRequest,
       threadOperation?: Thread['operation'],
-      displayPause?: ThreadDisplayPause | null,
     ) => {
       await ensureHistoryCredentials();
       if (!request.isCurrent()) return [];
@@ -187,23 +180,6 @@ export function useStreamHistoryMessages({
       pendingFollowUpsRef.current = page.pendingFollowUps;
       setAutoQueuedFollowUpIds(autoDrainIds);
       setPendingFollowUps(page.pendingFollowUps);
-      const protocolDisplay =
-        displayPause !== undefined
-          ? displayPause
-          : loadedThreadId
-            ? (await client.threads.get(loadedThreadId)).displayPause
-            : null;
-      if (!request.isCurrent() || conversationIdRef.current !== recordId)
-        return [];
-      if (protocolDisplay?.snapshot && loadedThreadId) {
-        setPausedDisplay({
-          threadId: loadedThreadId,
-          pause: protocolDisplay,
-          values: parsePausedDisplaySnapshot(protocolDisplay.snapshot),
-        });
-      } else {
-        setPausedDisplay(null);
-      }
       const latestExecutionId = getLatestExecutionIdFromMessages(page.messages);
       if (
         isLiveThreadRunStatus(conversationDetail?.status) &&
@@ -277,12 +253,7 @@ export function useStreamHistoryMessages({
     const request = captureHistoryRequest();
     const pagination = historyMessagePaginationRef.current;
     const recordId = pagination.conversationId;
-    if (
-      pausedDisplayRef.current ||
-      !recordId ||
-      !pagination.hasMore ||
-      pagination.isLoadingMore
-    ) {
+    if (!recordId || !pagination.hasMore || pagination.isLoadingMore) {
       return [];
     }
 

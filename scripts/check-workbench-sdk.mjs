@@ -28,6 +28,11 @@ try {
     throw new Error(
       `SDK is missing Client.workbench methods: ${missing.join(', ')}`,
     );
+  if (typeof client.viewHosts?.readFileAccess !== 'function') {
+    throw new Error(
+      'SDK is missing Client.viewHosts.readFileAccess. Install @xpert-ai/xpert-sdk ^0.8.0 before starting ChatKit.',
+    );
+  }
   console.log(`Workbench SDK: OK\nResolved: ${entry}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

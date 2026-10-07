@@ -28,7 +28,6 @@ type StreamLifecycleOptions = Pick<
     | 'isLoadingRef'
     | 'lastEventIdRef'
     | 'pauseRequestedRef'
-    | 'setPausedDisplay'
     | 'setIsLoading'
     | 'setInterruptedThreadId'
     | 'setError'
@@ -74,7 +73,6 @@ export function useStreamLifecycle({
   setContextUsageByAgentKey,
   resetHistory,
   pauseRequestedRef,
-  setPausedDisplay,
   setIsLoading,
   setInterruptedThreadId,
   setError,
@@ -136,7 +134,7 @@ export function useStreamLifecycle({
     ) => {
       resetHistory();
       pauseRequestedRef.current = false;
-      setPausedDisplay(null);
+
       abortRef.current?.abort();
       abortRef.current = null;
       setIsLoading(false);

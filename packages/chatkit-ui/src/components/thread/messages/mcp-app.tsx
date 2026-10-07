@@ -10,6 +10,7 @@ import {
   Maximize2,
   Minimize2,
   PictureInPicture2,
+  RefreshCw,
   ShieldAlert,
 } from 'lucide-react';
 import * as React from 'react';
@@ -30,6 +31,7 @@ import {
 import { useMcpAppApprovalExpiry } from './mcp-app/approval/useMcpAppApprovalExpiry';
 import { useMcpAppApprovals } from './mcp-app/approval/useMcpAppApprovals';
 import { useMcpAppBridge } from './mcp-app/bridge/useMcpAppBridge';
+import { useMcpAppRefresh } from './mcp-app/resource/useMcpAppRefresh';
 import { useMcpAppResource } from './mcp-app/resource/useMcpAppResource';
 import { useMcpAppState } from './mcp-app/session/useMcpAppState';
 import { useMcpAppTeardown } from './mcp-app/session/useMcpAppTeardown';
@@ -106,6 +108,15 @@ export function McpAppMessage({
     },
     [client, data, messageId, state.runtimeAppInstanceToken],
   );
+
+  const refresh = useMcpAppRefresh({
+    identity: data.appInstanceId,
+    refresh: state.resource?.refresh,
+    ready: state.initializedRef,
+    call: callHostRpc,
+    post: postToApp,
+    failureMessage: i18n.t('message.mcpApp.refreshFailed'),
+  });
 
   const approvals = useMcpAppApprovals({
     ...state,
@@ -222,6 +233,25 @@ export function McpAppMessage({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {state.resource?.refresh ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                title={i18n.t('message.mcpApp.refresh')}
+                aria-label={i18n.t('message.mcpApp.refresh')}
+                disabled={
+                  state.isLoading ||
+                  refresh.refreshing ||
+                  !!state.pendingApproval
+                }
+                onClick={() => void refresh.refresh()}
+              >
+                <RefreshCw
+                  className={cn(refresh.refreshing && 'animate-spin')}
+                />
+              </Button>
+            ) : null}
             {state.displayMode !== 'fullscreen' ? (
               <Button
                 type="button"
@@ -261,6 +291,11 @@ export function McpAppMessage({
           </div>
         </div>
 
+        {refresh.error ? (
+          <div role="alert" className="px-3 py-2 text-sm text-destructive">
+            {refresh.error}
+          </div>
+        ) : null}
         {state.pendingApproval ? (
           <div
             role="alertdialog"

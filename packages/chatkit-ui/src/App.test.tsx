@@ -311,7 +311,7 @@ describe('App', () => {
     expect(StreamProvider).toHaveBeenLastCalledWith(
       expect.objectContaining({
         projectId: 'project-3',
-        initialThread: 'thread-2',
+        initialThread: null,
       }),
       undefined,
     );
@@ -402,13 +402,17 @@ describe('App', () => {
     );
   });
 
-  it('clears the configured old Project when automatic creation is explicitly selected', () => {
+  it('clears the old Project and thread when automatic creation is explicitly selected', () => {
+    const scopedOptions = { ...options, initialThread: 'existing-thread' };
     const { rerender } = render(
-      <App clientSecret="secret" options={options} />,
+      <App clientSecret="secret" options={scopedOptions} />,
     );
     fireEvent.click(screen.getByTestId('auto-new-project'));
     rerender(
-      <App clientSecret="secret" options={{ ...options, theme: 'dark' }} />,
+      <App
+        clientSecret="secret"
+        options={{ ...scopedOptions, theme: 'dark' }}
+      />,
     );
     expect(StreamProvider).toHaveBeenLastCalledWith(
       expect.objectContaining({

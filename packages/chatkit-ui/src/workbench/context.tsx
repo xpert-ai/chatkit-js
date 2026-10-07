@@ -20,6 +20,7 @@ import {
 } from '../components/ui/tooltip';
 
 export type WorkbenchContextValue = {
+  openProject?: (projectId: string, viewKey: string) => Promise<unknown>;
   openResourceCard?: (
     card: TMessageContentResourceCard,
     messageId: string,

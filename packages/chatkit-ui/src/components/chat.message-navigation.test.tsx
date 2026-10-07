@@ -457,8 +457,8 @@ describe('Chat message navigation', () => {
     }]);
     mocks.stream.pauseRun.mockReturnValue(new Promise<void>((resolve) => { acceptPause = resolve; }));
     render(<Chat options={baseOptions} />);
-    const button = await screen.findByRole('button', { name: 'threadControl.pause' });
-    expect(screen.getAllByRole('button', { name: 'threadControl.pause' })).toHaveLength(1);
+    const button = await screen.findByRole('button', { name: 'threadControl.stop' });
+    expect(screen.getAllByRole('button', { name: 'threadControl.stop' })).toHaveLength(1);
     expect(button.closest('form')).not.toBeNull();
     expect(button).not.toBeDisabled();
     fireEvent.click(button);
@@ -482,23 +482,21 @@ describe('Chat message navigation', () => {
     await waitFor(() => expect(mocks.stream.resumeRun).toHaveBeenCalledExactlyOnceWith('source-run', 'pause-1'));
   });
 
-  it('keeps the resume icon while the visible output is paused and server state is catching up', async () => {
+  it('shows one Stop button that pauses, then exposes only disabled resume while pausing', async () => {
     mocks.stream.isLoading = true;
-    mocks.stream.isDisplayPaused = true;
-    mocks.stream.client.conversations.listThreads.mockResolvedValue([{
-      thread_id: 'thread-1', status: 'busy',
-      runControl: { executionId: 'source-run', state: 'running' },
-    }]);
+    mocks.stream.activeRunId = 'source-run';
+    mocks.stream.pauseRun.mockReturnValue(new Promise(() => {}));
     render(<Chat options={baseOptions} />);
-    await waitFor(() => expect(mocks.stream.client.conversations.listThreads).toHaveBeenCalled());
-    const resume = screen.getByRole('button', { name: 'threadControl.resume' });
-    expect(resume.querySelector('.lucide-play')).toBeInTheDocument();
-    expect(resume).toBeDisabled();
-    fireEvent.click(resume);
-    expect(mocks.stream.pauseRun).not.toHaveBeenCalled();
-    expect(mocks.stream.resumeRun).not.toHaveBeenCalled();
+    const stop = await screen.findByRole('button', { name: 'threadControl.stop' });
+    expect(screen.getAllByRole('button', { name: 'threadControl.stop' })).toHaveLength(1);
+    expect(stop.querySelector('.lucide-square')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'threadControl.pause' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'chat.stop' })).toBeNull();
+    fireEvent.click(stop);
+    expect(screen.queryByRole('button', { name: 'threadControl.stop' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'threadControl.resume' })).toBeDisabled();
+    expect(screen.getByText('threadControl.pausing')).toBeInTheDocument();
+    expect(mocks.stream.pauseRun).toHaveBeenCalledExactlyOnceWith('source-run');
+    expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
 
   it('lets the composer pause action retry after failure without cancelling the run', async () => {
@@ -509,9 +507,9 @@ describe('Chat message navigation', () => {
     }]);
     mocks.stream.pauseRun.mockRejectedValueOnce(new Error('Pause failed'));
     render(<Chat options={baseOptions} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'threadControl.pause' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'threadControl.stop' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Pause failed');
-    const retry = screen.getByRole('button', { name: 'threadControl.pause' });
+    const retry = screen.getByRole('button', { name: 'threadControl.stop' });
     expect(retry.closest('form')).not.toBeNull();
     expect(retry).not.toBeDisabled();
     fireEvent.click(retry);
@@ -519,20 +517,20 @@ describe('Chat message navigation', () => {
     expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
 
-  it('hides streaming indicators immediately while the backend stream is still running', () => {
+  it('keeps streaming indicators visible while the backend stream is still running', () => {
     mocks.stream.isLoading = true;
     const { rerender } = render(<Chat options={baseOptions} />);
     expect(screen.getAllByTestId('streaming-output').length).toBeGreaterThan(0);
     mocks.stream.isDisplayPaused = true;
     rerender(<Chat options={baseOptions} />);
-    expect(screen.queryByTestId('streaming-output')).toBeNull();
+    expect(screen.getAllByTestId('streaming-output').length).toBeGreaterThan(0);
     expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
 
   it('keeps pause disabled until a run id exists and never cancels the run', () => {
     mocks.stream.isLoading = true;
     render(<Chat options={baseOptions} />);
-    const pause = screen.getByRole('button', { name: 'threadControl.pause' });
+    const pause = screen.getByRole('button', { name: 'threadControl.stop' });
     expect(pause).toBeDisabled();
     fireEvent.click(pause);
     expect(mocks.stream.stop).not.toHaveBeenCalled();
@@ -543,21 +541,18 @@ describe('Chat message navigation', () => {
     mocks.stream.isLoading = true;
     mocks.stream.activeRunId = 'stream-run';
     render(<Chat options={baseOptions} />);
-    fireEvent.click(screen.getByRole('button', { name: 'threadControl.pause' }));
+    fireEvent.click(screen.getByRole('button', { name: 'threadControl.stop' }));
     await waitFor(() => expect(mocks.stream.pauseRun).toHaveBeenCalledExactlyOnceWith('stream-run'));
     expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
 
-  it('reveals a completed background run from the resume control without starting another execution', async () => {
-    mocks.stream.isDisplayPaused = true;
-    mocks.stream.displayPause = { executionId: 'finished', pauseId: 'pause-token' };
+  it('does not require a display resume after natural completion', async () => {
+    mocks.stream.displayPause = { executionId: 'finished', pauseId: 'legacy' };
     mocks.stream.client.conversations.listThreads.mockResolvedValue([{ thread_id: 'thread-1', status: 'idle' }]);
     render(<Chat options={baseOptions} />);
-    const resume = await screen.findByRole('button', { name: 'threadControl.resume' });
-    await waitFor(() => expect(resume).not.toBeDisabled());
-    fireEvent.click(resume);
-    await waitFor(() => expect(mocks.stream.resumeDisplay).toHaveBeenCalledTimes(1));
-    expect(mocks.stream.resumeRun).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.stream.client.conversations.listThreads).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'threadControl.resume' })).toBeNull();
+    expect(mocks.stream.resumeDisplay).not.toHaveBeenCalled();
   });
 
   it('uses the composer to send a new instruction instead of resuming when edited', async () => {
@@ -776,7 +771,7 @@ describe('Chat message navigation', () => {
     const { rerender } = await editSecondMessage();
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalled());
     rerender(<Chat options={baseOptions} />);
-    const pause = await screen.findByRole('button', { name: 'threadControl.pause' });
+    const pause = await screen.findByRole('button', { name: 'threadControl.stop' });
     expect(pause).not.toBeDisabled();
     fireEvent.click(pause);
     await waitFor(() =>

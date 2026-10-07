@@ -661,6 +661,8 @@ export function WorkbenchShell({
         );
         return true;
       },
+      openProject: (projectId, viewKey) => executeClientCommand('workbench.navigation.open',
+        { target: 'assistant.project', projectId, viewKey }, { key: viewKey }),
       openResourceCard: async (card, messageId) => {
         const result = await executeClientCommand(
           'workbench.navigation.open',

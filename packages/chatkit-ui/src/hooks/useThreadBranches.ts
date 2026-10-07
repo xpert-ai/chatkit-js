@@ -49,5 +49,25 @@ export function useThreadBranches(
       generation.current += 1;
     };
   }, [refresh, isLoading]);
+  useEffect(() => {
+    if (
+      !enabled ||
+      !threadId ||
+      !['busy', 'pausing'].includes(current?.status ?? '')
+    )
+      return;
+    // HTTP acceptance is not pause completion. Poll independently of the SSE connection.
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await refresh();
+      if (!disposed) timer = setTimeout(poll, 1000);
+    };
+    timer = setTimeout(poll, 1000);
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [enabled, threadId, current?.status, refresh]);
   return { branches, current, error, refresh };
 }

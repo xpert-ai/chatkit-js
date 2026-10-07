@@ -37,7 +37,6 @@ type StreamThreadLoadingOptions = Pick<
     | 'isLoadingRef'
     | 'setError'
     | 'setInterruptedThreadId'
-    | 'setPausedDisplay'
     | 'lastEventIdRef'
     | 'pauseRequestedRef'
     | 'rememberActiveRunId'
@@ -84,7 +83,6 @@ export function useStreamThreadLoading({
   loadHistory,
   setError,
   setInterruptedThreadId,
-  setPausedDisplay,
   updateTodos,
   clearRuntimeActivities,
   valuesRef,
@@ -123,7 +121,7 @@ export function useStreamThreadLoading({
       }
       return loadHistory(threadId, async (request) => {
         setError(null);
-        setPausedDisplay(null);
+
         updateTodos(null);
         clearRuntimeActivities();
         if (activeThreadIdRef.current !== threadId) {
@@ -208,7 +206,6 @@ export function useStreamThreadLoading({
           threadId,
           request,
           protocolThread?.operation,
-          protocolThread?.displayPause ?? null,
         );
         if (!request.isCurrent()) return;
         // Service discovery owns its loading/error state and must not gate views.

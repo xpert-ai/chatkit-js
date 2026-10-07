@@ -3,6 +3,7 @@ export function standardMcpAppStyles(legacy: Record<string, string>) {
   const mapping = {
     '--font-sans': '--mcp-app-font-sans',
     '--font-mono': '--mcp-app-font-mono',
+    '--font-text-md-size': '--mcp-app-font-size',
     '--border-radius-md': '--mcp-app-radius',
     '--color-background-primary': '--mcp-app-color-background',
     '--color-background-secondary': '--mcp-app-color-card',
@@ -15,7 +16,9 @@ export function standardMcpAppStyles(legacy: Record<string, string>) {
     '--color-border-primary': '--mcp-app-color-border',
     '--color-ring-primary': '--mcp-app-color-ring',
   };
-  return Object.fromEntries(Object.entries(mapping)
-    .filter(([, source]) => legacy[source])
-    .map(([key, source]) => [key, legacy[source]]));
+  return Object.fromEntries(
+    Object.entries(mapping)
+      .filter(([, source]) => legacy[source])
+      .map(([key, source]) => [key, legacy[source]]),
+  );
 }

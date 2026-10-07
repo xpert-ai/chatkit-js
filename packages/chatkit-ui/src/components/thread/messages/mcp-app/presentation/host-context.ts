@@ -161,6 +161,10 @@ export function buildMcpAppTheme(element: HTMLElement | null): McpAppTheme {
       readHostCssVariable(source, '--font-mono') ||
         'ui-monospace, SFMono-Regular, Menlo, monospace',
     ),
+    // Resolve rem-based host typography before crossing the iframe boundary.
+    '--mcp-app-font-size': sanitizeCssValue(
+      window.getComputedStyle(document.documentElement).fontSize || '16px',
+    ),
     '--mcp-app-radius': sanitizeCssValue(
       readHostCssVariable(source, '--radius') || '0.5rem',
     ),
@@ -186,7 +190,7 @@ export function injectMcpAppTheme(html: string, theme: McpAppTheme) {
   const declarations = Object.entries(theme.cssVariables)
     .map(([name, value]) => `${name}: ${sanitizeCssValue(value)};`)
     .join('');
-  const style = `<style id="mcp-app-host-theme">:root{font-size:14px;color-scheme:${theme.mode};${declarations}}</style>`;
+  const style = `<style id="mcp-app-host-theme">:root{font-size:var(--mcp-app-font-size,16px);color-scheme:${theme.mode};${declarations}}</style>`;
 
   return injectHeadContent(html, style);
 }

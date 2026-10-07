@@ -88,6 +88,11 @@
       "clientCommandUnavailable": "未配置客户端命令 {{commandKey}} 的处理器。"
     },
     "externalAssistants": {
+      "cancel": "取消执行",
+      "cancelRun": "取消执行：{{name}}",
+      "cancelling": "正在取消…",
+      "cancelRequested": "已请求取消",
+      "cancelFailed": "取消执行失败，请重试。",
       "title": "外部助手",
       "openRun": "查看执行：{{name}}",
       "back": "返回执行列表",
@@ -496,6 +501,7 @@
       "select": "选择项目",
       "none": "不使用项目",
       "autoNew": "新项目 · 发送后自动创建",
+      "confirmNew": "新项目 · 确认配置后创建",
       "search": "搜索项目",
       "new": "新建项目",
       "create": "创建",
@@ -861,6 +867,9 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
+      "openProjectFailed": "暂时无法打开此项目。",
+      "refresh": "刷新数据",
+      "refreshFailed": "数据刷新失败，请重试。",
       "loading": "正在加载 MCP App",
       "fullscreen": "全屏显示",
       "pictureInPicture": "画中画显示",
@@ -901,7 +910,13 @@
         "replied": "已回复",
         "pending": "等待中",
         "interrupted": "已中断",
-        "timeout": "已超时"
+        "timeout": "已超时",
+        "business_accepted": "已验收",
+        "business_already_completed": "已完成，无需重复",
+        "business_not_claimed": "未领取",
+        "business_blocked": "受阻",
+        "business_failed": "任务失败",
+        "business_incomplete": "未验收"
       },
       "counts": {
         "messages": {
@@ -1017,7 +1032,7 @@
     "pause": "暂停流程",
     "resume": "恢复流程",
     "cancelRun": "停止任务",
-    "pausing": "正在保存并暂停…",
+    "pausing": "正在暂停",
     "paused": "流程已暂停",
     "editMessage": "编辑消息",
     "sourcePauseUnavailable": "原任务暂不支持暂停，请在任务完成后重试。",
@@ -1031,7 +1046,11 @@
       "interrupted": "等待处理",
       "error": "出错",
       "running": "运行中"
-    }
+    },
+    "stop": "停止",
+    "stopping": "正在停止",
+    "stopDescription": "终止本次运行，不撤销已经完成的操作",
+    "pausingDescription": "正在等待当前步骤完成并保存进度；仍可停止运行"
   },
   "fileActivity": {
     "textLineChanges": "文本行变更",
