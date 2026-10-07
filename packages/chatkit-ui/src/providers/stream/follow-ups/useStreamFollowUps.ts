@@ -34,7 +34,6 @@ type StreamFollowUpsOptions = Pick<
     | 'isLoadingRef'
     | 'setError'
     | 'pauseRequestedRef'
-    | 'pausedDisplayRef'
     | 'submitRef'
     | 'isLoading'
     | 'interruptedThreadId'
@@ -79,7 +78,6 @@ export function useStreamFollowUps({
   setError,
   autoQueuedFollowUpIds,
   pauseRequestedRef,
-  pausedDisplayRef,
   removePendingFollowUps,
   insertPendingFollowUpsIntoTranscript,
   submitRef,
@@ -234,7 +232,6 @@ export function useStreamFollowUps({
         (interruptedThreadId !== null &&
           interruptedThreadId === activeThreadIdRef.current) ||
         pauseRequestedRef.current ||
-        pausedDisplayRef.current ||
         autoQueuedFollowUpIdSet.has(id)
       ) {
         return false;
@@ -249,12 +246,7 @@ export function useStreamFollowUps({
 
   const sendPendingFollowUpNow = useCallback(
     async (id: string) => {
-      if (
-        !id ||
-        isLoadingRef.current ||
-        pauseRequestedRef.current ||
-        pausedDisplayRef.current
-      ) {
+      if (!id || isLoadingRef.current || pauseRequestedRef.current) {
         return;
       }
 
@@ -305,7 +297,6 @@ export function useStreamFollowUps({
 
   const drainQueuedFollowUps = useCallback(async () => {
     if (
-      pausedDisplayRef.current ||
       queueDrainPromiseRef.current ||
       (interruptedThreadId !== null &&
         interruptedThreadId === activeThreadIdRef.current) ||
@@ -315,7 +306,7 @@ export function useStreamFollowUps({
     }
 
     const drainPromise = (async () => {
-      while (!isLoadingRef.current && !pausedDisplayRef.current) {
+      while (!isLoadingRef.current) {
         const nextItem = getNextAutoQueuedFollowUp(
           pendingFollowUpsRef.current,
           autoQueuedFollowUpIdsRef.current,

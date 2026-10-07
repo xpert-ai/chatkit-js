@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
         executeFileAction: vi.fn(),
         createFileAccessSession: vi.fn(),
         createFileAccessGrant: vi.fn(),
+        readFileAccess: vi.fn(),
         revokeFileAccessSession: vi.fn(),
       },
       threads: {

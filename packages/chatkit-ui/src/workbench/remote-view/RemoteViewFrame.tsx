@@ -11,6 +11,7 @@ import { useTheme } from '../../providers/Theme';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { isWorkbenchDebugEnabled, workbenchDebug } from '../debug';
 import { matchesHostEventSubscription } from '../host-events';
+import { FileAccessUrls } from './file-access-urls';
 import {
   REMOTE_COMPONENT_CHANNEL,
   REMOTE_COMPONENT_PROTOCOL_VERSION,
@@ -34,6 +35,7 @@ export type RemoteViewHostsClient = Pick<
   | 'executeFileAction'
   | 'createFileAccessSession'
   | 'createFileAccessGrant'
+  | 'readFileAccess'
   | 'revokeFileAccessSession'
 >;
 
@@ -91,6 +93,10 @@ export function RemoteViewFrame({
   const sessionPromiseRef =
     React.useRef<Promise<XpertViewFileAccessSessionResult> | null>(null);
   const sessionEpochRef = React.useRef(0);
+  const fileUrls = React.useMemo(
+    () => new FileAccessUrls(viewHosts),
+    [viewHosts],
+  );
   const debounceRef = React.useRef(new Map<string, number>());
   const requestControllersRef = React.useRef(new Set<AbortController>());
   const activeRef = React.useRef(true);
@@ -159,6 +165,7 @@ export function RemoteViewFrame({
   );
 
   const revokeSession = React.useCallback(() => {
+    fileUrls.clear();
     sessionEpochRef.current += 1;
     const session = sessionRef.current;
     sessionRef.current = null;
@@ -168,7 +175,7 @@ export function RemoteViewFrame({
         .revokeFileAccessSession(session.sessionId)
         .catch(() => undefined);
     }
-  }, [viewHosts]);
+  }, [viewHosts, fileUrls]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -498,7 +505,7 @@ export function RemoteViewFrame({
             }
             const session = await ensureFileAccessSession(signal);
             signal.throwIfAborted();
-            return viewHosts.createFileAccessGrant(
+            const grant = await viewHosts.createFileAccessGrant(
               session.sessionId,
               {
                 fileKey,
@@ -512,6 +519,11 @@ export function RemoteViewFrame({
               },
               { signal },
             );
+            signal.throwIfAborted();
+            // The opaque-origin iframe cannot send the session's SameSite cookie.
+            // Downloads need the same host transport as previews; returning the
+            // cookie-bound URL makes an iframe's download request fail with 401.
+            return fileUrls.create(grant, signal);
           });
           return;
         case 'invokeClientCommand':
@@ -550,6 +562,7 @@ export function RemoteViewFrame({
     runtimeScope,
     sendInit,
     viewHosts,
+    fileUrls,
   ]);
 
   React.useEffect(() => {

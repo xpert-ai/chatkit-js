@@ -150,9 +150,11 @@ export type StreamContextType = {
   isLoading: boolean;
   /** Raw thread interruption, including cancellation; does not imply work is running or will resume. */
   isThreadInterrupted?: boolean;
-  /** Visible output is frozen while the backend finishes and checkpoints its step. */
+  /** @deprecated Output stays live while pausing; always false. */
   isDisplayPaused?: boolean;
+  /** @deprecated Legacy display snapshots are ignored; always null. */
   displayPause?: ThreadDisplayPause | null;
+  /** @deprecated No display freeze remains to release. */
   resumeDisplay: () => Promise<void>;
   isReady: boolean;
   error: unknown;

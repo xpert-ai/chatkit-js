@@ -1,9 +1,4 @@
 import { useCallback } from 'react';
-import {
-  parsePausedDisplaySnapshot,
-  reconcilePausedDisplaySteps,
-  serializePausedDisplaySnapshot,
-} from '../../../lib/paused-display-snapshot';
 import { interruptActiveAgentRunOnMessages } from '../../../lib/stream-agent-runs';
 import type { useStreamCredentials } from '../auth/useStreamCredentials';
 import type { useStreamInterrupts } from '../interrupts/useStreamInterrupts';
@@ -20,14 +15,12 @@ type StreamRunControlOptions = Pick<
   | 'setInterruptedThreadId'
   | 'isLoadingRef'
   | 'pauseRequestedRef'
-  | 'setPausedDisplay'
-  | 'pausedDisplayRef'
   | 'lastExecutionIdRef'
 > &
   Pick<ReturnType<typeof useStreamUserInput>, 'clearPendingRequestUserInput'> &
   Pick<ReturnType<typeof useStreamInterrupts>, 'clearPendingHITLRequest'> &
   Pick<ReturnType<typeof useStreamScope>, 'activeThreadIdRef' | 'threadId'> &
-  Pick<ReturnType<typeof useStreamMessages>, 'valuesRef' | 'setValues'> &
+  Pick<ReturnType<typeof useStreamMessages>, 'setValues'> &
   Pick<ReturnType<typeof useStreamCredentials>, 'client'>;
 
 export function useStreamRunControl({
@@ -40,10 +33,7 @@ export function useStreamRunControl({
   activeThreadIdRef,
   threadId,
   pauseRequestedRef,
-  valuesRef,
-  setPausedDisplay,
   client,
-  pausedDisplayRef,
   lastExecutionIdRef,
   setValues,
 }: StreamRunControlOptions) {
@@ -66,37 +56,24 @@ export function useStreamRunControl({
       const target = activeThreadIdRef.current ?? threadId;
       if (!target) return;
       pauseRequestedRef.current = true;
-      const display = { threadId: target, values: valuesRef.current };
-      setPausedDisplay(display);
       try {
-        const result = await client.runs.pause(target, runId, {
-          displaySnapshot: serializePausedDisplaySnapshot(display.values),
-        });
-        if (!result.displayPause?.snapshot) {
-          throw new Error(
-            'The server did not save the paused display snapshot. Update the server before retrying.',
-          );
-        }
-        if (
-          pausedDisplayRef.current?.threadId === target &&
-          activeThreadIdRef.current === target
-        ) {
-          // The snapshot is captured at click time, so a step that was already
-          // running can settle while the server acknowledges the pause.
-          setPausedDisplay({
-            ...pausedDisplayRef.current,
-            values: reconcilePausedDisplaySteps(
-              parsePausedDisplaySnapshot(result.displayPause.snapshot),
-              valuesRef.current,
-            ),
-            pause: result.displayPause,
-          });
-        }
+        // Control requests never carry transcript, tool output, or image bytes.
+        await client.runs.pause(target, runId, { pollTimeoutMs: 0 });
       } catch (error) {
         if (activeThreadIdRef.current === target) {
-          pauseRequestedRef.current = false;
-          if (pausedDisplayRef.current?.threadId === target)
-            setPausedDisplay(null);
+          // A lost response does not mean the durable request was rejected.
+          const current = await client.threads.get(target).catch(() => null);
+          if (activeThreadIdRef.current === target) {
+            pauseRequestedRef.current =
+              current === null ||
+              current.status === 'pausing' ||
+              current.status === 'paused';
+            if (
+              current?.runControl?.executionId === runId &&
+              ['pausing', 'paused'].includes(current.status)
+            )
+              return;
+          }
         }
         throw error;
       }

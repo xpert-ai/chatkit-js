@@ -73,7 +73,7 @@ export const StreamSession = ({
   });
 
   const messages = useStreamMessages();
-  const runState = useStreamRunState({ ...messages });
+  const runState = useStreamRunState();
   const followUpState = useStreamFollowUpState({ ...messages });
   const userInput = useStreamUserInput();
   const host = useStreamHost({ ...scope, hostIntegration });
@@ -297,17 +297,12 @@ export const StreamSession = ({
     credentials.runtimeClientSecret.startsWith('cs-x-'),
   );
 
-  const isDisplayPaused = runState.pausedDisplay?.threadId === scope.threadId;
   const isThreadInterrupted =
     runState.interruptedThreadId !== null &&
     runState.interruptedThreadId === scope.threadId;
   const hasPendingUserInput = Boolean(
     interrupts.pendingHITLRequest || userInput.pendingRequestUserInput,
   );
-  const displayValues =
-    isDisplayPaused && runState.pausedDisplay
-      ? runState.pausedDisplay.values
-      : messages.values;
 
   const initialHistoryThread = normalizeThreadIdentifier(
     initialThread ?? scope.initialSelectedThreadRef.current,
@@ -334,12 +329,10 @@ export const StreamSession = ({
     connectorBindingIds: scope.connectorBindingIds,
     threadGoal: messages.threadGoal,
     contextUsageByAgentKey: messages.contextUsageByAgentKey,
-    values: displayValues,
-    messages: displayValues.messages ?? [],
+    values: messages.values,
+    messages: messages.values.messages ?? [],
     historyMessageLoadVersion: messages.historyMessageLoadVersion,
-    historyMessagePagination: isDisplayPaused
-      ? { ...messages.historyMessagePagination, hasMore: false }
-      : messages.historyMessagePagination,
+    historyMessagePagination: messages.historyMessagePagination,
     historyLoad: host.historyLoad,
     todos: messages.todos,
     runtimeActivities: activities.runtimeActivities,
@@ -349,12 +342,11 @@ export const StreamSession = ({
     // Waiting for a decision may retain a local resolver, but is not execution.
     isLoading:
       runState.isLoading && !isThreadInterrupted && !hasPendingUserInput,
-    isDisplayPaused,
+    isDisplayPaused: false,
     isThreadInterrupted,
-    displayPause: isDisplayPaused
-      ? (runState.pausedDisplay?.pause ?? null)
-      : null,
-    resumeDisplay: resume.resumeDisplay,
+    // Compatibility fields for embedders; messages are always server-backed.
+    displayPause: null,
+    resumeDisplay: async () => {},
     isReady,
     error: runState.error,
     selectedModelId: messages.selectedModelId,
