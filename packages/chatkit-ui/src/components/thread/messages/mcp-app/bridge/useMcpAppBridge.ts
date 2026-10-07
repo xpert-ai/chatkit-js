@@ -1,5 +1,10 @@
-import type { TMessageComponentMcpAppData } from '@xpert-ai/chatkit-types';
+import { parseMcpAppProjectLink } from './project-link';
+import {
+  resolveLocalizedText,
+  type TMessageComponentMcpAppData,
+} from '@xpert-ai/chatkit-types';
 import * as React from 'react';
+import { useWorkbench } from '../../../../../workbench/context';
 import type { useChatkitTranslation } from '../../../../../i18n/useChatkitTranslation';
 import {
   readAppContinuation,
@@ -102,6 +107,7 @@ export function useMcpAppBridge({
   streamIsLoading,
   dispatchHostRpc,
 }: McpAppBridgeOptions) {
+  const { openProject } = useWorkbench();
   React.useEffect(() => {
     if (!initializedRef.current) return;
     postToApp({
@@ -113,6 +119,28 @@ export function useMcpAppBridge({
       },
     });
   }, [displayMode, height, postToApp]);
+
+  React.useEffect(() => {
+    const notifyTheme = () => {
+      if (!initializedRef.current) return;
+      const theme = buildMcpAppTheme(containerRef.current);
+      postToApp({
+        jsonrpc: '2.0',
+        method: 'ui/notifications/host-context-changed',
+        params: {
+          theme: theme.mode,
+          styles: { variables: standardMcpAppStyles(theme.cssVariables) },
+          themeCssVariables: theme.cssVariables,
+        },
+      });
+    };
+    const observer = new MutationObserver(notifyTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-theme'],
+    });
+    return () => observer.disconnect();
+  }, [postToApp]);
 
   React.useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
@@ -203,8 +231,23 @@ export function useMcpAppBridge({
         initializedRef.current = true;
         const permissions = resource?.permissions ?? data.permissions;
         const csp = resource?.csp ?? data.csp;
-        const toolInfo =
+        const rawToolInfo =
           resource?.toolInfo ?? normalizeMcpAppToolInfo(undefined, data);
+        // Standard MCP Tool fields are strings even when resource presentation
+        // metadata carries translations. Localize at the protocol boundary.
+        const toolInfo = {
+          ...rawToolInfo,
+          tool: {
+            ...rawToolInfo.tool,
+            title:
+              resolveLocalizedText(rawToolInfo.tool.title, i18n.language) ??
+              rawToolInfo.tool.name,
+            description: resolveLocalizedText(
+              rawToolInfo.tool.description,
+              i18n.language,
+            ) ?? undefined,
+          },
+        };
         const theme = buildMcpAppTheme(containerRef.current);
         const hostLocale = normalizeHostLocale(i18n.language);
         const hostLanguage = getLocaleLanguage(hostLocale);
@@ -221,6 +264,9 @@ export function useMcpAppBridge({
               serverTools: {},
               serverResources: {},
               openLinks: {},
+              ...(openProject
+                ? { experimental: { 'xpert/workbench': { openProject: true } } }
+                : {}),
               logging: {},
               message: {
                 text: {},
@@ -298,6 +344,28 @@ export function useMcpAppBridge({
                 typeof request.params.href === 'string'
               ? request.params.href
               : null;
+        const projectLink = href ? parseMcpAppProjectLink(href) : null;
+        if (projectLink) {
+          try {
+            const response = await openProject?.(
+              projectLink.projectId,
+              projectLink.viewKey,
+            );
+            if (!isRecord(response) || response.success !== true) {
+              postToApp(
+                jsonRpcError(
+                  request.id,
+                  i18n.t('message.mcpApp.openProjectFailed'),
+                ),
+              );
+            } else {
+              postToApp(jsonRpcResult(request.id, {}));
+            }
+          } catch (cause) {
+            postToApp(jsonRpcError(request.id, getErrorMessage(cause)));
+          }
+          return;
+        }
         if (!href || !isHttpUrl(href)) {
           if (request.id !== undefined) {
             postToApp(jsonRpcError(request.id, 'Invalid URL'));
@@ -417,6 +485,7 @@ export function useMcpAppBridge({
     client,
     data,
     dispatchHostRpc,
+    openProject,
     displayMode,
     i18n.language,
     messageId,

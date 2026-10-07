@@ -27,3 +27,5 @@ export * from './file-change-lines.js';
 
 export * from './approvals.js';
 export * from './realtime-voice.js';
+
+export * from './agent-execution-outcome';

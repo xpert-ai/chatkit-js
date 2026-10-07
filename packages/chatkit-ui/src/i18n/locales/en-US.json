@@ -87,6 +87,11 @@
       "clientCommandUnavailable": "No handler is configured for client command {{commandKey}}."
     },
     "externalAssistants": {
+      "cancel": "Cancel",
+      "cancelRun": "Cancel execution: {{name}}",
+      "cancelling": "Cancelling…",
+      "cancelRequested": "Cancellation requested",
+      "cancelFailed": "Could not cancel the execution. Please try again.",
       "title": "External assistants",
       "openRun": "View execution: {{name}}",
       "back": "Back to executions",
@@ -495,6 +500,7 @@
       "select": "Select project",
       "none": "No project",
       "autoNew": "New project · Create on send",
+      "confirmNew": "New project · Confirm settings first",
       "search": "Search projects",
       "new": "New project",
       "create": "Create",
@@ -860,6 +866,9 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
+      "openProjectFailed": "Unable to open this project.",
+      "refresh": "Refresh data",
+      "refreshFailed": "Unable to refresh data. Please try again.",
       "loading": "Loading MCP App",
       "fullscreen": "Open fullscreen",
       "pictureInPicture": "Open picture in picture",
@@ -900,7 +909,13 @@
         "replied": "Replied",
         "pending": "Pending",
         "interrupted": "Interrupted",
-        "timeout": "Timed out"
+        "timeout": "Timed out",
+        "business_accepted": "Accepted",
+        "business_already_completed": "Already completed",
+        "business_not_claimed": "Not claimed",
+        "business_blocked": "Blocked",
+        "business_failed": "Task failed",
+        "business_incomplete": "Not accepted"
       },
       "counts": {
         "messages": {
@@ -1016,7 +1031,7 @@
     "pause": "Pause workflow",
     "resume": "Resume workflow",
     "cancelRun": "Stop task",
-    "pausing": "Saving and pausing…",
+    "pausing": "Pausing",
     "paused": "Workflow paused",
     "editMessage": "Edit message",
     "sourcePauseUnavailable": "The original task cannot be paused yet. Try again after it finishes.",
@@ -1030,7 +1045,11 @@
       "interrupted": "Waiting",
       "error": "Error",
       "running": "Running"
-    }
+    },
+    "stop": "Stop",
+    "stopping": "Stopping",
+    "stopDescription": "End this run without undoing completed actions",
+    "pausingDescription": "Waiting for the current step and checkpoint; you can still stop the run"
   },
   "fileActivity": {
     "textLineChanges": "Text line changes",

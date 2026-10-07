@@ -1,4 +1,4 @@
-import { ArrowUp, Play, Square } from 'lucide-react';
+import { ArrowUp, Pause, Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
@@ -14,6 +14,7 @@ export type SendButtonProps = {
   stopDisabled?: boolean;
   onStop?: () => void;
   stopLabel?: string;
+  stopIcon?: 'stop' | 'pause';
   showResume?: boolean;
   resumeDisabled?: boolean;
   onResume?: () => void;
@@ -29,6 +30,7 @@ export function SendButton({
   stopDisabled = false,
   onStop,
   stopLabel = 'Stop',
+  stopIcon = 'stop',
   showResume = false,
   resumeDisabled = false,
   onResume,
@@ -38,7 +40,7 @@ export function SendButton({
 }: SendButtonProps) {
   if (showStop || showResume) {
     const label = showStop ? stopLabel : resumeLabel;
-    const Icon = showStop ? Square : Play;
+    const Icon = showStop ? (stopIcon === 'pause' ? Pause : Square) : Play;
     return (
       <button
         type="button"

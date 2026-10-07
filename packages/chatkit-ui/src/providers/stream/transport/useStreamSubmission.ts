@@ -38,10 +38,8 @@ type StreamSubmissionOptions = Pick<
   ReturnType<typeof useStreamRunState>,
   | 'setError'
   | 'pauseRequestedRef'
-  | 'pausedDisplayRef'
   | 'isLoadingRef'
   | 'lastExecutionIdRef'
-  | 'setPausedDisplay'
   | 'lastStreamOptionsRef'
   | 'rememberActiveRunId'
   | 'lastEventIdRef'
@@ -90,7 +88,6 @@ type StreamSubmissionOptions = Pick<
 export function useStreamSubmission({
   setError,
   pauseRequestedRef,
-  pausedDisplayRef,
   activeThreadIdRef,
   threadId,
   client,
@@ -103,7 +100,6 @@ export function useStreamSubmission({
   addSteerPriorityFollowUpIds,
   sendSteerFollowUp,
   markPendingFollowUpsAsQueued,
-  setPausedDisplay,
   conversationIdRef,
   connectorBindingIdsRef,
   valuesRef,
@@ -129,11 +125,7 @@ export function useStreamSubmission({
     async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
       setError(null);
       const humanInput = input && 'input' in input ? input : null;
-      if (
-        humanInput &&
-        (pauseRequestedRef.current || pausedDisplayRef.current) &&
-        !options?.newThread
-      ) {
+      if (humanInput && pauseRequestedRef.current && !options?.newThread) {
         const target =
           options?.threadId ?? activeThreadIdRef.current ?? threadId;
         if (target) {
@@ -163,16 +155,6 @@ export function useStreamSubmission({
               throw createAbortError(
                 'The active thread changed before sending.',
               );
-            }
-            if (current.status !== 'paused' && current.displayPause) {
-              await client.threads.releaseDisplayPause(
-                target,
-                current.displayPause.pauseId,
-              );
-              if (activeThreadIdRef.current !== target)
-                throw createAbortError(
-                  'The active thread changed before sending.',
-                );
             }
             disconnect();
             pauseRequestedRef.current = false;
@@ -237,7 +219,7 @@ export function useStreamSubmission({
       }
 
       const previousThreadId = activeThreadIdRef.current ?? threadId ?? null;
-      setPausedDisplay(null);
+
       const previousActiveThreadId = activeThreadIdRef.current;
       const previousConversationId = conversationIdRef.current;
       const previousConnectorBindingIds = connectorBindingIdsRef.current;

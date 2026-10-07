@@ -1,3 +1,4 @@
+import type { TAgentExecutionOutcome } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import type { MessagePresentationMode } from '../../../lib/message-presentation';
 
@@ -183,6 +184,7 @@ export function formatStepDuration(durationMs: number): string {
 export function getAgentRunStatusConfig(
   status?: string | null,
   hasReply = false,
+  outcome?: TAgentExecutionOutcome,
 ) {
   const normalized = normalizeRunStatus(status);
   if (normalized === 'running') {
@@ -191,6 +193,21 @@ export function getAgentRunStatusConfig(
       iconClass: 'text-blue-700',
       labelKey: 'running',
       spin: true,
+    };
+  }
+
+  if ((normalized === 'success' || normalized === 'succeeded') && outcome) {
+    return {
+      icon: outcome.accepted
+        ? CheckCircle2
+        : outcome.status === 'failed'
+          ? XCircle
+          : Info,
+      iconClass: outcome.accepted
+        ? 'text-muted-foreground'
+        : 'text-destructive',
+      labelKey: `business_${outcome.status}`,
+      spin: false,
     };
   }
 
@@ -333,6 +350,7 @@ export function AgentRunGroup({
   const statusConfig = getAgentRunStatusConfig(
     node.info.status,
     counts.text > 0,
+    node.info.businessOutcome,
   );
   const StatusIcon = statusConfig.icon;
   const isRunning = isRunningRunStatus(node.info.status);

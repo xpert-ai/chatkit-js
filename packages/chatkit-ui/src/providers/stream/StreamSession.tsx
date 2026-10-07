@@ -1,11 +1,14 @@
 import { useThreadActivitySubscription } from './activity/useThreadActivitySubscription';
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from 'react';
+import type { AgentRunInfo } from '../../lib/agent-runs';
+import { reconcileAgentRun } from './messages/reconcile-agent-run';
 import { createMissingApiConfigurationError } from '../../lib/api-config';
 import { createResumedRootExecutionHydrator } from '../../lib/resumed-root-executions';
 import {
@@ -73,7 +76,18 @@ export const StreamSession = ({
   });
 
   const messages = useStreamMessages();
-  const runState = useStreamRunState({ ...messages });
+  const reconcileExecution = useCallback(
+    (threadId: string, run: AgentRunInfo) => {
+      if (scope.activeThreadIdRef.current !== threadId) return;
+      messages.setValues((previous) =>
+        scope.activeThreadIdRef.current === threadId
+          ? reconcileAgentRun(previous, run)
+          : previous,
+      );
+    },
+    [scope.activeThreadIdRef, messages.setValues],
+  );
+  const runState = useStreamRunState();
   const followUpState = useStreamFollowUpState({ ...messages });
   const userInput = useStreamUserInput();
   const host = useStreamHost({ ...scope, hostIntegration });
@@ -124,22 +138,6 @@ export const StreamSession = ({
     resetThreadOnMount,
   });
 
-  // Reset chat execution state without unmounting Assistant-owned Workbench views.
-  const bindingKey = JSON.stringify([
-    projectId,
-    projectSelection?.mode,
-    runtimeKey,
-  ]);
-  const previousBinding = useRef(bindingKey);
-  const bindingChanged = previousBinding.current !== bindingKey;
-  useLayoutEffect(() => {
-    if (previousBinding.current === bindingKey) return;
-    previousBinding.current = bindingKey;
-    scope.consumedInitialThreadRef.current = null;
-    scope.initialSelectedThreadRef.current = null;
-    lifecycle.reset(initialThread ?? null, []);
-  }, [bindingKey, initialThread, lifecycle.reset]);
-
   const conversationProject = useConversationProject({
     client: credentials.client,
     projectId,
@@ -151,6 +149,28 @@ export const StreamSession = ({
       host.historyLoad.status !== 'error',
     historyMessageLoadVersion: messages.historyMessageLoadVersion,
   });
+
+  // Keep Assistant views mounted; reset chat state only for a new binding.
+  const bindingKey = JSON.stringify([projectId, projectSelection?.mode, runtimeKey]);
+  const previousBinding = useRef({ key: bindingKey, runtimeKey });
+  const navigationChanged = previousBinding.current.runtimeKey !== runtimeKey;
+  const adoptingConversationProject = Boolean(
+    projectId && scope.conversationId && conversationProject.resolved &&
+    conversationProject.projectId === projectId,
+  );
+  const bindingChanged = previousBinding.current.key !== bindingKey &&
+    (navigationChanged || !adoptingConversationProject);
+  useLayoutEffect(() => {
+    if (previousBinding.current.key === bindingKey) return;
+    previousBinding.current = { key: bindingKey, runtimeKey };
+    if (!navigationChanged && adoptingConversationProject) return;
+    scope.initialSelectedThreadRef.current = null;
+    // Project changes must not reopen the old initial thread. Explicit navigation may reload it.
+    if (navigationChanged) scope.consumedInitialThreadRef.current = null;
+    lifecycle.reset(navigationChanged ? initialThread ?? null : null, [], {
+      suppressThreadChange: !navigationChanged,
+    });
+  }, [bindingKey, runtimeKey, navigationChanged, adoptingConversationProject, initialThread, lifecycle.reset]);
 
   const refreshConversationProject = conversationProject.refresh;
   const hydrateConversationProject = conversationProject.hydrate;
@@ -297,18 +317,12 @@ export const StreamSession = ({
     credentials.runtimeClientSecret.startsWith('cs-x-'),
   );
 
-  const isDisplayPaused = runState.pausedDisplay?.threadId === scope.threadId;
   const isThreadInterrupted =
     runState.interruptedThreadId !== null &&
     runState.interruptedThreadId === scope.threadId;
   const hasPendingUserInput = Boolean(
     interrupts.pendingHITLRequest || userInput.pendingRequestUserInput,
   );
-  const displayValues =
-    isDisplayPaused && runState.pausedDisplay
-      ? runState.pausedDisplay.values
-      : messages.values;
-
   const initialHistoryThread = normalizeThreadIdentifier(
     initialThread ?? scope.initialSelectedThreadRef.current,
   );
@@ -334,12 +348,10 @@ export const StreamSession = ({
     connectorBindingIds: scope.connectorBindingIds,
     threadGoal: messages.threadGoal,
     contextUsageByAgentKey: messages.contextUsageByAgentKey,
-    values: displayValues,
-    messages: displayValues.messages ?? [],
+    values: messages.values,
+    messages: messages.values.messages ?? [],
     historyMessageLoadVersion: messages.historyMessageLoadVersion,
-    historyMessagePagination: isDisplayPaused
-      ? { ...messages.historyMessagePagination, hasMore: false }
-      : messages.historyMessagePagination,
+    historyMessagePagination: messages.historyMessagePagination,
     historyLoad: host.historyLoad,
     todos: messages.todos,
     runtimeActivities: activities.runtimeActivities,
@@ -349,12 +361,11 @@ export const StreamSession = ({
     // Waiting for a decision may retain a local resolver, but is not execution.
     isLoading:
       runState.isLoading && !isThreadInterrupted && !hasPendingUserInput,
-    isDisplayPaused,
+    isDisplayPaused: false,
     isThreadInterrupted,
-    displayPause: isDisplayPaused
-      ? (runState.pausedDisplay?.pause ?? null)
-      : null,
-    resumeDisplay: resume.resumeDisplay,
+    // Compatibility fields for embedders; messages are always server-backed.
+    displayPause: null,
+    resumeDisplay: async () => {},
     isReady,
     error: runState.error,
     selectedModelId: messages.selectedModelId,
@@ -362,6 +373,7 @@ export const StreamSession = ({
     loadThread: threadLoading.loadThread,
     loadConversationMessages: history.loadConversationMessages,
     loadMoreConversationMessages: history.loadMoreConversationMessages,
+    reconcileAgentRun: reconcileExecution,
     submit: submission.submit,
     stop: controls.stop,
     activeRunId: runState.activeRunId,

@@ -62,3 +62,26 @@ it('refreshes when loading changes and does not poll on an interval', async () =
     setIntervalSpy.mockRestore();
   }
 });
+
+it('observes pausing until checkpoint confirmation even without a stream, then stops polling', async () => {
+  vi.useFakeTimers();
+  const listThreads = vi.fn()
+    .mockResolvedValueOnce([{ thread_id: 'thread', status: 'pausing' }])
+    .mockResolvedValue([{ thread_id: 'thread', status: 'paused' }]);
+  const client = { conversations: { listThreads } } as unknown as Client;
+  const { result, unmount } = renderHook(() =>
+    useThreadBranches(client, 'conversation', 'thread', true, false),
+  );
+  try {
+    await act(async () => {});
+    expect(result.current.current?.status).toBe('pausing');
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(result.current.current?.status).toBe('paused');
+    const reads = listThreads.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    expect(listThreads).toHaveBeenCalledTimes(reads);
+  } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});

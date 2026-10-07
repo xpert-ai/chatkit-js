@@ -178,9 +178,10 @@ export function setupHistoryTests() {
     mocks.releaseDisplayPause.mockReset().mockResolvedValue(undefined);
     mocks.pauseRun
       .mockReset()
-      .mockImplementation(async (_thread, _run, options) => ({
+      .mockImplementation(async (_thread, run) => ({
         state: 'pausing',
-        displayPause: { ...savedDisplay(), snapshot: options.displaySnapshot },
+        executionId: run,
+        pauseId: 'pause-token',
       }));
     mocks.runStream.mockReset().mockImplementation(async function* () {});
   });

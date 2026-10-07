@@ -44,6 +44,7 @@ export type McpAppToolInfo = JsonObject & {
 };
 
 export type NormalizedMcpAppResource = {
+  refresh?: { toolName: string; arguments?: JsonObject };
   uri?: string;
   mimeType?: string;
   html: string;

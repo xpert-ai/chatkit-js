@@ -306,7 +306,7 @@ describe('generic interrupted thread lifecycle', () => {
     expect(mocks.cancelRun).not.toHaveBeenCalled();
   });
 
-  it('can reveal a frozen display while the workflow remains interrupted', async () => {
+  it('ignores a legacy frozen display while the workflow remains interrupted', async () => {
     mocks.getThread.mockResolvedValue({
       metadata: { id: 'conversation-thread-1' },
       status: 'interrupted',
@@ -315,11 +315,11 @@ describe('generic interrupted thread lifecycle', () => {
     });
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
-    expect(stream.isDisplayPaused).toBe(true);
+    expect(stream.isDisplayPaused).toBe(false);
     await act(async () => {
       await stream.resumeDisplay();
     });
-    expect(mocks.releaseDisplayPause).toHaveBeenCalledOnce();
+    expect(mocks.releaseDisplayPause).not.toHaveBeenCalled();
     expect(stream.isDisplayPaused).toBe(false);
     expect(stream.isThreadInterrupted).toBe(true);
     expect(mocks.resumeRun).not.toHaveBeenCalled();

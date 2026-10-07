@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
 import { ThemeProvider } from '../../providers/Theme';
@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
       executeFileAction: vi.fn(),
       createFileAccessSession: vi.fn(),
       createFileAccessGrant: vi.fn(),
+      readFileAccess: vi.fn(),
       revokeFileAccessSession: vi.fn(),
     },
   },
@@ -67,7 +68,7 @@ const manifest: XpertExtensionViewManifest = {
   clientCommands: [
     { key: 'assistant.context.set', label: { en_US: 'Set context' } },
   ],
-  fileAccess: { purposes: ['preview'] },
+  fileAccess: { purposes: ['preview', 'download'] },
 };
 const runtimeScope = {
   projectId: 'project-1',
@@ -75,6 +76,7 @@ const runtimeScope = {
 };
 
 describe('RemoteViewFrame', () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     for (const key of Object.keys(mocks.client.viewHosts)) {
       const method =
@@ -117,6 +119,157 @@ describe('RemoteViewFrame', () => {
       '*',
     );
   });
+
+  it.each(['preview', 'download'] as const)(
+    'materializes authorized %s bytes in the host and revokes the session when the view closes',
+    async (purpose) => {
+      const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+      mocks.client.viewHosts.createFileAccessSession.mockResolvedValue({
+        sessionId: 'session',
+        expiresAt,
+      });
+      const grant = {
+        url: 'https://host/api/workspace-files/content/session/grant/image.png',
+        fileName: purpose === 'download' ? '投标文件.docx' : 'image.png',
+        mimeType:
+          purpose === 'download'
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'image/png',
+        expiresAt,
+      };
+      mocks.client.viewHosts.createFileAccessGrant.mockResolvedValue(grant);
+      mocks.client.viewHosts.readFileAccess.mockResolvedValue(
+        await new Response('image', {
+          headers: { 'Content-Type': grant.mimeType },
+        }).blob(),
+      );
+      const view = renderFrame();
+      const iframe = (await screen.findByTitle(
+        'Documents',
+      )) as HTMLIFrameElement;
+      const postMessage = vi.spyOn(getContentWindow(iframe), 'postMessage');
+      fireEvent.load(iframe);
+      const init = postMessage.mock.calls.find(
+        ([message]) =>
+          isObject(message) && Reflect.get(message, 'type') === 'init',
+      )?.[0];
+      const instanceId = isObject(init)
+        ? Reflect.get(init, 'instanceId')
+        : undefined;
+      act(() =>
+        dispatchFrameMessage(iframe, {
+          channel: REMOTE_COMPONENT_CHANNEL,
+          protocolVersion: 1,
+          instanceId,
+          type: 'requestFileAccess',
+          requestId: purpose,
+          fileKey: 'proof',
+          targetId: 'asset',
+          purpose,
+        }),
+      );
+      await waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'fileAccessResult',
+            requestId: purpose,
+            result: { ...grant, url: `data:${grant.mimeType};base64,aW1hZ2U=` },
+          }),
+          '*',
+        ),
+      );
+      expect(mocks.client.viewHosts.createFileAccessGrant).toHaveBeenCalledWith(
+        'session',
+        {
+          fileKey: 'proof',
+          targetId: 'asset',
+          purpose,
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(mocks.client.viewHosts.readFileAccess).toHaveBeenCalledWith(
+        grant.url,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+      expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin');
+      view.unmount();
+      expect(
+        mocks.client.viewHosts.revokeFileAccessSession,
+      ).toHaveBeenCalledWith('session');
+    },
+  );
+
+  it.each(['undeclared', 'denied'] as const)(
+    'rejects %s downloads without returning a cookie-bound URL',
+    async (failure) => {
+      const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+      mocks.client.viewHosts.createFileAccessSession.mockResolvedValue({
+        sessionId: 'session',
+        expiresAt,
+      });
+      mocks.client.viewHosts.createFileAccessGrant.mockResolvedValue({
+        url: 'https://host/api/workspace-files/content/session/grant/export.docx',
+        fileName: '标书.docx',
+        mimeType: 'application/octet-stream',
+        expiresAt,
+      });
+      mocks.client.viewHosts.readFileAccess.mockRejectedValue(
+        new Error('Forbidden'),
+      );
+      renderFrame(
+        undefined,
+        failure === 'undeclared'
+          ? { ...manifest, fileAccess: { purposes: ['preview'] } }
+          : manifest,
+      );
+      const iframe = (await screen.findByTitle(
+        'Documents',
+      )) as HTMLIFrameElement;
+      const postMessage = vi.spyOn(getContentWindow(iframe), 'postMessage');
+      fireEvent.load(iframe);
+      const init = postMessage.mock.calls.find(
+        ([message]) =>
+          isObject(message) && Reflect.get(message, 'type') === 'init',
+      )?.[0];
+      act(() =>
+        dispatchFrameMessage(iframe, {
+          channel: REMOTE_COMPONENT_CHANNEL,
+          protocolVersion: 1,
+          instanceId: isObject(init)
+            ? Reflect.get(init, 'instanceId')
+            : undefined,
+          type: 'requestFileAccess',
+          requestId: 'download',
+          fileKey: 'export',
+          targetId: 'asset',
+          purpose: 'download',
+        }),
+      );
+      await waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'error',
+            requestId: 'download',
+            message:
+              failure === 'undeclared'
+                ? "File access purpose 'download' is not available."
+                : 'Forbidden',
+          }),
+          '*',
+        ),
+      );
+      expect(postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'fileAccessResult' }),
+        '*',
+      );
+      if (failure === 'undeclared') {
+        expect(
+          mocks.client.viewHosts.createFileAccessSession,
+        ).not.toHaveBeenCalled();
+        expect(mocks.client.viewHosts.readFileAccess).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it('sends updated navigation selection and parameters to a retained view', async () => {
     const props = {
@@ -557,8 +710,8 @@ describe('RemoteViewFrame', () => {
   });
 });
 
-function renderFrame(theme?: ChatKitTheme) {
-  return render(renderFrameElement(theme));
+function renderFrame(theme?: ChatKitTheme, viewManifest = manifest) {
+  return render(renderFrameElement(theme, runtimeScope, true, viewManifest));
 }
 
 function renderFrameElement(
@@ -568,11 +721,12 @@ function renderFrameElement(
     conversationId: string | null;
   } = runtimeScope,
   contextReady = true,
+  viewManifest = manifest,
 ) {
   return (
     <ThemeProvider theme={theme}>
       <RemoteViewFrame
-        manifest={manifest}
+        manifest={viewManifest}
         hostId="agent-1"
         runtimeScope={scope}
         contextReady={contextReady}

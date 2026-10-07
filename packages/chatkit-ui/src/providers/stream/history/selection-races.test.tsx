@@ -3,6 +3,8 @@ import React from 'react';
 import { describe, expect, it } from 'vitest';
 import type { StreamContextType } from '../../Stream';
 import {
+  StreamProvider,
+  Probe,
   deferred,
   history,
   mocks,
@@ -268,5 +270,71 @@ describe('thread history restoration', () => {
       newDone.resolve(undefined);
     });
     await waitFor(() => expect(stream.isLoading).toBe(false));
+  });
+});
+
+describe('in-place project changes', () => {
+  setupHistoryTests();
+
+  it('adopts the persisted project of the current conversation without resetting its transcript or readiness', async () => {
+    mocks.getConversation.mockImplementation(async (id: string) => ({
+      id, status: 'idle', projectId: 'project-1',
+    }));
+    const { rerender } = render(provider('thread-1', 'cs-x-test', ''));
+    await waitFor(() => expect(stream.messages).toHaveLength(2));
+    const messages = stream.messages;
+    rerender(provider('thread-1', 'cs-x-test', 'project-1'));
+    expect(stream.threadId).toBe('thread-1');
+    expect(stream.messages).toBe(messages);
+    expect(stream.runtimeScopeReady).toBe(true);
+    expect(mocks.getThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reopen an unchanged initial thread when the host switches projects', async () => {
+    const { rerender } = render(provider('thread-1'));
+    await waitFor(() => expect(stream.messages).toHaveLength(2));
+    rerender(provider('thread-1', 'cs-x-test', 'project-2'));
+    await waitFor(() => expect(stream.threadId).toBeNull());
+    expect(stream.messages).toEqual([]);
+    expect(stream.runtimeScopeReady).toBe(true);
+    expect(mocks.getThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears personal history when automatic project creation is selected', async () => {
+    mocks.getConversation.mockResolvedValue({ id: 'personal', projectId: undefined });
+    const selection = (mode: 'none' | 'auto-new') => (
+      <StreamProvider apiKey="cs-x-test" xpertId="assistant-1" initialThread="personal-thread" projectSelection={{ mode }} threadStateMode="memory">
+        <Probe />
+      </StreamProvider>
+    );
+    const { rerender } = render(selection('none'));
+    await waitFor(() => expect(stream.messages).toHaveLength(2));
+    rerender(selection('auto-new'));
+    await waitFor(() => expect(stream.threadId).toBeNull());
+    expect(stream.messages).toEqual([]);
+    expect(stream.conversationId).toBeNull();
+  });
+
+  it('keeps the child DOM mounted and clears the previous conversation and connector selection', async () => {
+    const { rerender, getByTestId } = render(
+      <StreamProvider apiKey="cs-x-test" xpertId="assistant-1" projectId="project-1" initialThread="thread-1" threadStateMode="memory">
+        <Probe /><input data-testid="stable-composer" defaultValue="draft" />
+      </StreamProvider>,
+    );
+    await waitFor(() => expect(stream.messages).toHaveLength(2));
+    const composer = getByTestId('stable-composer');
+    rerender(
+      <StreamProvider apiKey="cs-x-test" xpertId="assistant-1" projectId="project-2" threadStateMode="memory">
+        <Probe /><input data-testid="stable-composer" defaultValue="draft" />
+      </StreamProvider>,
+    );
+    await waitFor(() => expect(stream.threadId).toBeNull());
+    expect(getByTestId('stable-composer')).toBe(composer);
+    expect(stream.conversationId).toBeNull();
+    expect(stream.messages).toEqual([]);
+    expect(stream.connectorBindingIds).toEqual([]);
+    expect(stream.projectId).toBe('project-2');
+    expect(stream.historyLoad.status).toBe('idle');
+    expect(mocks.cancelRun).not.toHaveBeenCalled();
   });
 });

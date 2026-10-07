@@ -41,3 +41,20 @@ standard MCP Apps style mapping.
 
 Follow the repository's file-size guidance in `AGENTS.md` through normal review,
 without adding a dedicated line-count gate.
+
+### Refresh and project navigation
+
+Resource providers may declare `_meta.ui.refresh = { toolName, arguments? }`.
+The header uses this explicit **read-only** tool through the existing scoped
+`tools/call` RPC and forwards its `CallToolResult` as
+`ui/notifications/tool-result`. It never replays the entry tool, reloads the
+iframe, saves the form, or submits a chat message. Failed refreshes preserve the
+current UI. Apps without a declaration do not show Refresh. App handlers must
+recognize their latest-data DTO and avoid replacing it with an old confirmation.
+
+The `xpert/workbench` experimental host capability advertises `openProject` and
+accepts project links via standard `ui/open-link`, using
+`xpert://project/<UUID>?viewKey=<provider>__<view>`. ChatKit converts this to
+`workbench.navigation.open` / `assistant.project`. Existing host authorization
+and session navigation apply; credentials never return to the App. External
+HTTP(S) links retain their existing behavior. Other schemes remain unsupported.

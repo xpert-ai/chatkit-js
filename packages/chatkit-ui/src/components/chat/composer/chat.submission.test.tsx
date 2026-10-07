@@ -77,6 +77,20 @@ describe('Chat plan mode and submission', () => {
     });
   });
 
+  it('clears a run-control error when sending a new message', async () => {
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.activeRunId = 'run-1';
+    mocks.stream.isLoading = true;
+    mocks.stream.pauseRun.mockRejectedValue(new Error('HTTP 409: workflow changed'));
+    renderChat();
+    fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+    await screen.findByText('HTTP 409: workflow changed');
+    setComposerText(screen.getByRole('textbox'), 'continue with current settings');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('HTTP 409: workflow changed')).not.toBeInTheDocument();
+  });
+
   it('adds planMode to input and state.human when enabled', async () => {
     renderChat();
 

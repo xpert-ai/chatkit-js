@@ -215,6 +215,7 @@ export function normalizeMcpAppResourceResponse(
     html,
     appInstanceToken: readString(raw.appInstanceToken),
     resourceUri: readString(raw.resourceUri),
+    refresh: readRefresh(raw.refresh),
     title: resourceInfo.title,
     description: resourceInfo.description,
     icon: resourceInfo.icon,
@@ -239,4 +240,12 @@ export function isMcpAppComponentData(
     typeof data.appInstanceId === 'string' &&
     typeof data.resourceUri === 'string'
   );
+}
+
+function readRefresh(value: unknown): NormalizedMcpAppResource['refresh'] {
+  const raw = readRecord(value);
+  const toolName = raw && readString(raw.toolName);
+  if (!raw || !toolName) return undefined;
+  if (raw.arguments !== undefined && !isRecord(raw.arguments)) return undefined;
+  return { toolName, arguments: readRecord(raw.arguments) };
 }
