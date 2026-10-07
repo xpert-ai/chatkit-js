@@ -170,7 +170,7 @@ export type StreamContextType = {
     values?: StreamRunInput | null,
     options?: StreamSubmitOptions,
   ) => Promise<void>;
-  stop: () => void;
+  stop: (runId?: string) => Promise<void>;
   /** Current stream execution id, or null until the first assistant event. */
   activeRunId: string | null;
   pauseRun: (runId: string) => Promise<void>;

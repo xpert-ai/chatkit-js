@@ -49,7 +49,7 @@ type ChatSubmissionOptions = Pick<
     | 'setReferencedWorkspaceFiles'
   > &
   Pick<ReturnType<typeof useChatEnvironment>, 'stream' | 't'> &
-  Pick<ReturnType<typeof useChatRunControl>, 'isRunPaused'> &
+  Pick<ReturnType<typeof useChatRunControl>, 'isRunPaused' | 'clearRunControlError'> &
   Pick<
     ReturnType<typeof useRuntimeCapabilitiesState>,
     | 'getRuntimeCapabilitiesForSubmit'
@@ -78,6 +78,7 @@ export function useChatSubmission({
   composerPartsRef,
   stream,
   isRunPaused,
+  clearRunControlError,
   planModeEnabled,
   getRuntimeCapabilitiesForSubmit,
   promptWorkflow,
@@ -130,6 +131,8 @@ export function useChatSubmission({
       if (!humanInput) {
         return;
       }
+
+      clearRunControlError();
 
       const {
         runtimeCapabilitiesForSubmit,
@@ -326,6 +329,7 @@ export function useChatSubmission({
       promptWorkflow,
       isSubmissionBlocked,
       isRunPaused,
+      clearRunControlError,
       options?.request,
       persistSessionRuntimeCapabilities,
       resourcesEnabled,

@@ -280,6 +280,43 @@ describe('thread history restoration', () => {
     ]);
   });
 
+  it.each(['pausing', 'paused'])(
+    'can stop a reloaded %s run without an SSE connection',
+    async (status) => {
+      mocks.getThread.mockResolvedValue({
+        metadata: { id: 'conversation-thread-1' },
+        status,
+      });
+      mocks.listRuns.mockResolvedValue([{ run_id: 'run', status: 'running' }]);
+      mocks.joinStream.mockImplementation(async function* () {});
+      render(provider('thread-1'));
+      await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+      await act(async () => {
+        await stream.stop('run');
+      });
+      expect(mocks.cancelRun).toHaveBeenCalledWith('thread-1', 'run', true);
+      expect(stream.isThreadInterrupted).toBe(true);
+    },
+  );
+
+  it('surfaces stop failures so a paused run can be retried', async () => {
+    mocks.getThread.mockResolvedValue({
+      metadata: { id: 'conversation-thread-1' },
+      status: 'paused',
+    });
+    mocks.cancelRun.mockRejectedValueOnce(new Error('Cancel unavailable'));
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    await act(async () => {
+      await expect(stream.stop('run')).rejects.toThrow('Cancel unavailable');
+    });
+    expect(stream.isThreadInterrupted).toBe(false);
+    await act(async () => {
+      await stream.stop('run');
+    });
+    expect(mocks.cancelRun).toHaveBeenCalledTimes(2);
+  });
+
   it('reconciles a lost pause response without freezing or retrying execution', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));

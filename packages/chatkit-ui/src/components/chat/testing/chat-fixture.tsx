@@ -84,6 +84,9 @@ const mocks = vi.hoisted(() => {
       loadMoreConversationMessages: vi.fn(),
       submit: vi.fn(),
       stop: vi.fn(),
+      activeRunId: null as string | null,
+      pauseRun: vi.fn(),
+      resumeRun: vi.fn(),
       reset: vi.fn(),
       removePendingFollowUp: vi.fn(),
       canSendPendingFollowUpNow: vi.fn().mockReturnValue(false),
@@ -268,10 +271,11 @@ vi.mock('../../composer/ComposerMenu', () => ({
 }));
 
 vi.mock('../../composer/SendButton', () => ({
-  SendButton: ({ disabled }: { disabled?: boolean }) => (
-    <button type="submit" disabled={disabled}>
-      send
-    </button>
+  SendButton: ({ disabled, showStop, onStop }: { disabled?: boolean; showStop?: boolean; onStop?: () => void }) => (
+    <>
+      {showStop && <button type="button" onClick={onStop}>stop</button>}
+      <button type="submit" disabled={disabled}>send</button>
+    </>
   ),
 }));
 
@@ -579,6 +583,9 @@ export function setupChatTest() {
     mocks.stream.submit.mockClear();
     mocks.stream.loadMoreConversationMessages.mockClear();
     mocks.stream.loadMoreConversationMessages.mockResolvedValue([]);
+    mocks.stream.activeRunId = null;
+    mocks.stream.pauseRun.mockReset();
+    mocks.stream.resumeRun.mockReset();
     mocks.stream.reset.mockClear();
     mocks.stream.reset.mockImplementation((threadId?: string | null) => {
       mocks.stream.threadId = threadId ?? null;

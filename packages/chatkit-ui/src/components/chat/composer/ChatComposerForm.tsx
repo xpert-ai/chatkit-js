@@ -94,7 +94,7 @@ type ChatComposerFormProps = Pick<
     | 'canPauseRun'
     | 'handleComposerRunControl'
     | 'isRunPaused'
-    | 'canRevealPausedDisplay'
+    | 'isStoppingRun'
     | 'isRunPausing'
     | 'isResumingRun'
     | 'currentRunControl'
@@ -183,7 +183,7 @@ export function ChatComposerForm({
   isChangingBranch,
   handleComposerRunControl,
   isRunPaused,
-  canRevealPausedDisplay,
+  isStoppingRun,
   isRunPausing,
   isResumingRun,
   currentRunControl,
@@ -415,6 +415,11 @@ export function ChatComposerForm({
                   futureBadge: t('chat.modelPicker.futureBadge'),
                 }}
               />
+              {isRunPausing && (
+                <span role="status" className="text-xs text-muted-foreground" title={t('threadControl.pausingDescription')}>
+                  {t('threadControl.pausing')}
+                </span>
+              )}
               <SendButton
                 disabled={isSendDisabled}
                 isLoading={stream.isLoading}
@@ -423,16 +428,17 @@ export function ChatComposerForm({
                   (stream.isLoading || canPauseRun) &&
                   (!hasComposerInput || hasPendingInteractiveRequest)
                 }
-                stopDisabled={isChangingBranch || !canPauseRun}
+                stopDisabled={isChangingBranch || isStoppingRun || !canPauseRun}
                 onStop={() => void handleComposerRunControl('pause')}
-                stopLabel={t('threadControl.pause')}
+                stopLabel={t('threadControl.stop')}
                 showResume={isPauseActive && !hasComposerInput}
                 resumeDisabled={
-                  (!isRunPaused && !canRevealPausedDisplay) ||
+                  !isRunPaused ||
+                  isStoppingRun ||
                   isRunPausing ||
                   isResumingRun ||
                   isChangingBranch ||
-                  (!currentRunControl?.pauseId && !canRevealPausedDisplay)
+                  !currentRunControl?.pauseId
                 }
                 onResume={() => void handleComposerRunControl('resume')}
                 resumeLabel={t('threadControl.resume')}

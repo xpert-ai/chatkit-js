@@ -1016,7 +1016,7 @@
     "pause": "Pause workflow",
     "resume": "Resume workflow",
     "cancelRun": "Stop task",
-    "pausing": "Saving and pausing…",
+    "pausing": "Pausing",
     "paused": "Workflow paused",
     "editMessage": "Edit message",
     "sourcePauseUnavailable": "The original task cannot be paused yet. Try again after it finishes.",
@@ -1030,7 +1030,11 @@
       "interrupted": "Waiting",
       "error": "Error",
       "running": "Running"
-    }
+    },
+    "stop": "Stop",
+    "stopping": "Stopping",
+    "stopDescription": "End this run without undoing completed actions",
+    "pausingDescription": "Waiting for the current step and checkpoint; you can still stop the run"
   },
   "fileActivity": {
     "textLineChanges": "Text line changes",

@@ -81,30 +81,36 @@ export function useStreamRunControl({
     [client, threadId],
   );
 
-  const stop = useCallback(() => {
-    const activeThreadId = activeThreadIdRef.current ?? threadId ?? null;
-    const activeRunId = lastExecutionIdRef.current;
-    const hasActiveRun = abortRef.current !== null;
-    disconnect();
-    if (hasActiveRun) {
-      const interruptedAt = Date.now();
+  const stop = useCallback(
+    async (runId?: string) => {
+      const target = activeThreadIdRef.current ?? threadId;
+      const previousRunId = lastExecutionIdRef.current;
+      const activeRunId = runId ?? previousRunId;
+      if (!target || !activeRunId) return;
+      // Cancellation must also work after reloading a paused thread, with no SSE.
+      // Keep the live connection until the server accepts; failures remain retryable.
+      await client.runs.cancel(target, activeRunId, true);
+      if (
+        activeThreadIdRef.current !== target ||
+        lastExecutionIdRef.current !== previousRunId
+      )
+        return;
+      disconnect();
+      pauseRequestedRef.current = false;
+      setInterruptedThreadId(target);
       setValues((prev) => {
         const messages = prev.messages ?? [];
         const nextMessages = interruptActiveAgentRunOnMessages(messages, {
           activeRunId,
-          hasActiveRun,
-          interruptedAt,
+          hasActiveRun: true,
+          interruptedAt: Date.now(),
         });
         return nextMessages === messages
           ? prev
           : { ...prev, messages: nextMessages };
       });
-    }
-    if (hasActiveRun && activeThreadId && activeRunId) {
-      client.runs
-        .cancel(activeThreadId, activeRunId, false)
-        .catch(() => undefined);
-    }
-  }, [client, disconnect, threadId]);
+    },
+    [client, disconnect, threadId],
+  );
   return { disconnect, stop, pauseRun };
 }
