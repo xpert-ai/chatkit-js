@@ -12,7 +12,16 @@ const imageBlob = () =>
 
 describe('FileAccessUrls', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    // Freeze grant expiry and track timers, but let jsdom FileReader's I/O run.
+    vi.useFakeTimers({
+      toFake: [
+        'Date',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+      ],
+    });
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
   });
   afterEach(() => vi.useRealTimers());
