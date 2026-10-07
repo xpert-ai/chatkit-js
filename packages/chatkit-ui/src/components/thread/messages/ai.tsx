@@ -197,17 +197,14 @@ export function AssistantMessage({
   return (
     <div className={cn('space-y-3', streamingClass, className)}>
       {answerNode}
-      {!isStreaming && (
-        <>
-          <MessageBubble
-            mode={mode}
-            hidden={!hasRenderableFileActivity(message)}
-          >
-            <MessageFileActivity message={message} />
-          </MessageBubble>
-          <MessageResourceCards message={message} mode={mode} />
-        </>
+      {!isStreaming && hasRenderableFileActivity(message) && (
+        <MessageFileActivity message={message} />
       )}
+      <MessageResourceCards
+        message={message}
+        mode={mode}
+        isStreaming={isStreaming}
+      />
       {showCompletion && (
         <MessageBubble mode={mode} kind="status" role="status">
           {t(`message.bubbles.${completion}`)}

@@ -1,4 +1,3 @@
-import { MessageBubble } from './message-bubble';
 import type { MessagePresentationMode } from '../../../lib/message-presentation';
 import * as React from 'react';
 import { Box, Loader2 } from 'lucide-react';
@@ -37,6 +36,7 @@ function ResourceCard({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const available = workbench.enabled && !!workbench.openResourceCard;
+  const openLabel = t('resourceCard.open');
   const open = async () => {
     if (!available || busy) return;
     setBusy(true);
@@ -92,13 +92,13 @@ function ResourceCard({
           type="button"
           onClick={open}
           disabled={!available || workbench.loading || busy}
-          aria-label={`${t('resourceCard.open')} ${card.data.title}`}
+          aria-label={`${openLabel} ${card.data.title}`}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
           {busy && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           )}
-          {t('resourceCard.open')}
+          {openLabel}
         </button>
       </div>
       {!available && (
@@ -117,17 +117,17 @@ function ResourceCard({
 
 export function MessageResourceCards({
   message,
-  mode,
 }: {
   message: ChatkitMessage;
   mode?: MessagePresentationMode;
+  isStreaming?: boolean;
 }) {
+  const cards = messageResourceCards(message);
+  if (!cards.length) return null;
   return (
     <div className="space-y-2">
-      {messageResourceCards(message).map((card) => (
-        <MessageBubble key={card.id} mode={mode}>
-          <ResourceCard card={card} messageId={message.id} />
-        </MessageBubble>
+      {cards.map((card) => (
+        <ResourceCard key={card.id} card={card} messageId={message.id} />
       ))}
     </div>
   );
