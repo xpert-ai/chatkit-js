@@ -1,5 +1,7 @@
+import { parseMcpAppProjectLink } from './project-link';
 import type { TMessageComponentMcpAppData } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
+import { useWorkbench } from '../../../../../workbench/context';
 import type { useChatkitTranslation } from '../../../../../i18n/useChatkitTranslation';
 import {
   readAppContinuation,
@@ -102,6 +104,7 @@ export function useMcpAppBridge({
   streamIsLoading,
   dispatchHostRpc,
 }: McpAppBridgeOptions) {
+  const { openProject } = useWorkbench();
   React.useEffect(() => {
     if (!initializedRef.current) return;
     postToApp({
@@ -221,6 +224,9 @@ export function useMcpAppBridge({
               serverTools: {},
               serverResources: {},
               openLinks: {},
+              ...(openProject
+                ? { experimental: { 'xpert/workbench': { openProject: true } } }
+                : {}),
               logging: {},
               message: {
                 text: {},
@@ -298,6 +304,28 @@ export function useMcpAppBridge({
                 typeof request.params.href === 'string'
               ? request.params.href
               : null;
+        const projectLink = href ? parseMcpAppProjectLink(href) : null;
+        if (projectLink) {
+          try {
+            const response = await openProject?.(
+              projectLink.projectId,
+              projectLink.viewKey,
+            );
+            if (!isRecord(response) || response.success !== true) {
+              postToApp(
+                jsonRpcError(
+                  request.id,
+                  i18n.t('message.mcpApp.openProjectFailed'),
+                ),
+              );
+            } else {
+              postToApp(jsonRpcResult(request.id, {}));
+            }
+          } catch (cause) {
+            postToApp(jsonRpcError(request.id, getErrorMessage(cause)));
+          }
+          return;
+        }
         if (!href || !isHttpUrl(href)) {
           if (request.id !== undefined) {
             postToApp(jsonRpcError(request.id, 'Invalid URL'));
@@ -417,6 +445,7 @@ export function useMcpAppBridge({
     client,
     data,
     dispatchHostRpc,
+    openProject,
     displayMode,
     i18n.language,
     messageId,

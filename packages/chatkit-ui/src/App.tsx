@@ -105,7 +105,9 @@ export function App({
     if (configuredSelectionKey === lastConfiguredSelectionRef.current) return;
     lastConfiguredSelectionRef.current = configuredSelectionKey;
     setProjectSelection(configuredSelection);
-    setScopedInitialThread(options?.initialThread ?? null);
+    setScopedInitialThread(options?.initialThread !== lastConfiguredInitialThreadRef.current
+      ? options?.initialThread ?? null : null);
+    setWorkbenchRequestContext({});
   }, [configuredSelectionKey, configuredSelection, options?.initialThread]);
 
   React.useEffect(() => {

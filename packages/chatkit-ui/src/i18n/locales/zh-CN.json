@@ -500,6 +500,7 @@
       "select": "选择项目",
       "none": "不使用项目",
       "autoNew": "新项目 · 发送后自动创建",
+      "confirmNew": "新项目 · 确认配置后创建",
       "search": "搜索项目",
       "new": "新建项目",
       "create": "创建",
@@ -865,6 +866,7 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
+      "openProjectFailed": "暂时无法打开此项目。",
       "loading": "正在加载 MCP App",
       "fullscreen": "全屏显示",
       "pictureInPicture": "画中画显示",

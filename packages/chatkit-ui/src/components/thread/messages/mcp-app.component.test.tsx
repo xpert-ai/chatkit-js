@@ -1,3 +1,4 @@
+import { WorkbenchContext, disabledWorkbenchContext } from '../../../workbench/context';
 import * as React from 'react';
 import type { TMessageComponentMcpAppData } from '@xpert-ai/chatkit-types';
 import {
@@ -121,6 +122,20 @@ describe('McpAppMessage host controls', () => {
     expect(await screen.findByTitle('Example App')).toBe(iframe);
     expect(mocks.getResource).toHaveBeenCalledTimes(1);
     expect(mocks.teardown).not.toHaveBeenCalled();
+  });
+
+  it('opens project links through the Workbench host without exposing session credentials', async () => {
+    const openProject = vi.fn().mockResolvedValue({ success: true, session: { clientSecret: 'host-only' } });
+    render(<WorkbenchContext.Provider value={{ ...disabledWorkbenchContext, enabled: true, openProject }}><McpAppMessage data={data}/></WorkbenchContext.Provider>);
+    const iframe = asIframe(await screen.findByTitle('Example App'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    const open = vi.spyOn(window, 'open');
+    await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: iframe.contentWindow, data: { jsonrpc: '2.0', method: 'ui/open-link', id: 'open', params: { url: 'xpert://project/12345678-1234-4234-8234-123456789abc?viewKey=platform.project-tasks__timeline' } } })); });
+    expect(openProject).toHaveBeenCalledWith('12345678-1234-4234-8234-123456789abc', 'platform.project-tasks__timeline');
+    expect(post).toHaveBeenCalledWith({ jsonrpc: '2.0', id: 'open', result: {} }, '*');
+    expect(open).not.toHaveBeenCalled();
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it('requires visible approval and retries the exact tool call with approvalId', async () => {

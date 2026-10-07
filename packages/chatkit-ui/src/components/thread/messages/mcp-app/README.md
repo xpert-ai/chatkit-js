@@ -41,3 +41,12 @@ standard MCP Apps style mapping.
 
 Follow the repository's file-size guidance in `AGENTS.md` through normal review,
 without adding a dedicated line-count gate.
+
+### Project navigation
+
+The `xpert/workbench` experimental host capability advertises `openProject` and
+accepts project links via standard `ui/open-link`, using
+`xpert://project/<UUID>?viewKey=<provider>__<view>`. ChatKit converts this to
+`workbench.navigation.open` / `assistant.project`. Existing host authorization
+and session navigation apply; credentials never return to the App. External
+HTTP(S) links retain their existing behavior. Other schemes remain unsupported.

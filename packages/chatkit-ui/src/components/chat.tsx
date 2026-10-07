@@ -298,10 +298,12 @@ export function Chat({
     !session.stream.isLoading;
 
   const hasPendingFollowUps = pendingFollowUps.length > 0;
-  const isProjectSelectionLocked =
-    Boolean(session.stream.threadId || session.stream.conversationId) ||
-    messages.length > 0 ||
-    viewport.canLoadMoreMessages;
+  const hasConversationId = Boolean(
+    session.stream.threadId || session.stream.conversationId,
+  );
+  const isProjectSelectionLocked = hasConversationId
+    ? !onProjectChange
+    : messages.length > 0 || viewport.canLoadMoreMessages;
 
   const isProjectScopeLocked =
     Boolean(session.activeProjectId) &&

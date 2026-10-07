@@ -95,8 +95,36 @@ export function useChatConversationActions({
   setIsChangingBranch,
   options,
 }: ChatConversationActionsOptions) {
+  const previousProjectRef = React.useRef(activeProjectId);
+  React.useLayoutEffect(() => {
+    if (previousProjectRef.current === activeProjectId) return;
+    previousProjectRef.current = activeProjectId;
+    commitComposerParts(composerPartsRef.current.filter(part => part.type === 'text'), {
+      resetDom: true, syncRemovedCapabilityTokens: false,
+    });
+    attachmentsRef.current?.clear();
+    setReferences([]);
+    setReferencedWorkspaceFiles([]);
+    setThreadMention(null);
+    setSelectedTool(null);
+    setEditingMessageId(null);
+    editRequestRef.current = null;
+    activeBranchRef.current = null;
+    setIsChangingBranch(false);
+    setHistoryError(null);
+    setRuntimeCapabilityPalette(null);
+    resetRunRuntimeCapabilities();
+    // The stream clears local connector state. Do not mutate the previous
+    // conversation's persisted bindings while changing the active project.
+  }, [activeProjectId, commitComposerParts, resetRunRuntimeCapabilities]);
+
   const handleProjectSelectionChange = React.useCallback(
     (projectId: string | null, selection?: ProjectSelection) => {
+      // Existing conversations keep their scope; the host opens a new conversation.
+      if (stream.threadId || stream.conversationId) {
+        onProjectChange?.(projectId, selection);
+        return;
+      }
       const textParts = composerPartsRef.current.filter(
         (part) => part.type === 'text',
       );

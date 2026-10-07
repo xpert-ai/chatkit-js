@@ -22,6 +22,7 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
       ({
         'composer.projects.select': 'Select project',
         'composer.projects.none': 'No project',
+        'composer.projects.confirmNew': 'New project · Confirm settings first',
         'composer.projects.autoNew': 'New project · Create on send',
         'composer.projects.search': 'Search projects',
         'composer.projects.new': 'New project',
@@ -942,4 +943,13 @@ it('keeps advanced filters compact and supports application and unclassified sel
       expect.objectContaining({ skip: 0, ...caseRef }),
     ),
   );
+});
+
+it('explains deferred creation and does not select an existing project', async () => {
+  const client = createClient([{ id: 'existing', name: 'Existing project', status: 'active' }]);
+  const onProjectChange = vi.fn();
+  render(<ProjectSelector client={client} xpertId="xpert-1" selection={{ mode: 'auto-new' }} autoNewEnabled autoNewMode="after-confirmation" onProjectChange={onProjectChange} />);
+  expect(screen.getByText('New project · Confirm settings first')).toBeInTheDocument();
+  expect(screen.queryByText('New project · Create on send')).not.toBeInTheDocument();
+  expect(onProjectChange).not.toHaveBeenCalled();
 });

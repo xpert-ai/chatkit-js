@@ -138,22 +138,6 @@ export const StreamSession = ({
     resetThreadOnMount,
   });
 
-  // Reset chat execution state without unmounting Assistant-owned Workbench views.
-  const bindingKey = JSON.stringify([
-    projectId,
-    projectSelection?.mode,
-    runtimeKey,
-  ]);
-  const previousBinding = useRef(bindingKey);
-  const bindingChanged = previousBinding.current !== bindingKey;
-  useLayoutEffect(() => {
-    if (previousBinding.current === bindingKey) return;
-    previousBinding.current = bindingKey;
-    scope.consumedInitialThreadRef.current = null;
-    scope.initialSelectedThreadRef.current = null;
-    lifecycle.reset(initialThread ?? null, []);
-  }, [bindingKey, initialThread, lifecycle.reset]);
-
   const conversationProject = useConversationProject({
     client: credentials.client,
     projectId,
@@ -165,6 +149,28 @@ export const StreamSession = ({
       host.historyLoad.status !== 'error',
     historyMessageLoadVersion: messages.historyMessageLoadVersion,
   });
+
+  // Keep Assistant views mounted; reset chat state only for a new binding.
+  const bindingKey = JSON.stringify([projectId, projectSelection?.mode, runtimeKey]);
+  const previousBinding = useRef({ key: bindingKey, runtimeKey });
+  const navigationChanged = previousBinding.current.runtimeKey !== runtimeKey;
+  const adoptingConversationProject = Boolean(
+    projectId && scope.conversationId && conversationProject.resolved &&
+    conversationProject.projectId === projectId,
+  );
+  const bindingChanged = previousBinding.current.key !== bindingKey &&
+    (navigationChanged || !adoptingConversationProject);
+  useLayoutEffect(() => {
+    if (previousBinding.current.key === bindingKey) return;
+    previousBinding.current = { key: bindingKey, runtimeKey };
+    if (!navigationChanged && adoptingConversationProject) return;
+    scope.initialSelectedThreadRef.current = null;
+    // Project changes must not reopen the old initial thread. Explicit navigation may reload it.
+    if (navigationChanged) scope.consumedInitialThreadRef.current = null;
+    lifecycle.reset(navigationChanged ? initialThread ?? null : null, [], {
+      suppressThreadChange: !navigationChanged,
+    });
+  }, [bindingKey, runtimeKey, navigationChanged, adoptingConversationProject, initialThread, lifecycle.reset]);
 
   const refreshConversationProject = conversationProject.refresh;
   const hydrateConversationProject = conversationProject.hydrate;
@@ -317,7 +323,6 @@ export const StreamSession = ({
   const hasPendingUserInput = Boolean(
     interrupts.pendingHITLRequest || userInput.pendingRequestUserInput,
   );
-
   const initialHistoryThread = normalizeThreadIdentifier(
     initialThread ?? scope.initialSelectedThreadRef.current,
   );

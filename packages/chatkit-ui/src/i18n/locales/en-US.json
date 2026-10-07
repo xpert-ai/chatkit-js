@@ -500,6 +500,7 @@
       "select": "Select project",
       "none": "No project",
       "autoNew": "New project · Create on send",
+      "confirmNew": "New project · Confirm settings first",
       "search": "Search projects",
       "new": "New project",
       "create": "Create",
@@ -865,6 +866,7 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
+      "openProjectFailed": "Unable to open this project.",
       "loading": "Loading MCP App",
       "fullscreen": "Open fullscreen",
       "pictureInPicture": "Open picture in picture",

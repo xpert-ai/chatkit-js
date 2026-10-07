@@ -885,6 +885,8 @@ export type ChatKitOptions = {
       selection?: import('./project-selection').ProjectSelection;
       /** Offer automatic creation on first send when the Assistant supports it. */
       autoNewEnabled?: boolean;
+      /** Describe applications that create only after a setup App is confirmed. */
+      autoNewMode?: 'on-send' | 'after-confirmation';
       /** Hide the no-Project choice for Assistants requiring a Project workspace. */
       allowNone?: boolean;
 

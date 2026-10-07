@@ -471,6 +471,7 @@ export function ChatComposerForm({
                 activeProjectId={activeProjectId}
                 selection={projectSelection}
                 autoNewEnabled={options?.composer?.projects?.autoNewEnabled}
+                autoNewMode={options?.composer?.projects?.autoNewMode}
                 allowNone={options?.composer?.projects?.allowNone}
                 locked={isProjectScopeLocked}
                 label={options?.composer?.projects?.label}
