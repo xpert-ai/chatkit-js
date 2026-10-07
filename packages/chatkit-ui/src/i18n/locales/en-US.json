@@ -867,6 +867,8 @@
     },
     "mcpApp": {
       "openProjectFailed": "Unable to open this project.",
+      "refresh": "Refresh data",
+      "refreshFailed": "Unable to refresh data. Please try again.",
       "loading": "Loading MCP App",
       "fullscreen": "Open fullscreen",
       "pictureInPicture": "Open picture in picture",

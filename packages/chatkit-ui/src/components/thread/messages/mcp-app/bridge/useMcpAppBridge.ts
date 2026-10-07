@@ -1,5 +1,8 @@
 import { parseMcpAppProjectLink } from './project-link';
-import type { TMessageComponentMcpAppData } from '@xpert-ai/chatkit-types';
+import {
+  resolveLocalizedText,
+  type TMessageComponentMcpAppData,
+} from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import { useWorkbench } from '../../../../../workbench/context';
 import type { useChatkitTranslation } from '../../../../../i18n/useChatkitTranslation';
@@ -118,6 +121,28 @@ export function useMcpAppBridge({
   }, [displayMode, height, postToApp]);
 
   React.useEffect(() => {
+    const notifyTheme = () => {
+      if (!initializedRef.current) return;
+      const theme = buildMcpAppTheme(containerRef.current);
+      postToApp({
+        jsonrpc: '2.0',
+        method: 'ui/notifications/host-context-changed',
+        params: {
+          theme: theme.mode,
+          styles: { variables: standardMcpAppStyles(theme.cssVariables) },
+          themeCssVariables: theme.cssVariables,
+        },
+      });
+    };
+    const observer = new MutationObserver(notifyTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style', 'class', 'data-theme'],
+    });
+    return () => observer.disconnect();
+  }, [postToApp]);
+
+  React.useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) {
         return;
@@ -206,8 +231,23 @@ export function useMcpAppBridge({
         initializedRef.current = true;
         const permissions = resource?.permissions ?? data.permissions;
         const csp = resource?.csp ?? data.csp;
-        const toolInfo =
+        const rawToolInfo =
           resource?.toolInfo ?? normalizeMcpAppToolInfo(undefined, data);
+        // Standard MCP Tool fields are strings even when resource presentation
+        // metadata carries translations. Localize at the protocol boundary.
+        const toolInfo = {
+          ...rawToolInfo,
+          tool: {
+            ...rawToolInfo.tool,
+            title:
+              resolveLocalizedText(rawToolInfo.tool.title, i18n.language) ??
+              rawToolInfo.tool.name,
+            description: resolveLocalizedText(
+              rawToolInfo.tool.description,
+              i18n.language,
+            ) ?? undefined,
+          },
+        };
         const theme = buildMcpAppTheme(containerRef.current);
         const hostLocale = normalizeHostLocale(i18n.language);
         const hostLanguage = getLocaleLanguage(hostLocale);

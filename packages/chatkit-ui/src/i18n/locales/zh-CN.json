@@ -867,6 +867,8 @@
     },
     "mcpApp": {
       "openProjectFailed": "暂时无法打开此项目。",
+      "refresh": "刷新数据",
+      "refreshFailed": "数据刷新失败，请重试。",
       "loading": "正在加载 MCP App",
       "fullscreen": "全屏显示",
       "pictureInPicture": "画中画显示",
