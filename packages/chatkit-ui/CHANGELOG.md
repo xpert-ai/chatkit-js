@@ -1,5 +1,17 @@
 # @xpert-ai/chatkit-ui
 
+## 0.11.2
+
+### Patch Changes
+
+- 2f71ed6: Use the published `@xpert-ai/xpert-sdk` 0.8.0 release for authenticated workspace
+  file reads and snapshot-free pause requests. Remove the temporary SDK patch and
+  its dependency configuration. Keep file previews and downloads working in
+  isolated Workbench views through the trusted host's SDK transport.
+  - @xpert-ai/chatkit-types@0.11.2
+  - @xpert-ai/chatkit-web-shared@0.11.2
+  - @xpert-ai/a2ui-react@0.11.2
+
 ## 0.11.1
 
 ### Patch Changes
