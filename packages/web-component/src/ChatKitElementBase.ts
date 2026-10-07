@@ -1,3 +1,4 @@
+import type { ChatKitMessageFocusRequest } from '@xpert-ai/chatkit-types';
 /// <reference path="./import-meta-env.d.ts" />
 
 import {
@@ -998,6 +999,13 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   async setThreadId(threadId: string | null) {
     await this.#loaded;
     await this.#messenger?.commands.setThreadId({ threadId });
+  }
+
+  @requireCommandCapability
+  async focusMessage(request: ChatKitMessageFocusRequest) {
+    await this.#loaded;
+    if (!this.#messenger) return { success: false as const, code: 'not_ready' };
+    return this.#messenger.commands.focusMessage(request);
   }
 
   @requireCommandCapability

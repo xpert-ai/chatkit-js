@@ -1,7 +1,10 @@
 import * as React from 'react';
-import { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import {
+  ChatKitEvents,
+  ChatKitOptions,
+  XpertAIChatKit,
+} from '@xpert-ai/chatkit-types';
 import { useStableOptions } from './useStableOptions';
-
 
 type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
   ? `${Head}${Capitalize<DotToCamelCase<Tail>>}`
@@ -10,6 +13,7 @@ type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
 const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
   'setThreadId',
+  'focusMessage',
   'sendUserMessage',
   'setComposerValue',
   'setRuntimeCapabilities',
@@ -49,7 +53,6 @@ export type UseChatKitReturn = ChatKitMethods & {
   control: ChatKitControl;
   ref: React.RefObject<XpertAIChatKit | null>;
 };
-
 
 export function useChatKit(options: UseChatKitOptions): UseChatKitReturn {
   const ref = React.useRef<XpertAIChatKit | null>(null);

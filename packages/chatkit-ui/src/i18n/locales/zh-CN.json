@@ -47,6 +47,7 @@
       "copyUrl": "复制链接",
       "suggestions": "地址建议"
     },
+    "messageUnavailable": "当前分支中找不到指定消息。",
     "executionUnavailable": "当前对话中找不到指定执行记录。",
     "title": "视图",
     "description": "远程工作台视图",

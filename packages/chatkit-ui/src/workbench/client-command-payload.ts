@@ -32,6 +32,8 @@ export type NavigationPayload = {
   target: string;
   conversationId?: string;
   threadId?: string;
+  messageId?: string;
+  preserveView?: boolean;
   executionId?: string;
   projectId?: string;
   xpertId?: string;
@@ -53,6 +55,8 @@ export function parseNavigation(value: unknown): NavigationPayload {
     target: text(field(value, 'target')) ?? '',
     conversationId: text(field(value, 'conversationId')),
     threadId: text(field(value, 'threadId')),
+    messageId: text(field(value, 'messageId')),
+    preserveView: field(value, 'preserveView') === true,
     executionId: text(field(value, 'executionId')),
     projectId: text(field(value, 'projectId')),
     xpertId: text(field(value, 'xpertId')),

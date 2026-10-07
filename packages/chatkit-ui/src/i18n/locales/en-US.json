@@ -47,6 +47,7 @@
       "copyUrl": "Copy link",
       "suggestions": "Address suggestions"
     },
+    "messageUnavailable": "The requested message is unavailable in this branch.",
     "executionUnavailable": "The requested execution is unavailable in this conversation.",
     "title": "Views",
     "description": "Remote workbench views",

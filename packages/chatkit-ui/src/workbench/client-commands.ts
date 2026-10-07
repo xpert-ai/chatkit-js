@@ -7,15 +7,17 @@ import {
   parseNavigationSession,
   parsePreview,
   type NavigationSession,
+  type NavigationPayload,
   type WorkbenchPreview,
   type ExecutionNavigationRequest,
   type ExecutionNavigationResult,
 } from './client-command-payload';
+import type { MessageFocusRequest } from './useMessageFocus';
 import type { ComposerValuePayload } from '../lib/references';
 
 export type WorkbenchCommandHost = {
   apiUrl: string;
-  isCurrent?: () => boolean;
+  isCurrent?: (navigation?: NavigationPayload) => boolean;
   openView: (key: string, query: XpertViewQuery) => boolean;
   openPreview: (preview: WorkbenchPreview) => void;
   revealChat: () => void;
@@ -23,6 +25,9 @@ export type WorkbenchCommandHost = {
   focusComposer: () => Promise<void>;
   openExecution?: (
     request: ExecutionNavigationRequest,
+  ) => Promise<ExecutionNavigationResult>;
+  openMessage?: (
+    request: MessageFocusRequest,
   ) => Promise<ExecutionNavigationResult>;
   navigate?: (
     session: NavigationSession,
@@ -141,15 +146,30 @@ export async function executeWorkbenchCommand(
         return invalid();
       if (!host.navigate) return unsupportedCommand(commandKey);
       const result = await host.forward(request);
-      if (host.isCurrent?.() === false) return stale();
+      // Successful authorized navigation may intentionally change the active conversation.
+      if (host.isCurrent?.(navigation) === false) return stale();
       const session = parseNavigationSession(result);
       if (!session) {
         if (
           field(result, 'success') === true &&
           field(result, 'status') === 'opened' &&
           !field(result, 'session')
-        )
+        ) {
+          if (navigation.messageId) {
+            if (
+              !navigation.threadId ||
+              !navigation.conversationId ||
+              !host.openMessage
+            )
+              return unsupportedCommand(commandKey);
+            return host.openMessage({
+              conversationId: navigation.conversationId,
+              threadId: navigation.threadId,
+              messageId: navigation.messageId,
+            });
+          }
           return { success: true, status: 'opened', target: navigation.target };
+        }
         const message = field(result, 'message');
         return {
           success: false,
@@ -170,6 +190,14 @@ export async function executeWorkbenchCommand(
       )
         return { success: false, code: 'navigation_mismatch' };
       host.navigate(session, request);
+      if (navigation.messageId && session.conversationId && session.threadId) {
+        if (!host.openMessage) return unsupportedCommand(commandKey);
+        return host.openMessage({
+          conversationId: session.conversationId,
+          threadId: session.threadId,
+          messageId: navigation.messageId,
+        });
+      }
       return {
         success: true,
         status: 'opened',
