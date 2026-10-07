@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.11.2
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.11.2
+
 ## 0.11.1
 
 ### Patch Changes
