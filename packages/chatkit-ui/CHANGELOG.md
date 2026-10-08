@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.12.1
+
+### Patch Changes
+
+- 7cce5b3: Keep resource image and file preview tabs selected when Workbench views refresh.
+  - @xpert-ai/chatkit-types@0.12.1
+  - @xpert-ai/chatkit-web-shared@0.12.1
+  - @xpert-ai/a2ui-react@0.12.1
+
 ## 0.12.0
 
 ### Minor Changes
