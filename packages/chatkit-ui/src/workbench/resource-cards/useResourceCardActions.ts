@@ -49,7 +49,7 @@ export function useWorkbenchResourceCardActions(
       previewFile = file,
     ) =>
       openPreview({
-        key: `resource-file:${JSON.stringify(file)}`,
+        key: `chatkit.preview.resource-file:${JSON.stringify(file)}`,
         kind: 'resource-file',
         title,
         source: {
