@@ -1,5 +1,25 @@
 # @xpert-ai/chatkit-ui
 
+## 0.12.0
+
+### Minor Changes
+
+- 3d8d526: Add the public `focusMessage` control for authorized exact-thread message navigation. ChatKit loads missing history, scrolls and highlights the target, and acknowledges success or a specific failure. Workbench navigation accepts message anchors and preserves its source view without sending messages or cancelling runs. Parent message handlers cleanly reject stale, unavailable and failed targets; old navigation payloads remain supported.
+
+### Patch Changes
+
+- acf5e17: Wait for scope-bound credentials before loading Assistant projects, tool continuations, and conversation resources. Share host initialization with refresh, cancel obsolete requests without retry warnings, and keep embedded thread navigation in memory to avoid repeated long-URL updates.
+- 868b473: Keep the character header within the available chat width when resizing the window. Constrain the shared grid column and allow its children to shrink so long hidden conversation titles do not clip the header actions.
+- f1ea28d: Resume the most recently updated conversation when selecting a project, while preserving explicit new-chat actions and preventing stale navigation responses. Keep loaded message-history results visible when reopening the dialog and remove duplicate conversation-list loading.
+- c27ab91: Display committed resource cards from all plugin namespaces during streaming, using a common Open action and a single card surface. Apply live card updates without project-task-specific rendering branches.
+
+  Render file delivery and file change cards without an extra message bubble, while preserving their saved-version and review actions.
+
+- Updated dependencies [3d8d526]
+  - @xpert-ai/chatkit-types@0.12.0
+  - @xpert-ai/chatkit-web-shared@0.12.0
+  - @xpert-ai/a2ui-react@0.12.0
+
 ## 0.11.2
 
 ### Patch Changes

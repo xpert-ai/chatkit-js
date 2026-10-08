@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-browser-extension",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "description": "Chrome extension host for Xpert ChatKit",
   "private": true,
   "type": "module",

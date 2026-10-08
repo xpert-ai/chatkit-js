@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-browser-runner",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "description": "Isolated headed browser runtime for Xpert ChatKit automation",
   "repository": {
     "type": "git",
