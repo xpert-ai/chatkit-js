@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-vue
 
+## 0.12.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.12.1
+- @xpert-ai/chatkit-web-component@0.12.1
+
 ## 0.12.0
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-wps-addin
 
+## 0.12.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.12.1
+- @xpert-ai/chatkit-react@0.12.1
+
 ## 0.12.0
 
 ### Patch Changes
