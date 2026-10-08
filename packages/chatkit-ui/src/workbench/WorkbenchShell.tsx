@@ -1,3 +1,6 @@
+import { ResourceCardContext } from '../resource-cards/context';
+import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
+import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
 import { createFileChangeReview } from './file-review/file-change-review';
 import type {
   XpertRemoteViewHostEventMessage,
@@ -9,10 +12,8 @@ import { useParentMessenger } from '../hooks/useParentMessenger';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { createMessageId } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
-import {
-  parseNavigation,
-  type WorkbenchPreview,
-} from './client-command-payload';
+import { parseNavigation } from './client-command-payload';
+import type { WorkbenchPreview } from './preview/types';
 import type { WorkbenchContextValue } from './context';
 import { createHtmlArtifactPreview } from './html-preview/html-artifact-preview';
 import {
@@ -35,7 +36,7 @@ import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDi
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
-import { useResourceCardNavigation } from './useResourceCardNavigation';
+import { useResourceCardNavigation } from './resource-cards/useResourceCardNavigation';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import {
   isWorkbenchNewTab,
@@ -578,6 +579,30 @@ export function WorkbenchShell({
       setSideChatCloseConfirmationDisabled,
     });
 
+  const navigateResourceCard = React.useCallback(
+    (
+      target: ResourceCardOpenTarget,
+      origin: { messageId: string; id: string },
+    ) =>
+      executeClientCommand(
+        'workbench.navigation.open',
+        target,
+        { key: target.viewKey },
+        origin,
+      ),
+    [executeClientCommand],
+  );
+  const resourceCardActions = useWorkbenchResourceCardActions({
+    client: viewHosts,
+    assistantId: stream.assistantId,
+    runtimeScope,
+    available: authenticated && stream.runtimeScopeReady !== false,
+    canOpen: enabled,
+    openPreview,
+    navigate: navigateResourceCard,
+    remember: rememberResourceCard,
+  });
+
   const contextValue = React.useMemo<WorkbenchContextValue>(
     () => ({
       enabled,
@@ -639,24 +664,12 @@ export function WorkbenchShell({
         );
         return true;
       },
-      openProject: (projectId, viewKey) => executeClientCommand('workbench.navigation.open',
-        { target: 'assistant.project', projectId, viewKey }, { key: viewKey }),
-      openResourceCard: async (card, messageId) => {
-        const result = await executeClientCommand(
+      openProject: (projectId, viewKey) =>
+        executeClientCommand(
           'workbench.navigation.open',
-          card.data.open,
-          { key: card.data.open.viewKey },
-          { messageId, id: card.id },
-        );
-        if (
-          result &&
-          typeof result === 'object' &&
-          'success' in result &&
-          result.success === true
-        )
-          rememberResourceCard(card.data.open);
-        return result;
-      },
+          { target: 'assistant.project', projectId, viewKey },
+          { key: viewKey },
+        ),
       toggle: () => {
         if (!available) return;
         if (open) {
@@ -682,7 +695,6 @@ export function WorkbenchShell({
       stream.client,
       stream.conversationId,
       t,
-      rememberResourceCard,
       askInSideChat,
       externalAssistantsEnabled,
       openExternalAssistant,
@@ -879,40 +891,42 @@ export function WorkbenchShell({
   );
 
   return (
-    <WorkbenchShellLayout
-      contextValue={contextValue}
-      rootRef={rootRef}
-      isNarrow={isNarrow}
-      workbenchSide={workbenchSide}
-      initialLoading={initialLoading}
-      t={t}
-      notification={notification}
-      open={open}
-      setNotification={setNotification}
-      resizing={resizing}
-      mainChatInWorkbench={mainChatInWorkbench}
-      chatHost={chatHost}
-      chat={chat}
-      sideChat={sideChat}
-      externalViewOpen={externalViewOpen}
-      expanded={expanded}
-      containerWidth={containerWidth}
-      resolvedPanelWidth={resolvedPanelWidth}
-      startResize={startResize}
-      setPanelWidth={setPanelWidth}
-      setExpanded={setExpanded}
-      swapSides={swapSides}
-      panelHost={panelHost}
-      setOpen={setOpen}
-      closeWorkbench={closeWorkbench}
-      panel={panel}
-      native={native}
-      activeViewKey={activeViewKey}
-      adjacentTab={adjacentTab}
-      setActiveViewKey={setActiveViewKey}
-      sideChatCloseDialogOpen={sideChatCloseDialogOpen}
-      setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
-      confirmCloseSideChat={confirmCloseSideChat}
-    />
+    <ResourceCardContext.Provider value={resourceCardActions}>
+      <WorkbenchShellLayout
+        contextValue={contextValue}
+        rootRef={rootRef}
+        isNarrow={isNarrow}
+        workbenchSide={workbenchSide}
+        initialLoading={initialLoading}
+        t={t}
+        notification={notification}
+        open={open}
+        setNotification={setNotification}
+        resizing={resizing}
+        mainChatInWorkbench={mainChatInWorkbench}
+        chatHost={chatHost}
+        chat={chat}
+        sideChat={sideChat}
+        externalViewOpen={externalViewOpen}
+        expanded={expanded}
+        containerWidth={containerWidth}
+        resolvedPanelWidth={resolvedPanelWidth}
+        startResize={startResize}
+        setPanelWidth={setPanelWidth}
+        setExpanded={setExpanded}
+        swapSides={swapSides}
+        panelHost={panelHost}
+        setOpen={setOpen}
+        closeWorkbench={closeWorkbench}
+        panel={panel}
+        native={native}
+        activeViewKey={activeViewKey}
+        adjacentTab={adjacentTab}
+        setActiveViewKey={setActiveViewKey}
+        sideChatCloseDialogOpen={sideChatCloseDialogOpen}
+        setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
+        confirmCloseSideChat={confirmCloseSideChat}
+      />
+    </ResourceCardContext.Provider>
   );
 }

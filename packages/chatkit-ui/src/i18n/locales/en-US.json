@@ -1,6 +1,8 @@
 {
   "resourceCard": {
     "open": "Open",
+    "moreImages": "More images ({{count}})",
+    "collapseImages": "Collapse images",
     "disabled": "Workbench is not enabled in this chat.",
     "unavailable": "This resource is unavailable or you no longer have access.",
     "forbidden": "You do not have access to this resource."

@@ -11,7 +11,7 @@ import { buildHumanMessageInputPayload } from '../../../lib/references';
 import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import { createMessageId } from '../../../lib/utils';
 import type { useStreamContext } from '../../../providers/Stream';
-import type { WorkbenchPreview } from '../../client-command-payload';
+import type { WorkbenchPreview } from '../../preview/types';
 import {
   executeWorkbenchCommand,
   unsupportedCommand,

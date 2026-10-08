@@ -7,7 +7,7 @@ import {
   prepareHtmlPreview,
 } from './html-artifact-preview';
 
-vi.mock('../code-editor/CodeEditor', () => ({
+vi.mock('../../components/code-editor/CodeEditor', () => ({
   default: ({ value, readOnly }: { value: string; readOnly: boolean }) => (
     <textarea aria-label="HTML source" value={value} readOnly={readOnly} />
   ),

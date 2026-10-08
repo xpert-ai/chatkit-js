@@ -1,14 +1,6 @@
 import type { XpertWorkspaceFile } from '@xpert-ai/xpert-sdk';
-import { fileKind } from './file-types';
+import { previewFileKind } from '../../../lib/files/file-types';
 
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 export const fileName = (path: string) =>
   path.split('/').filter(Boolean).pop() ?? path;
 export const isFolder = (file: XpertWorkspaceFile) =>
@@ -37,9 +29,7 @@ export function normalizeWorkspaceFiles(
 }
 
 export function previewKind(file: XpertWorkspaceFile) {
-  return /\.(csv|tsv)$/i.test(file.filePath)
-    ? 'text'
-    : fileKind(file.filePath, file.mimeType);
+  return previewFileKind(file.filePath, file.mimeType);
 }
 export function isOfficeFile(file: XpertWorkspaceFile) {
   return (

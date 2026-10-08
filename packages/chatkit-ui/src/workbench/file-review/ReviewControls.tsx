@@ -35,7 +35,7 @@ import {
   PopoverContent,
 } from '../../components/ui/popover';
 import type { ReviewSettings } from './review-presentation';
-import type { FileReviewEntry } from './file-change-review';
+import type { FileReviewEntry } from './types';
 import { ReviewJumpList } from './ReviewNavigation';
 
 export function ReviewControls({

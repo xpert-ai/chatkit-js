@@ -7,10 +7,10 @@ import {
   parseNavigationSession,
   parsePreview,
   type NavigationSession,
-  type WorkbenchPreview,
   type ExecutionNavigationRequest,
   type ExecutionNavigationResult,
 } from './client-command-payload';
+import type { WorkbenchPreview } from './preview/types';
 import type { ComposerValuePayload } from '../lib/references';
 
 export type WorkbenchCommandHost = {

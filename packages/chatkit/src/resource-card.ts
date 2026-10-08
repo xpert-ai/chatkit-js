@@ -1,4 +1,17 @@
 import type { IconDefinition } from './message.js';
+import {
+  parseResourceCardBlocks,
+  parseFileReference,
+  type ResourceCardContent,
+  type ResourceCardFileReference,
+} from './resource-card-content.js';
+export type {
+  ResourceCardContent,
+  ResourceCardField,
+  ResourceCardFile,
+  ResourceCardFileReference,
+  ResourceCardImage,
+} from './resource-card-content.js';
 
 export type ResourceCardScalar = string | number | boolean | null;
 export type ResourceCardOpenTarget = {
@@ -8,6 +21,12 @@ export type ResourceCardOpenTarget = {
 } & (
   | { target: 'workbench.view' }
   | { target: 'assistant.project'; projectId: string }
+  | {
+      target: 'workbench.file';
+      fileKey: string;
+      targetId: string;
+      previewFile?: ResourceCardFileReference;
+    }
 );
 
 /** Presentation of a committed business resource; distinct from versioned file Artifacts. */
@@ -21,6 +40,8 @@ export interface ConversationResourceCard {
   title: string;
   description?: string;
   icon?: IconDefinition;
+  /** Ordered content blocks; unknown kinds degrade to the base resource card. */
+  content?: ResourceCardContent[];
   open: ResourceCardOpenTarget;
 }
 
@@ -85,7 +106,9 @@ export function parseResourceCard(
     !open ||
     typeof open !== 'object' ||
     !('target' in open) ||
-    (open.target !== 'workbench.view' && open.target !== 'assistant.project') ||
+    (open.target !== 'workbench.view' &&
+      open.target !== 'assistant.project' &&
+      open.target !== 'workbench.file') ||
     !('viewKey' in open) ||
     !nonempty(open.viewKey)
   )
@@ -100,6 +123,9 @@ export function parseResourceCard(
           'selectionId',
           'parameters',
           'projectId',
+          'fileKey',
+          'targetId',
+          'previewFile',
         ].includes(key),
     )
   )
@@ -130,7 +156,30 @@ export function parseResourceCard(
     ...('parameters' in open ? { parameters } : {}),
   };
   let target: ResourceCardOpenTarget;
-  if (open.target === 'assistant.project') {
+  if (open.target === 'workbench.file') {
+    if (
+      'projectId' in open ||
+      'selectionId' in open ||
+      'parameters' in open ||
+      !('fileKey' in open) ||
+      !nonempty(open.fileKey) ||
+      !('targetId' in open) ||
+      !nonempty(open.targetId)
+    )
+      return null;
+    const previewFile =
+      'previewFile' in open ? parseFileReference(open.previewFile) : undefined;
+    if (previewFile === null) return null;
+    target = {
+      viewKey: open.viewKey,
+      target: 'workbench.file',
+      fileKey: open.fileKey,
+      targetId: open.targetId,
+      ...(previewFile ? { previewFile } : {}),
+    };
+  } else if ('fileKey' in open || 'targetId' in open || 'previewFile' in open) {
+    return null;
+  } else if (open.target === 'assistant.project') {
     if (!('projectId' in open) || !nonempty(open.projectId)) return null;
     target = {
       ...common,
@@ -143,6 +192,14 @@ export function parseResourceCard(
   }
   if ('description' in value && typeof value.description !== 'string')
     return null;
+  // Migrate persisted image-only cards at this read boundary; producers use content.
+  const content = parseResourceCardBlocks(
+    'content' in value
+      ? value.content
+      : 'images' in value
+        ? [{ kind: 'image-gallery', images: value.images }]
+        : [],
+  );
   let icon: IconDefinition | undefined;
   if ('icon' in value) {
     const candidate = value.icon;
@@ -177,6 +234,7 @@ export function parseResourceCard(
       ? { description: value.description as string }
       : {}),
     ...(icon ? { icon } : {}),
+    ...(content.length ? { content } : {}),
     open: target,
   };
 }

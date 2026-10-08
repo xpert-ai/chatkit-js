@@ -1,7 +1,8 @@
-import { parsePreview, type WorkbenchPreview } from '../client-command-payload';
+import { parsePreview } from '../client-command-payload';
+import type { UrlWorkbenchPreview } from '../preview/types';
 
 export type WorkbenchAddress =
-  | { kind: 'url'; preview: WorkbenchPreview }
+  | { kind: 'url'; preview: UrlWorkbenchPreview }
   | { kind: 'search' | 'invalid' };
 
 /** Address-bar input never resolves a search term relative to the API URL. */

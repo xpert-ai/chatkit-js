@@ -4,8 +4,8 @@ import {
   createResourceCardContent,
   type ChatkitMessage,
 } from '@xpert-ai/chatkit-types';
-import { ThemeProvider } from '../../../providers/Theme';
-import { AssistantMessage } from './ai';
+import { ThemeProvider } from '../../../../providers/Theme';
+import { AssistantMessage } from '../ai';
 
 const project = createResourceCardContent({
   resource: { namespace: 'platform', type: 'project', id: 'project-1' },
@@ -49,7 +49,9 @@ describe('resource cards at the end of an Assistant reply', () => {
       );
       const { rerender } = render(view(reply, true));
       expect(screen.queryByTestId('resource-card')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Project created/ })).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: /Project created/ }),
+      ).toBeNull();
 
       const completed: typeof reply = {
         ...reply,

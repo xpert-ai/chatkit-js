@@ -12,7 +12,7 @@ import {
 import { ThemeProvider } from '../../../providers/Theme';
 import { initI18n } from '../../../i18n';
 import { WorkspaceFileEditor } from './WorkspaceFileEditor';
-vi.mock('../../code-editor/CodeEditor', () => ({
+vi.mock('../../../components/code-editor/CodeEditor', () => ({
   default: ({
     value,
     onChange,

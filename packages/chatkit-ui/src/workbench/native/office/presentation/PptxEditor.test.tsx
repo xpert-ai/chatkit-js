@@ -10,7 +10,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PptxEditor from './PptxEditor';
-import type { BinaryEditorHandle } from '../../files/file-types';
+import type { BinaryEditorHandle } from '../../../../lib/files/file-types';
 import { initI18n } from '../../../../i18n';
 import { createPresentation } from './pptx-fixture.test-support';
 import { parsePptx } from './pptx-file.utils';

@@ -1,3 +1,7 @@
+import {
+  ResourceCardContext,
+  unavailableResourceCardActions,
+} from '../../resource-cards/context';
 import * as React from 'react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { StreamProvider, type useStreamContext } from '../../providers/Stream';
@@ -33,26 +37,28 @@ export function SideChatView({
   }, [options, session.threadId]);
 
   return (
-    <WorkbenchContext.Provider value={disabledWorkbenchContext}>
-      <StreamProvider
-        apiKey={stream.apiKey}
-        getClientSecret={stream.refreshClientSecret}
-        organizationId={stream.organizationId}
-        apiUrl={stream.apiUrl}
-        xpertId={stream.assistantId}
-        projectId={stream.projectId}
-        initialThread={session.threadId}
-        threadStateMode="memory"
-        hostIntegration={false}
-      >
-        <Chat
-          className="h-full"
-          clientSecret={stream.apiKey}
-          options={sideChatOptions}
-          surface="side"
-          referenceRequest={session.referenceRequest}
-        />
-      </StreamProvider>
-    </WorkbenchContext.Provider>
+    <ResourceCardContext.Provider value={unavailableResourceCardActions}>
+      <WorkbenchContext.Provider value={disabledWorkbenchContext}>
+        <StreamProvider
+          apiKey={stream.apiKey}
+          getClientSecret={stream.refreshClientSecret}
+          organizationId={stream.organizationId}
+          apiUrl={stream.apiUrl}
+          xpertId={stream.assistantId}
+          projectId={stream.projectId}
+          initialThread={session.threadId}
+          threadStateMode="memory"
+          hostIntegration={false}
+        >
+          <Chat
+            className="h-full"
+            clientSecret={stream.apiKey}
+            options={sideChatOptions}
+            surface="side"
+            referenceRequest={session.referenceRequest}
+          />
+        </StreamProvider>
+      </WorkbenchContext.Provider>
+    </ResourceCardContext.Provider>
   );
 }

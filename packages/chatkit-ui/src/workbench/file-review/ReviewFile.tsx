@@ -18,7 +18,7 @@ import { ReviewIconButton, ReviewStats } from './ReviewPrimitives';
 import { ReviewFileIcon, splitPath } from './ReviewNavigation';
 import { FileChangeDiff } from './FileChangeDiff';
 import { ReviewFileContent, canRenderReviewFile } from './ReviewFileContent';
-import type { FileReviewEntry } from './file-change-review';
+import type { FileReviewEntry } from './types';
 import type { ReviewSettings } from './review-presentation';
 
 export function ReviewFile({

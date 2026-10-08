@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceCardContent } from '@xpert-ai/chatkit-types';
 import { mergeAgentRunInfo, normalizeAgentRunInfo } from '../../lib/agent-runs';
 import {
   collectExternalAssistantRuns,
@@ -10,6 +11,22 @@ import {
 } from '../../lib/agent-run-render-tree';
 
 describe('external Assistant execution selection', () => {
+  it('retains only the selected expert image cards outside process counts and keeps the persisted reply identity', () => {
+    const card = createResourceCardContent({ resource: { namespace: 'bid', type: 'images', id: 'task' }, title: '施工配图',
+      content: [{ kind: 'image-gallery', images: [{ id: 'one', title: '平面图', file: { viewKey: 'bid', fileKey: 'image', targetId: 'p:v' } }] }],
+      open: { target: 'workbench.view', viewKey: 'bid' } });
+    const message: AssistantMessageWithAgentRuns = { id: 'reply', type: 'assistant', executionId: 'root', content: [
+      { ...card, messageId: 'reply', executionId: 'illustrator' },
+      { ...card, id: 'other', messageId: 'reply', executionId: 'other' },
+    ], agentRuns: [
+      { id: 'illustrator', parentId: 'root', invocationKind: 'external_assistant' },
+      { id: 'other', parentId: 'root', invocationKind: 'external_assistant' },
+    ] };
+    const run = collectExternalAssistantRuns([JSON.parse(JSON.stringify(message))]).find(run => run.id === 'illustrator')!;
+    const projected = toExternalAssistantMessages(run);
+    expect(projected[0].content).toEqual([{ ...card, messageId: 'reply', executionId: 'illustrator' }]);
+    expect(buildAssistantRenderTree(projected[0]).units).toEqual([]);
+  });
   it('preserves avatars from live events, history and legacy identity DTOs across partial updates', () => {
     const avatar = { emoji: { id: 'memo', unified: '1f4dd' } };
     const live = normalizeAgentRunInfo({

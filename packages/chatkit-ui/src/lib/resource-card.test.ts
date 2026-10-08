@@ -22,6 +22,113 @@ const card: ConversationResourceCard = {
 };
 
 describe('resource-card protocol', () => {
+  const images = ['one', 'two'].map((id) => ({
+    id,
+    title: id,
+    alt: `${id} image`,
+    file: {
+      viewKey: 'bid.view-provider__bid.studio',
+      fileKey: 'bid-project-image',
+      targetId: `project:${id}`,
+    },
+  }));
+  it('preserves mixed blocks in order across streaming, persistence and repeat emissions', () => {
+    const content = createResourceCardContent({
+      ...card,
+      content: [
+        { kind: 'fields', fields: [{ label: '状态', value: '已验收' }] },
+        { kind: 'image-gallery', title: '施工图', images },
+        {
+          kind: 'file-list',
+          files: [{ ...images[0], description: '设计说明' }],
+        },
+      ],
+    });
+    const restored = parseResourceCardContent(
+      JSON.parse(JSON.stringify(content)),
+    );
+    expect(restored).toEqual(content);
+    expect(upsertResourceCardContent([content], restored!)).toEqual([content]);
+    const message = applyResourceCard(
+      [{ id: 'reply', type: 'assistant', content: '' }],
+      { ...content, messageId: 'reply' },
+    )[0];
+    expect(message.content).toContainEqual(
+      expect.objectContaining({ data: content.data }),
+    );
+    expect(restored?.data.content?.map((block) => block.kind)).toEqual([
+      'fields',
+      'image-gallery',
+      'file-list',
+    ]);
+    expect(JSON.stringify(restored)).not.toContain('base64');
+  });
+  it('migrates historical images at the read boundary and prefers explicit content', () => {
+    expect(parseResourceCard({ ...card, images })?.content).toEqual([
+      { kind: 'image-gallery', images },
+    ]);
+    expect(parseResourceCard({ ...card, images })).not.toHaveProperty('images');
+    expect(parseResourceCard({ ...card, images, content: [] })).toEqual(card);
+  });
+  it.each(
+    [
+      [{ id: 'one', title: 'Image', file: { viewKey: 'v', fileKey: 'f' } }],
+      [
+        {
+          id: 'one',
+          title: 'Image',
+          file: {
+            viewKey: 'v',
+            fileKey: 'f',
+            targetId: 'id',
+            url: 'https://private',
+          },
+        },
+      ],
+      [
+        {
+          id: 'one',
+          title: 'Image',
+          file: { viewKey: 'v', fileKey: 'f', targetId: 'id' },
+        },
+        {
+          id: 'one',
+          title: 'Duplicate',
+          file: { viewKey: 'v', fileKey: 'f', targetId: 'id' },
+        },
+      ],
+      new Array(101).fill(null),
+    ].map((images) => ({ images })),
+  )('ignores invalid image blocks but retains navigation: %j', ({ images }) => {
+    expect(
+      parseResourceCard({
+        ...card,
+        content: [{ kind: 'image-gallery', images }],
+      }),
+    ).toEqual(card);
+  });
+  it('ignores unknown and malformed blocks without losing valid neighbors', () => {
+    const fields = {
+      kind: 'fields',
+      fields: [{ label: '状态', value: '已验收' }],
+    };
+    expect(
+      parseResourceCard({
+        ...card,
+        content: [
+          { kind: 'future-widget', payload: 'future' },
+          {
+            kind: 'file-list',
+            files: [
+              { ...images[0], file: { ...images[0].file, token: 'secret' } },
+            ],
+          },
+          fields,
+          { kind: 'fields', fields: [{ label: 'count', value: {} }] },
+        ],
+      }),
+    ).toEqual({ ...card, content: [fields] });
+  });
   it('preserves typed project navigation and scalar queries', () => {
     expect(parseResourceCard(card)).toEqual(card);
     expect(

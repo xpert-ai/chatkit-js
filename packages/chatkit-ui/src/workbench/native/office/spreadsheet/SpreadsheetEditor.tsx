@@ -26,7 +26,7 @@ import {
 import type {
   BinaryEditorHandle,
   BinaryEditorProps,
-} from '../../files/file-types';
+} from '../../../../lib/files/file-types';
 import { useChatkitTranslation } from '../../../../i18n/useChatkitTranslation';
 import { xlsxMenu, unsupportedXlsxCommand } from './spreadsheet-capabilities';
 import { useTheme } from '../../../../providers/Theme';

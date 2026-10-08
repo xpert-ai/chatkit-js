@@ -22,7 +22,7 @@ import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { useTheme } from '../../providers/Theme';
 import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
 import { resolveWorkbenchAddress } from './workbench-address';
-import type { WorkbenchPreview } from '../client-command-payload';
+import type { UrlWorkbenchPreview } from '../preview/types';
 
 export type AddressSuggestion = {
   key: string;
@@ -56,7 +56,7 @@ export function WorkbenchAddressBar({
   apiUrl: string;
   currentUrl?: string;
   suggestions: AddressSuggestion[];
-  onOpen: (preview: WorkbenchPreview) => void;
+  onOpen: (preview: UrlWorkbenchPreview) => void;
   onReload: () => void;
   loading?: boolean;
   navigation?: BrowserNavigation;

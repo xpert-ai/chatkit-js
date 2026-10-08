@@ -1,6 +1,6 @@
 import type { ChatKitQuoteReference } from '@xpert-ai/chatkit-types';
 import { previewRuntimeScript } from './runtime';
-import type { WorkbenchPreview } from '../client-command-payload';
+import type { HtmlWorkbenchPreview } from '../preview/types';
 
 /** Read the saved version through the SDK; never request privileged host commands. */
 export function createHtmlArtifactPreview(
@@ -9,12 +9,11 @@ export function createHtmlArtifactPreview(
   request: (signal: AbortSignal) => Promise<Blob>,
   unavailableMessage: string,
   onAnnotate?: (reference: ChatKitQuoteReference) => Promise<void>,
-): WorkbenchPreview {
+): HtmlWorkbenchPreview {
   return {
     key: `chatkit.preview.html:${resource.artifactId}:${resource.artifactVersionId}`,
     kind: 'html',
     title,
-    url: '',
     html: {
       identity: resource,
       onAnnotate,

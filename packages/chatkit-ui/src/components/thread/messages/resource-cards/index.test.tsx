@@ -5,10 +5,10 @@ import {
   type ChatkitMessage,
 } from '@xpert-ai/chatkit-types';
 import {
-  WorkbenchContext,
-  disabledWorkbenchContext,
-} from '../../../workbench/context';
-import { MessageResourceCards } from './resource-cards';
+  ResourceCardContext,
+  unavailableResourceCardActions,
+} from '../../../../resource-cards/context';
+import { MessageResourceCards } from './index';
 
 const content = createResourceCardContent({
   resource: { namespace: 'platform', type: 'task', id: 'task' },
@@ -27,13 +27,15 @@ const message: ChatkitMessage = {
 };
 describe('resource card interaction', () => {
   it('opens only on a user click, including a reloaded history message', async () => {
-    const openResourceCard = vi.fn().mockResolvedValue({ success: true });
+    const openResourceCard = vi
+      .fn()
+      .mockResolvedValue({ success: true as const, status: 'opened' as const });
     const ui = render(
-      <WorkbenchContext.Provider
-        value={{ ...disabledWorkbenchContext, enabled: true, openResourceCard }}
+      <ResourceCardContext.Provider
+        value={{ ...unavailableResourceCardActions, openResourceCard }}
       >
         <MessageResourceCards message={JSON.parse(JSON.stringify(message))} />
-      </WorkbenchContext.Provider>,
+      </ResourceCardContext.Provider>,
     );
     expect(openResourceCard).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Morning briefing/ }));
@@ -56,11 +58,11 @@ describe('resource card interaction', () => {
       .fn()
       .mockResolvedValue({ success: false, code: 'forbidden' });
     render(
-      <WorkbenchContext.Provider
-        value={{ ...disabledWorkbenchContext, enabled: true, openResourceCard }}
+      <ResourceCardContext.Provider
+        value={{ ...unavailableResourceCardActions, openResourceCard }}
       >
         <MessageResourceCards message={message} />
-      </WorkbenchContext.Provider>,
+      </ResourceCardContext.Provider>,
     );
     fireEvent.click(screen.getByRole('button'));
     await waitFor(() => expect(screen.getByRole('alert')).toBeVisible());

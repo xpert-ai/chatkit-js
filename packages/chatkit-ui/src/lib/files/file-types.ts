@@ -129,6 +129,11 @@ export const editableKinds: FileKind[] = [
   'spreadsheet',
   'pptx',
 ];
+
+/** CSV/TSV use text preview; their editable workspace surface can use a spreadsheet. */
+export function previewFileKind(fileName: string, mimeType = ''): FileKind {
+  return /\.(csv|tsv)$/i.test(fileName) ? 'text' : fileKind(fileName, mimeType);
+}
 export async function sameFileBytes(a: Blob, b: Blob) {
   if (a.size !== b.size) return false;
   const [left, right] = await Promise.all([a.arrayBuffer(), b.arrayBuffer()]);

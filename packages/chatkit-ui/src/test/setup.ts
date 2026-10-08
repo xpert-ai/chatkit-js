@@ -20,3 +20,14 @@ if (typeof Blob.prototype.arrayBuffer !== 'function') {
     },
   });
 }
+
+// jsdom does not implement Blob.text(); preserve Blob/File identity and UTF-8 bytes.
+if (typeof Blob.prototype.text !== 'function') {
+  Object.defineProperty(Blob.prototype, 'text', {
+    configurable: true,
+    writable: true,
+    async value(this: Blob): Promise<string> {
+      return new TextDecoder().decode(await this.arrayBuffer());
+    },
+  });
+}

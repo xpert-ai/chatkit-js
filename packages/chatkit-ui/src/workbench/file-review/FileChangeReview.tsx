@@ -3,10 +3,7 @@ import { Virtualizer } from '@pierre/diffs/react';
 import { Loader2 } from 'lucide-react';
 import { countFileChangeLines } from '@xpert-ai/chatkit-types';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import type {
-  FileChangeReviewOptions,
-  FileReviewEntry,
-} from './file-change-review';
+import type { FileChangeReviewOptions, FileReviewEntry } from './types';
 import { ReviewControls } from './ReviewControls';
 import { ReviewFileTree } from './ReviewNavigation';
 import { ReviewFile } from './ReviewFile';

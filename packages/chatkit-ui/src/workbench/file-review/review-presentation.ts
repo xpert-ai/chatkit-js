@@ -1,4 +1,4 @@
-import type { FileReviewEntry } from './file-change-review';
+import type { FileReviewEntry } from './types';
 
 export type ReviewSettings = {
   layout: 'auto' | 'split' | 'unified';

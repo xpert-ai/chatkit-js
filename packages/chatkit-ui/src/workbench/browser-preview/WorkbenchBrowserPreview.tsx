@@ -1,7 +1,7 @@
 import * as React from 'react';
-import type { WorkbenchPreview } from '../client-command-payload';
+import type { UrlWorkbenchPreview } from '../preview/types';
 import type { RecentWorkbenchPreview } from '../useWorkbenchPages';
-import { WorkbenchPreviewContent } from '../WorkbenchPreview';
+import { WorkbenchPreviewContent } from '../preview/WorkbenchPreview';
 import {
   WorkbenchAddressBar,
   type BrowserNavigation,
@@ -14,16 +14,16 @@ export function WorkbenchBrowserPreview({
   apiUrl,
   onNavigate,
 }: {
-  preview: WorkbenchPreview;
+  preview: UrlWorkbenchPreview;
   recent: RecentWorkbenchPreview[];
   navigation: BrowserNavigation;
   apiUrl: string;
-  onNavigate: (preview: WorkbenchPreview) => void;
+  onNavigate: (preview: UrlWorkbenchPreview) => void;
 }) {
   const [value, setValue] = React.useState(preview.url);
   const [revision, reload] = React.useReducer((version) => version + 1, 0);
   React.useEffect(() => setValue(preview.url), [preview.url]);
-  const navigate = (next: WorkbenchPreview) => {
+  const navigate = (next: UrlWorkbenchPreview) => {
     setValue(next.url);
     if (next.url === preview.url) reload();
     else onNavigate(next);
@@ -41,15 +41,19 @@ export function WorkbenchBrowserPreview({
           navigation={navigation}
           onReload={reload}
           onOpen={navigate}
-          suggestions={recent
-            .filter(({ preview }) => preview.kind === 'browser')
-            .map(({ preview }) => ({
-              key: preview.key,
-              title: preview.title,
-              detail: preview.url,
-              history: true,
-              onSelect: () => navigate(preview),
-            }))}
+          suggestions={recent.flatMap(({ preview }) =>
+            preview.kind === 'browser'
+              ? [
+                  {
+                    key: preview.key,
+                    title: preview.title,
+                    detail: preview.url,
+                    history: true,
+                    onSelect: () => navigate(preview),
+                  },
+                ]
+              : [],
+          )}
         />
       }
     />

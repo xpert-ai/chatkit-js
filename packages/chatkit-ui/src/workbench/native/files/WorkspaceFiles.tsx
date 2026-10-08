@@ -43,7 +43,6 @@ import { WorkspaceFileTree } from './WorkspaceFileTree';
 import { WorkspaceFileBreadcrumbs } from './WorkspaceFileBreadcrumbs';
 import { useWorkspaceFileTree } from './useWorkspaceFileTree';
 import {
-  downloadBlob,
   fileName,
   isFolder,
   isOfficeFile,
@@ -51,13 +50,10 @@ import {
   previewKind,
   validRelativePath,
 } from './workspace-file-utils';
+import { downloadBlob } from '../../../lib/files/download';
+export { downloadBlob } from '../../../lib/files/download';
 import './workspace-files.css';
-export {
-  downloadBlob,
-  fileName,
-  isFolder,
-  validRelativePath,
-} from './workspace-file-utils';
+export { fileName, isFolder, validRelativePath } from './workspace-file-utils';
 
 type Props = {
   client: Client;
