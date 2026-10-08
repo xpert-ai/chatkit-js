@@ -66,6 +66,20 @@ function setup(
 }
 
 describe('WorkbenchStartPage', () => {
+  it('disables a terminal known to be unavailable while keeping other tools usable', () => {
+    setup({
+      conversationReady: true,
+      terminalUnavailable: 'computer_desktop_required',
+    });
+    expect(
+      screen.getByRole('button', {
+        name: /Terminal.*This conversation uses Computer/,
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Files / folders' }),
+    ).toBeEnabled();
+  });
   it('opens native tools and reserves More tools for future integrations', () => {
     const onOpenTool = vi.fn();
     setup({ onOpenTool, conversationReady: true });

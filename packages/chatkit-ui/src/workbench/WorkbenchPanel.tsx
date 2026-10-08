@@ -66,6 +66,7 @@ import { resolveManifestText } from './manifest-text';
 import { WorkbenchBrowserPreview } from './browser-preview/WorkbenchBrowserPreview';
 import { SideChatView } from './side-chat/SideChatView';
 import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
+import type { TerminalRestriction } from './native/terminal/terminal-restriction';
 
 export { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 export const MAIN_CHAT_VIEW_KEY = 'chatkit.native.main-chat';
@@ -189,6 +190,27 @@ export function WorkbenchPanel({
   onClientCommand,
 }: WorkbenchPanelProps) {
   const { t } = useChatkitTranslation();
+  const terminalScope = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    stream.conversationId,
+    stream.projectId,
+    reloadVersion,
+  ]);
+  const [terminalRestriction, setTerminalRestriction] = React.useState<{
+    scope: string;
+    reason: TerminalRestriction;
+  } | null>(null);
+  const terminalUnavailable =
+    terminalRestriction?.scope === terminalScope
+      ? terminalRestriction.reason
+      : null;
+  const onTerminalUnavailable = React.useCallback(
+    (reason: TerminalRestriction) => {
+      setTerminalRestriction({ scope: terminalScope, reason });
+    },
+    [terminalScope],
+  );
   const [fileRevision, refreshFiles] = React.useReducer(
     (value) => value + 1,
     0,
@@ -497,6 +519,8 @@ export function WorkbenchPanel({
             onPreviewFile={native.previewFile}
             revision={fileRevision}
             onSaved={refreshFiles}
+            terminalUnavailable={terminalUnavailable}
+            onTerminalUnavailable={onTerminalUnavailable}
           />
         )}
         {newTabs.map((key) => (
@@ -519,6 +543,7 @@ export function WorkbenchPanel({
                 stream.threadId && stream.conversationId,
               )}
               sideChatEnabled={sideChatEnabled}
+              terminalUnavailable={terminalUnavailable}
               recent={recent}
               locale={locale}
               apiUrl={stream.apiUrl}

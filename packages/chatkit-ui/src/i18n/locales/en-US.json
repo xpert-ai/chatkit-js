@@ -66,6 +66,11 @@
     "swapPanes": "Swap left and right panes",
     "loading": "Loading views...",
     "loadingView": "Loading view...",
+    "viewError": {
+      "title": "This view could not be opened.",
+      "description": "Other tabs are still available. Save any changes there before reloading the chat interface.",
+      "reload": "Reload chat interface"
+    },
     "empty": "No compatible views are available.",
     "loadFailed": "Views could not be loaded.",
     "entryUnavailable": "Remote view content is unavailable.",
@@ -242,6 +247,10 @@
       "terminalEnded": "Session ended",
       "terminalReconnect": "Reconnect",
       "terminalClose": "Disconnect",
+      "terminalUnavailable": "Terminal unavailable for this conversation",
+      "terminalComputerRequired": "This conversation uses Computer. Open the Computer view, take control, and use its desktop terminal.",
+      "terminalUnsupported": "This environment does not support an independent terminal.",
+      "terminalSandboxDisabled": "The sandbox is disabled for this conversation.",
       "readOnly": "Read only",
       "find": "Find",
       "replace": "Replace",
