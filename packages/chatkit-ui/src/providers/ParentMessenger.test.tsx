@@ -105,8 +105,71 @@ describe('ParentMessengerProvider', () => {
     window.dispatchEvent(event);
   }
 
+  it('acknowledges precise message focus only after completion without resetting the thread', async () => {
+    let finish!: (result: { success: true; status: 'opened' }) => void;
+    const onFocusMessage = vi.fn(
+      () =>
+        new Promise<{ success: true; status: 'opened' }>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    function Probe() {
+      useParentMessenger({ onFocusMessage });
+      return null;
+    }
+    render(
+      <ParentMessengerProvider>
+        <Probe />
+      </ParentMessengerProvider>,
+    );
+    const event = new MessageEvent('message', {
+      source: window.parent,
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onFocusMessage',
+        nonce: 'focus',
+        data: {
+          conversationId: 'conversation',
+          threadId: 'side',
+          messageId: 'old',
+        },
+      },
+    });
+    act(() => window.dispatchEvent(event));
+    await waitFor(() =>
+      expect(onFocusMessage).toHaveBeenCalledWith({
+        conversationId: 'conversation',
+        threadId: 'side',
+        messageId: 'old',
+      }),
+    );
+    expect(
+      parentWindow.postMessage.mock.calls.some(
+        ([value]) => value.nonce === 'focus',
+      ),
+    ).toBe(false);
+    await act(async () => {
+      finish({ success: true, status: 'opened' });
+    });
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nonce: 'focus',
+          response: { success: true, status: 'opened' },
+        }),
+        expect.any(String),
+      ),
+    );
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+  });
+
   it('dispatches local composer changes without requiring a parent window', async () => {
-    Object.defineProperty(window, 'parent', { configurable: true, value: window });
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: window,
+    });
     const onSetComposerValue = vi.fn();
     const onFocusComposer = vi.fn();
     let messenger: ReturnType<typeof useParentMessenger> | undefined;
@@ -114,9 +177,19 @@ describe('ParentMessengerProvider', () => {
       messenger = useParentMessenger({ onSetComposerValue, onFocusComposer });
       return null;
     }
-    render(<ParentMessengerProvider><LocalComposer /></ParentMessengerProvider>);
-    const payload = { appendReferences: true, references: [{ id: 'quote', type: 'quote' as const, text: 'Evidence' }] };
-    await act(async () => { await messenger?.updateComposer(payload); await messenger?.focusComposer(); });
+    render(
+      <ParentMessengerProvider>
+        <LocalComposer />
+      </ParentMessengerProvider>,
+    );
+    const payload = {
+      appendReferences: true,
+      references: [{ id: 'quote', type: 'quote' as const, text: 'Evidence' }],
+    };
+    await act(async () => {
+      await messenger?.updateComposer(payload);
+      await messenger?.focusComposer();
+    });
     expect(onSetComposerValue).toHaveBeenCalledWith(payload);
     expect(onFocusComposer).toHaveBeenCalledOnce();
     expect(parentWindow.postMessage).not.toHaveBeenCalled();

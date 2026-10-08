@@ -1,5 +1,9 @@
 import { useContext, useEffect, useRef } from 'react';
-import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitMessageFocusRequest,
+  ChatKitMessageFocusResult,
+  ChatKitOptions,
+} from '@xpert-ai/chatkit-types';
 import { ParentMessengerContext } from '../providers/ParentMessenger';
 import type { ComposerValuePayload } from '../lib/references';
 import type { RuntimeCapabilitiesSelection } from '../lib/runtime-capabilities';
@@ -13,6 +17,9 @@ export type ParentMessengerOptions = {
   onSetRuntimeCapabilities?: (
     selection: RuntimeCapabilitiesSelection | null,
   ) => void;
+  onFocusMessage?: (
+    request: ChatKitMessageFocusRequest,
+  ) => Promise<ChatKitMessageFocusResult>;
   onFocusComposer?: () => void;
 };
 
@@ -21,6 +28,7 @@ export function useParentMessenger({
   onSetPetEnabled,
   onSetComposerValue,
   onSetRuntimeCapabilities,
+  onFocusMessage,
   onFocusComposer,
 }: ParentMessengerOptions = {}) {
   const context = useContext(ParentMessengerContext);
@@ -36,6 +44,7 @@ export function useParentMessenger({
     registerOnSetComposerValue,
     registerOnSetRuntimeCapabilities,
     registerOnFocusComposer,
+    registerOnFocusMessage,
     ...messenger
   } = context;
   const onSetOptionsRef = useRef(onSetOptions);
@@ -103,6 +112,10 @@ export function useParentMessenger({
     };
     return registerOnFocusComposer(handler);
   }, [hasOnFocusComposer, registerOnFocusComposer]);
+
+  useEffect(() => {
+    if (onFocusMessage) return registerOnFocusMessage?.(onFocusMessage);
+  }, [onFocusMessage, registerOnFocusMessage]);
 
   return messenger;
 }

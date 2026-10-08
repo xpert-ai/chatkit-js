@@ -3,6 +3,7 @@
     "open": "Open",
     "moreImages": "More images ({{count}})",
     "collapseImages": "Collapse images",
+    "viewTask": "View task",
     "disabled": "Workbench is not enabled in this chat.",
     "unavailable": "This resource is unavailable or you no longer have access.",
     "forbidden": "You do not have access to this resource."
@@ -49,6 +50,7 @@
       "copyUrl": "Copy link",
       "suggestions": "Address suggestions"
     },
+    "messageUnavailable": "The requested message is unavailable in this branch.",
     "executionUnavailable": "The requested execution is unavailable in this conversation.",
     "title": "Views",
     "description": "Remote workbench views",

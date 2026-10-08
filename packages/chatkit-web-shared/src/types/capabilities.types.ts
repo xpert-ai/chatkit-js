@@ -1,4 +1,8 @@
 import type {
+  ChatKitMessageFocusRequest,
+  ChatKitMessageFocusResult,
+} from '@xpert-ai/chatkit-types';
+import type {
   ChatKitReference,
   ChatKitReferenceCompositionMode,
   RuntimeCapabilitiesSelection as ChatKitRuntimeCapabilitiesSelection,
@@ -111,6 +115,9 @@ export type OuterCommands = {
     selection: RuntimeCapabilitiesSelection | null,
   ) => void;
   setThreadId: (params: { threadId: string | null }) => void;
+  focusMessage: (
+    params: ChatKitMessageFocusRequest,
+  ) => Promise<ChatKitMessageFocusResult>;
   focusComposer: () => void;
   fetchUpdates: () => void;
   sendCustomAction: (params: CustomActionCommandPayload) => void;
@@ -210,6 +217,7 @@ export const BASE_CAPABILITY_ALLOWLIST = [
   'command.setRuntimeCapabilities',
   'command.setThreadId',
   'command.focusComposer',
+  'command.focusMessage',
   'command.fetchUpdates',
   'command.sendCustomAction',
   'command.showHistory',

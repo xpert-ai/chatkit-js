@@ -70,6 +70,15 @@ export type Attachment =
  * A Web Component that serves as the entry point for a ChatKit integration.
  * * @noInheritDoc
  */
+export type ChatKitMessageFocusRequest = {
+  conversationId: string;
+  threadId: string;
+  messageId: string;
+};
+export type ChatKitMessageFocusResult =
+  | { success: true; status: 'opened' }
+  | { success: false; code: string; message?: string };
+
 export interface XpertAIChatKit extends HTMLElement {
   /**
    * Applies configuration options to the ChatKit instance.
@@ -83,6 +92,11 @@ export interface XpertAIChatKit extends HTMLElement {
 
   /** Changes the active thread. Pass `null` to switch to a new thread. */
   setThreadId(threadId: string | null): Promise<void>;
+
+  /** Locate an authorized message in the active branch, loading older history when necessary. */
+  focusMessage(
+    request: ChatKitMessageFocusRequest,
+  ): Promise<ChatKitMessageFocusResult>;
 
   /**
    * Sends a custom application-defined action to your backend.

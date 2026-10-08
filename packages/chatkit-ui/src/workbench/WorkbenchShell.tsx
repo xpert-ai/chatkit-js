@@ -1,6 +1,7 @@
 import { ResourceCardContext } from '../resource-cards/context';
 import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
 import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
+import { useMessageFocus } from './useMessageFocus';
 import { createFileChangeReview } from './file-review/file-change-review';
 import type {
   XpertRemoteViewHostEventMessage,
@@ -462,6 +463,22 @@ export function WorkbenchShell({
         : undefined,
   });
 
+  const openMessage = useMessageFocus({
+    ...executionFocusOptions,
+    conversationId: stream.conversationId,
+    scope: JSON.stringify([stream.apiUrl, stream.organizationId]),
+    unavailableMessage: t('workbench.messageUnavailable'),
+    historyError:
+      stream.historyLoad?.status === 'error'
+        ? getErrorMessage(
+            stream.historyLoad.error,
+            t('workbench.messageUnavailable'),
+          )
+        : undefined,
+  });
+
+  useParentMessenger({ onFocusMessage: openMessage });
+
   const rememberResourceCard = useResourceCardNavigation({
     scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
@@ -503,21 +520,26 @@ export function WorkbenchShell({
     parentMessenger,
     onNavigate,
     openExecution,
+    openMessage,
   });
 
   React.useEffect(() => {
     if (!initialNavigation || loading || viewsScope !== viewScopeKey) return;
     const navigation = parseNavigation(initialNavigation.payload);
-    if (navigation.target === 'assistant.conversation') {
+    if (
+      navigation.target === 'assistant.conversation' &&
+      !navigation.preserveView
+    ) {
       setExpanded(false);
       setOpen(false);
     }
     const viewKey = navigation.viewKey;
     if (viewKey && views.some((view) => view.key === viewKey)) {
-      setViewQueries((current) => ({
-        ...current,
-        [viewKey]: navigation.query,
-      }));
+      if (!navigation.preserveView)
+        setViewQueries((current) => ({
+          ...current,
+          [viewKey]: navigation.query,
+        }));
       selectView(viewKey);
       setOpen(true);
     }
