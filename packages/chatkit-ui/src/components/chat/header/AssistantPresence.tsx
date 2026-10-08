@@ -91,7 +91,7 @@ export function AssistantPresence(props: AssistantPresenceProps) {
   return (
     <div
       data-slot="assistant-presence"
-      className="chatkit-presence pointer-events-none relative z-20 col-start-1 row-start-1 flex shrink-0 flex-col items-center self-start"
+      className="chatkit-presence pointer-events-none relative z-20 col-start-1 row-start-1 flex min-w-0 shrink-0 flex-col items-center self-start"
     >
       <button
         id={props.motionId ? `${props.motionId}-trigger` : undefined}
