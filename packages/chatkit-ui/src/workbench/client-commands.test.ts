@@ -263,6 +263,35 @@ describe('Workbench built-in commands', () => {
     ).toMatchObject({ code: 'navigation_mismatch' });
     expect(host.navigate).toHaveBeenCalledOnce();
   });
+  it('waits for exact message focus after host authorization and surfaces focus failures', async () => {
+    const { host, execute } = fixture({ success: true, status: 'opened' });
+    host.openMessage = vi
+      .fn()
+      .mockResolvedValue({ success: false, code: 'message_unavailable' });
+    const payload = {
+      target: 'assistant.conversation',
+      conversationId: 'conversation',
+      threadId: 'side',
+      messageId: 'old-message',
+      preserveView: true,
+    };
+    expect(await execute('workbench.navigation.open', payload)).toEqual({
+      success: false,
+      code: 'message_unavailable',
+    });
+    expect(host.openMessage).toHaveBeenCalledWith({
+      conversationId: 'conversation',
+      threadId: 'side',
+      messageId: 'old-message',
+    });
+    vi.mocked(host.forward).mockResolvedValue({
+      success: false,
+      code: 'forbidden',
+    });
+    await execute('workbench.navigation.open', payload);
+    expect(host.openMessage).toHaveBeenCalledTimes(1);
+    expect(host.updateComposer).not.toHaveBeenCalled();
+  });
   it('keeps host-owned navigation compatible and rejects incomplete credentials', async () => {
     const { host, execute } = fixture({ success: true, status: 'opened' });
     const payload = { target: 'assistant.project', projectId: 'project' };

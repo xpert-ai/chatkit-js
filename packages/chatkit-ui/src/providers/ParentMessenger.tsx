@@ -1,3 +1,7 @@
+import type {
+  ChatKitMessageFocusRequest,
+  ChatKitMessageFocusResult,
+} from '@xpert-ai/chatkit-types';
 import {
   createContext,
   useCallback,
@@ -43,6 +47,7 @@ type CommandMessageMap = {
   onSetRuntimeCapabilities: RuntimeCapabilitiesSelection | null;
   onSetOptions: ChatKitOptions | null;
   onSetPetEnabled: { enabled: boolean };
+  onFocusMessage: ChatKitMessageFocusRequest;
   onFocusComposer: null;
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
@@ -157,6 +162,9 @@ type OnSetComposerValueHandler = (
 type OnSetRuntimeCapabilitiesHandler = (
   selection: RuntimeCapabilitiesSelection | null,
 ) => void | Promise<void>;
+type OnFocusMessageHandler = (
+  request: ChatKitMessageFocusRequest,
+) => Promise<ChatKitMessageFocusResult>;
 type OnFocusComposerHandler = () => void | Promise<void>;
 
 type ParentMessengerContextValue = ParentMessenger & {
@@ -170,6 +178,7 @@ type ParentMessengerContextValue = ParentMessenger & {
   registerOnSetRuntimeCapabilities: (
     handler: OnSetRuntimeCapabilitiesHandler,
   ) => () => void;
+  registerOnFocusMessage?: (handler: OnFocusMessageHandler) => () => void;
   registerOnFocusComposer: (handler: OnFocusComposerHandler) => () => void;
 };
 
@@ -201,6 +210,7 @@ export function ParentMessengerProvider({
   const onSetRuntimeCapabilitiesHandlersRef = useRef(
     new Set<OnSetRuntimeCapabilitiesHandler>(),
   );
+  const onFocusMessageRef = useRef<OnFocusMessageHandler | null>(null);
   const onFocusComposerHandlersRef = useRef(new Set<OnFocusComposerHandler>());
   const latestOptionsRef = useRef<ChatKitOptions | null>(null);
 
@@ -244,6 +254,17 @@ export function ParentMessengerProvider({
       onSetRuntimeCapabilitiesHandlersRef.current.add(handler);
       return () => {
         onSetRuntimeCapabilitiesHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
+  const registerOnFocusMessage = useCallback(
+    (handler: OnFocusMessageHandler) => {
+      onFocusMessageRef.current = handler;
+      return () => {
+        if (onFocusMessageRef.current === handler)
+          onFocusMessageRef.current = null;
       };
     },
     [],
@@ -519,6 +540,53 @@ export function ParentMessengerProvider({
         return;
       }
 
+      if (payload.type === 'command' && payload.command === 'onFocusMessage') {
+        const data = payload.data;
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          !('conversationId' in data) ||
+          typeof data.conversationId !== 'string' ||
+          !('threadId' in data) ||
+          typeof data.threadId !== 'string' ||
+          !('messageId' in data) ||
+          typeof data.messageId !== 'string'
+        ) {
+          if (payload.nonce)
+            sendResponse(payload.nonce, {
+              success: false,
+              code: 'bad_request',
+            });
+          return;
+        }
+        const request = {
+          conversationId: data.conversationId,
+          threadId: data.threadId,
+          messageId: data.messageId,
+        };
+        void Promise.resolve()
+          .then<ChatKitMessageFocusResult>(
+            () =>
+              onFocusMessageRef.current?.(request) ?? {
+                success: false,
+                code: 'not_ready',
+              },
+          )
+          .then(
+            (result) => {
+              if (payload.nonce) sendResponse(payload.nonce, result);
+            },
+            () => {
+              if (payload.nonce)
+                sendResponse(payload.nonce, {
+                  success: false,
+                  code: 'message_load_failed',
+                });
+            },
+          );
+        return;
+      }
+
       if (payload.type === 'command' && payload.command === 'onFocusComposer') {
         void Promise.all(
           [...onFocusComposerHandlersRef.current].map((handler) =>
@@ -654,6 +722,7 @@ export function ParentMessengerProvider({
       registerOnSetComposerValue,
       registerOnSetRuntimeCapabilities,
       registerOnFocusComposer,
+      registerOnFocusMessage,
     }),
     [
       updateComposer,
@@ -666,6 +735,7 @@ export function ParentMessengerProvider({
       registerOnSetComposerValue,
       registerOnSetRuntimeCapabilities,
       registerOnFocusComposer,
+      registerOnFocusMessage,
     ],
   );
 

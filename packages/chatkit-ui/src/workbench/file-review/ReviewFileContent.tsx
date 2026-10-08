@@ -3,7 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
-const CodeEditor = React.lazy(() => import('../code-editor/CodeEditor'));
+const CodeEditor = React.lazy(
+  () => import('../../components/code-editor/CodeEditor'),
+);
 export function canRenderReviewFile(path: string) {
   return /\.(html?|svg|md|markdown)$/i.test(path);
 }

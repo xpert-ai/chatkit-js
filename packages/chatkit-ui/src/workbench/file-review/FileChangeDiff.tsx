@@ -7,7 +7,9 @@ import { useTheme } from '../../providers/Theme';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { ReviewSettings } from './review-presentation';
 
-const CodeEditor = React.lazy(() => import('../code-editor/CodeEditor'));
+const CodeEditor = React.lazy(
+  () => import('../../components/code-editor/CodeEditor'),
+);
 
 export function FileChangeDiff({
   report,

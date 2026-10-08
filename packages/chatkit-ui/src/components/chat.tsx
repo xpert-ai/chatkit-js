@@ -232,6 +232,7 @@ export function Chat({
   const runtimeResources = useRuntimeResources({
     client: session.xpertPlatformClient,
     enabled: resourcesEnabled,
+    isReady: session.stream.isReady,
     assistantId: session.stream.assistantId,
     projectId: session.activeProjectId,
     conversationId: session.stream.conversationId,
@@ -247,6 +248,7 @@ export function Chat({
     runControl.isRunPausing ||
     hasPendingInteractiveRequest ||
     session.missingConfig ||
+    session.stream.runtimeScopeReady === false ||
     session.isHistoryUnavailable ||
     hasUploadingFiles ||
     files.isUploadingReferenceImages;
@@ -467,7 +469,7 @@ export function Chat({
           data-window-drag-scope=""
           className={
             characterPresentation
-              ? 'pointer-events-none sticky top-0 z-10 grid w-full shrink-0'
+              ? 'pointer-events-none sticky top-0 z-10 grid w-full min-w-0 shrink-0 grid-cols-1'
               : 'contents'
           }
         >

@@ -40,6 +40,7 @@ export type ProjectSelectorProps = {
   autoNewMode?: 'on-send' | 'after-confirmation';
   allowNone?: boolean;
   disabled?: boolean;
+  ready?: boolean;
   locked?: boolean;
   label?: string;
   onAvailabilityChange?: (available: boolean) => void;
@@ -62,6 +63,7 @@ export function ProjectSelector({
   autoNewMode = 'on-send',
   allowNone = true,
   disabled = false,
+  ready = true,
   locked = false,
   label,
   onAvailabilityChange,
@@ -131,6 +133,7 @@ export function ProjectSelector({
     setSkip(0);
     setCatalogReady(false);
     setCatalogFailed(false);
+    if (!ready) return;
     if (!client || !xpertId || locked) {
       setCatalogReady(true);
       return;
@@ -157,10 +160,11 @@ export function ProjectSelector({
         }
       });
     return () => controller.abort();
-  }, [client, xpertId, locked]);
+  }, [client, xpertId, locked, ready]);
 
   React.useEffect(() => {
     if (
+      !ready ||
       !activeProjectId ||
       !client?.projects?.get ||
       (locked && label?.trim())
@@ -178,7 +182,7 @@ export function ProjectSelector({
       // Keep the id fallback if the name is temporarily unavailable.
       .catch(() => undefined);
     return () => controller.abort();
-  }, [client, activeProjectId, label, locked]);
+  }, [client, activeProjectId, label, locked, ready]);
 
   React.useEffect(() => {
     if (locked) {
@@ -188,7 +192,7 @@ export function ProjectSelector({
       setRefreshing(false);
       return;
     }
-    if (!client || !xpertId || !catalogReady) {
+    if (!ready || !client || !xpertId || !catalogReady) {
       setProjects([]);
       setLoadFailed(false);
       setLoadedFor(null);
@@ -275,6 +279,7 @@ export function ProjectSelector({
     locked,
     xpertId,
     catalogReady,
+    ready,
     query,
     applicationKey,
     projectTypeKey,

@@ -126,7 +126,7 @@ export function ChatHeader({
       <div
         data-slot="chatkit-chat-header-container"
         className={cn(
-          'sticky top-0 z-10 w-full shrink-0 bg-background',
+          'sticky top-0 z-10 w-full min-w-0 shrink-0 bg-background',
           characterPresentation && 'col-start-1 row-start-1 self-start',
         )}
       >

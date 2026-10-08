@@ -3,7 +3,6 @@ import type {
   ChatKitReference,
   FileChangeResource,
   FileChangeSetResource,
-  TMessageContentResourceCard,
 } from '@xpert-ai/chatkit-types';
 import { Loader2 } from 'lucide-react';
 import {
@@ -21,10 +20,6 @@ import {
 
 export type WorkbenchContextValue = {
   openProject?: (projectId: string, viewKey: string) => Promise<unknown>;
-  openResourceCard?: (
-    card: TMessageContentResourceCard,
-    messageId: string,
-  ) => Promise<unknown>;
   openHtmlArtifact?: (
     resource: { artifactId: string; artifactVersionId: string },
     title: string,

@@ -20,7 +20,7 @@ import { IconDefinitionRenderer } from '../../components/ui/icon-definition';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { useTheme } from '../../providers/Theme';
 import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
-import type { WorkbenchPreview } from '../client-command-payload';
+import type { WorkbenchPreview } from '../preview/types';
 import {
   WorkbenchAddressBar,
   type BrowserNavigation,
@@ -105,7 +105,7 @@ export function WorkbenchStartPage({
     item.file.filePath.toLocaleLowerCase(locale).includes(search),
   );
   const recentItems = recent.filter((item) =>
-    `${item.preview.title} ${item.preview.url}`
+    `${item.preview.title} ${'url' in item.preview ? item.preview.url : ''}`
       .toLocaleLowerCase(locale)
       .includes(search),
   );
@@ -133,9 +133,11 @@ export function WorkbenchStartPage({
     ...recent.map(({ preview }) => ({
       key: preview.key,
       title: preview.title,
-      detail: preview.url,
+      detail: 'url' in preview ? preview.url : '',
       history: preview.kind === 'browser',
-      icon: preview.kind === 'file' ? <File size={16} /> : undefined,
+      icon: ['file', 'resource-file', 'snapshot'].includes(preview.kind) ? (
+        <File size={16} />
+      ) : undefined,
       onSelect: () => onOpenPreview(preview),
     })),
     ...recentFiles.map(({ file }) => ({
@@ -338,7 +340,9 @@ export function WorkbenchStartPage({
                   className="flex w-full min-w-0 items-center gap-3 rounded-[var(--chat-item-radius)] px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-[var(--chat-item-radius)] bg-muted text-muted-foreground">
-                    {preview.kind === 'file' ? (
+                    {['file', 'resource-file', 'snapshot'].includes(
+                      preview.kind,
+                    ) ? (
                       <File size={18} />
                     ) : (
                       <Globe size={18} />

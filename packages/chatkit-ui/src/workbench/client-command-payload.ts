@@ -1,8 +1,5 @@
-import type { FileChangeReviewOptions } from './file-review/file-change-review';
-import type {
-  ChatKitQuoteReference,
-  ChatKitWorkbenchNavigationSession,
-} from '@xpert-ai/chatkit-types';
+import type { UrlWorkbenchPreview } from './preview/types';
+import type { ChatKitWorkbenchNavigationSession } from '@xpert-ai/chatkit-types';
 import type {
   WorkbenchOpenFile,
   WorkbenchOpenFileEvidence,
@@ -11,27 +8,13 @@ import type {
 import { normalizeReferences } from '../lib/references';
 import { parseViewQuery } from './protocol';
 
-export type WorkbenchPreview = {
-  key: string;
-  kind: 'file' | 'browser' | 'html' | 'review';
-  title: string;
-  url: string;
-  file?: WorkbenchOpenFile;
-  /** In-memory loader for an immutable HTML delivery; never a mutable workspace path. */
-  review?: FileChangeReviewOptions;
-  /** Saved review content; never read from the mutable workspace. */
-  snapshot?: { path: string; text: string };
-  html?: {
-    load: (signal: AbortSignal) => Promise<{ blob: Blob; name: string }>;
-    identity?: { artifactId: string; artifactVersionId: string };
-    onAnnotate?: (reference: ChatKitQuoteReference) => Promise<void>;
-  };
-};
 export type NavigationSession = ChatKitWorkbenchNavigationSession;
 export type NavigationPayload = {
   target: string;
   conversationId?: string;
   threadId?: string;
+  messageId?: string;
+  preserveView?: boolean;
   executionId?: string;
   projectId?: string;
   xpertId?: string;
@@ -53,6 +36,8 @@ export function parseNavigation(value: unknown): NavigationPayload {
     target: text(field(value, 'target')) ?? '',
     conversationId: text(field(value, 'conversationId')),
     threadId: text(field(value, 'threadId')),
+    messageId: text(field(value, 'messageId')),
+    preserveView: field(value, 'preserveView') === true,
     executionId: text(field(value, 'executionId')),
     projectId: text(field(value, 'projectId')),
     xpertId: text(field(value, 'xpertId')),
@@ -162,7 +147,7 @@ export function parsePreview(
   kind: 'file' | 'browser',
   value: unknown,
   apiUrl: string,
-): WorkbenchPreview | null {
+): UrlWorkbenchPreview | null {
   const url = previewUrl(
     typeof value === 'string'
       ? value

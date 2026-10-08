@@ -10,7 +10,6 @@ type HistoryRequest = {
   assistantId: string;
   projectId: string | null | undefined;
   search: string;
-  enabled: boolean;
 };
 
 type HistoryPage = {
@@ -54,9 +53,8 @@ export function useMessageHistory({
       assistantId,
       projectId: filterProjectId,
       search,
-      enabled,
     }),
-    [client, assistantId, filterProjectId, search, enabled],
+    [client, assistantId, filterProjectId, search],
   );
   const [page, setPage] = React.useState<HistoryPage | null>(null);
   const pending = React.useRef<{
@@ -73,7 +71,7 @@ export function useMessageHistory({
   const fetchPage = React.useCallback(
     (offset: number, append: boolean, delay = 0) => {
       cancelRequest();
-      if (!request.enabled) return;
+      if (!enabled) return;
       const task = {
         controller: new AbortController(),
         busy: true,
@@ -161,7 +159,7 @@ export function useMessageHistory({
           });
       }, delay);
     },
-    [cancelRequest, request],
+    [cancelRequest, request, enabled],
   );
 
   React.useEffect(() => {

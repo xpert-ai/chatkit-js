@@ -33,6 +33,7 @@ export type CreateChatKitOptions = ChatKitOptions &
 const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
   'setThreadId',
+  'focusMessage',
   'sendUserMessage',
   'setComposerValue',
   'setRuntimeCapabilities',

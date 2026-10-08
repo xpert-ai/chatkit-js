@@ -1,7 +1,9 @@
+import { parseResourceCardContent } from '@xpert-ai/chatkit-types';
 import type {
   ChatkitMessage,
   TMessageContentComplex,
   TMessageContentReasoning,
+  TMessageContentResourceCard,
 } from '@xpert-ai/chatkit-types';
 import {
   buildAssistantRenderTree,
@@ -97,7 +99,9 @@ export function toExternalAssistantMessages(
       index: number;
     }[] = [];
     const agentRuns: AgentRunInfo[] = [];
+    const executionIds = new Set<string>();
     const visit = (current: AgentRunRenderNode) => {
+      executionIds.add(current.id);
       if (current !== node) agentRuns.push(current.info);
       for (const entry of current.entries) {
         const item =
@@ -118,14 +122,18 @@ export function toExternalAssistantMessages(
     };
     visit(node);
     entries.sort((a, b) => a.index - b.index);
+    // Presentation cards stay outside process counts, but still belong to their emitting expert.
+    const cards = (Array.isArray(message.content) ? message.content : [])
+      .map(parseResourceCardContent)
+      .filter((card): card is TMessageContentResourceCard => card !== null && !!card.executionId && executionIds.has(card.executionId));
     messages.push({
       id: `${run.id}:${message.id}`,
       type: 'assistant',
       executionId: run.id,
       status: message.status,
-      content: entries
+      content: [...entries
         .filter((entry) => entry.source === 'content')
-        .map((entry) => entry.item),
+        .map((entry) => entry.item), ...cards],
       reasoning: entries
         .filter((entry) => entry.source === 'reasoning')
         .map((entry) => entry.item as TMessageContentReasoning),

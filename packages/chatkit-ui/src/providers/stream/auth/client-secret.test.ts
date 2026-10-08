@@ -123,3 +123,184 @@ describe('createFetchWithClientSecretRefresh', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+describe('credential readiness and request cancellation', () => {
+  it('waits for credentials before sending the first request', async () => {
+    const pending = deferred<{ secret: string; organizationId: string }>();
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response());
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret: '' }),
+      refreshClientSecret: () => pending.promise,
+    });
+    const response = request('https://example.test');
+    expect(fetchFn).not.toHaveBeenCalled();
+    pending.resolve({ secret: 'cs-x-ready', organizationId: 'org-ready' });
+    expect((await response).status).toBe(200);
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(
+      new Headers(fetchFn.mock.calls[0][1]?.headers).get('organization-id'),
+    ).toBe('org-ready');
+  });
+
+  it('does not send a request when initialization fails', async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret: '' }),
+      refreshClientSecret: async () => {
+        throw new Error('Host unavailable');
+      },
+    });
+    await expect(request('https://example.test')).rejects.toThrow(
+      'Host unavailable',
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('cancels one waiter promptly without cancelling a refresh needed by another', async () => {
+    const pending = deferred<{ secret: string }>();
+    const controller = new AbortController();
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response());
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret: '' }),
+      refreshClientSecret: () => pending.promise,
+    });
+    const cancelled = request('https://example.test/old', {
+      signal: controller.signal,
+    });
+    const active = request('https://example.test/current');
+    const rejection = expect(cancelled).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    controller.abort();
+    await rejection;
+    expect(fetchFn).not.toHaveBeenCalled();
+    pending.resolve({ secret: 'cs-x-ready' });
+    await active;
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(fetchFn.mock.calls[0][0]).toBe('https://example.test/current');
+  });
+
+  it('does not refresh or send an already cancelled request', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchFn = vi.fn<typeof fetch>();
+    const refresh = vi.fn();
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret: '' }),
+      refreshClientSecret: refresh,
+    });
+    await expect(
+      request('https://example.test', { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('does not retry or warn when the consumer aborts during 401 refresh', async () => {
+    const pending = deferred<{ secret: string }>();
+    const controller = new AbortController();
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    const refresh = vi.fn(() => pending.promise);
+    const warning = vi.fn();
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret: 'cs-x-old' }),
+      refreshClientSecret: refresh,
+      onRefreshError: warning,
+    });
+    const response = request('https://example.test', {
+      signal: controller.signal,
+    });
+    const rejection = expect(response).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    controller.abort();
+    await rejection;
+    pending.resolve({ secret: 'cs-x-new' });
+    await pending.promise;
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it('reuses rotated credentials for a late 401 instead of refreshing again', async () => {
+    const first = deferred<Response>();
+    let secret = 'cs-x-old';
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(new Response());
+    const refresh = vi.fn();
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret }),
+      refreshClientSecret: refresh,
+    });
+    const response = request('https://example.test');
+    secret = 'cs-x-new';
+    first.resolve(new Response(null, { status: 401 }));
+    await response;
+    expect(refresh).not.toHaveBeenCalled();
+    expect(
+      new Headers(fetchFn.mock.calls[1][1]?.headers).get('Authorization'),
+    ).toBe('Bearer cs-x-new');
+  });
+
+  it('propagates a retry transport failure without calling it a refresh failure', async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockRejectedValueOnce(new TypeError('Network failed'));
+    const warning = vi.fn();
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getCurrentClientSecret: () => ({ secret: 'cs-x-old' }),
+      refreshClientSecret: async () => ({ secret: 'cs-x-new' }),
+      onRefreshError: warning,
+    });
+    await expect(request('https://example.test')).rejects.toThrow(
+      'Network failed',
+    );
+    expect(warning).not.toHaveBeenCalled();
+  });
+
+  it('cancels in-flight SDK requests when their Assistant scope is disposed', async () => {
+    const controller = new AbortController();
+    const fetchFn = vi.fn<typeof fetch>().mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(init.signal?.reason),
+          );
+        }),
+    );
+    const refresh = vi.fn();
+    const request = createFetchWithClientSecretRefresh({
+      fetchFn,
+      getScopeSignal: () => controller.signal,
+      getCurrentClientSecret: () => ({ secret: 'cs-x-old' }),
+      refreshClientSecret: refresh,
+    });
+    const response = request('https://example.test');
+    const rejection = expect(response).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    controller.abort();
+    await rejection;
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { WorkbenchPreview } from './client-command-payload';
+import type { WorkbenchPreview } from './preview/types';
 
 export const NEW_TAB_PREFIX = 'chatkit.new-tab:';
 export const isWorkbenchNewTab = (key: string | null) =>

@@ -466,6 +466,7 @@ export function ChatComposerForm({
             {projectsEnabled &&
             (isProjectScopeLocked || !isProjectSelectionLocked) ? (
               <ProjectSelector
+                ready={stream.isReady}
                 client={xpertPlatformClient}
                 xpertId={stream.assistantId}
                 activeProjectId={activeProjectId}

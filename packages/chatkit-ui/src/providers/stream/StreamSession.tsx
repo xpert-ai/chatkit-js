@@ -25,6 +25,10 @@ import { useStreamFollowUpState } from './follow-ups/useStreamFollowUpState';
 import { useStreamFollowUps } from './follow-ups/useStreamFollowUps';
 import { useStreamHistoryMessages } from './history/useStreamHistoryMessages';
 import { useStreamThreadLoading } from './history/useStreamThreadLoading';
+import {
+  useProjectConversation,
+  type ProjectConversationRequest,
+} from './history/useProjectConversation';
 import { useStreamHost } from './host/useStreamHost';
 import { useStreamInterrupts } from './interrupts/useStreamInterrupts';
 import { useStreamUserInput } from './interrupts/useStreamUserInput';
@@ -44,6 +48,7 @@ export const StreamSession = ({
   assistantId,
   projectId,
   projectSelection,
+  projectConversationRequest,
   initialThread,
   runtimeKey,
   locale,
@@ -60,6 +65,7 @@ export const StreamSession = ({
   assistantId: string;
   projectId?: string;
   projectSelection?: ProjectSelection;
+  projectConversationRequest?: ProjectConversationRequest | null;
   initialThread?: string | null;
   runtimeKey?: string | number;
   locale?: string | null;
@@ -151,14 +157,21 @@ export const StreamSession = ({
   });
 
   // Keep Assistant views mounted; reset chat state only for a new binding.
-  const bindingKey = JSON.stringify([projectId, projectSelection?.mode, runtimeKey]);
+  const bindingKey = JSON.stringify([
+    projectId,
+    projectSelection?.mode,
+    runtimeKey,
+  ]);
   const previousBinding = useRef({ key: bindingKey, runtimeKey });
   const navigationChanged = previousBinding.current.runtimeKey !== runtimeKey;
   const adoptingConversationProject = Boolean(
-    projectId && scope.conversationId && conversationProject.resolved &&
+    projectId &&
+    scope.conversationId &&
+    conversationProject.resolved &&
     conversationProject.projectId === projectId,
   );
-  const bindingChanged = previousBinding.current.key !== bindingKey &&
+  const bindingChanged =
+    previousBinding.current.key !== bindingKey &&
     (navigationChanged || !adoptingConversationProject);
   useLayoutEffect(() => {
     if (previousBinding.current.key === bindingKey) return;
@@ -167,10 +180,17 @@ export const StreamSession = ({
     scope.initialSelectedThreadRef.current = null;
     // Project changes must not reopen the old initial thread. Explicit navigation may reload it.
     if (navigationChanged) scope.consumedInitialThreadRef.current = null;
-    lifecycle.reset(navigationChanged ? initialThread ?? null : null, [], {
+    lifecycle.reset(navigationChanged ? (initialThread ?? null) : null, [], {
       suppressThreadChange: !navigationChanged,
     });
-  }, [bindingKey, runtimeKey, navigationChanged, adoptingConversationProject, initialThread, lifecycle.reset]);
+  }, [
+    bindingKey,
+    runtimeKey,
+    navigationChanged,
+    adoptingConversationProject,
+    initialThread,
+    lifecycle.reset,
+  ]);
 
   const refreshConversationProject = conversationProject.refresh;
   const hydrateConversationProject = conversationProject.hydrate;
@@ -317,6 +337,17 @@ export const StreamSession = ({
     credentials.runtimeClientSecret.startsWith('cs-x-'),
   );
 
+  const isResolvingProjectConversation = useProjectConversation({
+    request: projectConversationRequest,
+    client: credentials.client,
+    assistantId,
+    isReady,
+    reset: lifecycle.reset,
+    captureHistoryRequest: host.captureHistoryRequest,
+    loadThread: threadLoading.loadThread,
+    setError: runState.setError,
+  });
+
   const isThreadInterrupted =
     runState.interruptedThreadId !== null &&
     runState.interruptedThreadId === scope.threadId;
@@ -337,6 +368,7 @@ export const StreamSession = ({
     projectScopeResolved: conversationProject.resolved,
     runtimeScopeReady:
       !bindingChanged &&
+      !isResolvingProjectConversation &&
       host.historyLoad.status !== 'loading' &&
       host.historyLoad.status !== 'error' &&
       (!initialHistoryThread ||

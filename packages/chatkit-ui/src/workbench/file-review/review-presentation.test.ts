@@ -12,7 +12,7 @@ import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { reviewApplyCommand } from './review-presentation';
-import type { FileReviewEntry } from './file-change-review';
+import type { FileReviewEntry } from './types';
 
 const revision = (text: string) => ({
   text,

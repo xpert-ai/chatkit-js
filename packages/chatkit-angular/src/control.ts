@@ -1,4 +1,8 @@
-import type { ChatKitEvents, ChatKitOptions, XpertAIChatKit } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitEvents,
+  ChatKitOptions,
+  XpertAIChatKit,
+} from '@xpert-ai/chatkit-types';
 
 type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
   ? `${Head}${Capitalize<DotToCamelCase<Tail>>}`
@@ -7,6 +11,7 @@ type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
 const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
   'setThreadId',
+  'focusMessage',
   'sendUserMessage',
   'setComposerValue',
   'setRuntimeCapabilities',
@@ -131,6 +136,10 @@ class ChatKitController {
 
   setThreadId(...args: Parameters<XpertAIChatKit['setThreadId']>) {
     return this.callMethod('setThreadId', ...args);
+  }
+
+  focusMessage(...args: Parameters<XpertAIChatKit['focusMessage']>) {
+    return this.callMethod('focusMessage', ...args);
   }
 
   sendUserMessage(...args: Parameters<XpertAIChatKit['sendUserMessage']>) {

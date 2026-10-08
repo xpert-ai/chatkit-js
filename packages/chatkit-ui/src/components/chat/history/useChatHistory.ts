@@ -47,11 +47,6 @@ export function useChatHistory({
     scope: effectiveHistoryScope,
   });
 
-  React.useEffect(() => {
-    if (missingConfig) return;
-    void refreshThreads();
-  }, [missingConfig, refreshThreads]);
-
   const currentThread = React.useMemo(
     () =>
       threads.find((item) =>

@@ -15,8 +15,11 @@ import type { RecentWorkbenchPreview } from './useWorkbenchPages';
 import { useTheme } from '../providers/Theme';
 import { getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
-import type { WorkbenchPreview } from './client-command-payload';
-import { PreviewTabs, WorkbenchPreviewContent } from './WorkbenchPreview';
+import type { WorkbenchPreview } from './preview/types';
+import {
+  PreviewTabs,
+  WorkbenchPreviewContent,
+} from './preview/WorkbenchPreview';
 import type { WorkbenchBrowserHistory } from './useWorkbenchPages';
 import type {
   Client,

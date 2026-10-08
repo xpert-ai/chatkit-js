@@ -11,7 +11,7 @@ import { buildHumanMessageInputPayload } from '../../../lib/references';
 import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import { createMessageId } from '../../../lib/utils';
 import type { useStreamContext } from '../../../providers/Stream';
-import type { WorkbenchPreview } from '../../client-command-payload';
+import type { WorkbenchPreview } from '../../preview/types';
 import {
   executeWorkbenchCommand,
   unsupportedCommand,
@@ -20,6 +20,7 @@ import {
   parseChatMessagePayload,
   parseContextSetPayload,
 } from '../../message-command-payload';
+import type { useMessageFocus } from '../../useMessageFocus';
 import type { useLocalExecutionNavigation } from '../../useLocalExecutionNavigation';
 import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
 import type { useWorkbenchViews } from '../../useWorkbenchViews';
@@ -50,6 +51,7 @@ type WorkbenchClientCommandsOptions = {
   isNarrow: boolean;
   parentMessenger: ReturnType<typeof useParentMessenger>;
   onNavigate: WorkbenchShellProps['onNavigate'];
+  openMessage: ReturnType<typeof useMessageFocus>;
   openExecution: ReturnType<typeof useLocalExecutionNavigation>;
 };
 
@@ -69,6 +71,7 @@ export function useWorkbenchClientCommands({
   isNarrow,
   parentMessenger,
   onNavigate,
+  openMessage,
   openExecution,
 }: WorkbenchClientCommandsOptions) {
   const contextKey = JSON.stringify([
@@ -78,9 +81,23 @@ export function useWorkbenchClientCommands({
     stream.projectId,
     stream.conversationId,
   ]);
-  const currentContext = React.useRef({ key: contextKey });
+  const navigationScope = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    stream.assistantId,
+    stream.projectId,
+  ]);
+  const currentContext = React.useRef({
+    key: contextKey,
+    navigationScope,
+    conversationId: stream.conversationId,
+  });
   if (currentContext.current.key !== contextKey)
-    currentContext.current = { key: contextKey };
+    currentContext.current = {
+      key: contextKey,
+      navigationScope,
+      conversationId: stream.conversationId,
+    };
   const publishContexts = React.useCallback(() => {
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
   }, [onRequestContextChange]);
@@ -228,7 +245,14 @@ export function useWorkbenchClientCommands({
       };
       return executeWorkbenchCommand(request, {
         apiUrl: stream.apiUrl,
-        isCurrent: () => currentContext.current === context,
+        isCurrent: (navigation) =>
+          currentContext.current === context ||
+          Boolean(
+            navigation?.preserveView &&
+            currentContext.current.navigationScope ===
+              context.navigationScope &&
+            currentContext.current.conversationId === navigation.conversationId,
+          ),
         openView: (key, query) => {
           if (!views.some((view) => view.key === key)) return false;
           setViewQueries((current) => ({ ...current, [key]: query }));
@@ -251,6 +275,7 @@ export function useWorkbenchClientCommands({
         },
         navigate: onNavigate,
         openExecution,
+        openMessage,
         forward: async (request) => {
           const onClientCommand = options?.workbench?.onClientCommand;
           if (typeof onClientCommand === 'function')
@@ -274,6 +299,7 @@ export function useWorkbenchClientCommands({
       isNarrow,
       onNavigate,
       openExecution,
+      openMessage,
       options?.workbench?.onClientCommand,
       parentMessenger,
       publishContexts,

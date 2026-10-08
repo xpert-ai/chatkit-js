@@ -70,3 +70,9 @@
     animation: none;
   }
 }
+
+[data-message-focused='true'] {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+}

@@ -1,6 +1,9 @@
 {
   "resourceCard": {
     "open": "打开",
+    "moreImages": "更多图片（{{count}}）",
+    "collapseImages": "收起图片",
+    "viewTask": "查看任务",
     "disabled": "当前对话未启用 Workbench。",
     "unavailable": "此资源不可用，或你已无权访问。",
     "forbidden": "你没有访问此资源的权限。"
@@ -47,6 +50,7 @@
       "copyUrl": "复制链接",
       "suggestions": "地址建议"
     },
+    "messageUnavailable": "当前分支中找不到指定消息。",
     "executionUnavailable": "当前对话中找不到指定执行记录。",
     "title": "视图",
     "description": "远程工作台视图",

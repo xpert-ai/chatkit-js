@@ -5,24 +5,13 @@ import {
   parseFileChangeReport,
   type FileChangeResource,
   type FileChangeSetResource,
-  type FileChangeReport,
 } from '@xpert-ai/chatkit-types';
-import type { WorkbenchPreview } from '../client-command-payload';
+import type {
+  WorkbenchPreview,
+  ReviewWorkbenchPreview,
+} from '../preview/types';
 
-export type FileReviewEntry = {
-  key: string;
-  path: string;
-  report?: FileChangeReport;
-};
-export type FileChangeReviewOptions = {
-  selected: FileChangeResource | FileChangeSetResource;
-  openFile?: (entry: FileReviewEntry) => void;
-  load: (
-    scope: 'selected' | 'conversation',
-    signal: AbortSignal,
-  ) => Promise<FileReviewEntry[]>;
-};
-
+import type { FileReviewEntry } from './types';
 /** Review endpoints stay pinned to the original first/last reports, including after refresh. */
 export function createFileChangeReview(
   client: Client,
@@ -30,12 +19,11 @@ export function createFileChangeReview(
   selected: FileChangeResource | FileChangeSetResource,
   title: string,
   openPreview?: (preview: WorkbenchPreview) => void,
-): WorkbenchPreview {
+): ReviewWorkbenchPreview {
   return {
     key: `chatkit.preview.review:${conversationId}`,
     kind: 'review',
     title,
-    url: '',
     review: {
       selected,
       openFile: openPreview
@@ -44,9 +32,8 @@ export function createFileChangeReview(
             if (snapshot?.text === undefined) return;
             openPreview({
               key: `chatkit.preview.review-file:${conversationId}:${entry.key}:${snapshot.sha256}`,
-              kind: 'file',
+              kind: 'snapshot',
               title: entry.path.split('/').pop() || title,
-              url: '',
               snapshot: { path: entry.path, text: snapshot.text },
             });
           }
