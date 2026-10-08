@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.12.0
+
+### Minor Changes
+
+- 3d8d526: Add the public `focusMessage` control for authorized exact-thread message navigation. ChatKit loads missing history, scrolls and highlights the target, and acknowledges success or a specific failure. Workbench navigation accepts message anchors and preserves its source view without sending messages or cancelling runs. Parent message handlers cleanly reject stale, unavailable and failed targets; old navigation payloads remain supported.
+
 ## 0.11.2
 
 ## 0.11.1
