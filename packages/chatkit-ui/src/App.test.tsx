@@ -14,6 +14,7 @@ vi.mock('@xpert-ai/a2ui-react', () => ({
 }));
 
 const parentMessengerMocks = vi.hoisted(() => ({
+  isParentAvailable: true,
   sendCommand: vi.fn(),
   sendEvent: vi.fn(),
 }));
@@ -110,7 +111,7 @@ vi.mock('./workbench/WorkbenchShell', () => ({
 
 vi.mock('./hooks/useParentMessenger', () => ({
   useParentMessenger: () => ({
-    isParentAvailable: true,
+    isParentAvailable: parentMessengerMocks.isParentAvailable,
     sendCommand: parentMessengerMocks.sendCommand,
     sendEvent: parentMessengerMocks.sendEvent,
   }),
@@ -137,6 +138,7 @@ const options = {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    parentMessengerMocks.isParentAvailable = true;
   });
 
   it('renders the chat shell while the parent client secret is initializing', () => {
@@ -553,5 +555,33 @@ describe('App', () => {
       'public_event',
       ['effect', { name: 'project.create', data: { name: 'Launch project' } }],
     );
+  });
+});
+
+describe('embedded thread state', () => {
+  it('uses memory and the shared credential resolver inside the host', () => {
+    parentMessengerMocks.isParentAvailable = true;
+    const getClientSecret = vi.fn().mockResolvedValue({ secret: 'cs-x-ready' });
+    render(
+      <App
+        clientSecret=""
+        options={options}
+        getClientSecret={getClientSecret}
+        isClientSecretInitializing
+      />,
+    );
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadStateMode: 'memory', getClientSecret }),
+      undefined,
+    );
+  });
+  it('preserves standalone URL navigation', () => {
+    parentMessengerMocks.isParentAvailable = false;
+    render(<App clientSecret="cs-x-standalone" options={options} />);
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({ threadStateMode: 'url' }),
+      undefined,
+    );
+    parentMessengerMocks.isParentAvailable = true;
   });
 });

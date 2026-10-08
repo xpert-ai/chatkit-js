@@ -11,6 +11,7 @@ import { useWorkbenchNavigation } from './workbench/useWorkbenchNavigation';
 import { useWindowDragRegions } from './hooks/useWindowDragRegions';
 import { WorkbenchShell } from './workbench/WorkbenchShell';
 import type { ChatProps } from './components/chat/types';
+import type { ResolvedClientSecret } from './lib/client-secret';
 import type { ProjectConversationRequest } from './providers/stream/history/useProjectConversation';
 
 export type AppProps = {
@@ -19,6 +20,7 @@ export type AppProps = {
   organizationId?: string;
   resolvedXpertId?: string;
   isClientSecretInitializing?: boolean;
+  getClientSecret?: () => Promise<ResolvedClientSecret>;
 };
 
 export function App({
@@ -27,6 +29,7 @@ export function App({
   resolvedXpertId,
   options,
   isClientSecretInitializing = false,
+  getClientSecret,
 }: AppProps) {
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
   useWindowDragRegions(options?.header?.windowDrag === true);
@@ -248,12 +251,12 @@ export function App({
         >
           <StreamProvider
             runtimeKey={navigation.revision ?? 'host'}
-            threadStateMode={navigation.session ? 'memory' : 'url'}
+            threadStateMode={isParentAvailable || navigation.session ? 'memory' : 'url'}
             apiKey={apiKey}
             organizationId={
               navigation.session?.organizationId ?? organizationId
             }
-            getClientSecret={navigation.refresh}
+            getClientSecret={navigation.refresh ?? getClientSecret}
             apiUrl={options?.api.apiUrl || apiUrl}
             xpertId={
               navigation.session?.assistantId ||

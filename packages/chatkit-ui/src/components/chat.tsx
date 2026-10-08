@@ -232,6 +232,7 @@ export function Chat({
   const runtimeResources = useRuntimeResources({
     client: session.xpertPlatformClient,
     enabled: resourcesEnabled,
+    isReady: session.stream.isReady,
     assistantId: session.stream.assistantId,
     projectId: session.activeProjectId,
     conversationId: session.stream.conversationId,

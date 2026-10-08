@@ -1,5 +1,6 @@
 import { Client } from '@xpert-ai/xpert-sdk';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requestAborted } from '../../../lib/request-abort';
 import { createMissingApiConfigurationError } from '../../../lib/api-config';
 import {
   createSdkRequestHook,
@@ -51,6 +52,17 @@ export function useStreamCredentials({
   const refreshClientSecretPromiseRef =
     useRef<Promise<ResolvedClientSecret> | null>(null);
 
+  const scopeController = useRef(new AbortController());
+  useEffect(() => {
+    // React StrictMode replays effects without discarding refs.
+    if (scopeController.current.signal.aborted)
+      scopeController.current = new AbortController();
+    return () => {
+      scopeController.current.abort(requestAborted());
+      refreshClientSecretPromiseRef.current = null;
+    };
+  }, []);
+
   const getRuntimeOrganizationId = useCallback(
     () => runtimeOrganizationIdRef.current,
     [],
@@ -66,6 +78,8 @@ export function useStreamCredentials({
 
   const refreshClientSecret =
     useCallback(async (): Promise<ResolvedClientSecret> => {
+      const signal = scopeController.current.signal;
+      if (signal.aborted) throw requestAborted();
       if (!isParentAvailable && !getClientSecret) {
         throw new Error(
           '[chatkit-ui] Parent window is not available for client secret refresh.',
@@ -80,6 +94,7 @@ export function useStreamCredentials({
         const response = getClientSecret
           ? await getClientSecret()
           : await sendCommand('onGetClientSecret', currentSecret || null);
+        if (signal.aborted) throw requestAborted();
         const nextClientSecret = normalizeClientSecretResult(
           response,
           runtimeOrganizationIdRef.current,
@@ -106,7 +121,7 @@ export function useStreamCredentials({
     if (
       apiUrl.trim() &&
       !runtimeClientSecretRef.current.trim() &&
-      isParentAvailable
+      (isParentAvailable || getClientSecret)
     ) {
       await refreshClientSecret();
     }
@@ -116,7 +131,7 @@ export function useStreamCredentials({
       clientSecret: runtimeClientSecretRef.current,
     });
     if (configError) throw configError;
-  }, [apiUrl, isParentAvailable, refreshClientSecret]);
+  }, [apiUrl, isParentAvailable, getClientSecret, refreshClientSecret]);
 
   const fetchWithClientSecretRefresh = useMemo(
     () =>
@@ -131,6 +146,7 @@ export function useStreamCredentials({
             : { secret: currentSecret };
         },
         refreshClientSecret,
+        getScopeSignal: () => scopeController.current.signal,
         onRefreshError: (refreshError) => {
           console.warn(
             '[chatkit-ui] Failed to refresh client secret:',

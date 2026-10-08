@@ -20,6 +20,7 @@ type ResourceSubmission = {
 export function useRuntimeResources({
   client,
   enabled,
+  isReady = true,
   assistantId,
   projectId,
   conversationId,
@@ -27,6 +28,7 @@ export function useRuntimeResources({
 }: {
   client: Client<unknown> | null;
   enabled: boolean;
+  isReady?: boolean;
   assistantId?: string | null;
   projectId?: string | null;
   conversationId?: string | null;
@@ -51,9 +53,15 @@ export function useRuntimeResources({
   const submission = React.useRef<ResourceSubmission | null>(null);
   // A failed history read must never turn an existing conversation into a draft.
   // Drafts may still remove resources after project validation fails.
-  const canEdit = ready || (!conversationId && !threadId);
+  const canEdit = isReady && (ready || (!conversationId && !threadId));
   React.useEffect(() => {
     const current = ++generation.current;
+    if (enabled && !isReady) {
+      setReady(false);
+      setBusy(false);
+      setError(null);
+      return;
+    }
     const pending = submission.current;
     const isDraft = !conversationId && !threadId;
     const isHandoff =
@@ -131,6 +139,7 @@ export function useRuntimeResources({
   }, [
     client,
     enabled,
+    isReady,
     assistantId,
     projectId,
     conversationId,

@@ -330,3 +330,62 @@ describe('conversation resource selection', () => {
     expect(result.current.selection.resources).toEqual([ref]);
   });
 });
+
+describe('runtime resources authentication readiness', () => {
+  it('does not search or restore resources until authenticated', async () => {
+    const { client, read } = setup();
+    const search = vi
+      .spyOn(client.conversations, 'search')
+      .mockResolvedValue({
+        items: [{ id: 'conversation', threadId: 'thread' }],
+        total: 1,
+      });
+    const { result, rerender } = renderHook(
+      ({ isReady }) =>
+        useRuntimeResources({
+          client,
+          enabled: true,
+          isReady,
+          assistantId: 'assistant',
+          threadId: 'thread',
+        }),
+      { initialProps: { isReady: false } },
+    );
+    expect(search).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(result.current.ready).toBe(false);
+    expect(result.current.canEdit).toBe(false);
+    rerender({ isReady: true });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(search).toHaveBeenCalledOnce();
+    expect(read).toHaveBeenCalledWith('conversation');
+  });
+
+  it('retains selected draft resources while authentication is temporarily unavailable', async () => {
+    const { client, validate } = setup();
+    const { result, rerender } = renderHook(
+      ({ isReady }) =>
+        useRuntimeResources({
+          client,
+          enabled: true,
+          isReady,
+          assistantId: 'assistant',
+        }),
+      { initialProps: { isReady: true } },
+    );
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.busy).toBe(false);
+    });
+    await act(() => result.current.toggle(ref));
+    expect(validate).toHaveBeenCalledOnce();
+    expect(result.current.selection.resources).toEqual([ref]);
+    rerender({ isReady: false });
+    expect(result.current.selection.resources).toEqual([ref]);
+    expect(result.current.canEdit).toBe(false);
+    rerender({ isReady: true });
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.selection.resources).toEqual([ref]);
+    expect(validate).toHaveBeenCalledTimes(2);
+  });
+});
