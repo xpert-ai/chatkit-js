@@ -38,7 +38,7 @@ import { PptxSlideshow } from './PptxSlideshow';
 import type {
   BinaryEditorHandle,
   BinaryEditorProps,
-} from '../../files/file-types';
+} from '../../../../lib/files/file-types';
 import { useChatkitTranslation } from '../../../../i18n/useChatkitTranslation';
 
 const button =

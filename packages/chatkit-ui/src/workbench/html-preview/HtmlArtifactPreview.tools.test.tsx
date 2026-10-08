@@ -19,7 +19,7 @@ import {
 import { htmlAnnotationReference } from './annotation';
 import { prepareHtmlPreview } from './html-artifact-preview';
 
-vi.mock('../code-editor/CodeEditor', () => ({
+vi.mock('../../components/code-editor/CodeEditor', () => ({
   default: ({ value }: { value: string }) => (
     <pre data-testid="html-source">{value}</pre>
   ),

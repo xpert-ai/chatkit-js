@@ -1,14 +1,15 @@
 import * as React from 'react';
-import { ReviewFileContent } from './file-review/ReviewFileContent';
-import { HtmlArtifactPreview } from './html-preview/HtmlArtifactPreview';
+import { ReviewFileContent } from '../file-review/ReviewFileContent';
+import { HtmlArtifactPreview } from '../html-preview/HtmlArtifactPreview';
 import { File, Globe, FileDiff } from 'lucide-react';
-import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
-import { WorkbenchTab } from './WorkbenchTab';
-import type { WorkbenchPreview } from './client-command-payload';
-import { UrlPreviewContent } from './url-preview/UrlPreviewContent';
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { WorkbenchTab } from '../WorkbenchTab';
+import type { WorkbenchPreview } from './types';
+import { UrlPreviewContent } from '../url-preview/UrlPreviewContent';
+import { FilePreview } from '../../components/file-preview/FilePreview';
 
 const FileChangeReview = React.lazy(() =>
-  import('./file-review/FileChangeReview').then((module) => ({
+  import('../file-review/FileChangeReview').then((module) => ({
     default: module.FileChangeReview,
   })),
 );
@@ -34,7 +35,7 @@ export function PreviewTabs({
       icon={
         preview.kind === 'review' ? (
           <FileDiff size={16} />
-        ) : preview.kind === 'file' ? (
+        ) : ['file', 'resource-file', 'snapshot'].includes(preview.kind) ? (
           <File size={16} />
         ) : (
           <Globe size={16} />
@@ -54,9 +55,17 @@ export function WorkbenchPreviewContent(props: {
   reloadKey?: number;
 }) {
   const { t } = useChatkitTranslation();
-  if (props.preview.snapshot)
+  if (props.preview.kind === 'resource-file')
+    return (
+      <FilePreview
+        key={props.preview.key}
+        file={props.preview.source}
+        title={props.preview.title}
+      />
+    );
+  if (props.preview.kind === 'snapshot')
     return <ReviewFileContent {...props.preview.snapshot} />;
-  if (props.preview.kind === 'review' && props.preview.review)
+  if (props.preview.kind === 'review')
     return (
       <React.Suspense
         fallback={<p className="p-4 text-sm">{t('workbench.loading')}</p>}
@@ -64,7 +73,7 @@ export function WorkbenchPreviewContent(props: {
         <FileChangeReview options={props.preview.review} />
       </React.Suspense>
     );
-  if (props.preview.kind === 'html' && props.preview.html)
+  if (props.preview.kind === 'html')
     return (
       <HtmlArtifactPreview
         title={props.preview.title}
@@ -73,5 +82,11 @@ export function WorkbenchPreviewContent(props: {
         onAnnotate={props.preview.html.onAnnotate}
       />
     );
-  return <UrlPreviewContent {...props} />;
+  return (
+    <UrlPreviewContent
+      preview={props.preview}
+      toolbar={props.toolbar}
+      reloadKey={props.reloadKey}
+    />
+  );
 }

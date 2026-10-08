@@ -106,7 +106,7 @@ describe('WorkspaceFiles creation', () => {
   });
 });
 
-vi.mock('../../code-editor/CodeEditor', () => ({
+vi.mock('../../../components/code-editor/CodeEditor', () => ({
   default: ({ value, readOnly }: { value: string; readOnly: boolean }) => (
     <textarea aria-label="File source" value={value} readOnly={readOnly} />
   ),

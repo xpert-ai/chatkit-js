@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { countFileChangeLines } from '@xpert-ai/chatkit-types';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import type { FileReviewEntry } from './file-change-review';
+import type { FileReviewEntry } from './types';
 import { ReviewStats } from './ReviewPrimitives';
 
 export function ReviewFileIcon({ path }: { path: string }) {

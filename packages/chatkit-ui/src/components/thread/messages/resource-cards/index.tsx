@@ -1,4 +1,4 @@
-import type { MessagePresentationMode } from '../../../lib/message-presentation';
+import type { MessagePresentationMode } from '../../../../lib/message-presentation';
 import * as React from 'react';
 import { Box, Loader2 } from 'lucide-react';
 import {
@@ -7,9 +7,10 @@ import {
   type ChatkitMessage,
   type TMessageContentResourceCard,
 } from '@xpert-ai/chatkit-types';
-import { useWorkbench } from '../../../workbench/context';
-import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
-import { IconDefinitionRenderer } from '../../ui/icon-definition';
+import { useResourceCardActions } from '../../../../resource-cards/context';
+import { useChatkitTranslation } from '../../../../i18n/useChatkitTranslation';
+import { IconDefinitionRenderer } from '../../../ui/icon-definition';
+import { ResourceCardBlocks } from './content';
 
 export function messageResourceCards(
   message: Pick<ChatkitMessage, 'content'>,
@@ -31,28 +32,20 @@ function ResourceCard({
   card: TMessageContentResourceCard;
   messageId: string;
 }) {
-  const workbench = useWorkbench();
+  const actions = useResourceCardActions();
   const { t } = useChatkitTranslation();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const available = workbench.enabled && !!workbench.openResourceCard;
+  const available = !!actions.openResourceCard;
   const openLabel = t('resourceCard.open');
   const open = async () => {
     if (!available || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await workbench.openResourceCard!(card, messageId);
-      if (
-        !result ||
-        typeof result !== 'object' ||
-        !('success' in result) ||
-        result.success !== true
-      ) {
-        const code =
-          result && typeof result === 'object' && 'code' in result
-            ? result.code
-            : null;
+      const result = await actions.openResourceCard!(card, messageId);
+      if (!result.success) {
+        const code = result.code;
         setError(
           t(
             code === 'forbidden'
@@ -91,7 +84,7 @@ function ResourceCard({
         <button
           type="button"
           onClick={open}
-          disabled={!available || workbench.loading || busy}
+          disabled={!available || busy}
           aria-label={`${openLabel} ${card.data.title}`}
           className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
@@ -101,6 +94,12 @@ function ResourceCard({
           {openLabel}
         </button>
       </div>
+      {!!card.data.content?.length && (
+        <ResourceCardBlocks
+          content={card.data.content}
+          title={card.data.title}
+        />
+      )}
       {!available && (
         <p className="mt-2 text-sm text-muted-foreground">
           {t('resourceCard.disabled')}
@@ -127,7 +126,11 @@ export function MessageResourceCards({
   return (
     <div className="space-y-2">
       {cards.map((card) => (
-        <ResourceCard key={card.id} card={card} messageId={message.id} />
+        <ResourceCard
+          key={card.id}
+          card={card}
+          messageId={card.messageId ?? message.id}
+        />
       ))}
     </div>
   );

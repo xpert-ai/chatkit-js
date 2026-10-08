@@ -10,15 +10,18 @@ import { Download, Loader2, Save } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import type { FileEditorHandle } from '../useNativeWorkbench';
-import { downloadBlob, fileName } from './WorkspaceFiles';
+import { downloadBlob } from '../../../lib/files/download';
+import { fileName } from './workspace-file-utils';
 import {
   editableKinds,
   fileKind,
   sameFileBytes,
   type BinaryEditorHandle,
-} from './file-types';
+} from '../../../lib/files/file-types';
 
-const CodeEditor = React.lazy(() => import('../../code-editor/CodeEditor'));
+const CodeEditor = React.lazy(
+  () => import('../../../components/code-editor/CodeEditor'),
+);
 const DocxEditor = React.lazy(() => import('../office/document/DocxEditor'));
 const SpreadsheetEditor = React.lazy(
   () => import('../office/spreadsheet/SpreadsheetEditor'),

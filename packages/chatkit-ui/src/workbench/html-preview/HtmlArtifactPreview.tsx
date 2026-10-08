@@ -17,7 +17,9 @@ import {
 import { useHtmlPreviewRuntime } from './useHtmlPreviewRuntime';
 import type { HtmlPreviewIdentity } from './annotation';
 
-const CodeEditor = React.lazy(() => import('../code-editor/CodeEditor'));
+const CodeEditor = React.lazy(
+  () => import('../../components/code-editor/CodeEditor'),
+);
 type LoadedHtml = { source: string; downloadUrl: string; name: string };
 
 export function HtmlArtifactPreview({

@@ -4,13 +4,13 @@ import {
   createResourceCardContent,
   type ChatkitMessage,
 } from '@xpert-ai/chatkit-types';
-import { ThemeProvider } from '../../../providers/Theme';
+import { ThemeProvider } from '../../../../providers/Theme';
 import {
   disabledWorkbenchContext,
   WorkbenchContext,
-} from '../../../workbench/context';
-import { changesReceipt } from '../../../test/file-activity-fixtures';
-import { AssistantMessage } from './ai';
+} from '../../../../workbench/context';
+import { changesReceipt } from '../../../../test/file-activity-fixtures';
+import { AssistantMessage } from '../ai';
 
 const project = createResourceCardContent({
   resource: { namespace: 'platform', type: 'project', id: 'project-1' },

@@ -1,14 +1,14 @@
 import type * as React from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import type { WorkbenchPreview } from '../client-command-payload';
+import type { UrlWorkbenchPreview } from '../preview/types';
 
 export function UrlPreviewContent({
   preview,
   toolbar,
   reloadKey,
 }: {
-  preview: WorkbenchPreview;
+  preview: UrlWorkbenchPreview;
   toolbar?: React.ReactNode;
   reloadKey?: number;
 }) {

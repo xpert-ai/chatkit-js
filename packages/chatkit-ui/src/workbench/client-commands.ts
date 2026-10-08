@@ -8,10 +8,10 @@ import {
   parsePreview,
   type NavigationSession,
   type NavigationPayload,
-  type WorkbenchPreview,
   type ExecutionNavigationRequest,
   type ExecutionNavigationResult,
 } from './client-command-payload';
+import type { WorkbenchPreview } from './preview/types';
 import type { MessageFocusRequest } from './useMessageFocus';
 import type { ComposerValuePayload } from '../lib/references';
 

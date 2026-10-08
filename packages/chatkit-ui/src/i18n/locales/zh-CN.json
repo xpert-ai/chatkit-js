@@ -1,6 +1,8 @@
 {
   "resourceCard": {
     "open": "打开",
+    "moreImages": "更多图片（{{count}}）",
+    "collapseImages": "收起图片",
     "viewTask": "查看任务",
     "disabled": "当前对话未启用 Workbench。",
     "unavailable": "此资源不可用，或你已无权访问。",

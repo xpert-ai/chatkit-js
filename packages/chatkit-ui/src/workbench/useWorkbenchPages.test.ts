@@ -38,7 +38,10 @@ describe('workbench browser navigation', () => {
       { ...website('b'), key: 'tab-1' },
     ]);
     act(() => result.current.moveBrowser('tab-1', -1));
-    expect(result.current.previews[0].url).toBe(website('a').url);
+    expect(result.current.previews[0]).toMatchObject({
+      kind: 'browser',
+      url: website('a').url,
+    });
     act(() => result.current.moveBrowser('tab-1', -1));
     expect(result.current.newTabs).toEqual(['tab-1']);
     expect(result.current.previews).toEqual([]);
@@ -51,15 +54,20 @@ describe('workbench browser navigation', () => {
     ]);
     act(() => result.current.navigateBrowser('tab-1', website('c')));
     act(() => result.current.moveBrowser('tab-1', 1));
-    expect(result.current.previews[0].url).toBe(website('c').url);
+    expect(result.current.previews[0]).toMatchObject({
+      kind: 'browser',
+      url: website('c').url,
+    });
     expect(result.current.browserHistory['tab-1'].entries).toEqual([
       null,
       website('a'),
       website('c'),
     ]);
-    expect(result.current.recent.map(({ preview }) => preview.url)).toEqual(
-      ['c', 'a', 'b'].map((path) => website(path).url),
-    );
+    expect(
+      result.current.recent.map(({ preview }) =>
+        'url' in preview ? preview.url : null,
+      ),
+    ).toEqual(['c', 'a', 'b'].map((path) => website(path).url));
   });
 
   it('isolates tabs, ignores closed tabs and clears navigation when the conversation changes', () => {

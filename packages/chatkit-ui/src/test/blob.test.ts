@@ -34,3 +34,30 @@ describe('test environment Blob APIs', () => {
     expect(blob.type).toBe('image/png');
   });
 });
+
+describe('browser Blob compatibility in the test environment', () => {
+  it('preserves UTF-8 text and FileReader identity across Response, Blob and File', async () => {
+    const text = '# 项目交付\n施工步骤 🏗️';
+    const bytes = new TextEncoder().encode(text);
+    const responseBlob = await new Response(bytes).blob();
+    const file = new File([responseBlob], 'delivery.md', {
+      type: 'text/markdown',
+    });
+    expect(await responseBlob.text()).toBe(text);
+    expect(await file.text()).toBe(text);
+    expect(Array.from(new Uint8Array(await file.arrayBuffer()))).toEqual(
+      Array.from(bytes),
+    );
+    expect(await file.slice(0, bytes.length).text()).toBe(text);
+    const fromReader = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () =>
+        typeof reader.result === 'string'
+          ? resolve(reader.result)
+          : reject(new Error('Expected text'));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+    expect(fromReader).toBe(text);
+  });
+});
