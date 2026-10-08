@@ -13,6 +13,7 @@ import type { useChatHistory } from '../history/useChatHistory';
 import type { useRuntimeCapabilitiesState } from '../runtime-capabilities';
 import type { useChatBranchState } from './useChatBranchState';
 import type { useChatEnvironment } from './useChatEnvironment';
+import type { ChatProps } from '../types';
 
 type ChatConversationActionsOptions = Pick<
   ReturnType<typeof useChatDraft>,
@@ -54,9 +55,7 @@ type ChatConversationActionsOptions = Pick<
     'refreshThreads' | 'deleteThread' | 'messageHistory'
   > & {
     onConnectorsChange: ((connectorBindingIds: string[]) => void) | undefined;
-    onProjectChange:
-      | ((projectId: string | null, selection?: ProjectSelection) => void)
-      | undefined;
+    onProjectChange: ChatProps['onProjectChange'];
     isPromptEditDisabled: boolean;
     configuredProjectId: string | undefined;
     options: ChatKitOptions | null | undefined;
@@ -99,9 +98,13 @@ export function useChatConversationActions({
   React.useLayoutEffect(() => {
     if (previousProjectRef.current === activeProjectId) return;
     previousProjectRef.current = activeProjectId;
-    commitComposerParts(composerPartsRef.current.filter(part => part.type === 'text'), {
-      resetDom: true, syncRemovedCapabilityTokens: false,
-    });
+    commitComposerParts(
+      composerPartsRef.current.filter((part) => part.type === 'text'),
+      {
+        resetDom: true,
+        syncRemovedCapabilityTokens: false,
+      },
+    );
     attachmentsRef.current?.clear();
     setReferences([]);
     setReferencedWorkspaceFiles([]);
@@ -120,9 +123,12 @@ export function useChatConversationActions({
 
   const handleProjectSelectionChange = React.useCallback(
     (projectId: string | null, selection?: ProjectSelection) => {
-      // Existing conversations keep their scope; the host opens a new conversation.
+      const navigation = {
+        resumeLatestConversation: selection?.mode !== 'auto-new',
+      };
+      // Existing conversations retain their stored project and Connector bindings.
       if (stream.threadId || stream.conversationId) {
-        onProjectChange?.(projectId, selection);
+        onProjectChange?.(projectId, selection, navigation);
         return;
       }
       const textParts = composerPartsRef.current.filter(
@@ -145,7 +151,7 @@ export function useChatConversationActions({
         );
       });
       onConnectorsChange?.([]);
-      onProjectChange?.(projectId, selection);
+      onProjectChange?.(projectId, selection, navigation);
     },
     [
       commitComposerParts,

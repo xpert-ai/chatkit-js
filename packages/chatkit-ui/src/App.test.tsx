@@ -28,6 +28,7 @@ vi.mock('./components/chat', () => ({
       onProjectChange?: (
         projectId: string | null,
         selection?: ProjectSelection,
+        navigation?: { resumeLatestConversation: boolean },
       ) => void;
       onProjectCreate?: (name: string) => void;
       onConnectorsChange?: (connectorBindingIds: string[]) => void;
@@ -48,7 +49,11 @@ vi.mock('./components/chat', () => ({
           <button
             type="button"
             data-testid="select-project"
-            onClick={() => onProjectChange?.('project-2')}
+            onClick={() =>
+              onProjectChange?.('project-2', undefined, {
+                resumeLatestConversation: true,
+              })
+            }
           />
           <button
             type="button"
@@ -58,7 +63,21 @@ vi.mock('./components/chat', () => ({
           <button
             type="button"
             data-testid="clear-project"
-            onClick={() => onProjectChange?.(null)}
+            onClick={() =>
+              onProjectChange?.(null, undefined, {
+                resumeLatestConversation: true,
+              })
+            }
+          />
+          <button
+            type="button"
+            data-testid="new-conversation"
+            onClick={() =>
+              onProjectChange?.('project-2', {
+                mode: 'existing',
+                projectId: 'project-2',
+              })
+            }
           />
           <button
             type="button"
@@ -249,6 +268,7 @@ describe('App', () => {
       expect.objectContaining({
         projectId: 'project-2',
         initialThread: null,
+        projectConversationRequest: { projectId: 'project-2' },
       }),
       undefined,
     );
@@ -331,6 +351,83 @@ describe('App', () => {
       ],
     );
   });
+
+  it('does not resume history when the user explicitly starts a new conversation', () => {
+    render(<App clientSecret="secret" options={options} />);
+    fireEvent.click(screen.getByTestId('select-project'));
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectConversationRequest: { projectId: 'project-2' },
+      }),
+      undefined,
+    );
+    fireEvent.click(screen.getByTestId('new-conversation'));
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        projectId: 'project-2',
+        initialThread: null,
+        projectConversationRequest: null,
+      }),
+      undefined,
+    );
+  });
+
+  it('keeps a project lookup through the host echo but lets an explicit thread win', () => {
+    const { rerender } = render(
+      <App clientSecret="secret" options={options} />,
+    );
+    fireEvent.click(screen.getByTestId('select-project'));
+    const request = vi
+      .mocked(StreamProvider)
+      .mock.calls.at(-1)?.[0].projectConversationRequest;
+    const echoed = {
+      ...options,
+      api: { ...options.api, projectId: 'project-2' },
+    };
+    rerender(<App clientSecret="secret" options={echoed} />);
+    expect(
+      vi.mocked(StreamProvider).mock.calls.at(-1)?.[0]
+        .projectConversationRequest,
+    ).toBe(request);
+    rerender(
+      <App
+        clientSecret="secret"
+        options={{ ...echoed, initialThread: 'host-thread' }}
+      />,
+    );
+    expect(StreamProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        initialThread: 'host-thread',
+        projectConversationRequest: null,
+      }),
+      undefined,
+    );
+  });
+
+  it.each(['assistant', 'organization'] as const)(
+    'does not reuse a project lookup after the %s changes',
+    (scope) => {
+      const { rerender } = render(
+        <App clientSecret="secret" organizationId="org-1" options={options} />,
+      );
+      fireEvent.click(screen.getByTestId('select-project'));
+      rerender(
+        <App
+          clientSecret="secret"
+          organizationId={scope === 'organization' ? 'org-2' : 'org-1'}
+          options={
+            scope === 'assistant'
+              ? { ...options, api: { ...options.api, xpertId: 'assistant-2' } }
+              : options
+          }
+        />,
+      );
+      expect(StreamProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ projectConversationRequest: null }),
+        undefined,
+      );
+    },
+  );
 
   it('clears an optional hosted project scope and emits the nullable public event', () => {
     render(<App clientSecret="secret" options={options} />);

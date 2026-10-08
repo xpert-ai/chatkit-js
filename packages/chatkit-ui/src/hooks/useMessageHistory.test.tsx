@@ -27,6 +27,54 @@ function setup() {
 }
 
 describe('useMessageHistory', () => {
+  it('shows the last page immediately on reopen while refreshing it in the background', async () => {
+    const { options, search } = setup();
+    search.mockResolvedValueOnce({ items: [conversation('cached')], total: 1 });
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useMessageHistory({ ...options, enabled }),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(result.current.threads).toHaveLength(1));
+    rerender({ enabled: false });
+    let finish!: (page: { items: ChatConversation[]; total: number }) => void;
+    search.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    rerender({ enabled: true });
+    expect(result.current.threads[0]?.title).toBe('cached');
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    expect(result.current.isLoading).toBe(true);
+    await act(async () => finish({ items: [conversation('fresh')], total: 1 }));
+    expect(result.current.threads[0]?.title).toBe('fresh');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('does not reuse a cached page for a different assistant or project filter', async () => {
+    const { options, search } = setup();
+    search.mockResolvedValueOnce({
+      items: [conversation('private')],
+      total: 1,
+    });
+    search.mockImplementation(() => new Promise(() => {}));
+    const { result, rerender } = renderHook(
+      ({ assistantId, scope }) =>
+        useMessageHistory({ ...options, assistantId, scope }),
+      {
+        initialProps: {
+          assistantId: 'assistant-1',
+          scope: 'all' as 'all' | 'current-project',
+        },
+      },
+    );
+    await waitFor(() => expect(result.current.threads).toHaveLength(1));
+    rerender({ assistantId: 'assistant-1', scope: 'current-project' });
+    expect(result.current.threads).toEqual([]);
+    rerender({ assistantId: 'assistant-2', scope: 'all' });
+    expect(result.current.threads).toEqual([]);
+  });
+
   it('only loads while open and keeps title searches scoped to the assistant', async () => {
     const { options, search } = setup();
     search.mockResolvedValue({

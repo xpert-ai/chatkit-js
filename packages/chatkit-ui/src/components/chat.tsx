@@ -247,6 +247,7 @@ export function Chat({
     runControl.isRunPausing ||
     hasPendingInteractiveRequest ||
     session.missingConfig ||
+    session.stream.runtimeScopeReady === false ||
     session.isHistoryUnavailable ||
     hasUploadingFiles ||
     files.isUploadingReferenceImages;

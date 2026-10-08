@@ -47,7 +47,9 @@ describe('Chat project scope', () => {
       document.querySelector('[data-slot="composer-input-shell"]'),
     ).not.toHaveClass('pb-composer-inset');
     fireEvent.click(screen.getByTestId('project-selector'));
-    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined);
+    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined, {
+      resumeLatestConversation: true,
+    });
     expect(mocks.stream.setConnectorBindingIds).not.toHaveBeenCalled();
     expect(onConnectorsChange).not.toHaveBeenCalled();
     expect(mocks.stream.reset).not.toHaveBeenCalled();
@@ -198,7 +200,9 @@ describe('Chat project scope', () => {
     expect(textbox.textContent).toBe('Keep me');
     expect(mocks.stream.setConnectorBindingIds).toHaveBeenCalledWith([]);
     expect(onConnectorsChange).toHaveBeenCalledWith([]);
-    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined);
+    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined, {
+      resumeLatestConversation: true,
+    });
   });
 
   it('locks the selected Project on the optimistic message before the thread id resolves', async () => {

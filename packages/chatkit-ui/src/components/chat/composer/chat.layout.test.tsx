@@ -111,7 +111,9 @@ describe('Chat composer layout', () => {
 
     fireEvent.click(screen.getByTestId('project-selector'));
     expect(onProjectChange).toHaveBeenCalledOnce();
-    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined);
+    expect(onProjectChange).toHaveBeenCalledWith('project-2', undefined, {
+      resumeLatestConversation: true,
+    });
   });
 
   it('keeps the file selector rail when the project selector is disabled', async () => {

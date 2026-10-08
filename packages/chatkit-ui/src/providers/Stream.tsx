@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ProjectSelection } from './stream/types';
 
 import { StreamSession } from './stream/StreamSession';
+import type { ProjectConversationRequest } from './stream/history/useProjectConversation';
 
 export {
   buildSteerFollowUpRunInput,
@@ -64,6 +65,7 @@ export const StreamProvider: React.FC<{
   xpertId?: string;
   projectId?: string;
   projectSelection?: ProjectSelection;
+  projectConversationRequest?: ProjectConversationRequest | null;
   initialThread?: string | null;
   runtimeKey?: string | number;
   locale?: string | null;
@@ -79,6 +81,7 @@ export const StreamProvider: React.FC<{
   xpertId,
   projectId,
   projectSelection,
+  projectConversationRequest,
   initialThread,
   runtimeKey,
   locale,
@@ -125,6 +128,7 @@ export const StreamProvider: React.FC<{
       assistantId={assistantId}
       projectId={normalizedProjectId}
       projectSelection={projectSelection}
+      projectConversationRequest={projectConversationRequest}
       initialThread={initialThread}
       locale={locale}
       additionalContext={additionalContext}

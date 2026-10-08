@@ -10,6 +10,8 @@ import { useParentMessenger } from './hooks/useParentMessenger';
 import { useWorkbenchNavigation } from './workbench/useWorkbenchNavigation';
 import { useWindowDragRegions } from './hooks/useWindowDragRegions';
 import { WorkbenchShell } from './workbench/WorkbenchShell';
+import type { ChatProps } from './components/chat/types';
+import type { ProjectConversationRequest } from './providers/stream/history/useProjectConversation';
 
 export type AppProps = {
   options?: ChatKitOptions | null;
@@ -77,6 +79,16 @@ export function App({
     Boolean(hostedApi) && options?.composer?.connectors?.enabled === true;
   const [projectSelection, setProjectSelection] =
     React.useState(configuredSelection);
+  const projectBinding = JSON.stringify([
+    options?.api.apiUrl || apiUrl,
+    options?.api.xpertId || resolvedXpertId || xpertId,
+    organizationId,
+  ]);
+  const [projectConversationRequest, setProjectConversationRequest] =
+    React.useState<{
+      binding: string;
+      request: ProjectConversationRequest;
+    } | null>(null);
   const activeProjectId =
     projectSelection?.mode === 'existing' ? projectSelection.projectId : null;
   const [scopedInitialThread, setScopedInitialThread] = React.useState<
@@ -105,8 +117,18 @@ export function App({
     if (configuredSelectionKey === lastConfiguredSelectionRef.current) return;
     lastConfiguredSelectionRef.current = configuredSelectionKey;
     setProjectSelection(configuredSelection);
-    setScopedInitialThread(options?.initialThread !== lastConfiguredInitialThreadRef.current
-      ? options?.initialThread ?? null : null);
+    const nextProjectId =
+      configuredSelection?.mode === 'existing'
+        ? configuredSelection.projectId
+        : null;
+    setProjectConversationRequest((current) =>
+      current?.request.projectId === nextProjectId ? current : null,
+    );
+    setScopedInitialThread(
+      options?.initialThread !== lastConfiguredInitialThreadRef.current
+        ? (options?.initialThread ?? null)
+        : null,
+    );
     setWorkbenchRequestContext({});
   }, [configuredSelectionKey, configuredSelection, options?.initialThread]);
 
@@ -115,10 +137,13 @@ export function App({
     if (nextInitialThread === lastConfiguredInitialThreadRef.current) return;
     lastConfiguredInitialThreadRef.current = nextInitialThread;
     setScopedInitialThread(nextInitialThread);
+    if (nextInitialThread) setProjectConversationRequest(null);
   }, [options?.initialThread]);
 
-  const handleProjectChange = React.useCallback(
-    (projectId: string | null, selection?: ProjectSelection) => {
+  const handleProjectChange = React.useCallback<
+    NonNullable<ChatProps['onProjectChange']>
+  >(
+    (projectId, selection, navigation) => {
       const nextProjectId = projectId?.trim() || null;
       const nextSelection =
         selection ??
@@ -126,6 +151,11 @@ export function App({
           ? { mode: 'existing' as const, projectId: nextProjectId }
           : { mode: 'none' as const });
       setProjectSelection(nextSelection);
+      setProjectConversationRequest(
+        navigation?.resumeLatestConversation
+          ? { binding: projectBinding, request: { projectId: nextProjectId } }
+          : null,
+      );
       setScopedInitialThread(null);
       setWorkbenchRequestContext({});
       sendEvent('public_event', [
@@ -133,7 +163,7 @@ export function App({
         { projectId: nextProjectId, selection: nextSelection },
       ]);
     },
-    [sendEvent],
+    [sendEvent, projectBinding],
   );
   const handleProjectCreate = React.useCallback(
     (name: string, projectType?: XpertProjectTypeRef) => {
@@ -237,6 +267,12 @@ export function App({
                 : (activeProjectId ?? undefined)
             }
             projectSelection={navigation.session ? undefined : projectSelection}
+            projectConversationRequest={
+              !navigation.session &&
+              projectConversationRequest?.binding === projectBinding
+                ? projectConversationRequest.request
+                : null
+            }
             initialThread={
               navigation.session
                 ? navigation.session.threadId

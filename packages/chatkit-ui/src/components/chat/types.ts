@@ -21,6 +21,7 @@ export type ChatProps = {
   onProjectChange?: (
     projectId: string | null,
     selection?: ProjectSelection,
+    navigation?: { resumeLatestConversation: boolean },
   ) => void;
   onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
   onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
