@@ -1,22 +1,44 @@
-import { useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { Assistant, Client } from '@xpert-ai/xpert-sdk';
 import { ParentMessengerContext } from '../providers/ParentMessenger';
 
 type AssistantClient = Pick<Client, 'assistants'>;
 
-/** Scope the profile to the current client and Assistant, including pending requests. */
+export const AssistantInfoContext = createContext<{
+  client: AssistantClient | null;
+  id: string;
+  assistant: Assistant | undefined;
+} | null>(null);
+
+/** Reuse the session's profile across project/chat remounts, with a standalone fallback. */
 export function useAssistantInfo(
+  client: AssistantClient | null | undefined,
+  assistantId: string | null | undefined,
+) {
+  const shared = useContext(AssistantInfoContext);
+  const matchesSession =
+    shared !== null && shared.client === client && shared.id === assistantId;
+  const local = useAssistantProfile(
+    matchesSession ? null : client,
+    assistantId,
+  );
+  return matchesSession ? shared.assistant : local;
+}
+
+/** Scope the profile to the current client and Assistant, including pending requests. */
+function useAssistantProfile(
   client: AssistantClient | null | undefined,
   assistantId: string | null | undefined,
 ) {
   const messenger = useContext(ParentMessengerContext);
   const [revision, setRevision] = useState(0);
   const registerOnSetOptions = messenger?.registerOnSetOptions;
-  useEffect(
-    () => registerOnSetOptions?.(() => setRevision((value) => value + 1)),
-    [registerOnSetOptions],
-  );
   useEffect(() => {
+    if (!client || !assistantId) return;
+    return registerOnSetOptions?.(() => setRevision((value) => value + 1));
+  }, [client, assistantId, registerOnSetOptions]);
+  useEffect(() => {
+    if (!client || !assistantId) return;
     const refresh = () => {
       if (document.visibilityState === 'visible')
         setRevision((value) => value + 1);
@@ -29,7 +51,7 @@ export function useAssistantInfo(
       document.removeEventListener('visibilitychange', refresh);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [client, assistantId]);
   const [profile, setProfile] = useState<{
     client: AssistantClient;
     id: string;

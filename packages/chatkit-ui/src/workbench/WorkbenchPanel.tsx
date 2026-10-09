@@ -93,6 +93,7 @@ type WorkbenchPanelProps = {
   onNavigateNewTab: (tabKey: string, viewKey: string) => void;
   onPreviewFromNewTab: (tabKey: string, preview: WorkbenchPreview) => void;
   viewQueries: Record<string, XpertViewQuery>;
+  viewResetKeys?: Record<string, number>;
   onClosePreview: (key: string) => void;
   visible: boolean;
   views: XpertExtensionViewManifest[];
@@ -154,6 +155,7 @@ export function WorkbenchPanel({
   onNavigateNewTab,
   onPreviewFromNewTab,
   viewQueries,
+  viewResetKeys = {},
   onClosePreview,
   views,
   availableViews = views,
@@ -633,6 +635,7 @@ export function WorkbenchPanel({
               key={JSON.stringify([
                 frameScope,
                 view.key,
+                viewResetKeys[view.key],
                 view.source,
                 view.view,
               ])}

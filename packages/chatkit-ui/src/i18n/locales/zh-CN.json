@@ -536,7 +536,9 @@
       "loadMore": "加载更多",
       "retry": "重试",
       "loadMoreError": "更多项目加载失败，已加载的项目仍可使用。",
-      "filters": "筛选应用与类型"
+      "filters": "筛选应用与类型",
+      "creationFailed": "无法打开新建项目，请重试。",
+      "creationViewUnavailable": "当前助理中暂时无法打开项目创建视图。"
     },
     "connectors": {
       "search": "搜索连接器",

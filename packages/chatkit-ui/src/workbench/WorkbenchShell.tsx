@@ -1,3 +1,4 @@
+import { useProjectCreationEntry } from './useProjectCreationEntry';
 import { ResourceCardContext } from '../resource-cards/context';
 import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
 import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
@@ -73,6 +74,7 @@ export function WorkbenchShell({
   onRequestContextChange,
   onNavigate,
   initialNavigation,
+  projectCreation,
   initializing = false,
 }: WorkbenchShellProps) {
   const { t } = useChatkitTranslation();
@@ -123,6 +125,9 @@ export function WorkbenchShell({
     Record<string, XpertViewQuery>
   >({});
 
+  const [viewResetKeys, setViewResetKeys] = React.useState<
+    Record<string, number>
+  >({});
   const [reloadVersion, setReloadVersion] = React.useState(0);
   const [notification, setNotification] = React.useState<{
     level: 'success' | 'error';
@@ -556,6 +561,33 @@ export function WorkbenchShell({
     setExpanded,
   ]);
 
+  useProjectCreationEntry({
+    request: projectCreation,
+    ready:
+      !loading &&
+      viewsScope === viewScopeKey &&
+      stream.runtimeScopeReady !== false,
+    projectId: stream.projectId,
+    conversationId: stream.conversationId,
+    views,
+    openView: (key, query) => {
+      setViewQueries((current) => ({ ...current, [key]: query }));
+      // A cached iframe may still own the previous project's form state.
+      setViewResetKeys((current) => ({
+        ...current,
+        [key]: (current[key] ?? 0) + 1,
+      }));
+      selectView(key);
+      setExpanded(false);
+      setOpen(true);
+    },
+    onUnavailable: () =>
+      setNotification({
+        level: 'error',
+        message: t('composer.projects.creationViewUnavailable'),
+      }),
+  });
+
   const available =
     hasExternalRuns ||
     (enabled &&
@@ -816,6 +848,7 @@ export function WorkbenchShell({
       visible={open}
       previews={previews}
       viewQueries={viewQueries}
+      viewResetKeys={viewResetKeys}
       newTabs={newTabs}
       recent={recent}
       browserHistory={browserHistory}
