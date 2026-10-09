@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.12.2
+
+### Patch Changes
+
+- 91035b1: Carry the shell's transient user activation snapshot through the Workbench host command bridge, independently of plugin payloads. Keep command policy and payload validation with host implementations, and discard forwarded results when the originating Workbench context has changed.
+
 ## 0.12.1
 
 ## 0.12.0

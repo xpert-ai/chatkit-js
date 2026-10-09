@@ -1,5 +1,27 @@
 # @xpert-ai/chatkit-ui
 
+## 0.12.2
+
+### Patch Changes
+
+- 91035b1: Carry the shell's transient user activation snapshot through the Workbench host command bridge, independently of plugin payloads. Keep command policy and payload validation with host implementations, and discard forwarded results when the originating Workbench context has changed.
+- 3ff3731: Restore an explicitly requested View query after conversation navigation with preserveView enabled, once the destination scope confirms that the View is available. Preserve existing queries when no query is supplied within the same scope, while retaining the normal query reset across scopes.
+- 39f1ff6: Fix Workbench terminal crashes during rapid tab changes and React StrictMode
+  cleanup by upgrading xterm and ignoring callbacks from disposed sessions. Keep
+  terminal connections and output when switching languages, and avoid focusing
+  hidden terminals.
+
+  Show localized guidance when the server requires the Computer desktop terminal
+  or reports an unsupported or disabled sandbox. Disable the terminal launcher for
+  that Workbench context while preserving reconnect for transient failures. Isolate
+  native view loading failures so other tabs remain usable, with a localized reload
+  action and documented development recovery steps.
+
+- Updated dependencies [91035b1]
+  - @xpert-ai/chatkit-types@0.12.2
+  - @xpert-ai/chatkit-web-shared@0.12.2
+  - @xpert-ai/a2ui-react@0.12.2
+
 ## 0.12.1
 
 ### Patch Changes
