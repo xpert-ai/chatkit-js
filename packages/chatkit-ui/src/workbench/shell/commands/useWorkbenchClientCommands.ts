@@ -110,6 +110,7 @@ export function useWorkbenchClientCommands({
       resourceCard?: { messageId: string; id: string },
     ): Promise<unknown> => {
       const context = currentContext.current;
+      const userActivated = navigator.userActivation?.isActive === true;
       if (commandKey === ASSISTANT_CONTEXT_SET_COMMAND) {
         const parsed = parseContextSetPayload(payload);
         if (!parsed.key) {
@@ -237,6 +238,7 @@ export function useWorkbenchClientCommands({
 
       const request = {
         ...(resourceCard ? { resourceCard } : {}),
+        userActivated,
         commandKey,
         payload,
         hostType: 'agent' as const,

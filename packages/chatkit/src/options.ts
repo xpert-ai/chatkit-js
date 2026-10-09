@@ -501,6 +501,12 @@ export type ChatKitGoalAdapter = {
 };
 
 export type ChatKitWorkbenchClientCommandRequest = {
+  /**
+   * Browser activation snapshot taken by the ChatKit shell, never from plugin input.
+   * Hosts still validate command permissions and payloads; this is not authorization.
+   * Absent when an older shell does not provide activation context.
+   */
+  userActivated?: boolean;
   /** User-clicked persisted resource; hosts resolve its canonical target from message history. */
   resourceCard?: { messageId: string; id: string };
   commandKey: string;

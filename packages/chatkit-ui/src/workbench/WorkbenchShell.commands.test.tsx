@@ -81,43 +81,61 @@ describe('WorkbenchShell', () => {
     },
   );
 
-  it('forwards manifest client commands to the configured callback', async () => {
-    mocks.listSlotViews.mockResolvedValue([manifest]);
-    const onClientCommand = vi.fn().mockResolvedValue({ opened: true });
-    render(
-      <WorkbenchShell
-        options={{
-          ...baseOptions,
-          workbench: { enabled: true, onClientCommand },
-        }}
-        locale="en-US"
-        onRequestContextChange={vi.fn()}
-      >
-        <WorkbenchToggleButton />
-      </WorkbenchShell>,
-    );
-    setObservedWidth(1200);
-    await waitFor(() =>
-      expect(screen.getByLabelText('Open views')).toBeEnabled(),
-    );
-    fireEvent.click(screen.getByLabelText('Open views'));
-    await screen.findByTestId('remote-view');
+  it.each([true, false, undefined])(
+    'forwards custom commands with shell activation %s instead of the payload claim',
+    async (isActive) => {
+      const original = Object.getOwnPropertyDescriptor(
+        navigator,
+        'userActivation',
+      );
+      Object.defineProperty(navigator, 'userActivation', {
+        configurable: true,
+        value: isActive === undefined ? undefined : { isActive },
+      });
+      try {
+        mocks.listSlotViews.mockResolvedValue([manifest]);
+        const onClientCommand = vi.fn().mockResolvedValue({ opened: true });
+        render(
+          <WorkbenchShell
+            options={{
+              ...baseOptions,
+              workbench: { enabled: true, onClientCommand },
+            }}
+            locale="en-US"
+            onRequestContextChange={vi.fn()}
+          >
+            <WorkbenchToggleButton />
+          </WorkbenchShell>,
+        );
+        setObservedWidth(1200);
+        await waitFor(() =>
+          expect(screen.getByLabelText('Open views')).toBeEnabled(),
+        );
+        fireEvent.click(screen.getByLabelText('Open views'));
+        await screen.findByTestId('remote-view');
 
-    await expect(
-      mocks.remoteViewProps?.onClientCommand(
-        'platform.custom.open',
-        { url: '/file.pdf' },
-        manifest,
-      ),
-    ).resolves.toEqual({ opened: true });
-    expect(onClientCommand).toHaveBeenCalledWith({
-      commandKey: 'platform.custom.open',
-      payload: { url: '/file.pdf' },
-      hostType: 'agent',
-      hostId: 'agent-1',
-      viewKey: manifest.key,
-    });
-  });
+        await expect(
+          mocks.remoteViewProps?.onClientCommand(
+            'platform.custom.open',
+            { url: '/file.pdf', userActivated: !isActive },
+            manifest,
+          ),
+        ).resolves.toEqual({ opened: true });
+        expect(onClientCommand).toHaveBeenCalledWith({
+          commandKey: 'platform.custom.open',
+          userActivated: isActive === true,
+          payload: { url: '/file.pdf', userActivated: !isActive },
+          hostType: 'agent',
+          hostId: 'agent-1',
+          viewKey: manifest.key,
+        });
+      } finally {
+        if (original)
+          Object.defineProperty(navigator, 'userActivation', original);
+        else Reflect.deleteProperty(navigator, 'userActivation');
+      }
+    },
+  );
 
   it('copies once per source thread and reuses the native side chat for later selections', async () => {
     mocks.copyThread.mockResolvedValue({ thread_id: 'side-thread-1' });

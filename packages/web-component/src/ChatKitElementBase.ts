@@ -11,6 +11,7 @@ import { ChatFrameMessenger } from './ChatFrameMessenger';
 import type {
   Card,
   ChatKitOptions,
+  ChatKitWorkbenchClientCommandRequest,
   Entity,
   ListView,
   ToolOutputAttachmentPreviewRequest,
@@ -236,13 +237,8 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
         hostType,
         hostId,
         viewKey,
-      }: {
-        commandKey: string;
-        payload?: unknown;
-        hostType: 'agent';
-        hostId: string;
-        viewKey: string;
-      }) => {
+        userActivated,
+      }: ChatKitWorkbenchClientCommandRequest) => {
         const onClientCommand = this.#opts?.workbench?.onClientCommand;
         if (!onClientCommand) {
           return { success: false, code: 'unsupported', commandKey };
@@ -253,6 +249,8 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
           hostType,
           hostId,
           viewKey,
+          // This flag comes from the trusted ChatKit shell, never from the plugin payload.
+          ...(userActivated !== undefined ? { userActivated } : {}),
         });
       },
       onWidgetAction: async ({

@@ -55,4 +55,38 @@ describe('Workbench host bridge', () => {
     });
     expect(onClientCommand).toHaveBeenCalledWith(request);
   });
+
+  it.each([true, false, undefined])(
+    'preserves shell activation (%s) independently of the command payload',
+    async (userActivated) => {
+      const element = document.createElement(
+        'xpertai-chatkit',
+      ) as ChatKitElement;
+      const onClientCommand = vi.fn(
+        async (command: ChatKitWorkbenchClientCommandRequest) => ({
+          success: command.userActivated === true,
+        }),
+      );
+      element.setOptions({
+        api: {
+          apiUrl: 'https://example.org/api/ai',
+          getClientSecret: async () => 'secret',
+        },
+        workbench: { onClientCommand },
+      });
+      const command = {
+        ...request,
+        commandKey: 'platform.example.run',
+        // A payload field must never substitute for the trusted shell's activation.
+        payload: { input: 'example', userActivated: true },
+        ...(userActivated !== undefined ? { userActivated } : {}),
+      };
+      expect(await bridge.handlers.onWorkbenchClientCommand(command)).toEqual({
+        success: userActivated === true,
+      });
+      expect(onClientCommand.mock.calls[0][0].userActivated).toBe(
+        userActivated,
+      );
+    },
+  );
 });
