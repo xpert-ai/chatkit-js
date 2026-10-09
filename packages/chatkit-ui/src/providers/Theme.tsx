@@ -1,6 +1,10 @@
 import { getDensitySpacing, getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
-import type { ChatKitTheme, ColorScheme, GrayscaleOptions } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitTheme,
+  ColorScheme,
+  GrayscaleOptions,
+} from '@xpert-ai/chatkit-types';
 
 export interface ThemeProviderProps {
   children: React.ReactNode;
@@ -30,7 +34,9 @@ interface ThemeContextValue {
   themeRevision: number;
 }
 
-const ThemeContext = React.createContext<ThemeContextValue | undefined>(undefined);
+const ThemeContext = React.createContext<ThemeContextValue | undefined>(
+  undefined,
+);
 
 export function useTheme(): ThemeContextValue {
   const context = React.useContext(ThemeContext);
@@ -76,52 +82,13 @@ function getLuminance(hex: string): number {
 }
 
 /**
- * Convert hex color to OKLCH CSS color string
- * Returns format: "oklch(L C H)" for CSS variable usage
- * Uses proper sRGB → Linear RGB → OKLab → OKLCH conversion
- */
-function hexToOklch(hex: string): string | null {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return null;
-
-  // Convert sRGB to linear RGB
-  const toLinear = (c: number) => {
-    const v = c / 255;
-    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  };
-
-  const lr = toLinear(rgb.r);
-  const lg = toLinear(rgb.g);
-  const lb = toLinear(rgb.b);
-
-  // Convert linear RGB to OKLab using the proper matrix
-  // Step 1: Linear RGB to LMS
-  const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
-  const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
-  const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
-
-  // Step 2: LMS to LMS' (cube root)
-  const l_ = Math.cbrt(l);
-  const m_ = Math.cbrt(m);
-  const s_ = Math.cbrt(s);
-
-  // Step 3: LMS' to OKLab
-  const okL = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
-  const okA = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
-  const okB = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
-
-  // Step 4: OKLab to OKLCH
-  const okC = Math.sqrt(okA * okA + okB * okB);
-  const okH = Math.atan2(okB, okA) * (180 / Math.PI);
-  const normalizedH = okH < 0 ? okH + 360 : okH;
-
-  return `oklch(${okL.toFixed(3)} ${okC.toFixed(3)} ${normalizedH.toFixed(1)})`;
-}
-
-/**
  * Convert HSL to RGB
  */
-function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+function hslToRgb(
+  h: number,
+  s: number,
+  l: number,
+): { r: number; g: number; b: number } {
   const sNorm = s / 100;
   const lNorm = l / 100;
 
@@ -129,18 +96,39 @@ function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: n
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = lNorm - c / 2;
 
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; b = 0; }
-  else if (h < 120) { r = x; g = c; b = 0; }
-  else if (h < 180) { r = 0; g = c; b = x; }
-  else if (h < 240) { r = 0; g = x; b = c; }
-  else if (h < 300) { r = x; g = 0; b = c; }
-  else { r = c; g = 0; b = x; }
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 60) {
+    r = c;
+    g = x;
+    b = 0;
+  } else if (h < 120) {
+    r = x;
+    g = c;
+    b = 0;
+  } else if (h < 180) {
+    r = 0;
+    g = c;
+    b = x;
+  } else if (h < 240) {
+    r = 0;
+    g = x;
+    b = c;
+  } else if (h < 300) {
+    r = x;
+    g = 0;
+    b = c;
+  } else {
+    r = c;
+    g = 0;
+    b = x;
+  }
 
   return {
     r: Math.round((r + m) * 255),
     g: Math.round((g + m) * 255),
-    b: Math.round((b + m) * 255)
+    b: Math.round((b + m) * 255),
   };
 }
 
@@ -167,9 +155,9 @@ function rgbToOklch(r: number, g: number, b: number): string {
   const m_ = Math.cbrt(m);
   const s_ = Math.cbrt(s);
 
-  const okL = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
-  const okA = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
-  const okB = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
+  const okL = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
+  const okA = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
+  const okB = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
 
   const okC = Math.sqrt(okA * okA + okB * okB);
   const okH = Math.atan2(okB, okA) * (180 / Math.PI);
@@ -193,7 +181,7 @@ function hslToOklch(h: number, s: number, l: number): string {
  */
 function generateGrayscaleColors(
   grayscale: GrayscaleOptions,
-  isDarkMode: boolean
+  isDarkMode: boolean,
 ): Record<string, string> {
   const { hue, tint } = grayscale;
   // tint: 0-9, where 0 is pure gray and 9 is most colored
@@ -231,7 +219,10 @@ function generateGrayscaleColors(
 /**
  * ThemeProvider applies theme configuration via CSS variables
  */
-export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps) {
+export function ThemeProvider({
+  children,
+  theme: themeProp,
+}: ThemeProviderProps) {
   const themeRef = React.useRef<HTMLDivElement>(null);
   const [themeRevision, setThemeRevision] = React.useState(0);
 
@@ -258,7 +249,7 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
       themeRootRef: themeRef,
       themeRevision,
     }),
-    [theme, isDarkMode, themeRevision]
+    [theme, isDarkMode, themeRevision],
   );
 
   React.useEffect(() => {
@@ -297,20 +288,35 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
     // Typography
     if (typography) {
       if (typography.baseSize) {
-        document.documentElement.style.setProperty('font-size', `${typography.baseSize}px`);
+        document.documentElement.style.setProperty(
+          'font-size',
+          `${typography.baseSize}px`,
+        );
       }
       if (typography.fontFamily) {
         el.style.setProperty('--font-family', typography.fontFamily);
         // Set on documentElement to override Tailwind's @theme
-        document.documentElement.style.setProperty('--font-sans', typography.fontFamily);
+        document.documentElement.style.setProperty(
+          '--font-sans',
+          typography.fontFamily,
+        );
         // Set Tailwind 4 default font variable
-        document.documentElement.style.setProperty('--default-font-family', typography.fontFamily);
+        document.documentElement.style.setProperty(
+          '--default-font-family',
+          typography.fontFamily,
+        );
       }
       if (typography.fontFamilyMono) {
         el.style.setProperty('--font-family-mono', typography.fontFamilyMono);
-        document.documentElement.style.setProperty('--font-mono', typography.fontFamilyMono);
+        document.documentElement.style.setProperty(
+          '--font-mono',
+          typography.fontFamilyMono,
+        );
         // Set Tailwind 4 default mono font variable
-        document.documentElement.style.setProperty('--default-mono-font-family', typography.fontFamilyMono);
+        document.documentElement.style.setProperty(
+          '--default-mono-font-family',
+          typography.fontFamilyMono,
+        );
       }
 
       // Load custom fonts from fontSources (user-provided URLs only)
@@ -322,11 +328,17 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
             display: (font.display as FontDisplay) || 'swap',
           });
 
-          fontFace.load().then((loadedFont) => {
-            document.fonts.add(loadedFont);
-          }).catch((err) => {
-            console.warn(`[ThemeProvider] Failed to load font ${font.family}:`, err);
-          });
+          fontFace
+            .load()
+            .then((loadedFont) => {
+              document.fonts.add(loadedFont);
+            })
+            .catch((err) => {
+              console.warn(
+                `[ThemeProvider] Failed to load font ${font.family}:`,
+                err,
+              );
+            });
         });
       }
     }
@@ -335,7 +347,10 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
     if (color) {
       // Grayscale colors (affects muted, border, card, etc.)
       if (color.grayscale) {
-        const grayscaleColors = generateGrayscaleColors(color.grayscale, isDarkMode);
+        const grayscaleColors = generateGrayscaleColors(
+          color.grayscale,
+          isDarkMode,
+        );
         Object.entries(grayscaleColors).forEach(([key, value]) => {
           el.style.setProperty(`--${key}`, value);
           root.style.setProperty(`--${key}`, value);
@@ -346,7 +361,7 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
       if (color.accent?.primary) {
         // const level = color.accent.level ?? 2; // Default to level 2 (no adjustment)
         // const { primary, ring } = adjustAccentByLevel(color.accent.primary, level);
-        const primary = color.accent?.primary
+        const primary = color.accent?.primary;
 
         el.style.setProperty('--primary', primary);
         el.style.setProperty('--accent', primary);
@@ -372,29 +387,30 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
         }
       }
 
-      // Surface colors
+      // Preserve resolved CSS colors (including OKLCH and color-mix) from the host.
+      // The same foreground drives both ordinary UI and AI message text.
       if (color.surface?.background) {
-        if (color.surface.background) {
-          el.style.setProperty('--background', color.surface.background);
-          root.style.setProperty('--background', color.surface.background);
+        el.style.setProperty('--background', color.surface.background);
+        root.style.setProperty('--background', color.surface.background);
+        if (!color.surface.foreground) {
+          const luminance = hexToRgb(color.surface.background)
+            ? getLuminance(color.surface.background)
+            : isDarkMode
+              ? 0
+              : 1;
+          const foreground =
+            luminance > 0.5 ? 'oklch(0.145 0 0)' : 'oklch(0.985 0 0)';
+          el.style.setProperty('--chat-foreground', foreground);
+          root.style.setProperty('--chat-foreground', foreground);
         }
-
-        // Auto-calculate chat-foreground based on background luminance
-        // This ensures AI message text is always readable regardless of background
-        const bgLuminance = getLuminance(color.surface.background);
-        const chatForeground = bgLuminance > 0.5
-          ? 'oklch(0.145 0 0)'  // Dark text for light backgrounds
-          : 'oklch(0.985 0 0)'; // Light text for dark backgrounds
-        el.style.setProperty('--chat-foreground', chatForeground);
-        root.style.setProperty('--chat-foreground', chatForeground);
       }
-
-      // Foreground color - apply directly without conditions
       if (color.surface?.foreground) {
-        const oklchValue = hexToOklch(color.surface.foreground);
-        if (oklchValue) {
-          el.style.setProperty('--foreground', oklchValue);
-          root.style.setProperty('--foreground', oklchValue);
+        for (const element of [el, root]) {
+          element.style.setProperty('--foreground', color.surface.foreground);
+          element.style.setProperty(
+            '--chat-foreground',
+            color.surface.foreground,
+          );
         }
       }
     }
@@ -421,12 +437,25 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
       root.style.removeProperty('--default-mono-font-family');
       // Color properties - remove from both el and root
       const colorProps = [
-        '--primary', '--primary-foreground', '--accent', '--accent-foreground',
-        '--ring', '--background', '--foreground', '--chat-foreground', '--muted', '--muted-foreground',
-        '--border', '--card', '--card-foreground', '--popover', '--popover-foreground',
-        '--secondary', '--secondary-foreground'
+        '--primary',
+        '--primary-foreground',
+        '--accent',
+        '--accent-foreground',
+        '--ring',
+        '--background',
+        '--foreground',
+        '--chat-foreground',
+        '--muted',
+        '--muted-foreground',
+        '--border',
+        '--card',
+        '--card-foreground',
+        '--popover',
+        '--popover-foreground',
+        '--secondary',
+        '--secondary-foreground',
       ];
-      colorProps.forEach(prop => {
+      colorProps.forEach((prop) => {
         el.style.removeProperty(prop);
         root.style.removeProperty(prop);
       });
@@ -440,7 +469,9 @@ export function ThemeProvider({ children, theme: themeProp }: ThemeProviderProps
         className="h-full w-full bg-background text-foreground"
         style={{
           ...getSurfaceThemeStyle(theme),
-          ...(theme.typography?.fontFamily && { fontFamily: theme.typography.fontFamily }),
+          ...(theme.typography?.fontFamily && {
+            fontFamily: theme.typography.fontFamily,
+          }),
         }}
       >
         {children}
