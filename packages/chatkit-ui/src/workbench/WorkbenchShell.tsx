@@ -535,7 +535,9 @@ export function WorkbenchShell({
     }
     const viewKey = navigation.viewKey;
     if (viewKey && views.some((view) => view.key === viewKey)) {
-      if (!navigation.preserveView)
+      // A conversation scope change clears old queries. Restore the explicitly
+      // requested resource even when keeping its panel open.
+      if (!navigation.preserveView || Object.keys(navigation.query).length > 0)
         setViewQueries((current) => ({
           ...current,
           [viewKey]: navigation.query,

@@ -297,6 +297,33 @@ artifact-download, and terminal methods, then starts Vite on port 5173 with fres
 It fails if that port is occupied instead of silently switching ports. To check
 the installed SDK separately, run `corepack pnpm check:sdk`.
 
+Stop Vite before reinstalling dependencies or removing its `.vite` cache, then
+restart it with `corepack pnpm dev:ui:fresh`. A running server can retain module
+URLs whose prebundled files no longer exist. This causes `504 Outdated Optimize
+Dep` when opening a lazy view such as Terminal, even while already loaded views
+still work. Restart the server before reloading the host page; a browser refresh
+alone cannot restore missing server-side cache files.
+
+Native workbench tabs isolate module-loading and rendering errors. A failed tab
+offers an explicit reload of the ChatKit frame, with a reminder to save changes
+in other tabs first. It never automatically reloads the frame or resets other
+tabs. Reloading clears React's cached lazy-import failure; closing and reopening
+the same failed view is not sufficient.
+
+Terminal uses xterm 6 and its matching Fit addon. This includes the upstream
+cleanup fix for a deferred viewport callback firing after terminal disposal,
+which React StrictMode can expose during development. Resize and transport
+callbacks also ignore disposed sessions; language changes do not reconnect them.
+
+The terminal protocol reports stable restriction codes (`computer_desktop_required`,
+`unsupported_provider`, or `sandbox_disabled`). After the first response, ChatKit
+shows localized guidance and disables further terminal launches for that conversation
+in the current workbench. Switching context or reloading rechecks availability.
+Computer users must take control in the Computer view and use its desktop terminal.
+This does not grant independent terminal access to Computer. Transient connection
+errors still offer Reconnect. Older servers retain their ordinary error display
+until they provide these codes.
+
 The local Xpert host should use `VITE_CHATKIT_FRAME_URL=http://localhost:5173`.
 After restarting Vite, fully reload the host page (for example,
 `http://localhost:4300/chat/clawxpert/c`) to recreate the SDK client inside the

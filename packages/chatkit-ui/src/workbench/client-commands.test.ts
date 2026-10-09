@@ -339,4 +339,50 @@ describe('Workbench built-in commands', () => {
       }),
     );
   });
+
+  it.each([true, false, undefined])(
+    'leaves custom command policy and payload validation to the host with activation %s',
+    async (userActivated) => {
+      const result = { success: false, code: 'host_defined_policy' };
+      const { host } = fixture(result);
+      const request: ChatKitWorkbenchClientCommandRequest = {
+        commandKey: 'platform.example.run',
+        payload: { input: ['opaque', 'values'], userActivated: true },
+        userActivated,
+        hostType: 'agent',
+        hostId: 'assistant',
+        viewKey: 'source',
+      };
+      expect(await executeWorkbenchCommand(request, host)).toBe(result);
+      expect(host.forward).toHaveBeenCalledExactlyOnceWith(request);
+    },
+  );
+
+  it('discards a custom command result after its originating context changes', async () => {
+    const { host, execute } = fixture();
+    let current = true;
+    let complete!: (result: unknown) => void;
+    host.isCurrent = () => current;
+    host.forward = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const pending = execute('platform.example.run', { input: 'example' });
+    current = false;
+    complete({ success: true, value: 'previous context' });
+    expect(await pending).toEqual({ success: false, code: 'stale_context' });
+    expect(host.forward).toHaveBeenCalledOnce();
+  });
+
+  it('does not forward a custom command from an already stale context', async () => {
+    const { host, execute } = fixture();
+    host.isCurrent = () => false;
+    expect(await execute('platform.example.run', {})).toEqual({
+      success: false,
+      code: 'stale_context',
+    });
+    expect(host.forward).not.toHaveBeenCalled();
+  });
 });

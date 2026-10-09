@@ -209,5 +209,6 @@ export async function executeWorkbenchCommand(
       };
     }
   }
-  return host.forward(request);
+  const result = await host.forward(request);
+  return host.isCurrent?.() === false ? stale() : result;
 }

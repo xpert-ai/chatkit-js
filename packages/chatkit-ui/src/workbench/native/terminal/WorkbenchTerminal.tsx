@@ -6,20 +6,28 @@ import '@xterm/xterm/css/xterm.css';
 import { Button } from '../../../components/ui/button';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { useTheme } from '../../../providers/Theme';
+import {
+  terminalRestriction,
+  type TerminalRestriction,
+} from './terminal-restriction';
 
 export default function WorkbenchTerminal({
   client,
   conversationId,
   projectId,
   active,
+  onUnavailable,
 }: {
   client: Client;
   conversationId?: string | null;
   projectId?: string | null;
   active: boolean;
+  onUnavailable?: (reason: TerminalRestriction) => void;
 }) {
   const { t } = useChatkitTranslation();
   const { themeRevision } = useTheme();
+  const callbacks = React.useRef({ t, active });
+  callbacks.current = { t, active };
   const container = React.useRef<HTMLDivElement>(null);
   const terminalRef = React.useRef<Terminal | null>(null);
   const fitRef = React.useRef<FitAddon | null>(null);
@@ -45,7 +53,12 @@ export default function WorkbenchTerminal({
     terminalRef.current = terminal;
     fitRef.current = fit;
     const resize = () => {
-      if (container.current?.clientWidth && container.current?.clientHeight) {
+      if (
+        !abort.signal.aborted &&
+        container.current?.isConnected &&
+        container.current.clientWidth &&
+        container.current.clientHeight
+      ) {
         fit.fit();
         connectionRef.current?.resize(terminal.cols, terminal.rows);
       }
@@ -53,7 +66,9 @@ export default function WorkbenchTerminal({
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(container.current);
-    const input = terminal.onData((data) => connectionRef.current?.input(data));
+    const input = terminal.onData((data) => {
+      if (!abort.signal.aborted) connectionRef.current?.input(data);
+    });
     setStatus('terminalConnecting');
     setError('');
     setDirectory('');
@@ -70,12 +85,19 @@ export default function WorkbenchTerminal({
             case 'opened':
               setStatus('terminalReady');
               setDirectory(event.workingDirectory);
-              terminal.focus();
+              if (callbacks.current.active) terminal.focus();
               break;
             case 'output':
               terminal.write(event.data);
               break;
             case 'error':
+              const restriction = terminalRestriction(event.code);
+              if (restriction && onUnavailable) {
+                onUnavailable(restriction);
+                abort.abort();
+                connectionRef.current?.close();
+                return;
+              }
               setError(event.message);
               setStatus('terminalEnded');
               break;
@@ -102,7 +124,7 @@ export default function WorkbenchTerminal({
           setError(
             error instanceof Error
               ? error.message
-              : t('workbench.files.failed'),
+              : callbacks.current.t('workbench.files.failed'),
           );
           setStatus('terminalEnded');
         }
@@ -117,7 +139,7 @@ export default function WorkbenchTerminal({
       terminalRef.current = null;
       fitRef.current = null;
     };
-  }, [client, conversationId, projectId, attempt, t]);
+  }, [client, conversationId, projectId, attempt, onUnavailable]);
   React.useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal || !container.current) return;
@@ -127,7 +149,11 @@ export default function WorkbenchTerminal({
       foreground: styles.color,
       cursor: styles.color,
     };
-    if (active) {
+    if (
+      active &&
+      container.current.clientWidth &&
+      container.current.clientHeight
+    ) {
       fitRef.current?.fit();
       connectionRef.current?.resize(terminal.cols, terminal.rows);
     }

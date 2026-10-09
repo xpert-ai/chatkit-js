@@ -66,6 +66,11 @@
     "swapPanes": "交换左右窗格",
     "loading": "正在加载视图...",
     "loadingView": "正在加载视图...",
+    "viewError": {
+      "title": "无法打开此视图。",
+      "description": "其他标签仍可使用。请先保存其中的修改，再刷新聊天界面。",
+      "reload": "刷新聊天界面"
+    },
     "empty": "暂无兼容的视图。",
     "loadFailed": "视图加载失败。",
     "entryUnavailable": "远程视图内容不可用。",
@@ -242,6 +247,10 @@
       "terminalEnded": "会话已结束",
       "terminalReconnect": "重新连接",
       "terminalClose": "断开连接",
+      "terminalUnavailable": "当前会话无法使用独立终端",
+      "terminalComputerRequired": "当前会话使用 Computer。请切换到“电脑”视图，接管后使用桌面内的终端。",
+      "terminalUnsupported": "当前环境不支持独立终端。",
+      "terminalSandboxDisabled": "当前会话未启用沙箱。",
       "readOnly": "只读",
       "find": "查找",
       "replace": "替换",

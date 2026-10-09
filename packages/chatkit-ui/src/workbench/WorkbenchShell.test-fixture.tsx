@@ -10,7 +10,10 @@ import {
 } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
+import type {
+  XpertExtensionViewManifest,
+  XpertViewQuery,
+} from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../providers/Stream';
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   remoteUnmounts: 0,
   resizeCallback: null as ResizeObserverCallback | null,
   remoteViewProps: null as {
+    initialQuery?: XpertViewQuery;
     onClientCommand: (
       commandKey: string,
       payload: unknown,

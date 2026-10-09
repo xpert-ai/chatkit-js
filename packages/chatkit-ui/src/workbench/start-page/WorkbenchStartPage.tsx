@@ -30,6 +30,11 @@ import { resolveWorkbenchAddress } from '../browser-preview/workbench-address';
 import { resolveManifestText } from '../manifest-text';
 import type { RecentWorkbenchPreview } from '../useWorkbenchPages';
 
+import {
+  terminalRestrictionMessage,
+  type TerminalRestriction,
+} from '../native/terminal/terminal-restriction';
+
 export function WorkbenchStartPage({
   navigation,
   views,
@@ -38,6 +43,7 @@ export function WorkbenchStartPage({
   onOpenTool,
   onOpenFile,
   conversationReady = false,
+  terminalUnavailable,
   sideChatEnabled = true,
   recent,
   locale,
@@ -55,6 +61,7 @@ export function WorkbenchStartPage({
   onOpenTool?: (tool: NativeTool) => void;
   onOpenFile?: (file: XpertWorkspaceFile) => void;
   conversationReady?: boolean;
+  terminalUnavailable?: TerminalRestriction | null;
   sideChatEnabled?: boolean;
   recent: RecentWorkbenchPreview[];
   locale: string;
@@ -84,7 +91,11 @@ export function WorkbenchStartPage({
   );
   const tools = [
     { key: 'files' as const, icon: Folder, disabled: false },
-    { key: 'terminal' as const, icon: Terminal, disabled: !conversationReady },
+    {
+      key: 'terminal' as const,
+      icon: Terminal,
+      disabled: !conversationReady || Boolean(terminalUnavailable),
+    },
     {
       key: 'side-chat' as const,
       icon: MessageSquarePlus,
@@ -220,13 +231,15 @@ export function WorkbenchStartPage({
                   disabled={tool.disabled}
                   onClick={() => onOpenTool?.(tool.key)}
                   title={
-                    tool.disabled
-                      ? t(
-                          tool.key === 'side-chat' && !sideChatEnabled
-                            ? 'workbench.start.disabled'
-                            : 'workbench.start.conversationRequired',
-                        )
-                      : undefined
+                    tool.key === 'terminal' && terminalUnavailable
+                      ? t(terminalRestrictionMessage[terminalUnavailable])
+                      : tool.disabled
+                        ? t(
+                            tool.key === 'side-chat' && !sideChatEnabled
+                              ? 'workbench.start.disabled'
+                              : 'workbench.start.conversationRequired',
+                          )
+                        : undefined
                   }
                   className="flex min-w-0 items-center gap-3 rounded-[var(--chat-item-radius)] border border-border/60 bg-muted/30 px-4 py-3 text-left text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -235,8 +248,15 @@ export function WorkbenchStartPage({
                     className="shrink-0 text-muted-foreground"
                   />
                   <span className="min-w-0 flex-1 truncate">
-                    {t(
-                      `workbench.start.${tool.key === 'side-chat' ? 'sideChat' : tool.key}`,
+                    {tool.key === 'terminal' && terminalUnavailable ? (
+                      <span className="block whitespace-normal text-xs text-muted-foreground">
+                        {t('workbench.start.terminal')} ·{' '}
+                        {t(terminalRestrictionMessage[terminalUnavailable])}
+                      </span>
+                    ) : (
+                      t(
+                        `workbench.start.${tool.key === 'side-chat' ? 'sideChat' : tool.key}`,
+                      )
                     )}
                   </span>
                 </button>
