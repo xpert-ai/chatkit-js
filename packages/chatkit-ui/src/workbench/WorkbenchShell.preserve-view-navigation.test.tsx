@@ -163,10 +163,43 @@ describe('Workbench navigation with preserved View', () => {
     expect(mocks.remoteViewProps?.initialQuery).toEqual(query);
   });
 
-  it('does not carry an old query into another conversation without an explicit query', async () => {
+  it.each([null, 'conversation-existing'])(
+    'retains an Assistant view query across a conversation transition from %s',
+    async (conversationId) => {
+      mocks.stream.conversationId = conversationId;
+      mocks.stream.projectId = undefined;
+      const destination = pendingViews();
+      mocks.listSlotViews
+        .mockResolvedValueOnce([manifest])
+        .mockReturnValueOnce(destination.promise);
+      const shell = createShell();
+      const query = { selectionId: 'document-1', search: 'report' };
+      const { rerender } = render(shell(navigation(query, false)));
+      await waitFor(() =>
+        expect(mocks.remoteViewProps?.initialQuery).toEqual(query),
+      );
+      const frame = screen.getByTestId('remote-view');
+
+      mocks.stream.conversationId = 'conversation-created';
+      rerender(shell());
+      expect(mocks.remoteViewProps?.contextReady).toBe(false);
+      expect(mocks.remoteViewProps?.initialQuery).toEqual(query);
+      await act(async () => destination.resolve([manifest]));
+      expect(mocks.remoteViewProps?.contextReady).toBe(true);
+      expect(mocks.remoteViewProps?.initialQuery).toEqual(query);
+      expect(screen.getByTestId('remote-view')).toBe(frame);
+    },
+  );
+
+  it('clears a conversation-scoped query when switching conversations without an explicit query', async () => {
+    const workbench = { ...manifest.workbench, contextScope: 'conversation' };
+    const conversationView: XpertExtensionViewManifest = {
+      ...manifest,
+      workbench,
+    };
     const destination = pendingViews();
     mocks.listSlotViews
-      .mockResolvedValueOnce([manifest])
+      .mockResolvedValueOnce([conversationView])
       .mockReturnValueOnce(destination.promise);
     const shell = createShell();
     const { rerender } = render(
@@ -180,7 +213,7 @@ describe('Workbench navigation with preserved View', () => {
 
     mocks.stream.conversationId = 'conversation-2';
     rerender(shell(navigation()));
-    await act(async () => destination.resolve([manifest]));
+    await act(async () => destination.resolve([conversationView]));
     await waitFor(() =>
       expect(mocks.remoteViewProps).toMatchObject({
         runtimeScope: { conversationId: 'conversation-2' },

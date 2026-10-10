@@ -70,7 +70,7 @@ describe('workbench browser navigation', () => {
     ).toEqual(['c', 'a', 'b'].map((path) => website(path).url));
   });
 
-  it('isolates tabs, ignores closed tabs and clears navigation when the conversation changes', () => {
+  it('isolates tabs, ignores closed tabs and clears navigation when the workspace changes', () => {
     const { result, rerender } = renderHook(
       ({ scope }) => useWorkbenchPages(scope),
       { initialProps: { scope: 'one' } },
@@ -109,5 +109,56 @@ describe('workbench browser navigation', () => {
     expect(result.current.newTabs).toEqual([]);
     expect(result.current.previews).toEqual([preview]);
     expect(result.current.recent).toHaveLength(1);
+  });
+
+  it('retains websites and history while removing conversation evidence from every tab', () => {
+    const { result, rerender } = renderHook(
+      ({ scope, contentScope }) => useWorkbenchPages(scope, contentScope),
+      { initialProps: { scope: 'workspace', contentScope: 'draft' } },
+    );
+    const file = parsePreview(
+      'file',
+      { name: 'Private file', url: 'https://example.test/private.pdf' },
+      '/api/ai',
+    );
+    if (!file) throw new Error('Invalid file fixture');
+    act(() => {
+      result.current.addNewTab('web');
+      result.current.addNewTab('home');
+      result.current.addNewTab('file');
+    });
+    act(() => {
+      result.current.navigateBrowser('web', website('a'));
+      result.current.navigateBrowser('web', file);
+      result.current.navigateBrowser('web', website('b'));
+      result.current.navigateBrowser('home', file);
+      result.current.moveBrowser('home', -1);
+      result.current.navigateBrowser('file', file);
+    });
+    const browser = result.current.previews.find(({ key }) => key === 'web');
+
+    rerender({ scope: 'workspace', contentScope: 'conversation-1' });
+    expect(result.current.previews).toEqual([browser]);
+    expect(result.current.previews[0]).toBe(browser);
+    expect(result.current.newTabs).toEqual(['home']);
+    expect(result.current.browserHistory).toEqual({
+      web: { entries: [null, website('a'), website('b')], index: 2 },
+      home: { entries: [null], index: 0 },
+    });
+    expect(result.current.recent.map(({ preview }) => preview.kind)).toEqual([
+      'browser',
+      'browser',
+    ]);
+    act(() => result.current.moveBrowser('web', -1));
+    expect(result.current.previews[0]).toMatchObject({ url: website('a').url });
+    rerender({ scope: 'workspace', contentScope: 'draft' });
+    act(() => result.current.moveBrowser('web', 1));
+    expect(result.current.previews[0]).toMatchObject({ url: website('b').url });
+
+    rerender({ scope: 'another-workspace', contentScope: 'draft' });
+    expect(result.current.newTabs).toEqual([]);
+    expect(result.current.previews).toEqual([]);
+    expect(result.current.recent).toEqual([]);
+    expect(result.current.browserHistory).toEqual({});
   });
 });

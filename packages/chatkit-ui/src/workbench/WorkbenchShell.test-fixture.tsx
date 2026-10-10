@@ -13,6 +13,7 @@ import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type {
   XpertExtensionViewManifest,
   XpertViewQuery,
+  XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../providers/Stream';
 
@@ -32,6 +33,8 @@ const mocks = vi.hoisted(() => ({
   resizeCallback: null as ResizeObserverCallback | null,
   remoteViewProps: null as {
     initialQuery?: XpertViewQuery;
+    contextReady?: boolean;
+    runtimeScope?: XpertViewRuntimeScopeInput;
     onClientCommand: (
       commandKey: string,
       payload: unknown,
@@ -65,10 +68,10 @@ const mocks = vi.hoisted(() => ({
     apiUrl: '/api/ai',
     authenticatedFetch: vi.fn(),
     assistantId: 'agent-1',
-    projectId: 'project-1',
+    projectId: 'project-1' as string | undefined,
     organizationId: 'organization-1',
-    threadId: 'thread-1',
-    conversationId: 'conversation-1',
+    threadId: 'thread-1' as string | null,
+    conversationId: 'conversation-1' as string | null,
     isLoading: false,
     messages: [] as StateType['messages'],
     submit: vi.fn(),

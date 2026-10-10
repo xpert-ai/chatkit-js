@@ -1,6 +1,7 @@
 import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
 import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
+import { useWorkbenchScopeReset } from './shell/useWorkbenchScopeReset';
 import { ResourceCardContext } from '../resource-cards/context';
 import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
 import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
@@ -181,12 +182,23 @@ function WorkbenchContent({
     runtimeScope.conversationId,
   ]);
 
-  const startPageScope = JSON.stringify([viewScopeKey, authenticated, enabled]);
-  const startPageScopeRef = React.useRef(startPageScope);
+  const startPageScope = JSON.stringify([
+    layoutKey,
+    runtimeScope.projectId,
+    authenticated,
+    enabled,
+  ]);
+  const requestScope = JSON.stringify([viewScopeKey, authenticated, enabled]);
+  const requestScopeRef = React.useRef(requestScope);
 
-  startPageScopeRef.current = startPageScope;
+  requestScopeRef.current = requestScope;
 
-  const native = useNativeWorkbench(startPageScope);
+  const native = useNativeWorkbench(
+    JSON.stringify([
+      startPageScope,
+      runtimeScope.projectId ? runtimeScope.conversationId : null,
+    ]),
+  );
   const {
     previews,
     newTabs,
@@ -194,16 +206,15 @@ function WorkbenchContent({
     browserHistory,
     navigateBrowser,
     moveBrowser,
-    reset: resetPages,
     clearPreviews,
     addNewTab,
     closeNewTab,
     openPreview: storePreview,
     closePreview: removePreview,
     visitPreview,
-  } = useWorkbenchPages(startPageScope);
+  } = useWorkbenchPages(startPageScope, requestScope);
 
-  const { views, viewsScope, loading, error } = useWorkbenchViews({
+  const { views, viewsScope, loading, showLoading, error } = useWorkbenchViews({
     client: viewHosts,
     hostId: stream.assistantId,
     scopeKey: viewScopeKey,
@@ -238,6 +249,7 @@ function WorkbenchContent({
     requestedOpen,
     expanded,
     restoring,
+    completeRestoration,
     resolvedPanelWidth,
     workbenchSide,
     swapSides,
@@ -270,6 +282,9 @@ function WorkbenchContent({
           (viewsScope === viewScopeKey && (views.length > 0 || !expanded)))));
 
   const mainChatInWorkbench = open && expanded;
+  React.useEffect(() => {
+    if (open && restoring) completeRestoration();
+  }, [open, restoring, completeRestoration]);
   const openPreview = React.useCallback(
     (preview: WorkbenchPreview) => {
       storePreview(preview);
@@ -317,31 +332,23 @@ function WorkbenchContent({
     return () => observer.disconnect();
   }, []);
 
-  React.useEffect(() => {
-    resetPages();
-    setViewQueries({});
-    setActiveViewKey((current) =>
-      current?.startsWith(NATIVE_PREFIX) ||
-      current?.startsWith('chatkit.preview.')
-        ? null
-        : current,
-    );
-    setNotification(null);
-    setHostEvent(null);
-    contextsRef.current.clear();
-    onRequestContextChange({});
-  }, [
-    viewScopeKey,
-    authenticated,
-    remoteViewsEnabled,
+  useWorkbenchScopeReset({
+    workspaceScope: startPageScope,
+    runtimeScope: requestScope,
+    views,
+    contexts: contextsRef,
     onRequestContextChange,
-    resetPages,
-  ]);
+    setViewQueries,
+    setNotification,
+    setHostEvent,
+    tabKeys,
+    setActiveViewKey,
+  });
 
   React.useEffect(() => {
     if (views.length === 0) {
       // An empty recommendation list must not erase address-bar navigation.
-      const unavailable = viewsScope !== viewScopeKey;
+      const unavailable = Boolean(error);
       if (unavailable) clearPreviews();
       setViewQueries({});
       setActiveViewKey((current) =>
@@ -371,6 +378,7 @@ function WorkbenchContent({
     viewScopeKey,
     onRequestContextChange,
     clearPreviews,
+    error,
   ]);
 
   React.useEffect(() => {
@@ -787,7 +795,7 @@ function WorkbenchContent({
             : undefined;
           replaceNewTab(fromTab, SIDE_CHAT_VIEW_KEY);
           void askInSideChat().catch((error: unknown) => {
-            if (startPageScopeRef.current !== startPageScope) return;
+            if (requestScopeRef.current !== requestScope) return;
             if (fromTab) {
               // The pending side-chat tab may already have disappeared after failure.
               insertTabBefore(fromTab, nextTab);
@@ -907,6 +915,7 @@ function WorkbenchContent({
       notification={notification}
       error={error}
       loading={loading}
+      startPageLoading={showLoading}
       expanded={expanded}
       onClose={closeWorkbench}
       onRequestCloseSideChat={requestCloseSideChat}

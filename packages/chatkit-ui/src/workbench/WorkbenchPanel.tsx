@@ -116,6 +116,7 @@ type WorkbenchPanelProps = {
   notification: { level: 'success' | 'error'; message: string } | null;
   error: string | null;
   loading: boolean;
+  startPageLoading?: boolean;
   expanded: boolean;
   onClose: () => void;
   onRequestCloseSideChat: () => void;
@@ -178,6 +179,7 @@ export function WorkbenchPanel({
   notification,
   error,
   loading,
+  startPageLoading = loading,
   expanded,
   onClose,
   onRequestCloseSideChat,
@@ -490,7 +492,7 @@ export function WorkbenchPanel({
               recent={recent}
               locale={locale}
               apiUrl={stream.apiUrl}
-              loading={loading}
+              loading={startPageLoading}
               error={error}
               onReload={onReload}
               onSelectView={(viewKey) => onNavigateNewTab(key, viewKey)}

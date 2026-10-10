@@ -68,26 +68,48 @@ function withoutHistory(pages: Pages, key: string) {
   return history;
 }
 
-/** Recent URLs and file evidence stay in memory within the current runtime scope. */
-export function useWorkbenchPages(scope: string) {
-  const [state, setState] = React.useState<Pages & { scope: string }>({
+/** Keep browser navigation in the workspace; file evidence belongs to its conversation. */
+export function useWorkbenchPages(scope: string, contentScope = scope) {
+  const [state, setState] = React.useState<
+    Pages & { scope: string; contentScope: string }
+  >({
     scope,
+    contentScope,
     ...empty,
   });
-  const pages = state.scope === scope ? state : empty;
+  const pages = React.useMemo(
+    () =>
+      state.scope !== scope
+        ? empty
+        : state.contentScope === contentScope
+          ? state
+          : retainBrowserPages(state),
+    [state, scope, contentScope],
+  );
   React.useEffect(() => {
     setState((current) =>
-      current.scope === scope ? current : { scope, ...empty },
+      current.scope !== scope
+        ? { scope, contentScope, ...empty }
+        : current.contentScope === contentScope
+          ? current
+          : { scope, contentScope, ...retainBrowserPages(current) },
     );
-  }, [scope]);
+  }, [scope, contentScope]);
   const update = React.useCallback(
     (change: (pages: Pages) => Pages) => {
       setState((current) => ({
         scope,
-        ...change(current.scope === scope ? current : empty),
+        contentScope,
+        ...change(
+          current.scope !== scope
+            ? empty
+            : current.contentScope === contentScope
+              ? current
+              : retainBrowserPages(current),
+        ),
       }));
     },
-    [scope],
+    [scope, contentScope],
   );
 
   return {
@@ -203,6 +225,38 @@ export function useWorkbenchPages(scope: string) {
             : pages;
         }),
       [update],
+    ),
+  };
+}
+
+function retainBrowserPages(pages: Pages): Pages {
+  const previews = pages.previews.filter(
+    (preview) => preview.kind === 'browser',
+  );
+  const keys = new Set([
+    ...pages.newTabs,
+    ...previews.map((preview) => preview.key),
+  ]);
+  return {
+    newTabs: pages.newTabs,
+    previews,
+    recent: pages.recent.filter(({ preview }) => preview.kind === 'browser'),
+    browserHistory: Object.fromEntries(
+      Object.entries(pages.browserHistory)
+        .filter(([key]) => keys.has(key))
+        .map(([key, history]) => [
+          key,
+          {
+            entries: history.entries.filter(
+              (entry) => !entry || entry.kind === 'browser',
+            ),
+            index:
+              history.entries
+                .slice(0, history.index + 1)
+                .filter((entry) => !entry || entry.kind === 'browser').length -
+              1,
+          },
+        ]),
     ),
   };
 }

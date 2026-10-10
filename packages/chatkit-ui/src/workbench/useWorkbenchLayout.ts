@@ -34,6 +34,18 @@ export function useWorkbenchLayout(
         };
   const latest = React.useRef(current);
   latest.current = current;
+  const completeRestoration = React.useCallback(() => {
+    const previous = latest.current;
+    if (
+      previous.key !== key ||
+      previous.narrow !== narrow ||
+      !previous.restoring
+    )
+      return;
+    const next = { ...previous, restoring: false };
+    latest.current = next;
+    setState(next);
+  }, [key, narrow]);
   const update = React.useCallback(
     (change: (layout: WorkbenchLayout) => WorkbenchLayout, persist = true) => {
       const previous = latest.current;
@@ -113,6 +125,7 @@ export function useWorkbenchLayout(
     requestedOpen: current.visible.open,
     expanded: current.visible.expanded,
     restoring: current.restoring,
+    completeRestoration,
     resolvedPanelWidth,
     workbenchSide: current.visible.workbenchSide,
     swapSides,
