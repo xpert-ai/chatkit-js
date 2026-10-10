@@ -1,5 +1,7 @@
 # @xpert-ai/chatkit-browser-runner
 
+## 0.13.0
+
 ## 0.12.2
 
 ## 0.12.1

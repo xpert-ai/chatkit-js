@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.13.0
+
+### Minor Changes
+
+- 806699c: Define public options for shared group conversations and host session identity. Preserve existing surface colors without Hex conversion and align neutral surface variables and input derivation with the host. Hosts and ChatKit UI must use matching group-enabled versions.
+
 ## 0.12.2
 
 ### Patch Changes

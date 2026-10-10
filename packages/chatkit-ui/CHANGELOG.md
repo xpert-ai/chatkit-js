@@ -1,5 +1,24 @@
 # @xpert-ai/chatkit-ui
 
+## 0.13.0
+
+### Minor Changes
+
+- fe79435: Extend the existing Chat, Header, Composer, and Workbench for shared group conversations, member invitations, authored message groups, and Assistant execution records. Reuse ChatKit credentials and preserve the hosted iframe during navigation. Use the published Xpert SDK 0.9.0 for group APIs.
+
+### Patch Changes
+
+- 01aba84: Upgrade to the published @xpert-ai/xpert-sdk 0.8.2 release to read authorized Workbench file previews and downloads without third-party cookies. This fixes document previews in Desktop and cross-site embeddings while preserving Remote View isolation and file grant checks. Requires the platform's authenticated runtime file-content endpoint.
+- 806699c: Define public options for shared group conversations and host session identity. Preserve existing surface colors without Hex conversion and align neutral surface variables and input derivation with the host. Hosts and ChatKit UI must use matching group-enabled versions.
+- 9c5c919: Handle application project creation inside ChatKit's Workbench. Resolve the creation entry through the SDK and open it in a fresh conversation/project scope instead of delegating a project.create-entry effect to the embedding host. Show failures inline and discard stale or duplicate requests.
+
+  Keep the current Assistant profile outside the project-specific chat lifecycle so creating or switching projects does not clear its name, avatar, or published presentation settings or refetch the profile merely because Chat remounts.
+
+- Updated dependencies [806699c]
+  - @xpert-ai/chatkit-types@0.13.0
+  - @xpert-ai/chatkit-web-shared@0.13.0
+  - @xpert-ai/a2ui-react@0.13.0
+
 ## 0.12.2
 
 ### Patch Changes
