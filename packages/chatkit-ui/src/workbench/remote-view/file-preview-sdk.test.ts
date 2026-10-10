@@ -2,7 +2,7 @@ import { Client } from '@xpert-ai/xpert-sdk';
 import { describe, expect, it, vi } from 'vitest';
 
 // Exercise the published SDK as well as the UI mocks: granted content must use
-// its server-issued route while retaining the trusted host's SDK transport.
+// the authenticated grant route while retaining the trusted host's SDK transport.
 describe('installed SDK preview transport', () => {
   it('reads content from the grant route while retaining the configured transport', async () => {
     const grantUrl =
@@ -16,11 +16,21 @@ describe('installed SDK preview transport', () => {
     const client = new Client({
       apiUrl: 'https://platform.example/api/ai',
       callerOptions: { fetch, maxRetries: 0 },
+      onRequest: (_url, init) => {
+        const headers = new Headers(init.headers);
+        headers.set('Authorization', 'Bearer cs-preview-test');
+        return { ...init, headers };
+      },
     });
     const blob = await client.viewHosts.readFileAccess(grantUrl);
-    expect(String(fetch.mock.calls[0]?.[0])).toBe(grantUrl);
+    expect(String(fetch.mock.calls[0]?.[0])).toBe(
+      'https://platform.example/api/ai/workspace-files/view-sessions/session/grants/grant/content/proof.png',
+    );
+    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe(
+      'Bearer cs-preview-test',
+    );
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({
-      credentials: 'include',
+      credentials: 'omit',
       redirect: 'error',
     });
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes);

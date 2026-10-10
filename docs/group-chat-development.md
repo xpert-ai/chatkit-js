@@ -1,12 +1,18 @@
 # Group chat integration
 
-The group feature uses the published `@xpert-ai/xpert-sdk` **0.9.0** or a compatible version, including `Client.groups` and `Client.forGroupWorkbench`, together with `/api/ai/groups` from the matching Xpert backend. The manifest and lockfile resolve the published SDK; no local SDK checkout or dependency symlink is needed.
+The group feature uses the published `@xpert-ai/xpert-sdk` **0.9.1** or a compatible version, including `Client.groups` and `Client.forGroupWorkbench`, together with `/api/ai/groups` from the matching Xpert backend. The manifest and lockfile resolve the published SDK; no local SDK checkout or dependency symlink is needed.
 
 1. Run `corepack pnpm install --frozen-lockfile`.
 2. Use Node 24 and run `corepack pnpm test`, `corepack pnpm --filter @xpert-ai/chatkit-ui types`, and the UI build.
 3. Start the matching Xpert backend and point Cloud's `VITE_CHATKIT_FRAME_URL` at this UI build/dev server. Create/open a group from the shared conversation list; Cloud resolves it into the existing ChatKit page.
 
-Embedding uses `group: { id: groupId }` and the existing `api.getClientSecret` callback. The host authenticates its human user and calls `POST /api/ai/groups/:groupId/sessions` to obtain a ChatKit client secret scoped to that conversation. The iframe uses the shared ChatKit credential transport and refresh handling; there is no separate group credential header. Private Assistant credentials do not grant access to a group. Host navigation changes `sessionKey` to reset conversation state and cancel stale requests while retaining the iframe and its loaded modules.
+Embedding uses `group: { id: groupId }` and the existing `api.getClientSecret` callback. The host uses its authenticated human session, with the selected tenant and organization context, to call `POST /api/ai/v1/chatkit/sessions`:
+
+```json
+{ "scope": { "kind": "conversation", "conversationId": "<group-conversation-uuid>" } }
+```
+
+The host maps the response's `client_secret` to `{ secret: client_secret, organizationId }` for `api.getClientSecret`; it renews credentials through the same host callback. The iframe uses the existing ChatKit credential transport and refresh handling. There is no group-specific session endpoint or `x-group-session` header. Private Assistant credentials do not grant access to a group, and conversation-scoped credentials cannot mint more credentials. `GroupsClient.createSession` was removed in SDK 0.9.1; hosts mint conversation-scoped credentials through the shared ChatKit session endpoint above. Host navigation changes `sessionKey` to reset conversation state and cancel stale requests while retaining the iframe and its loaded modules.
 
 Group bubbles distinguish the current human, other humans, and digital experts. Typing `@` opens a member picker; selecting a member records the stable participant ID and text range. An unbound mention is rejected instead of guessed from a display name. Explicit mentions route to those members; without a mention, the conversation's `xpertId` identifies the primary Assistant that receives the message. Messages addressed only to humans do not wake an Assistant. The backend reuses the existing message queue and steers an already running recipient; the UI does not offer a queue/interrupt mode selector.
 

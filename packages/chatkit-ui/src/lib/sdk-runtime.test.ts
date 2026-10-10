@@ -53,7 +53,7 @@ describe('SDK runtime routing used by ChatKit', () => {
       const base = apiUrl.replace(/\/+$/, '');
       expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
         `${base}/assistants/assistant%2Fid/workspace/files?path=pages`,
-        `${base}/conversations/conversation%2Fid/files?path=pages`,
+        `${base}/conversations/conversation%2Fid/workspace/files?path=pages`,
         `${base}/conversations/conversation%2Fid/artifacts/artifact%2Fid/versions/version%2Fid/content`,
       ]);
       for (const [, init] of fetchMock.mock.calls) {
