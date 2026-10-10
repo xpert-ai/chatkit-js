@@ -304,3 +304,38 @@ describe('credential readiness and request cancellation', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 });
+
+it('coalesces concurrent 401 refreshes across SDK calls and does not renew after 403', async () => {
+  let current = { secret: 'cs-x-old' };
+  let finish!: (value: { secret: string }) => void;
+  const refresh = vi.fn(
+    () =>
+      new Promise<{ secret: string }>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const fetchFn = vi.fn<typeof fetch>(
+    async (_input, init) =>
+      new Response(null, {
+        status:
+          new Headers(init?.headers).get('Authorization') === 'Bearer cs-x-old'
+            ? 401
+            : 200,
+      }),
+  );
+  const request = createFetchWithClientSecretRefresh({
+    fetchFn,
+    getCurrentClientSecret: () => current,
+    refreshClientSecret: refresh,
+  });
+  const first = request('https://example.test/groups/D');
+  const second = request('https://example.test/groups/D/messages');
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  current = { secret: 'cs-x-new' };
+  finish(current);
+  expect((await first).status).toBe(200);
+  expect((await second).status).toBe(200);
+  fetchFn.mockResolvedValueOnce(new Response(null, { status: 403 }));
+  expect((await request('https://example.test/groups/D')).status).toBe(403);
+  expect(refresh).toHaveBeenCalledTimes(1);
+});

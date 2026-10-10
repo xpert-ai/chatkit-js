@@ -1,3 +1,6 @@
+import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
+import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
+import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
 import { ResourceCardContext } from '../resource-cards/context';
 import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
 import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
@@ -11,9 +14,7 @@ import type {
 import * as React from 'react';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
-import { createMessageId } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
-import { parseNavigation } from './client-command-payload';
 import type { WorkbenchPreview } from './preview/types';
 import type { WorkbenchContextValue } from './context';
 import { createHtmlArtifactPreview } from './html-preview/html-artifact-preview';
@@ -39,11 +40,7 @@ import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
 import { useResourceCardNavigation } from './resource-cards/useResourceCardNavigation';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
-import {
-  isWorkbenchNewTab,
-  NEW_TAB_PREFIX,
-  useWorkbenchPages,
-} from './useWorkbenchPages';
+import { isWorkbenchNewTab, useWorkbenchPages } from './useWorkbenchPages';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
 import { useWorkbenchResize } from './useWorkbenchResize';
 import { useWorkbenchViews } from './useWorkbenchViews';
@@ -53,6 +50,7 @@ import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
+import { WORKBENCH_NARROW_BREAKPOINT } from './shell/layout/WorkbenchFrame';
 import { useWorkbenchSideChat } from './shell/side-chat/useWorkbenchSideChat';
 import { useWorkbenchShellTabs } from './shell/tabs/useWorkbenchShellTabs';
 export { useWorkbench, WorkbenchToggleButton } from './context';
@@ -64,23 +62,37 @@ const isNativeView = (key: string | null) =>
   key === SIDE_CHAT_VIEW_KEY ||
   key === EXTERNAL_ASSISTANTS_VIEW_KEY ||
   Boolean(key?.startsWith(NATIVE_PREFIX));
-const NARROW_BREAKPOINT = 960;
+const NARROW_BREAKPOINT = WORKBENCH_NARROW_BREAKPOINT;
 
-export function WorkbenchShell({
+export function WorkbenchShell(props: WorkbenchShellProps) {
+  const runtime = useWorkbenchRuntime();
+  return runtime ? (
+    <WorkbenchContent {...props} stream={runtime} />
+  ) : (
+    <PrivateWorkbenchShell {...props} />
+  );
+}
+function PrivateWorkbenchShell(props: WorkbenchShellProps) {
+  return <WorkbenchContent {...props} stream={useStreamContext()} />;
+}
+function WorkbenchContent({
   options,
   locale,
   children,
   onRequestContextChange,
   onNavigate,
   initialNavigation,
+  projectCreation,
   initializing = false,
-}: WorkbenchShellProps) {
+  stream,
+}: WorkbenchShellProps & { stream: WorkbenchRuntime }) {
   const { t } = useChatkitTranslation();
-  const stream = useStreamContext();
+  const groupRecord = useGroupExecutionRecord(stream.client, stream.group?.id);
   const parentMessenger = useParentMessenger();
   const remoteViewsEnabled = options?.workbench?.enabled === true;
   const sideChatEnabled =
-    options?.workbench?.sideChat?.enabled ?? remoteViewsEnabled;
+    !stream.group &&
+    (options?.workbench?.sideChat?.enabled ?? remoteViewsEnabled);
 
   const externalAssistantsEnabled =
     options?.workbench?.externalAssistants?.enabled !== false;
@@ -95,8 +107,11 @@ export function WorkbenchShell({
     [workbenchMessages],
   );
 
-  const hasExternalRuns = externalAssistantsEnabled && externalRuns.length > 0;
-  const enabled = remoteViewsEnabled || sideChatEnabled || hasExternalRuns;
+  const hasExternalRuns =
+    externalAssistantsEnabled &&
+    (externalRuns.length > 0 || !!groupRecord.target);
+  const enabled =
+    remoteViewsEnabled || sideChatEnabled || hasExternalRuns || !!stream.group;
   const externalScope = `${stream.assistantId}:${stream.threadId ?? stream.conversationId ?? ''}`;
   const [externalSession, setExternalSession] = React.useState<{
     scope: string;
@@ -106,7 +121,7 @@ export function WorkbenchShell({
   const externalViewOpen =
     externalAssistantsEnabled && externalSession?.scope === externalScope;
 
-  const authenticated = Boolean(stream.apiKey.trim());
+  const authenticated = stream.authenticated ?? Boolean(stream.apiKey?.trim());
   const viewHosts = stream.client.viewHosts;
   const runtimeScope = React.useMemo<XpertViewRuntimeScopeInput>(
     () => ({
@@ -123,6 +138,9 @@ export function WorkbenchShell({
     Record<string, XpertViewQuery>
   >({});
 
+  const [viewResetKeys, setViewResetKeys] = React.useState<
+    Record<string, number>
+  >({});
   const [reloadVersion, setReloadVersion] = React.useState(0);
   const [notification, setNotification] = React.useState<{
     level: 'success' | 'error';
@@ -249,7 +267,7 @@ export function WorkbenchShell({
       (containerWidth >= NARROW_BREAKPOINT &&
         (externalViewOpen ||
           Boolean(sideChat) ||
-          (viewsScope === viewScopeKey && views.length > 0))));
+          (viewsScope === viewScopeKey && (views.length > 0 || !expanded)))));
 
   const mainChatInWorkbench = open && expanded;
   const openPreview = React.useCallback(
@@ -261,20 +279,13 @@ export function WorkbenchShell({
     [storePreview, setOpen],
   );
 
-  const createNewTab = () => {
-    const key = `${NEW_TAB_PREFIX}${createMessageId()}`;
-    addNewTab(key);
-    setActiveViewKey(key);
-    setOpen(true);
-  };
-
   const selectTab = (key: string) => {
     if (views.some((view) => view.key === key)) selectView(key);
     else setActiveViewKey(key);
     visitPreview(key);
   };
 
-  const { tabKeys, adjacentTab, replaceNewTab, insertTabBefore } =
+  const { tabKeys, adjacentTab, replaceNewTab, insertTabBefore, createNewTab } =
     useWorkbenchShellTabs({
       native,
       externalViewOpen,
@@ -290,6 +301,9 @@ export function WorkbenchShell({
       loading,
       views,
       closeNewTab,
+      addNewTab,
+      setOpen,
+      fallbackReady: open && !initialLoading && !loading && !error,
     });
 
   React.useEffect(() => {
@@ -523,40 +537,23 @@ export function WorkbenchShell({
     openMessage,
   });
 
-  React.useEffect(() => {
-    if (!initialNavigation || loading || viewsScope !== viewScopeKey) return;
-    const navigation = parseNavigation(initialNavigation.payload);
-    if (
-      navigation.target === 'assistant.conversation' &&
-      !navigation.preserveView
-    ) {
-      setExpanded(false);
-      setOpen(false);
-    }
-    const viewKey = navigation.viewKey;
-    if (viewKey && views.some((view) => view.key === viewKey)) {
-      // A conversation scope change clears old queries. Restore the explicitly
-      // requested resource even when keeping its panel open.
-      if (!navigation.preserveView || Object.keys(navigation.query).length > 0)
-        setViewQueries((current) => ({
-          ...current,
-          [viewKey]: navigation.query,
-        }));
-      selectView(viewKey);
-      setOpen(true);
-    }
-  }, [
+  useWorkbenchEntryNavigation({
     initialNavigation,
-    loading,
-    viewsScope,
-    viewScopeKey,
+    projectCreation,
+    ready: !loading && viewsScope === viewScopeKey,
+    runtimeScopeReady: stream.runtimeScopeReady !== false,
+    runtimeScope,
     views,
+    setViewQueries,
+    setViewResetKeys,
     selectView,
-    setOpen,
     setExpanded,
-  ]);
+    setOpen,
+    setNotification,
+  });
 
   const available =
+    (Boolean(stream.group) && authenticated && stream.runtimeScopeReady) ||
     hasExternalRuns ||
     (enabled &&
       authenticated &&
@@ -648,6 +645,15 @@ export function WorkbenchShell({
       askInSideChat,
       externalAssistantsEnabled,
       openExternalAssistant,
+      openGroupAssistant: stream.group
+        ? (target) => {
+            groupRecord.select(target);
+            setExternalSession({ scope: externalScope, selectedId: null });
+            setActiveViewKey(EXTERNAL_ASSISTANTS_VIEW_KEY);
+            setExpanded(false);
+            setOpen(true);
+          }
+        : undefined,
       openHtmlArtifact: (resource, title) => {
         if (!enabled || !authenticated || !stream.conversationId) return false;
         const conversationId = stream.conversationId;
@@ -710,6 +716,8 @@ export function WorkbenchShell({
       },
     }),
     [
+      stream.group,
+      groupRecord.select,
       executeClientCommand,
       openPreview,
       parentMessenger.updateComposer,
@@ -816,6 +824,7 @@ export function WorkbenchShell({
       visible={open}
       previews={previews}
       viewQueries={viewQueries}
+      viewResetKeys={viewResetKeys}
       newTabs={newTabs}
       recent={recent}
       browserHistory={browserHistory}
@@ -869,6 +878,7 @@ export function WorkbenchShell({
       sideChatOpening={sideChatOpening}
       externalViewOpen={externalViewOpen}
       externalRuns={externalRuns}
+      groupRecord={stream.group ? groupRecord : undefined}
       workbenchMessages={workbenchMessages}
       selectedExternalId={
         externalViewOpen ? (externalSession?.selectedId ?? null) : null
@@ -877,6 +887,7 @@ export function WorkbenchShell({
         setExternalSession({ scope: externalScope, selectedId })
       }
       onCloseExternal={() => {
+        groupRecord.select(null);
         setExternalSession(null);
         const next = adjacentTab(EXTERNAL_ASSISTANTS_VIEW_KEY);
         setActiveViewKey(next);

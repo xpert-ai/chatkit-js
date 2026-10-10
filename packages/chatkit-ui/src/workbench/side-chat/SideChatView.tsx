@@ -4,7 +4,8 @@ import {
 } from '../../resource-cards/context';
 import * as React from 'react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import { StreamProvider, type useStreamContext } from '../../providers/Stream';
+import { StreamProvider } from '../../providers/Stream';
+import type { WorkbenchRuntime } from '../WorkbenchRuntime';
 import { Chat } from '../../components/chat';
 import { WorkbenchContext, disabledWorkbenchContext } from '../context';
 import type { SideChatSession } from './types';
@@ -16,7 +17,7 @@ export function SideChatView({
 }: {
   session: SideChatSession;
   options?: ChatKitOptions | null;
-  stream: ReturnType<typeof useStreamContext>;
+  stream: WorkbenchRuntime;
 }) {
   const sideChatOptions = React.useMemo<ChatKitOptions | null>(() => {
     if (!options) return null;
@@ -40,7 +41,7 @@ export function SideChatView({
     <ResourceCardContext.Provider value={unavailableResourceCardActions}>
       <WorkbenchContext.Provider value={disabledWorkbenchContext}>
         <StreamProvider
-          apiKey={stream.apiKey}
+          apiKey={stream.apiKey ?? ''}
           getClientSecret={stream.refreshClientSecret}
           organizationId={stream.organizationId}
           apiUrl={stream.apiUrl}

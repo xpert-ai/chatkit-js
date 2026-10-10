@@ -394,6 +394,7 @@
       "deleteThread": "删除线程失败"
     },
     "contextUsage": {
+      "model": "模型：{{model}}",
       "label": "上下文窗口",
       "full": "已使用 {{usedPercent}}%（剩余 {{remainingPercent}}%）",
       "tokensUsed": "已使用 {{used}} / {{max}} tokens",
@@ -536,7 +537,9 @@
       "loadMore": "加载更多",
       "retry": "重试",
       "loadMoreError": "更多项目加载失败，已加载的项目仍可使用。",
-      "filters": "筛选应用与类型"
+      "filters": "筛选应用与类型",
+      "creationFailed": "无法打开新建项目，请重试。",
+      "creationViewUnavailable": "当前助理中暂时无法打开项目创建视图。"
     },
     "connectors": {
       "search": "搜索连接器",
@@ -1145,5 +1148,79 @@
     "open": "打开对话",
     "tasksContinue": "已接受的任务会在通话结束后继续执行。",
     "commandFailed": "通话操作未完成，请重试。"
+  },
+  "group": {
+    "loadingMembers": "正在加载成员…",
+    "details": "群组详情",
+    "closeDetails": "关闭群组详情",
+    "noMatches": "没有匹配的成员",
+
+    "loading": "正在加载群聊…",
+    "connected": "已连接",
+    "reconnecting": "正在重连…",
+    "members": "成员（{{count}}）",
+    "membersTitle": "群成员",
+    "assistant": "数字专家",
+    "person": "用户",
+    "remove": "移除",
+    "memberKind": "成员类型",
+    "memberId": "成员 ID",
+    "invite": "邀请",
+    "messages": "群消息",
+    "loadMore": "加载更早消息",
+    "replyTo": "查看原消息",
+    "reply": "回复",
+    "stop": "停止",
+    "dismiss": "关闭",
+    "replying": "回复 @{{name}}",
+    "cancelReply": "取消回复",
+    "sendTo": "发送给",
+    "broadcast": "所有人（仅发言）",
+    "composer": "群消息",
+    "placeholder": "发送消息，@ 成员一起讨论…",
+    "send": "发送",
+    "delivery": {
+      "pending": "已接收",
+      "starting": "正在启动",
+      "steering": "正在引导",
+      "blocked": "等待处理",
+      "canceled": "已取消",
+      "failed": "失败"
+    },
+    "run": {
+      "busy": "正在回复",
+      "pausing": "正在暂停",
+      "paused": "已暂停",
+      "interrupted": "等待处理",
+      "idle": "空闲",
+      "error": "失败"
+    },
+    "hostRequired": "此工具需要已连接的宿主应用。",
+    "toolFailed": "工具未返回结果。",
+    "invalidInteraction": "交互请求无效。",
+    "waitingFor": "等待 {{name}} 处理",
+    "handle": "查看并处理",
+    "retryResult": "重新发送结果",
+    "searchMembers": "按姓名搜索",
+    "selectMember": "选择成员",
+    "mentions": "选择要提及的成员",
+    "kind": {
+      "user": "用户",
+      "assistant": "助手"
+    },
+    "pause": "暂停",
+    "resume": "继续",
+    "cancelDelivery": "取消投递",
+    "formerMember": "已离开的成员",
+    "emptyHint": "让同事与数字专家一起讨论。输入 @ 向成员提问，也可以向大家分享消息。",
+    "noMembers": "没有匹配的成员",
+    "composerHint": "@ 提及成员 · Enter 发送 · Shift + Enter 换行",
+    "primaryAssistant": "主助手",
+    "selectMention": "请从 @ 菜单选择成员后发送。",
+    "openRuntime": "查看 {{name}} 对话",
+    "runtimeHint": "点击群消息中的助手名称，查看对应的对话记录。",
+    "executionRecord": "助手处理记录",
+    "closeRuntime": "关闭处理记录",
+    "otherAssistant": "其他助手"
   }
 }

@@ -1,4 +1,10 @@
 import * as React from 'react';
+import type { ChatGroupRuntimeView } from '@xpert-ai/xpert-sdk';
+import { mapChatMessageToUiMessage } from '../../providers/stream/messages/metadata';
+import {
+  ChatkitAvatar,
+  normalizeChatkitAvatar,
+} from '../../components/ui/chatkit-avatar';
 import { ExternalAssistantCancelButton } from '../../components/thread/messages/external-assistant-cancel-button';
 import { useCancelExternalAssistant } from './useCancelExternalAssistant';
 import { useExternalAssistantRunSync } from './useExternalAssistantRunSync';
@@ -42,8 +48,10 @@ export function ExternalAssistantView({
   loadingMore,
   onLoadMore,
   active = true,
+  conversation,
 }: {
   active?: boolean;
+  conversation?: ChatGroupRuntimeView;
   runs: ExternalAssistantRun[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
@@ -95,13 +103,31 @@ export function ExternalAssistantView({
     observer.observe(content);
     return () => observer.disconnect();
   }, [selectedId, active]);
-  const title = run
-    ? getAgentRunTitle(run.info, t('message.agentRun.defaultTitle'))
-    : t('workbench.externalAssistants.title');
+  const title =
+    conversation?.title ??
+    (run
+      ? getAgentRunTitle(run.info, t('message.agentRun.defaultTitle'))
+      : t('workbench.externalAssistants.title'));
   const transcript = React.useMemo(
     () => (run ? toExternalAssistantMessages(run) : []),
     [run],
   );
+  const conversationMessages = React.useMemo(
+    () =>
+      conversation?.messages.map((message) =>
+        mapChatMessageToUiMessage({ ...message }),
+      ) ?? [],
+    [conversation],
+  );
+  React.useLayoutEffect(() => {
+    if (!conversation?.messageId) return;
+    scrollRef.current
+      ?.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(conversation.messageId)}"]`,
+      )
+      ?.scrollIntoView({ block: 'center' });
+    followRef.current = false;
+  }, [conversation?.executionId, conversation?.messageId]);
   return (
     <section
       className="flex h-full min-h-0 flex-col"
@@ -109,7 +135,7 @@ export function ExternalAssistantView({
     >
       <header className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          {selectedId && (
+          {selectedId && !conversation && (
             <button
               type="button"
               onClick={() => onSelect(null)}
@@ -119,7 +145,13 @@ export function ExternalAssistantView({
               <ArrowLeft className="h-4 w-4" />
             </button>
           )}
-          {run ? (
+          {conversation ? (
+            <ChatkitAvatar
+              label={title ?? ''}
+              avatar={normalizeChatkitAvatar(conversation.avatar)}
+              className="size-6"
+            />
+          ) : run ? (
             <ExternalAssistantAvatar info={run.info} />
           ) : (
             <Bot
@@ -146,7 +178,31 @@ export function ExternalAssistantView({
         }}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4"
       >
-        {run ? (
+        {conversation ? (
+          <div
+            ref={contentRef}
+            className="mx-auto max-w-3xl space-y-4"
+            data-group-runtime-conversation={conversation.conversationId}
+          >
+            <p className="text-xs text-muted-foreground">
+              {t('group.executionRecord')}
+            </p>
+            <MessageList
+              messages={conversationMessages}
+              assistantTitle={title ?? undefined}
+              messagePresentation={presentation}
+              isLoading={['running', 'pending'].includes(conversation.status)}
+              isThreadRunning={['running', 'pending'].includes(
+                conversation.status,
+              )}
+              organizationId={organizationId}
+              apiUrl={apiUrl}
+              mcpApps={mcpApps}
+              enableQuotes={false}
+              showActions={false}
+            />
+          </div>
+        ) : run ? (
           <div
             ref={contentRef}
             className="mx-auto max-w-3xl space-y-4"

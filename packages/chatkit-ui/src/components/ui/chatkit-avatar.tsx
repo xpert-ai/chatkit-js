@@ -1,9 +1,13 @@
 import * as React from 'react';
 
 import type { Assistant } from '@xpert-ai/xpert-sdk';
-import { parseAssistantAppearance, type AssistantAppearance } from '@xpert-ai/chatkit-types';
+import {
+  parseAssistantAppearance,
+  type AssistantAppearance,
+} from '@xpert-ai/chatkit-types';
 
 import { cn, getRoundedClass } from '../../lib/utils';
+import { useAvatarEmoji } from '../../lib/avatar-emoji';
 import { useTheme } from '../../providers/Theme';
 import { Avatar, AvatarFallback, AvatarImage } from './avatar';
 
@@ -28,7 +32,9 @@ export type ChatkitAvatarProps = React.ComponentProps<typeof Avatar> & {
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function getNonEmptyString(value: unknown): string | undefined {
@@ -37,29 +43,13 @@ function getNonEmptyString(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
-function unicodeFromUnified(unified?: string): string | undefined {
-  const normalized = getNonEmptyString(unified);
-  if (!normalized) return undefined;
-
-  try {
-    return normalized
-      .split('-')
-      .map((hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
-      .join('');
-  } catch {
-    return undefined;
-  }
-}
-
-function getEmojiCharacter(avatar?: ChatkitAvatarData | null): string | undefined {
-  return unicodeFromUnified(avatar?.emoji?.unified);
-}
-
 export function getAvatarFallback(label: string): string {
   return label.trim().charAt(0).toUpperCase() || 'A';
 }
 
-export function normalizeChatkitAvatar(rawAvatar: unknown): ChatkitAvatarData | null {
+export function normalizeChatkitAvatar(
+  rawAvatar: unknown,
+): ChatkitAvatarData | null {
   if (typeof rawAvatar === 'string') {
     const url = getNonEmptyString(rawAvatar);
     return url ? { url } : null;
@@ -84,10 +74,18 @@ export function normalizeChatkitAvatar(rawAvatar: unknown): ChatkitAvatarData | 
     };
   }
 
-  return avatar.appearance || avatar.url || avatar.background || avatar.emoji?.id || avatar.emoji?.unified ? avatar : null;
+  return avatar.appearance ||
+    avatar.url ||
+    avatar.background ||
+    avatar.emoji?.id ||
+    avatar.emoji?.unified
+    ? avatar
+    : null;
 }
 
-export function extractAssistantAvatar(assistant: Assistant): ChatkitAvatarData | null {
+export function extractAssistantAvatar(
+  assistant: Assistant,
+): ChatkitAvatarData | null {
   const assistantRecord = asRecord(assistant);
   const metadata = asRecord(assistant.metadata);
   const rawAvatar = assistantRecord?.avatar ?? metadata?.avatar;
@@ -113,11 +111,14 @@ export function ChatkitAvatar({
   ...props
 }: ChatkitAvatarProps) {
   const { theme } = useTheme();
-  const emojiCharacter = getEmojiCharacter(avatar);
+  const emojiCharacter = useAvatarEmoji(avatar?.emoji);
   const fallbackText = fallback || getAvatarFallback(label);
   const roundedClass = getRoundedClass(theme.radius);
   const emojiStyle = avatar?.useNotoColor
-    ? { fontFamily: '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif' }
+    ? {
+        fontFamily:
+          '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
+      }
     : undefined;
   return (
     <Avatar
@@ -129,7 +130,11 @@ export function ChatkitAvatar({
         <AvatarImage className={imageClassName} src={avatar.url} alt={label} />
       ) : null}
       <AvatarFallback
-        className={cn('rounded-[inherit] text-sm font-medium text-foreground', avatar?.background && 'bg-transparent', fallbackClassName)}
+        className={cn(
+          'rounded-[inherit] text-sm font-medium text-foreground',
+          avatar?.background && 'bg-transparent',
+          fallbackClassName,
+        )}
       >
         {emojiCharacter ? (
           <span className="text-[50cqi] leading-none" style={emojiStyle}>

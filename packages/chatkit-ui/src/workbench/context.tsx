@@ -19,6 +19,7 @@ import {
 } from '../components/ui/tooltip';
 
 export type WorkbenchContextValue = {
+  openGroupAssistant?: (target: { messageId: string; participantId: string }) => void;
   openProject?: (projectId: string, viewKey: string) => Promise<unknown>;
   openHtmlArtifact?: (
     resource: { artifactId: string; artifactVersionId: string },

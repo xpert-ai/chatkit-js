@@ -20,14 +20,18 @@ export function useHostCredentials({
   initialClientSecret,
   apiUrl,
   assistantId,
+  groupId,
+  sessionKey,
   isParentAvailable,
   sendCommand,
 }: Pick<ParentMessenger, 'isParentAvailable' | 'sendCommand'> & {
   initialClientSecret: string;
   apiUrl?: string;
   assistantId?: string;
+  groupId?: string;
+  sessionKey?: string;
 }) {
-  const binding = JSON.stringify([apiUrl, assistantId]);
+  const binding = JSON.stringify([apiUrl, assistantId, groupId, sessionKey]);
   const initialBinding = useRef(binding);
   const [, render] = useReducer((revision: number) => revision + 1, 0);
   const scope = useMemo<CredentialScope>(

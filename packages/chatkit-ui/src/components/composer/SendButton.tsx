@@ -43,6 +43,7 @@ export function SendButton({
     const Icon = showStop ? (stopIcon === 'pause' ? Pause : Square) : Play;
     return (
       <button
+        data-slot="composer-send-button"
         type="button"
         onClick={showStop ? onStop : onResume}
         disabled={showStop ? stopDisabled : resumeDisabled}
@@ -68,6 +69,7 @@ export function SendButton({
 
   const button = (
     <button
+      data-slot="composer-send-button"
       type="submit"
       disabled={disabled}
       className={cn(

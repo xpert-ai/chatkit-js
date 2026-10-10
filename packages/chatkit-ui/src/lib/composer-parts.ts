@@ -263,6 +263,7 @@ export function readComposerPartsFromElement(
     }
 
     if (node.tagName === 'BR') {
+      if (node.hasAttribute('data-composer-trailing-break')) return;
       appendText('\n');
       return;
     }
@@ -373,6 +374,7 @@ function getComposerEditingTextFromNode(node: Node): string {
     }
 
     if (current instanceof HTMLElement && current.tagName === 'BR') {
+      if (current.hasAttribute('data-composer-trailing-break')) return;
       value += '\n';
       return;
     }
@@ -430,6 +432,7 @@ function findDomPointForComposerOffset(
     }
 
     if (node.tagName === 'BR') {
+      if (node.hasAttribute('data-composer-trailing-break')) return null;
       const parent = node.parentNode ?? root;
       const index = Array.prototype.indexOf.call(parent.childNodes, node);
       if (remaining <= 0) {

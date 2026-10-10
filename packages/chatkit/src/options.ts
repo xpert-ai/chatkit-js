@@ -179,6 +179,7 @@ export type FontObject = {
 
 export type ColorScheme = 'light' | 'dark';
 
+/** Resolved CSS colors, including OKLCH and color-mix(). Resolve host var() references before crossing an iframe. */
 export type SurfaceColors = {
   background: string;
   foreground: string;
@@ -604,6 +605,9 @@ export type ChatKitMessagePresentationOptions = {
 };
 
 export type ChatKitOptions = {
+  /** Public multi-member conversation. Authenticate through a ChatKit session scoped to this conversation. */
+  group?: { id: string };
+
   /**
    * ChatKit iframe URL for web component integrations.
    */
@@ -702,6 +706,13 @@ export type ChatKitOptions = {
    * @default null
    */
   initialThread?: null | string;
+
+  /**
+   * Host navigation identity. Change this to start an isolated UI/credential
+   * session in the existing iframe (including navigation within one Assistant).
+   * Keep it stable for theme, locale and other presentation updates.
+   */
+  sessionKey?: string;
 
   /** Generic approval placement and host decision callbacks. */
   approvals?: ChatKitApprovalsOptions;

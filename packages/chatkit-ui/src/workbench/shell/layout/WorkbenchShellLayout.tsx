@@ -1,14 +1,5 @@
-import { Loader2 } from 'lucide-react';
 import type * as React from 'react';
-import { createPortal } from 'react-dom';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-} from '../../../components/ui/sheet';
 import type { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
-import { cn } from '../../../lib/utils';
 import { WorkbenchContext, type WorkbenchContextValue } from '../../context';
 import { NativeCloseDialog } from '../../native/NativeCloseDialog';
 import type { useNativeWorkbench } from '../../native/useNativeWorkbench';
@@ -17,7 +8,7 @@ import type { useInitialLoading } from '../../useInitialLoading';
 import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
 import type { useWorkbenchPanelHost } from '../../useWorkbenchPanelHost';
 import type { useWorkbenchResize } from '../../useWorkbenchResize';
-import { WorkbenchDivider } from '../../WorkbenchDivider';
+import { WorkbenchFrame } from './WorkbenchFrame';
 import type { SideChatSession } from '../../side-chat/types';
 import type { useWorkbenchSideChat } from '../side-chat/useWorkbenchSideChat';
 import type { useWorkbenchShellTabs } from '../tabs/useWorkbenchShellTabs';
@@ -104,115 +95,31 @@ export function WorkbenchShellLayout({
 }: WorkbenchShellLayoutProps) {
   return (
     <WorkbenchContext.Provider value={contextValue}>
-      <div
-        ref={rootRef}
-        className={cn(
-          'relative flex h-full min-h-0 w-full overflow-hidden bg-background',
-          !isNarrow && workbenchSide === 'left' && 'flex-row-reverse',
-        )}
-        data-workbench-side={workbenchSide}
-        data-chatkit-workbench-root=""
-        aria-busy={initialLoading}
+      <WorkbenchFrame
+        rootRef={rootRef}
+        isNarrow={isNarrow}
+        containerWidth={containerWidth}
+        workbenchSide={workbenchSide}
+        initialLoading={initialLoading}
+        notification={notification}
+        setNotification={setNotification}
+        open={open}
+        resizing={resizing}
+        mainChatInWorkbench={mainChatInWorkbench}
+        chatHost={chatHost}
+        chat={chat}
+        keepPanelMounted={Boolean(sideChat) || externalViewOpen}
+        expanded={expanded}
+        resolvedPanelWidth={resolvedPanelWidth}
+        startResize={startResize}
+        setPanelWidth={setPanelWidth}
+        setExpanded={setExpanded}
+        swapSides={swapSides}
+        panelHost={panelHost}
+        setOpen={setOpen}
+        closeWorkbench={closeWorkbench}
+        panel={panel}
       >
-        {initialLoading && (
-          <div
-            role="status"
-            className="absolute inset-0 z-50 flex items-center justify-center gap-2 bg-background text-sm text-muted-foreground"
-          >
-            <Loader2 size={16} className="animate-spin" />
-            {t('message.loading')}
-          </div>
-        )}
-        {notification && !open && (
-          <div
-            role="alert"
-            className="absolute inset-x-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border bg-background p-3 text-sm shadow-lg"
-          >
-            <span className="flex-1">{notification.message}</span>
-            <button
-              type="button"
-              aria-label={t('workbench.close')}
-              className="rounded px-2 hover:bg-muted"
-              onClick={() => setNotification(null)}
-            >
-              ×
-            </button>
-          </div>
-        )}
-        {resizing && (
-          <div
-            aria-hidden="true"
-            className="fixed inset-0 z-[100] cursor-col-resize select-none"
-          />
-        )}
-        <div
-          ref={mainChatInWorkbench ? undefined : chatHost.attach}
-          hidden={mainChatInWorkbench}
-          className={cn('flex min-w-0 flex-1', mainChatInWorkbench && 'hidden')}
-        >
-          {!chatHost.container && chat}
-        </div>
-
-        {(open || Boolean(sideChat) || externalViewOpen) && !isNarrow && (
-          <>
-            {open && !expanded && (
-              <WorkbenchDivider
-                containerWidth={containerWidth}
-                panelWidth={resolvedPanelWidth}
-                workbenchSide={workbenchSide}
-                resizing={resizing}
-                onResizeStart={startResize}
-                onPanelWidthChange={setPanelWidth}
-                onExpand={() => setExpanded(true)}
-                onSwap={swapSides}
-              />
-            )}
-            <aside
-              hidden={!open}
-              className={cn(
-                'h-full min-h-0 border-l-0 bg-background',
-                !open && 'hidden',
-                expanded ? 'min-w-0 flex-1' : 'shrink-0',
-              )}
-              style={expanded ? undefined : { width: resolvedPanelWidth }}
-              aria-label={t('workbench.title')}
-            >
-              <div ref={panelHost.attach} className="contents" />
-            </aside>
-          </>
-        )}
-
-        <Sheet
-          open={open && isNarrow}
-          onOpenChange={(nextOpen) => {
-            if (nextOpen) {
-              setOpen(true);
-            } else {
-              closeWorkbench();
-            }
-          }}
-        >
-          <SheetContent
-            side="right"
-            showCloseButton={false}
-            className={cn(
-              'flex h-full max-w-none flex-col gap-0 p-0',
-              expanded
-                ? 'inset-0 w-full max-w-none border-0 shadow-none sm:max-w-none'
-                : 'w-[min(92vw,720px)]',
-            )}
-          >
-            <SheetTitle className="sr-only">{t('workbench.title')}</SheetTitle>
-            <SheetDescription className="sr-only">
-              {t('workbench.description')}
-            </SheetDescription>
-            <div ref={panelHost.attach} className="contents" />
-          </SheetContent>
-        </Sheet>
-        {panelHost.container &&
-          (open || Boolean(sideChat) || externalViewOpen) &&
-          createPortal(panel, panelHost.container)}
-        {chatHost.container && createPortal(chat, chatHost.container)}
         <NativeCloseDialog
           open={Boolean(native.pending)}
           onCancel={() => native.setPending(null)}
@@ -243,7 +150,7 @@ export function WorkbenchShellLayout({
           onOpenChange={setSideChatCloseDialogOpen}
           onConfirm={confirmCloseSideChat}
         />
-      </div>
+      </WorkbenchFrame>
     </WorkbenchContext.Provider>
   );
 }

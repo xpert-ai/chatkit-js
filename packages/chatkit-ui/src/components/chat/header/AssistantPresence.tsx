@@ -18,6 +18,11 @@ import { AssistantCharacter } from './AssistantCharacter';
 
 export type AssistantPresenceProps = {
   avatar: ChatkitAvatarData | null;
+  /** Group conversations supply their member avatars in the existing presence layout. */
+  avatarContent?: React.ReactNode;
+  statusText?: string;
+  /** Inline detail panels move the avatar; a modal dialog leaves its trigger in place. */
+  hideWhenOpen?: boolean;
   name: string;
   state: ChatKitPetAnimationName;
   waitingForInput: boolean;
@@ -49,7 +54,9 @@ function PresenceCharacter({
       style={{ width: size, height: size }}
       transition={{ layout: { duration: 0.34, ease: PRESENCE_EASE } }}
     >
-      <AssistantCharacter {...presence} size={size} />
+      {presence.avatarContent ?? (
+        <AssistantCharacter {...presence} size={size} />
+      )}
     </motion.div>
   );
 }
@@ -58,7 +65,11 @@ function PresenceStatus({
   state,
   waitingForInput,
   activity,
-}: Pick<AssistantPresenceProps, 'state' | 'waitingForInput' | 'activity'>) {
+  statusText,
+}: Pick<
+  AssistantPresenceProps,
+  'state' | 'waitingForInput' | 'activity' | 'statusText'
+>) {
   const { t } = useChatkitTranslation();
   const key = waitingForInput
     ? 'approval'
@@ -78,8 +89,8 @@ function PresenceStatus({
       className="block max-w-56 truncate text-xs text-muted-foreground"
       title={activity}
     >
-      {t(`assistantPresence.${key}`)}
-      {activity && key === 'running' ? ` · ${activity}` : ''}
+      {statusText ?? t(`assistantPresence.${key}`)}
+      {!statusText && activity && key === 'running' ? ` · ${activity}` : ''}
     </span>
   );
 }
@@ -88,6 +99,7 @@ export function AssistantPresence(props: AssistantPresenceProps) {
   const { t } = useChatkitTranslation();
   const systemReducedMotion = useReducedMotion();
   const still = props.reducedMotion || systemReducedMotion;
+  const hideTrigger = props.open && props.hideWhenOpen !== false;
   return (
     <div
       data-slot="assistant-presence"
@@ -99,21 +111,21 @@ export function AssistantPresence(props: AssistantPresenceProps) {
         aria-label={t('assistantPresence.open', { name: props.name })}
         aria-haspopup="dialog"
         aria-expanded={props.open}
-        aria-hidden={props.open || undefined}
-        inert={props.open || undefined}
-        tabIndex={props.open ? -1 : undefined}
+        aria-hidden={hideTrigger || undefined}
+        inert={hideTrigger || undefined}
+        tabIndex={hideTrigger ? -1 : undefined}
         className="chatkit-presence-trigger pointer-events-auto grid justify-items-center rounded-2xl outline-offset-4"
         onClick={() => props.onOpenChange(true)}
       >
         {/* Reserve the header height while expanded; the conversation must not jump. */}
         <span className="block size-20">
-          {!props.open && <PresenceCharacter presence={props} />}
+          {!hideTrigger && <PresenceCharacter presence={props} />}
         </span>
         <motion.span
           initial={false}
           animate={{
-            '--presence-bubble-opacity': props.open ? 0 : 1,
-            y: props.open && !still ? -6 : 0,
+            '--presence-bubble-opacity': hideTrigger ? 0 : 1,
+            y: hideTrigger && !still ? -6 : 0,
           }}
           style={{ opacity: 'var(--presence-bubble-opacity, 1)' }}
           transition={{ duration: still ? 0 : 0.18, ease: PRESENCE_EASE }}
@@ -134,9 +146,15 @@ export function AssistantSummaryDialog({
   summary,
   computers,
   voice,
+  children,
+  title,
+  closeLabel,
 }: {
   presence: AssistantPresenceProps;
   summary: TaskSummaryProps;
+  children?: React.ReactNode;
+  title?: string;
+  closeLabel?: string;
   computers?: React.ReactNode;
   voice?: { panel: React.ReactNode; dial: React.ReactNode };
 }) {
@@ -216,7 +234,7 @@ export function AssistantSummaryDialog({
               }}
             >
               <Dialog.Title className="sr-only">
-                {t('assistantPresence.details')}
+                {title ?? t('assistantPresence.details')}
               </Dialog.Title>
               <div className="chatkit-presence-header flex shrink-0 items-start">
                 <PresenceCharacter presence={presence} size="4rem" />
@@ -237,7 +255,7 @@ export function AssistantSummaryDialog({
                 <button
                   type="button"
                   className="chatkit-presence-close flex shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
-                  aria-label={t('assistantPresence.close')}
+                  aria-label={closeLabel ?? t('assistantPresence.close')}
                   onClick={() => presence.onOpenChange(false)}
                 >
                   <X className="size-[1.125rem]" />
@@ -246,6 +264,7 @@ export function AssistantSummaryDialog({
               <div className="min-h-0 overflow-auto rounded-b-3xl">
                 {voice?.dial}
                 {computers}
+                {children}
                 <TaskSummaryContent {...summary} />
               </div>
             </PresenceDialogSurface>

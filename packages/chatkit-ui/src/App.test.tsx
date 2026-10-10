@@ -1,16 +1,37 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 
 import App from './App';
 import { Chat } from './components/chat';
-import { StreamProvider } from './providers/Stream';
+import { StreamProvider, useStreamContext } from './providers/Stream';
+import { WorkbenchShell } from './workbench/WorkbenchShell';
+import { useAssistantInfo } from './hooks/useAssistantInfo';
 
 vi.mock('@xpert-ai/a2ui-react', () => ({
   A2UIProvider: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+}));
+
+const projectMocks = vi.hoisted(() => {
+  const typeEntry = vi.fn();
+  const getAssistant = vi.fn();
+  return {
+    typeEntry,
+    getAssistant,
+    apiKey: '',
+    profileRenders: [] as Array<string | undefined>,
+    client: { projects: { typeEntry }, assistants: { get: getAssistant } },
+  };
+});
+
+vi.mock('./i18n/useChatkitTranslation', () => ({
+  useChatkitTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock('./workbench/context', () => ({
+  useWorkbench: () => ({ enabled: true }),
 }));
 
 const parentMessengerMocks = vi.hoisted(() => ({
@@ -24,6 +45,7 @@ vi.mock('./components/chat', () => ({
     ({
       onProjectChange,
       onProjectCreate,
+      onProjectTypeCreate,
       onConnectorsChange,
     }: {
       onProjectChange?: (
@@ -32,11 +54,30 @@ vi.mock('./components/chat', () => ({
         navigation?: { resumeLatestConversation: boolean },
       ) => void;
       onProjectCreate?: (name: string) => void;
+      onProjectTypeCreate?: (type: {
+        applicationKey: string;
+        projectTypeKey: string;
+      }) => void;
       onConnectorsChange?: (connectorBindingIds: string[]) => void;
     }) => {
       const [draft, setDraft] = React.useState('');
+      const stream = useStreamContext();
+      const assistant = useAssistantInfo(
+        projectMocks.apiKey ? stream.client : null,
+        stream.assistantId,
+      );
+      projectMocks.profileRenders.push(assistant?.name);
       return (
         <div data-testid="chat">
+          <button
+            data-testid="create-entity-project"
+            onClick={() =>
+              onProjectTypeCreate?.({
+                applicationKey: 'bid',
+                projectTypeKey: 'bid',
+              })
+            }
+          />
           <input
             data-testid="chat-draft"
             value={draft}
@@ -92,6 +133,13 @@ vi.mock('./components/chat', () => ({
 }));
 
 vi.mock('./providers/Stream', () => ({
+  useStreamContext: () => ({
+    client: projectMocks.client,
+    assistantId: 'xpert-1',
+    organizationId: 'org-1',
+    apiUrl: '/api/ai',
+    apiKey: projectMocks.apiKey,
+  }),
   StreamProvider: vi.fn(({ children }: { children: React.ReactNode }) => (
     <div data-testid="stream-provider">{children}</div>
   )),
@@ -104,8 +152,14 @@ vi.mock('./providers/Theme', () => ({
 }));
 
 vi.mock('./workbench/WorkbenchShell', () => ({
-  WorkbenchShell: ({ children }: { children: React.ReactNode }) => (
+  WorkbenchShell: vi.fn(({ children }: { children: React.ReactNode }) => (
     <div data-testid="workbench-shell">{children}</div>
+  )),
+}));
+
+vi.mock('./components/group/GroupConversationProvider', () => ({
+  GroupConversationProvider: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="group-provider">{children}</div>
   ),
 }));
 
@@ -138,7 +192,25 @@ const options = {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    projectMocks.apiKey = '';
+    projectMocks.getAssistant.mockReset().mockResolvedValue(null);
+    projectMocks.profileRenders.length = 0;
     parentMessengerMocks.isParentAvailable = true;
+  });
+
+  it('keeps group chat outside the private project creation runtime', () => {
+    render(
+      <App
+        clientSecret="secret"
+        options={{ ...options, group: { id: 'group-1' } }}
+      />,
+    );
+    expect(screen.getByTestId('group-provider')).toBeInTheDocument();
+    expect(screen.getByTestId('chat')).toBeInTheDocument();
+    expect(StreamProvider).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(Chat).mock.calls.at(-1)?.[0].onProjectTypeCreate,
+    ).toBeUndefined();
   });
 
   it('renders the chat shell while the parent client secret is initializing', () => {
@@ -521,6 +593,75 @@ describe('App', () => {
       }),
       undefined,
     );
+  });
+
+  it('consumes application project creation locally and opens a fresh Workbench scope', async () => {
+    projectMocks.apiKey = 'secret';
+    projectMocks.getAssistant.mockResolvedValue({ name: 'Bid Studio' });
+    const entry = {
+      kind: 'assistant',
+      xpertId: 'xpert-1',
+      slug: 'bid-studio',
+      viewKey: 'bid.studio',
+    };
+    projectMocks.typeEntry.mockResolvedValue(entry);
+    const scopedOptions = { ...options, initialThread: 'old-thread' };
+    const { rerender } = render(
+      <App clientSecret="secret" options={scopedOptions} />,
+    );
+    await waitFor(() =>
+      expect(projectMocks.profileRenders.at(-1)).toBe('Bid Studio'),
+    );
+    projectMocks.profileRenders.length = 0;
+    fireEvent.click(screen.getByTestId('create-entity-project'));
+    await waitFor(() =>
+      expect(StreamProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          projectId: undefined,
+          projectSelection: { mode: 'none' },
+          initialThread: null,
+          runtimeKey: 'project-create:1',
+        }),
+        undefined,
+      ),
+    );
+    expect(projectMocks.typeEntry).toHaveBeenCalledWith(
+      { applicationKey: 'bid', projectTypeKey: 'bid' },
+      expect.objectContaining({ xpertId: 'xpert-1' }),
+    );
+    expect(WorkbenchShell).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectCreation: { id: 1, entry } }),
+      undefined,
+    );
+    expect(parentMessengerMocks.sendEvent).not.toHaveBeenCalled();
+    // Host acknowledgements of the cleared thread must not discard pending view navigation.
+    rerender(
+      <App
+        clientSecret="secret"
+        options={{ ...scopedOptions, initialThread: null }}
+      />,
+    );
+    expect(WorkbenchShell).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectCreation: { id: 1, entry } }),
+      undefined,
+    );
+    fireEvent.click(screen.getByTestId('create-entity-project'));
+    await waitFor(() =>
+      expect(StreamProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ runtimeKey: 'project-create:2' }),
+        undefined,
+      ),
+    );
+    fireEvent.click(screen.getByTestId('select-project'));
+    expect(WorkbenchShell).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectCreation: undefined }),
+      undefined,
+    );
+    expect(projectMocks.profileRenders.length).toBeGreaterThan(0);
+    expect(
+      projectMocks.profileRenders.every((name) => name === 'Bid Studio'),
+    ).toBe(true);
+    expect(projectMocks.getAssistant).toHaveBeenCalledTimes(1);
   });
 
   it('does not expose Project creation when the host disables it', () => {

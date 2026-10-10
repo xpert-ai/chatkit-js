@@ -9,6 +9,7 @@ import {
   type MessageActor,
 } from '../../lib/message-presentation';
 import type { ReactNode } from 'react';
+import { ChatkitAvatar } from '../ui/chatkit-avatar';
 import type { ChatMessageInputCheckpoint, Message } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../../providers/Stream';
 import {
@@ -110,6 +111,18 @@ function formatMessageContent(
 }
 
 export type MessageListProps = {
+  /** Group presentation is supplied by the trusted public timeline, never inferred from roles. */
+  messageContext?: Record<
+    string,
+    {
+      actor: MessageActor;
+      actorAction?: { onClick: () => void; title?: string };
+      isSelf: boolean;
+      streaming?: boolean;
+      before?: ReactNode;
+      after?: ReactNode;
+    }
+  >;
   approval?: ReactNode;
   approvalToolCallId?: string;
   collapseProcess?: boolean;
@@ -156,6 +169,7 @@ export type MessageListProps = {
 
 /** Shared transcript presentation for main chat and read-only workbench views. */
 export function MessageList({
+  messageContext,
   approval,
   approvalToolCallId,
   collapseProcess: legacyCollapseProcess = false,
@@ -232,7 +246,7 @@ export function MessageList({
       <div
         data-slot="chatkit-message-list"
         data-message-presentation={mode}
-        className="space-y-4"
+        className={messageContext ? 'space-y-0' : 'space-y-4'}
       >
         {canLoadMoreMessages && (
           <div className="flex items-center gap-3 py-1">
@@ -276,7 +290,21 @@ export function MessageList({
             messageType === 'human' || messageType === 'user';
           const isAssistantMessage =
             messageType === 'assistant' || messageType === 'ai';
-          const isStreamingMessage = isLoading && index === messages.length - 1;
+          const context = message.id ? messageContext?.[message.id] : undefined;
+          const isSelf = context ? context.isSelf : isHumanMessage;
+          const previousId = messages[index - 1]?.id;
+          const nextId = messages[index + 1]?.id;
+          const continuesGroup =
+            !!context &&
+            !!previousId &&
+            messageContext?.[previousId]?.actor.id === context.actor.id;
+          const endsGroup =
+            !!context &&
+            (!nextId ||
+              messageContext?.[nextId]?.actor.id !== context.actor.id);
+
+          const isStreamingMessage =
+            context?.streaming ?? (isLoading && index === messages.length - 1);
           const streamingStatus = isAssistantMessage
             ? getAssistantStreamingStatus(
                 {
@@ -373,33 +401,99 @@ export function MessageList({
               }}
               data-message-navigation-id={messageNavigationId}
               data-actor-id={
-                isHumanMessage
+                context?.actor.id ??
+                (isHumanMessage
                   ? 'self'
                   : isAssistantMessage
                     ? assistantActor?.id
-                    : undefined
+                    : undefined)
               }
+              data-author={context?.actor.id}
+              data-message-group-start={context ? !continuesGroup : undefined}
+              data-message-group-end={context ? endsGroup : undefined}
+              style={
+                context
+                  ? { marginTop: index === 0 ? 0 : continuesGroup ? 6 : 20 }
+                  : undefined
+              }
+              id={context ? `group-message-${message.id}` : undefined}
               data-execution-id={
                 'executionId' in message ? message.executionId : undefined
               }
               className={cn(
-                'group group/message flex gap-3',
-                isHumanMessage
+                'group group/message',
+                context
+                  ? isSelf
+                    ? 'grid grid-cols-1 gap-x-3'
+                    : 'grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3'
+                  : 'flex gap-3',
+                isSelf
                   ? 'justify-end'
                   : embedded
                     ? 'justify-start'
                     : 'justify-start -ml-1',
               )}
             >
+              {context && !isSelf && (
+                <div
+                  data-slot="message-avatar-column"
+                  className={cn(
+                    'col-start-1 row-start-1 flex w-8 shrink-0 self-stretch items-end',
+                    isAssistantMessage && 'mb-1',
+                  )}
+                >
+                  {endsGroup && !context.streaming && (
+                    <ChatkitAvatar
+                      label={context.actor.name ?? ''}
+                      avatar={context.actor.avatar}
+                      className="size-8 shrink-0"
+                    />
+                  )}
+                </div>
+              )}
               <div
                 className={cn(
                   'flex flex-col',
+                  context &&
+                    (isSelf
+                      ? 'col-start-1 row-start-1 justify-self-end'
+                      : 'col-start-2 row-start-1'),
                   !bubbles && 'overflow-hidden',
-                  bubbles && isHumanMessage && 'max-w-[92%] sm:max-w-[80%]',
-                  !embedded && 'px-3',
+                  bubbles &&
+                    isHumanMessage &&
+                    'min-w-0 max-w-[92%] sm:max-w-[80%]',
+                  !embedded && !context && 'px-3',
                   (isAssistantMessage || isEditingMessage) && 'min-w-0 flex-1',
                 )}
               >
+                {context && !isSelf && !continuesGroup && (
+                  <div
+                    className={cn(
+                      'mb-1.5 flex items-center gap-2 text-xs text-muted-foreground',
+                      isSelf && 'justify-end',
+                    )}
+                  >
+                    {context.actorAction ? (
+                      <button
+                        type="button"
+                        data-slot="message-sender-name"
+                        className="truncate rounded-sm text-left font-medium hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        title={context.actorAction.title}
+                        onClick={context.actorAction.onClick}
+                      >
+                        {context.actor.name}
+                      </button>
+                    ) : (
+                      <span
+                        data-slot="message-sender-name"
+                        className="truncate font-medium"
+                      >
+                        {context.actor.name}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {context?.before}
                 {isEditingMessage && editing ? (
                   <MessageEditor
                     key={message.id}
@@ -422,8 +516,11 @@ export function MessageList({
                         : {})}
                       className={cn(
                         'max-w-full rounded-2xl',
+                        context && isHumanMessage && 'whitespace-pre-wrap',
                         isHumanMessage
-                          ? 'bg-primary text-primary-foreground px-4 py-2.5'
+                          ? isSelf
+                            ? 'bg-primary text-primary-foreground px-4 py-2.5'
+                            : 'bg-muted text-foreground px-4 py-2.5'
                           : message.type === 'system'
                             ? 'bg-muted text-muted-foreground text-xs px-4 py-2.5'
                             : 'py-1 text-chat-foreground', // AI messages: use chat-specific foreground color
@@ -471,6 +568,7 @@ export function MessageList({
                           )}
                           isStreaming={isStreamingMessage}
                           streamingStatus={streamingStatus}
+                          showStreamingIndicator={!context}
                           isThreadRunning={isThreadRunning}
                           isThreadPaused={isThreadPaused}
                           organizationId={organizationId}
@@ -589,7 +687,8 @@ export function MessageList({
                     {index === approvalIndex && approval && (
                       <MessageBubble mode={mode}>{approval}</MessageBubble>
                     )}
-                    {!showActions &&
+                    {!context &&
+                      !showActions &&
                       !isStreamingMessage &&
                       (isAssistantMessage || isHumanMessage) && (
                         <MessageTimestamp updatedAt={message.updatedAt} />
@@ -597,6 +696,11 @@ export function MessageList({
                   </>
                 )}
               </div>
+              {context?.after && !isEditingMessage && (
+                <div data-slot="message-footer" className="col-span-full">
+                  {context.after}
+                </div>
+              )}
             </div>
           );
         })}

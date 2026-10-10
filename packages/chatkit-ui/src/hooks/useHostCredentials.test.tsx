@@ -150,3 +150,26 @@ it('preserves resolved Assistant identity and organization for legacy string ref
   expect(result.current.resolvedXpertId).toBe('resolved-assistant');
   expect(result.current.organizationId).toBe('org');
 });
+
+it('does not carry a group session into another group in the same frame', async () => {
+  const sendCommand = vi
+    .fn()
+    .mockResolvedValueOnce('cs-x-one')
+    .mockResolvedValueOnce('cs-x-two');
+  const { result, rerender } = renderHook(
+    ({ groupId }) =>
+      useHostCredentials({
+        initialClientSecret: '',
+        apiUrl: '/api',
+        groupId,
+        isParentAvailable: true,
+        sendCommand,
+      }),
+    { initialProps: { groupId: 'one' } },
+  );
+  await waitFor(() => expect(result.current.clientSecret).toBe('cs-x-one'));
+  rerender({ groupId: 'two' });
+  expect(result.current.clientSecret).toBe('');
+  await waitFor(() => expect(result.current.clientSecret).toBe('cs-x-two'));
+  expect(sendCommand).toHaveBeenLastCalledWith('onGetClientSecret', null);
+});

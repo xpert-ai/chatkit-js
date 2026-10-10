@@ -65,4 +65,42 @@ describe('ThemeProvider', () => {
     expect(themedRoot).not.toHaveStyle('--radius: 9999px');
     expect(themedRoot?.style.getPropertyValue('--radius')).toBe('');
   });
+  it.each([
+    ['dark', 'oklch(0.141 0 0)', 'oklch(0.985 0 0)'],
+    ['light', 'rgb(255 255 255)', 'color-mix(in oklab, black 90%, white)'],
+    ['light', '#ffffff', '#222222'],
+  ] as const)(
+    'preserves existing surface colors for %s mode and portaled UI',
+    (colorScheme, background, foreground) => {
+      const { rerender, unmount } = render(
+        <ThemeProvider
+          theme={{
+            colorScheme,
+            color: { surface: { background, foreground } },
+          }}
+        >
+          <div data-testid="surface-colors" />
+        </ThemeProvider>,
+      );
+      const container = screen.getByTestId('surface-colors').parentElement!;
+      for (const element of [container, document.documentElement]) {
+        expect(element.style.getPropertyValue('--background')).toBe(background);
+        expect(element.style.getPropertyValue('--foreground')).toBe(foreground);
+        expect(element.style.getPropertyValue('--chat-foreground')).toBe(
+          foreground,
+        );
+      }
+      rerender(
+        <ThemeProvider theme={{ colorScheme: 'light' }}>
+          <div data-testid="surface-colors" />
+        </ThemeProvider>,
+      );
+      for (const element of [container, document.documentElement]) {
+        expect(element.style.getPropertyValue('--background')).toBe('');
+        expect(element.style.getPropertyValue('--foreground')).toBe('');
+        expect(element.style.getPropertyValue('--chat-foreground')).toBe('');
+      }
+      unmount();
+    },
+  );
 });

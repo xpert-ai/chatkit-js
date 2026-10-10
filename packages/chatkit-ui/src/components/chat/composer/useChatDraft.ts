@@ -22,15 +22,17 @@ import {
 } from '../runtime-capabilities';
 import type { ThreadMentionState } from './draft-utils';
 
-type ChatDraftOptions = Pick<
-  ReturnType<typeof useRuntimeCapabilitiesState>,
-  'setRunRuntimeCapabilities' | 'setRuntimeCapabilityPalette'
+type ChatDraftOptions = Partial<
+  Pick<
+    ReturnType<typeof useRuntimeCapabilitiesState>,
+    'setRunRuntimeCapabilities' | 'setRuntimeCapabilityPalette'
+  >
 >;
 
 export function useChatDraft({
   setRunRuntimeCapabilities,
   setRuntimeCapabilityPalette,
-}: ChatDraftOptions) {
+}: ChatDraftOptions = {}) {
   const [composerParts, setComposerParts] = React.useState<ComposerPart[]>([]);
   const [renderedComposerParts, setRenderedComposerParts] = React.useState<
     ComposerPart[]
@@ -88,7 +90,7 @@ export function useChatDraft({
           removedCapabilities.forEach((part) =>
             onComposerCapabilityRemovedRef.current(part.capability),
           );
-          setRunRuntimeCapabilities((selection) =>
+          setRunRuntimeCapabilities?.((selection) =>
             removeComposerCapabilityPartsFromSelection(
               selection,
               removedCapabilities,
@@ -126,6 +128,7 @@ export function useChatDraft({
       if (!input) {
         return;
       }
+      pendingComposerCaretOffsetRef.current = null;
       setComposerSelectionOffset(input, nextPosition);
     });
   }, []);
@@ -164,7 +167,7 @@ export function useChatDraft({
         },
       );
       setThreadMention(null);
-      setRuntimeCapabilityPalette(null);
+      setRuntimeCapabilityPalette?.(null);
       focusComposerAt(mention.start + 2);
     },
     [

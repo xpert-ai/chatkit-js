@@ -643,7 +643,7 @@ describe('WorkbenchShell', () => {
     expect(screen.getByRole('separator')).toBeInTheDocument();
   });
 
-  it('opens an empty state when no compatible views are available', async () => {
+  it('opens a new tab when no compatible views are available', async () => {
     mocks.listSlotViews.mockResolvedValue([]);
     render(
       <WorkbenchShell
@@ -663,9 +663,14 @@ describe('WorkbenchShell', () => {
     );
 
     fireEvent.click(screen.getByLabelText('Open views'));
-    expect(
-      await screen.findByText('No compatible views are available.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'New tab' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByText('No compatible views are available.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
+    fireEvent.click(screen.getByLabelText('Open views'));
+    expect(screen.getAllByRole('tab', { name: 'New tab' })).toHaveLength(1);
   });
 
   it('maximizes the narrow drawer across the frame, hides chat and restores both without remounting', async () => {
