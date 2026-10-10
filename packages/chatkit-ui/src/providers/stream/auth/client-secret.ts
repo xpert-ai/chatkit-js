@@ -36,6 +36,18 @@ export function createFetchWithClientSecretRefresh({
   onRefreshError,
   getScopeSignal,
 }: CreateFetchWithClientSecretRefreshOptions): typeof fetch {
+  let refreshing: Promise<ResolvedClientSecret> | undefined;
+  const refresh = () => {
+    if (!refreshing) {
+      const request = Promise.resolve()
+        .then(refreshClientSecret)
+        .finally(() => {
+          if (refreshing === request) refreshing = undefined;
+        });
+      refreshing = request;
+    }
+    return refreshing;
+  };
   return async (input, init) => {
     const signal = combineRequestSignals([
       init?.signal ?? (input instanceof Request ? input.signal : undefined),
@@ -60,7 +72,7 @@ export function createFetchWithClientSecretRefresh({
     throwIfAborted(signal);
     let sentCredential = getCurrentClientSecret();
     if (!sentCredential.secret.trim()) {
-      sentCredential = await waitForCredentials(refreshClientSecret(), signal);
+      sentCredential = await waitForCredentials(refresh(), signal);
     }
     const response = await requestWithSecret(sentCredential);
     if (response.status !== 401) return response;
@@ -73,10 +85,7 @@ export function createFetchWithClientSecretRefresh({
       nextCredential.secret === sentCredential.secret
     ) {
       try {
-        nextCredential = await waitForCredentials(
-          refreshClientSecret(),
-          signal,
-        );
+        nextCredential = await waitForCredentials(refresh(), signal);
       } catch (refreshError) {
         throwIfAborted(signal);
         if (refreshError instanceof Error && refreshError.name === 'AbortError')

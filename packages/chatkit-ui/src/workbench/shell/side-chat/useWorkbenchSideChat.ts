@@ -1,7 +1,7 @@
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import type { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
-import type { useStreamContext } from '../../../providers/Stream';
+import type { WorkbenchRuntime } from '../../WorkbenchRuntime';
 import { persistSideChatCloseConfirmationDisabled } from '../../side-chat/SideChatCloseDialog';
 import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
 import {
@@ -15,7 +15,7 @@ type WorkbenchSideChatOptions = Pick<
   'adjacentTab'
 > & {
   sideChatEnabled: boolean;
-  stream: ReturnType<typeof useStreamContext>;
+  stream: WorkbenchRuntime;
   t: ReturnType<typeof useChatkitTranslation>['t'];
   setActiveViewKey: React.Dispatch<React.SetStateAction<string | null>>;
   setOpen: ReturnType<typeof useWorkbenchLayout>['setOpen'];

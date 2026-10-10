@@ -1,6 +1,6 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Assistant, Client } from '@xpert-ai/xpert-sdk';
 import { useAssistantInfo } from './useAssistantInfo';
 import { readAssistantMessagePresentation } from '../lib/assistant-message-presentation';
@@ -26,6 +26,40 @@ function profile(id: string, mode?: string): Assistant {
 }
 
 describe('Assistant presentation configuration', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('reuses the profile across focus, visibility changes and idle time', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const visibility = vi
+      .spyOn(document, 'visibilityState', 'get')
+      .mockReturnValue('visible');
+    const get = vi.fn().mockResolvedValue(profile('a', 'bubbles'));
+    const client = { assistants: { get } } as unknown as Pick<
+      Client,
+      'assistants'
+    >;
+    const { result } = renderHook(() => useAssistantInfo(client, 'a'));
+    await act(async () => {});
+    expect(result.current?.assistant_id).toBe('a');
+    const loadedProfile = result.current;
+
+    for (let cycle = 0; cycle < 3; cycle++) {
+      await act(async () => window.dispatchEvent(new Event('focus')));
+      visibility.mockReturnValue('hidden');
+      await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+      visibility.mockReturnValue('visible');
+      await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+    }
+    await act(async () => vi.advanceTimersByTime(180000));
+
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(result.current).toBe(loadedProfile);
+  });
+
   it('revalidates published settings on a host update without clearing the current profile', async () => {
     let refresh: () => void = () => {};
     const context: NonNullable<

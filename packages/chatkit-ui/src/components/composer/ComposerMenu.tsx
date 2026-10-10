@@ -728,6 +728,7 @@ export function ComposerMenu({
                   <DropdownMenuItem
                     role="switch"
                     aria-checked={planModeEnabled}
+                    disabled={!onPlanModeChange}
                     onSelect={(event) => {
                       event.preventDefault();
                       onPlanModeChange?.(!planModeEnabled);

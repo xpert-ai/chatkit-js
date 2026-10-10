@@ -15,6 +15,26 @@ import {
 } from '../../lib/composer-parts';
 import type { RuntimeCapabilitiesWithCommands } from '../../lib/slash-commands';
 
+export function getVisibleComposerCapabilities(
+  selection: RuntimeCapabilitiesSelection | null,
+  options: RuntimeCapabilityOption[],
+  parts: ComposerPart[] = [],
+) {
+  const tokenKeys = getComposerCapabilitySelectionKeys(parts);
+  const recommended = getRecommendedRuntimeCapabilitiesSelection(selection);
+  return options.filter(
+    (option) =>
+      selection &&
+      isRuntimeCapabilitySelected(selection, option.type, option.id) &&
+      // Default availability is not an explicit invocation in the draft.
+      (option.type !== 'skill' ||
+        option.capability.default !== true ||
+        (recommended &&
+          isRuntimeCapabilitySelected(recommended, option.type, option.id))) &&
+      !tokenKeys.has(getRuntimeCapabilityOptionKey(option)),
+  );
+}
+
 export function useComposerCapabilitySelection({
   capabilities,
   session,
@@ -63,9 +83,6 @@ export function useComposerCapabilitySelection({
       selection &&
       isRuntimeCapabilitySelected(selection, option.type, option.id),
   );
-  const tokenKeys = getComposerCapabilitySelectionKeys(parts);
-  const recommended = getRecommendedRuntimeCapabilitiesSelection(selection);
-
   const removeFromSessionAndPrompt = React.useCallback(
     (option: RuntimeCapabilityOption) => {
       if (
@@ -98,19 +115,8 @@ export function useComposerCapabilitySelection({
 
   return {
     selection,
-    inline: selectedOptions.filter(
-      (option) =>
-        option.type !== 'subAgent' &&
-        // Default availability is not an explicit invocation in the draft.
-        (option.type !== 'skill' ||
-          option.capability.default !== true ||
-          (recommended &&
-            isRuntimeCapabilitySelected(
-              recommended,
-              option.type,
-              option.id,
-            ))) &&
-        !tokenKeys.has(getRuntimeCapabilityOptionKey(option)),
+    inline: getVisibleComposerCapabilities(selection, options, parts).filter(
+      (option) => option.type !== 'subAgent',
     ),
     subAgents: selectedOptions.filter((option) => option.type === 'subAgent'),
     remove,

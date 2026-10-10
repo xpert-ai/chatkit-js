@@ -22,6 +22,20 @@ const thread: ComposerThreadPart = {
 };
 
 describe('thread composer tokens', () => {
+  it('does not submit the trailing editable-line placeholder as an extra newline', () => {
+    const editor = document.createElement('div');
+    editor.append(document.createTextNode('First line\n'));
+    const placeholder = document.createElement('br');
+    placeholder.setAttribute('data-composer-trailing-break', '');
+    editor.append(placeholder);
+    expect(
+      getComposerPlainText(readComposerPartsFromElement(editor, new Map())),
+    ).toBe('First line\n');
+    placeholder.removeAttribute('data-composer-trailing-break');
+    expect(
+      getComposerPlainText(readComposerPartsFromElement(editor, new Map())),
+    ).toBe('First line\n\n');
+  });
   it('uses atomic caret positions without serializing titles into the submitted text', () => {
     const parts = [
       { type: 'text' as const, text: 'Use ' },

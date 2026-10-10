@@ -10,7 +10,7 @@ import type { useChatkitTranslation } from '../../../i18n/useChatkitTranslation'
 import { buildHumanMessageInputPayload } from '../../../lib/references';
 import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import { createMessageId } from '../../../lib/utils';
-import type { useStreamContext } from '../../../providers/Stream';
+import type { WorkbenchRuntime } from '../../WorkbenchRuntime';
 import type { WorkbenchPreview } from '../../preview/types';
 import {
   executeWorkbenchCommand,
@@ -36,7 +36,7 @@ type WorkbenchClientCommandsOptions = {
   contextsRef: React.RefObject<Map<string, WorkbenchAssistantContext>>;
   t: ReturnType<typeof useChatkitTranslation>['t'];
   options: WorkbenchShellProps['options'];
-  stream: ReturnType<typeof useStreamContext>;
+  stream: WorkbenchRuntime;
   setNotification: React.Dispatch<
     React.SetStateAction<{ level: 'success' | 'error'; message: string } | null>
   >;
@@ -112,6 +112,7 @@ export function useWorkbenchClientCommands({
       const context = currentContext.current;
       const userActivated = navigator.userActivation?.isActive === true;
       if (commandKey === ASSISTANT_CONTEXT_SET_COMMAND) {
+        if (stream.group) return unsupportedCommand(commandKey);
         const parsed = parseContextSetPayload(payload);
         if (!parsed.key) {
           throw new Error(t('workbench.errors.contextKeyRequired'));
@@ -134,6 +135,12 @@ export function useWorkbenchClientCommands({
 
       if (commandKey === ASSISTANT_CHAT_SEND_MESSAGE_COMMAND) {
         const message = parseChatMessagePayload(payload);
+        if (stream.group) {
+          if ((await stream.group.sendMessage(message)) === false)
+            return unsupportedCommand(commandKey);
+          return { success: true, status: 'sent', threadId: stream.threadId };
+        }
+        if (!stream.submit) return unsupportedCommand(commandKey);
         const humanInput = buildHumanMessageInputPayload({
           content: message.text,
           references: message.references,
@@ -156,7 +163,7 @@ export function useWorkbenchClientCommands({
           humanInput: input,
         });
         const messageId = message.clientMessageId ?? createMessageId();
-        if (message.newThread) stream.reset(null);
+        if (message.newThread) stream.reset?.(null);
         const followUpMode =
           stream.isLoading && !message.newThread
             ? (message.followUpMode ?? 'queue')

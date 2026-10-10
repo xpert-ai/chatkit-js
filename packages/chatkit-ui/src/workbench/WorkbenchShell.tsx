@@ -1,3 +1,5 @@
+import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
+import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import { ResourceCardContext } from '../resource-cards/context';
 import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
 import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
@@ -53,6 +55,7 @@ import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
+import { WORKBENCH_NARROW_BREAKPOINT } from './shell/layout/WorkbenchFrame';
 import { useWorkbenchSideChat } from './shell/side-chat/useWorkbenchSideChat';
 import { useWorkbenchShellTabs } from './shell/tabs/useWorkbenchShellTabs';
 export { useWorkbench, WorkbenchToggleButton } from './context';
@@ -64,9 +67,20 @@ const isNativeView = (key: string | null) =>
   key === SIDE_CHAT_VIEW_KEY ||
   key === EXTERNAL_ASSISTANTS_VIEW_KEY ||
   Boolean(key?.startsWith(NATIVE_PREFIX));
-const NARROW_BREAKPOINT = 960;
+const NARROW_BREAKPOINT = WORKBENCH_NARROW_BREAKPOINT;
 
-export function WorkbenchShell({
+export function WorkbenchShell(props: WorkbenchShellProps) {
+  const runtime = useWorkbenchRuntime();
+  return runtime ? (
+    <WorkbenchContent {...props} stream={runtime} />
+  ) : (
+    <PrivateWorkbenchShell {...props} />
+  );
+}
+function PrivateWorkbenchShell(props: WorkbenchShellProps) {
+  return <WorkbenchContent {...props} stream={useStreamContext()} />;
+}
+function WorkbenchContent({
   options,
   locale,
   children,
@@ -74,13 +88,15 @@ export function WorkbenchShell({
   onNavigate,
   initialNavigation,
   initializing = false,
-}: WorkbenchShellProps) {
+  stream,
+}: WorkbenchShellProps & { stream: WorkbenchRuntime }) {
   const { t } = useChatkitTranslation();
-  const stream = useStreamContext();
+  const groupRecord = useGroupExecutionRecord(stream.client, stream.group?.id);
   const parentMessenger = useParentMessenger();
   const remoteViewsEnabled = options?.workbench?.enabled === true;
   const sideChatEnabled =
-    options?.workbench?.sideChat?.enabled ?? remoteViewsEnabled;
+    !stream.group &&
+    (options?.workbench?.sideChat?.enabled ?? remoteViewsEnabled);
 
   const externalAssistantsEnabled =
     options?.workbench?.externalAssistants?.enabled !== false;
@@ -95,8 +111,11 @@ export function WorkbenchShell({
     [workbenchMessages],
   );
 
-  const hasExternalRuns = externalAssistantsEnabled && externalRuns.length > 0;
-  const enabled = remoteViewsEnabled || sideChatEnabled || hasExternalRuns;
+  const hasExternalRuns =
+    externalAssistantsEnabled &&
+    (externalRuns.length > 0 || !!groupRecord.target);
+  const enabled =
+    remoteViewsEnabled || sideChatEnabled || hasExternalRuns || !!stream.group;
   const externalScope = `${stream.assistantId}:${stream.threadId ?? stream.conversationId ?? ''}`;
   const [externalSession, setExternalSession] = React.useState<{
     scope: string;
@@ -106,7 +125,7 @@ export function WorkbenchShell({
   const externalViewOpen =
     externalAssistantsEnabled && externalSession?.scope === externalScope;
 
-  const authenticated = Boolean(stream.apiKey.trim());
+  const authenticated = stream.authenticated ?? Boolean(stream.apiKey?.trim());
   const viewHosts = stream.client.viewHosts;
   const runtimeScope = React.useMemo<XpertViewRuntimeScopeInput>(
     () => ({
@@ -557,6 +576,7 @@ export function WorkbenchShell({
   ]);
 
   const available =
+    (Boolean(stream.group) && authenticated && stream.runtimeScopeReady) ||
     hasExternalRuns ||
     (enabled &&
       authenticated &&
@@ -648,6 +668,15 @@ export function WorkbenchShell({
       askInSideChat,
       externalAssistantsEnabled,
       openExternalAssistant,
+      openGroupAssistant: stream.group
+        ? (target) => {
+            groupRecord.select(target);
+            setExternalSession({ scope: externalScope, selectedId: null });
+            setActiveViewKey(EXTERNAL_ASSISTANTS_VIEW_KEY);
+            setExpanded(false);
+            setOpen(true);
+          }
+        : undefined,
       openHtmlArtifact: (resource, title) => {
         if (!enabled || !authenticated || !stream.conversationId) return false;
         const conversationId = stream.conversationId;
@@ -710,6 +739,8 @@ export function WorkbenchShell({
       },
     }),
     [
+      stream.group,
+      groupRecord.select,
       executeClientCommand,
       openPreview,
       parentMessenger.updateComposer,
@@ -869,6 +900,7 @@ export function WorkbenchShell({
       sideChatOpening={sideChatOpening}
       externalViewOpen={externalViewOpen}
       externalRuns={externalRuns}
+      groupRecord={stream.group ? groupRecord : undefined}
       workbenchMessages={workbenchMessages}
       selectedExternalId={
         externalViewOpen ? (externalSession?.selectedId ?? null) : null
@@ -877,6 +909,7 @@ export function WorkbenchShell({
         setExternalSession({ scope: externalScope, selectedId })
       }
       onCloseExternal={() => {
+        groupRecord.select(null);
         setExternalSession(null);
         const next = adjacentTab(EXTERNAL_ASSISTANTS_VIEW_KEY);
         setActiveViewKey(next);

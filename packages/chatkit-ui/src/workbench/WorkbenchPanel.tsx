@@ -1,3 +1,4 @@
+import type { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import {
   NativeWorkbenchContent,
   NativeWorkbenchTabs,
@@ -29,7 +30,7 @@ import type {
   XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import type { useStreamContext } from '../providers/Stream';
+import type { WorkbenchRuntime } from './WorkbenchRuntime';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { cn } from '../lib/utils';
 import { ExternalAssistantView } from './external-assistant/ExternalAssistantView';
@@ -40,27 +41,20 @@ import {
 } from './external-assistant/external-assistant-runs';
 import {
   Loader2,
-  Maximize2,
-  Minimize2,
   PanelRight,
   RotateCcw,
   MessageSquarePlus,
   MessageSquare,
   Bot,
   Globe,
-  Plus,
 } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '../components/ui/tooltip';
 import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import {
   RemoteViewFrame,
   type RemoteViewHostsClient,
 } from './remote-view/RemoteViewFrame';
 import { WorkbenchTabs } from './WorkbenchTabs';
+import { WorkbenchPanelHeader } from './WorkbenchPanelHeader';
 import { WorkbenchTab } from './WorkbenchTab';
 import { resolveManifestText } from './manifest-text';
 import { WorkbenchBrowserPreview } from './browser-preview/WorkbenchBrowserPreview';
@@ -104,12 +98,13 @@ type WorkbenchPanelProps = {
   sideChatOpening: boolean;
   externalViewOpen: boolean;
   externalRuns: ExternalAssistantRun[];
+  groupRecord?: ReturnType<typeof useGroupExecutionRecord>;
   workbenchMessages: ReturnType<typeof toWorkbenchMessages>;
   selectedExternalId: string | null;
   onSelectExternal: (id: string | null) => void;
   onCloseExternal: () => void;
   options?: ChatKitOptions | null;
-  stream: ReturnType<typeof useStreamContext>;
+  stream: WorkbenchRuntime;
   hostId: string;
   runtimeScope: XpertViewRuntimeScopeInput;
   contextReady?: boolean;
@@ -164,6 +159,7 @@ export function WorkbenchPanel({
   sideChatOpening,
   externalViewOpen,
   externalRuns,
+  groupRecord,
   workbenchMessages,
   selectedExternalId,
   onSelectExternal,
@@ -273,9 +269,11 @@ export function WorkbenchPanel({
       className="flex h-full min-h-0 flex-col bg-background"
       style={getSurfaceThemeStyle(theme)}
     >
-      <div
-        data-slot="chatkit-workbench-header"
-        className="flex min-h-14 shrink-0 items-center gap-2 px-2.5 py-2"
+      <WorkbenchPanelHeader
+        expanded={expanded}
+        onToggleExpanded={onToggleExpanded}
+        onClose={onClose}
+        onNewTab={onNewTab}
       >
         {mainChatHost ||
         (native?.tabs.length ?? 0) > 0 ||
@@ -401,64 +399,7 @@ export function WorkbenchPanel({
         ) : (
           <div className="min-w-0 flex-1" />
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onNewTab}
-              aria-label={t('workbench.newTab')}
-              className="flex size-8 shrink-0 items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Plus size={18} aria-hidden="true" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t('workbench.newTab')}</TooltipContent>
-        </Tooltip>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onToggleExpanded}
-                className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors',
-                  'hover:bg-muted hover:text-foreground',
-                  expanded && 'bg-muted text-foreground',
-                )}
-                aria-label={
-                  expanded
-                    ? t('workbench.restorePanel')
-                    : t('workbench.expandPanel')
-                }
-                aria-pressed={expanded}
-              >
-                {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {expanded
-                ? t('workbench.restorePanel')
-                : t('workbench.expandPanel')}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-muted/80"
-                aria-label={t('workbench.toggleSidebar')}
-                aria-pressed={true}
-              >
-                <PanelRight size={17} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {t('workbench.toggleSidebar')}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
+      </WorkbenchPanelHeader>
 
       {notification && (
         <div
@@ -575,25 +516,38 @@ export function WorkbenchPanel({
             hidden={activeViewKey !== EXTERNAL_ASSISTANTS_VIEW_KEY}
             className="h-full min-h-0"
           >
-            <ExternalAssistantView
-              client={stream.client}
-              threadId={stream.threadId}
-              onRunUpdate={stream.reconcileAgentRun}
-              runs={externalRuns}
-              selectedId={selectedExternalId}
-              onSelect={onSelectExternal}
-              active={visible && activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY}
-              messages={workbenchMessages}
-              organizationId={stream.organizationId}
-              apiUrl={stream.apiUrl}
-              mcpApps={options?.mcpApps}
-              messagePresentation={options?.messagePresentation}
-              hasMore={stream.historyMessagePagination?.hasMore}
-              loadingMore={stream.historyMessagePagination?.isLoadingMore}
-              onLoadMore={() => {
-                void stream.loadMoreConversationMessages();
-              }}
-            />
+            {groupRecord && !groupRecord.record ? (
+              <p
+                role={groupRecord.error ? 'alert' : 'status'}
+                className="p-4 text-sm text-muted-foreground"
+              >
+                {groupRecord.error ??
+                  t(groupRecord.target ? 'group.loading' : 'group.runtimeHint')}
+              </p>
+            ) : (
+              <ExternalAssistantView
+                conversation={groupRecord?.record}
+                client={groupRecord ? undefined : stream.client}
+                threadId={stream.threadId}
+                onRunUpdate={stream.reconcileAgentRun}
+                runs={externalRuns}
+                selectedId={selectedExternalId}
+                onSelect={onSelectExternal}
+                active={
+                  visible && activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY
+                }
+                messages={workbenchMessages}
+                organizationId={stream.organizationId}
+                apiUrl={stream.apiUrl}
+                mcpApps={options?.mcpApps}
+                messagePresentation={options?.messagePresentation}
+                hasMore={stream.historyMessagePagination?.hasMore}
+                loadingMore={stream.historyMessagePagination?.isLoadingMore}
+                onLoadMore={() => {
+                  void stream.loadMoreConversationMessages();
+                }}
+              />
+            )}
           </div>
         )}
         {previews.map((preview) => (

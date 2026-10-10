@@ -82,7 +82,7 @@ describe('Chat composer layout', () => {
     );
     expect(editorSurface).toBeInTheDocument();
     expect(editorSurface).toHaveClass(
-      'bg-background',
+      'bg-input-background',
       'min-h-[6.5rem]',
       'rounded-composer-editor',
     );

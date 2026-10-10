@@ -4,11 +4,10 @@ import { NuqsAdapter } from 'nuqs/adapters/react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { decodeBase64 } from '@xpert-ai/chatkit-web-shared';
 
-import App from './App';
+import { HostedApp } from './HostedApp';
 import './index.css';
 import { ParentMessengerProvider } from './providers/ParentMessenger';
 import { useParentMessenger } from './hooks/useParentMessenger';
-import { useHostCredentials } from './hooks/useHostCredentials';
 
 /**
  * Decode base64 options from URL hash
@@ -55,14 +54,13 @@ const AppContainer = () => {
     initialOptions,
   );
   const parent = useParentMessenger({ onSetOptions: setOptions });
-  const credentials = useHostCredentials({
-    initialClientSecret,
-    apiUrl: options?.api.apiUrl,
-    assistantId: options?.api.xpertId,
-    isParentAvailable: parent.isParentAvailable,
-    sendCommand: parent.sendCommand,
-  });
-  return <App options={options} {...credentials} />;
+  return (
+    <HostedApp
+      options={options}
+      parent={parent}
+      initialClientSecret={initialClientSecret}
+    />
+  );
 };
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

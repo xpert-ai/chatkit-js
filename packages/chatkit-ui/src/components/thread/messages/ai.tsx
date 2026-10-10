@@ -38,6 +38,8 @@ export type AssistantMessageProps = {
   className?: string;
   isStreaming?: boolean;
   streamingStatus?: AssistantStreamingStatus | null;
+  /** A parent transcript can render one shared activity row for the assistant. */
+  showStreamingIndicator?: boolean;
   isThreadRunning?: boolean;
   isThreadPaused?: boolean;
   organizationId?: string;
@@ -96,6 +98,7 @@ export function AssistantMessage({
   className,
   isStreaming = false,
   streamingStatus,
+  showStreamingIndicator = true,
   isThreadRunning,
   isThreadPaused,
   organizationId,
@@ -210,7 +213,7 @@ export function AssistantMessage({
           {t(`message.bubbles.${completion}`)}
         </MessageBubble>
       )}
-      {resolvedStreamingStatus ? (
+      {showStreamingIndicator && resolvedStreamingStatus ? (
         <MessageBubble
           mode={mode}
           kind="status"

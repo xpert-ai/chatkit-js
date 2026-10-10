@@ -10,6 +10,10 @@ export type ChatProps = {
   title?: string;
   placeholder?: string;
   clientSecret?: string;
+  refreshClientSecret?: () => Promise<{
+    secret: string;
+    organizationId?: string;
+  }>;
   options?: ChatKitOptions | null;
   isClientSecretInitializing?: boolean;
   surface?: 'main' | 'side';

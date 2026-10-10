@@ -59,6 +59,17 @@
 [data-message-presentation='bubbles'] [data-system-bubble] {
   border-radius: var(--chat-bubble-radius);
 }
+
+/* A sender's first bubble opens the group; subsequent bubbles have a tighter corner. */
+[data-message-presentation='bubbles'] [data-message-group-start='true']
+  :is([data-human-bubble], .chatkit-message-bubble) {
+  border-top-left-radius: calc(var(--chat-bubble-radius) * 1.5);
+}
+[data-message-presentation='bubbles'] [data-message-group-start='false']
+  :is([data-human-bubble], .chatkit-message-bubble) {
+  border-top-left-radius: calc(var(--chat-bubble-radius) * 0.5);
+}
+
 @container (max-width: 480px) {
   .chatkit-message-bubble[data-message-bubble='text'] {
     max-width: 92%;
