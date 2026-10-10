@@ -17,6 +17,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 type ContextUsageIndicatorProps = {
   label?: string;
   className?: string;
+  /** Selected model label, used until the runtime reports its effective model. */
+  modelName?: string | null;
 };
 
 const kNumberFormatter = new Intl.NumberFormat('en-US', {
@@ -66,6 +68,7 @@ function formatCountInK(value: number): string {
 export function ContextUsageIndicator({
   label,
   className,
+  modelName,
 }: ContextUsageIndicatorProps) {
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
@@ -243,6 +246,12 @@ export function ContextUsageIndicator({
   const formattedUsed = formatCountInK(used);
   const formattedMax = formatCountInK(max);
   const usageLabel = label ?? t('chat.contextUsage.label');
+  // Runtime fallback models take precedence over the configured selection.
+  const effectiveModelName =
+    realtimeUsage?.effectiveModel?.model?.trim() || modelName?.trim();
+  const modelLabel = effectiveModelName
+    ? t('chat.contextUsage.model', { model: effectiveModelName })
+    : null;
   const usageFullLabel = t('chat.contextUsage.full', {
     usedPercent: roundedPercent,
     remainingPercent,
@@ -276,7 +285,7 @@ export function ContextUsageIndicator({
             'inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background',
             className,
           )}
-          aria-label={`${usageLabelWithSuffix} ${hasMeasurement ? `${usageFullLabel}. ${usageTokensLabel}` : ''}${statusLabel ? ` ${statusLabel}` : ''}`}
+          aria-label={`${modelLabel ? `${modelLabel}. ` : ''}${usageLabelWithSuffix} ${hasMeasurement ? `${usageFullLabel}. ${usageTokensLabel}` : ''}${statusLabel ? ` ${statusLabel}` : ''}`}
         >
           {hasMeasurement ? (
             <ProgressCircle
@@ -296,6 +305,7 @@ export function ContextUsageIndicator({
         sideOffset={6}
         className="space-y-0.5 px-3 py-2 text-center"
       >
+        {modelLabel && <div className="font-medium">{modelLabel}</div>}
         <div className="text-primary-foreground/70">{usageLabelWithSuffix}</div>
         {hasMeasurement && (
           <>

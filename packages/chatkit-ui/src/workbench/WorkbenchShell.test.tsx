@@ -37,7 +37,7 @@ describe('WorkbenchShell', () => {
       expect(screen.getByLabelText('Open views')).toBeEnabled(),
     );
     fireEvent.click(screen.getByLabelText('Open views'));
-    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    await screen.findByRole('tab', { name: 'New tab' });
     fireEvent.click(screen.getByRole('button', { name: 'Side chat' }));
     await screen.findByTestId('side-chat');
     expect(mocks.copyThread).toHaveBeenCalledWith('thread-1');

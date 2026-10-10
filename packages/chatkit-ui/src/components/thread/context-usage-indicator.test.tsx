@@ -10,7 +10,8 @@ vi.mock('../../providers/Stream', () => ({
 
 vi.mock('../../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { model?: string }) =>
+      options?.model ? `Model: ${options.model}` : key,
   }),
 }));
 
@@ -66,7 +67,7 @@ describe('ContextUsageIndicator', () => {
     vi.clearAllMocks();
   });
 
-  it('uses the realtime model window and falls back for older events', async () => {
+  it('uses the realtime model name and window and falls back for older events', async () => {
     const event = {
       type: 'thread_context_usage',
       threadId: 'thread-1',
@@ -88,13 +89,16 @@ describe('ContextUsageIndicator', () => {
     mockUseStreamContext.mockReturnValue(
       stream as unknown as ReturnType<typeof useStreamContext>,
     );
-    const { rerender } = render(<ContextUsageIndicator />);
+    const { rerender } = render(<ContextUsageIndicator modelName="Primary" />);
     await waitFor(() =>
       expect(screen.getByTestId('progress-circle')).toHaveAttribute(
         'data-value',
         '50',
       ),
     );
+    expect(screen.getByText('Model: fallback')).toBeInTheDocument();
+    expect(screen.getByRole('button')).toHaveAccessibleName(/^Model: fallback/);
+    expect(screen.queryByText('Model: Primary')).not.toBeInTheDocument();
 
     mockUseStreamContext.mockReturnValue({
       ...stream,
@@ -102,13 +106,15 @@ describe('ContextUsageIndicator', () => {
         'agent-1': { ...event, effectiveModel: undefined },
       },
     } as unknown as ReturnType<typeof useStreamContext>);
-    rerender(<ContextUsageIndicator />);
+    rerender(<ContextUsageIndicator modelName="Primary" />);
     await waitFor(() =>
       expect(screen.getByTestId('progress-circle')).toHaveAttribute(
         'data-value',
         '100',
       ),
     );
+    expect(screen.getByText('Model: Primary')).toBeInTheDocument();
+    expect(screen.queryByText('Model: fallback')).not.toBeInTheDocument();
   });
 
   it('does not load assistant context size before the client secret is ready', () => {
@@ -129,11 +135,20 @@ describe('ContextUsageIndicator', () => {
       stream as unknown as ReturnType<typeof useStreamContext>,
     );
 
-    render(<ContextUsageIndicator />);
+    const { rerender } = render(<ContextUsageIndicator modelName="Primary" />);
 
     await waitFor(() => {
       expect(stream.client.assistants.get).toHaveBeenCalledWith('assistant-1');
+      expect(screen.getByText('Model: Primary')).toBeInTheDocument();
     });
+
+    rerender(<ContextUsageIndicator modelName="Fast" />);
+    expect(screen.getByText('Model: Fast')).toBeInTheDocument();
+    expect(screen.queryByText('Model: Primary')).not.toBeInTheDocument();
+    expect(stream.client.assistants.get).toHaveBeenCalledTimes(1);
+
+    rerender(<ContextUsageIndicator />);
+    expect(screen.queryByText(/^Model:/)).not.toBeInTheDocument();
   });
 
   it('does not refetch usage when an unrelated request rotates the client secret', async () => {

@@ -47,13 +47,7 @@ describe('Chat composer layout', () => {
       '[data-slot="composer-input-shell"]',
     );
     expect(composerShell).toHaveAttribute('data-layout', 'stacked');
-    expect(composerShell).toHaveClass(
-      'bg-composer-shell',
-      'px-composer-inset',
-      'pt-composer-inset',
-      'rounded-composer-shell',
-      'shadow-composer-shell',
-    );
+    expect(composerShell).toHaveClass('overflow-visible');
     expect(composerShell).not.toHaveClass('p-3', 'px-0.5', 'pt-0.5');
     expect(composerShell).not.toHaveClass(
       'border',
@@ -83,13 +77,13 @@ describe('Chat composer layout', () => {
     expect(editorSurface).toBeInTheDocument();
     expect(editorSurface).toHaveClass(
       'bg-input-background',
-      'min-h-[6.5rem]',
-      'rounded-composer-editor',
+      'shadow-composer-shell',
     );
     expect(editorSurface).not.toHaveClass('min-h-[10rem]');
     expect(editorSurface).not.toHaveClass('border', 'border-border');
     expect(editorSurface).not.toHaveClass('shadow-sm', 'shadow-md');
     const composerEditor = screen.getByRole('textbox');
+    expect(editorSurface).toContainElement(composerEditor);
     expect(document.querySelector('[data-slot="composer-body"]')).toHaveClass(
       'min-h-10',
       'max-h-32',
@@ -101,9 +95,18 @@ describe('Chat composer layout', () => {
     expect(projectRail).toBeInTheDocument();
     expect(projectRail).toHaveClass('h-10', 'items-center');
     expect(projectRail).not.toHaveClass('mt-1');
+    const contextSurface = document.querySelector(
+      '[data-slot="composer-context-surface"]',
+    );
+    expect(contextSurface?.parentElement).toBe(composerShell);
+    expect(editorSurface?.parentElement).toBe(composerShell);
+    expect(contextSurface).toContainElement(projectRail);
+    expect(editorSurface).not.toContainElement(projectRail);
 
     const contextUsage = screen.getByTestId('context-usage');
     const send = screen.getByRole('button', { name: 'send' });
+    expect(editorSurface).toContainElement(contextUsage);
+    expect(editorSurface).toContainElement(send);
     expect(
       contextUsage.compareDocumentPosition(send) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -130,18 +133,18 @@ describe('Chat composer layout', () => {
       document.querySelector('[data-slot="composer-file-selector"]'),
     ).toBeInTheDocument();
     expect(composerShell).not.toHaveClass('pb-composer-inset');
-    expect(composerShell).toHaveClass(
-      'px-composer-inset',
-      'pt-composer-inset',
-      'rounded-composer-shell',
-    );
+    expect(composerShell).toHaveClass('overflow-visible');
     expect(
       document.querySelector('[data-slot="composer-project-rail"]'),
     ).not.toBeInTheDocument();
 
-    expect(
-      document.querySelector('[data-slot="composer-editor-surface"]'),
-    ).toHaveClass('rounded-composer-editor');
+    const contextSurface = document.querySelector(
+      '[data-slot="composer-context-surface"]',
+    );
+    expect(contextSurface?.parentElement).toBe(composerShell);
+    expect(contextSurface).toContainElement(
+      document.querySelector('[data-slot="composer-file-selector"]'),
+    );
   });
 
   it.each([

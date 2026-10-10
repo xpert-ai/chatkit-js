@@ -1,7 +1,11 @@
 import * as React from 'react';
+import { createMessageId } from '../../../lib/utils';
 import { EXTERNAL_ASSISTANTS_VIEW_KEY } from '../../external-assistant/external-assistant-runs';
 import type { useNativeWorkbench } from '../../native/useNativeWorkbench';
-import type { useWorkbenchPages } from '../../useWorkbenchPages';
+import {
+  NEW_TAB_PREFIX,
+  type useWorkbenchPages,
+} from '../../useWorkbenchPages';
 import { useWorkbenchTabOrder } from '../../useWorkbenchTabOrder';
 import type { useWorkbenchViews } from '../../useWorkbenchViews';
 import type { useWorkbenchViewTabs } from '../../useWorkbenchViewTabs';
@@ -26,6 +30,9 @@ type WorkbenchShellTabsOptions = {
   loading: ReturnType<typeof useWorkbenchViews>['loading'];
   views: ReturnType<typeof useWorkbenchViews>['views'];
   closeNewTab: ReturnType<typeof useWorkbenchPages>['closeNewTab'];
+  addNewTab: ReturnType<typeof useWorkbenchPages>['addNewTab'];
+  setOpen: (open: boolean) => void;
+  fallbackReady: boolean;
 };
 
 export function useWorkbenchShellTabs({
@@ -43,6 +50,9 @@ export function useWorkbenchShellTabs({
   loading,
   views,
   closeNewTab,
+  addNewTab,
+  setOpen,
+  fallbackReady,
 }: WorkbenchShellTabsOptions) {
   const availableTabKeys = React.useMemo(
     () => [
@@ -75,6 +85,18 @@ export function useWorkbenchShellTabs({
       mainChatInWorkbench ? [MAIN_CHAT_VIEW_KEY, ...viewTabKeys] : viewTabKeys,
     [mainChatInWorkbench, viewTabKeys],
   );
+
+  const createNewTab = React.useCallback(() => {
+    const key = `${NEW_TAB_PREFIX}${createMessageId()}`;
+    addNewTab(key);
+    setActiveViewKey(key);
+    setOpen(true);
+  }, [addNewTab, setActiveViewKey, setOpen]);
+
+  // Wait for scope restoration and manifests before choosing the empty-panel fallback.
+  React.useEffect(() => {
+    if (fallbackReady && tabKeys.length === 0) createNewTab();
+  }, [fallbackReady, tabKeys.length, createNewTab]);
 
   const previousView = React.useRef<{ scope: string; key: string | null }>({
     scope: startPageScope,
@@ -125,5 +147,5 @@ export function useWorkbenchShellTabs({
     },
     [tabKeys],
   );
-  return { tabKeys, adjacentTab, replaceNewTab, insertTabBefore };
+  return { tabKeys, adjacentTab, replaceNewTab, insertTabBefore, createNewTab };
 }

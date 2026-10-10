@@ -254,7 +254,13 @@ export function getAssistantComposerProps({
     ),
     trailingActions: (
       <>
-        <ContextUsageIndicator className="size-8" />
+        <ContextUsageIndicator
+          className="size-8"
+          modelName={
+            availableModels.find((model) => model.id === stream.selectedModelId)
+              ?.label
+          }
+        />
 
         <ModelPicker
           models={availableModels}

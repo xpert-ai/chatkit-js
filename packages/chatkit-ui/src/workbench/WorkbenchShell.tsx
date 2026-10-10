@@ -13,7 +13,6 @@ import type {
 import * as React from 'react';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
-import { createMessageId } from '../lib/utils';
 import { useStreamContext } from '../providers/Stream';
 import { parseNavigation } from './client-command-payload';
 import type { WorkbenchPreview } from './preview/types';
@@ -43,7 +42,6 @@ import { useResourceCardNavigation } from './resource-cards/useResourceCardNavig
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import {
   isWorkbenchNewTab,
-  NEW_TAB_PREFIX,
   useWorkbenchPages,
 } from './useWorkbenchPages';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
@@ -268,7 +266,7 @@ function WorkbenchContent({
       (containerWidth >= NARROW_BREAKPOINT &&
         (externalViewOpen ||
           Boolean(sideChat) ||
-          (viewsScope === viewScopeKey && views.length > 0))));
+          (viewsScope === viewScopeKey && (views.length > 0 || !expanded)))));
 
   const mainChatInWorkbench = open && expanded;
   const openPreview = React.useCallback(
@@ -280,20 +278,13 @@ function WorkbenchContent({
     [storePreview, setOpen],
   );
 
-  const createNewTab = () => {
-    const key = `${NEW_TAB_PREFIX}${createMessageId()}`;
-    addNewTab(key);
-    setActiveViewKey(key);
-    setOpen(true);
-  };
-
   const selectTab = (key: string) => {
     if (views.some((view) => view.key === key)) selectView(key);
     else setActiveViewKey(key);
     visitPreview(key);
   };
 
-  const { tabKeys, adjacentTab, replaceNewTab, insertTabBefore } =
+  const { tabKeys, adjacentTab, replaceNewTab, insertTabBefore, createNewTab } =
     useWorkbenchShellTabs({
       native,
       externalViewOpen,
@@ -309,6 +300,9 @@ function WorkbenchContent({
       loading,
       views,
       closeNewTab,
+      addNewTab,
+      setOpen,
+      fallbackReady: open && !initialLoading && !loading && !error,
     });
 
   React.useEffect(() => {

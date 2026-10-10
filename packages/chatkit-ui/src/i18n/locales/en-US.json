@@ -394,6 +394,7 @@
       "deleteThread": "Failed to delete thread"
     },
     "contextUsage": {
+      "model": "Model: {{model}}",
       "label": "Context window",
       "full": "{{usedPercent}}% used ({{remainingPercent}}% left)",
       "tokensUsed": "{{used}} / {{max}} tokens used",

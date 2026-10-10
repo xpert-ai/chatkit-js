@@ -22,14 +22,13 @@ export function ComposerSurface({
       data-layout="stacked"
       style={style}
       className={cn(
-        'relative flex min-w-0 flex-1 flex-col overflow-visible bg-composer-shell px-composer-inset pt-composer-inset rounded-composer-shell shadow-composer-shell',
+        'relative isolate flex min-w-0 flex-1 flex-col overflow-visible',
         paddedBottom && 'pb-composer-inset',
-        'transition-[border-radius] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
       )}
     >
       <div
         data-slot="composer-editor-surface"
-        className="relative flex min-h-[6.5rem] min-w-0 flex-col rounded-composer-editor bg-input-background px-2 pt-2 pb-14"
+        className="relative z-10 flex min-w-0 flex-col bg-input-background shadow-composer-shell"
         onClick={(event) => {
           if (event.target === event.currentTarget) onFocusEditor?.();
         }}
@@ -37,7 +36,7 @@ export function ComposerSurface({
         {children}
         {actions}
       </div>
-      {footer}
+      {footer && <div data-slot="composer-context-surface">{footer}</div>}
     </div>
   );
 }
