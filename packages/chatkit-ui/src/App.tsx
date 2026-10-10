@@ -2,8 +2,14 @@ import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import { A2UIProvider } from '@xpert-ai/a2ui-react';
+import {
+  ProjectCreationChat,
+  type ProjectCreationEntry,
+} from './components/chat/ProjectCreationChat';
+import type { ProjectCreationNavigation } from './workbench/useProjectCreationEntry';
 import { Chat } from './components/chat';
 import { StreamProvider } from './providers/Stream';
+import { AssistantInfoProvider } from './providers/AssistantInfo';
 import { ThemeProvider } from './providers/Theme';
 import { getLanguage, setLanguage } from './i18n';
 import { useParentMessenger } from './hooks/useParentMessenger';
@@ -102,6 +108,23 @@ export function App({
   const lastConfiguredInitialThreadRef = React.useRef<string | null>(
     options?.initialThread ?? null,
   );
+  const [creationNavigation, setCreationNavigation] =
+    React.useState<ProjectCreationNavigation>();
+  const [creationRevision, setCreationRevision] = React.useState(0);
+  const creationSequence = React.useRef(0);
+  const runtimeKey =
+    navigation.revision ??
+    (creationRevision ? `project-create:${creationRevision}` : 'host');
+  React.useEffect(() => {
+    setCreationNavigation(undefined);
+  }, [projectBinding]);
+  React.useEffect(() => {
+    if (options?.initialThread) setCreationNavigation(undefined);
+  }, [options?.initialThread]);
+  React.useEffect(() => {
+    if (configuredSelection?.mode === 'existing')
+      setCreationNavigation(undefined);
+  }, [configuredSelectionKey]);
   const [workbenchRequestContext, setWorkbenchRequestContext] = React.useState<
     Record<string, unknown>
   >({});
@@ -154,6 +177,7 @@ export function App({
         (nextProjectId
           ? { mode: 'existing' as const, projectId: nextProjectId }
           : { mode: 'none' as const });
+      setCreationNavigation(undefined);
       setProjectSelection(nextSelection);
       setProjectConversationRequest(
         navigation?.resumeLatestConversation
@@ -168,6 +192,18 @@ export function App({
       ]);
     },
     [sendEvent, projectBinding],
+  );
+  const handleProjectEntry = React.useCallback(
+    (entry: ProjectCreationEntry) => {
+      const id = ++creationSequence.current;
+      setProjectSelection({ mode: 'none' });
+      setProjectConversationRequest(null);
+      setScopedInitialThread(null);
+      setWorkbenchRequestContext({});
+      setCreationRevision(id);
+      setCreationNavigation({ id, entry });
+    },
+    [],
   );
   const handleProjectCreate = React.useCallback(
     (name: string, projectType?: XpertProjectTypeRef) => {
@@ -198,10 +234,11 @@ export function App({
     [sendEvent],
   );
 
+  const ChatComponent = activeOptions?.group ? Chat : ProjectCreationChat;
   const chat = (
-    <Chat
+    <ChatComponent
       key={JSON.stringify([
-        navigation.revision ?? 'host',
+        runtimeKey,
         activeProjectId,
         projectSelection?.mode,
       ])}
@@ -220,21 +257,8 @@ export function App({
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
       onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
-      onProjectTypeCreate={
-        projectCreationEnabled
-          ? (projectType) =>
-              sendEvent('public_event', [
-                'effect',
-                {
-                  name: 'project.create-entry',
-                  data: {
-                    applicationKey: projectType.applicationKey,
-                    projectTypeKey: projectType.projectTypeKey,
-                  },
-                },
-              ])
-          : undefined
-      }
+      creationEnabled={projectCreationEnabled && !navigation.session}
+      onProjectEntry={handleProjectEntry}
       onConnectorsChange={handleConnectorsChange}
     />
   );
@@ -271,7 +295,7 @@ export function App({
             </GroupConversationProvider>
           ) : (
             <StreamProvider
-              runtimeKey={navigation.revision ?? 'host'}
+              runtimeKey={runtimeKey}
               threadStateMode={
                 isParentAvailable || navigation.session ? 'memory' : 'url'
               }
@@ -311,20 +335,25 @@ export function App({
                 workbenchEnabled ? workbenchRequestContext : undefined
               }
             >
-              {workbenchEnabled ? (
-                <WorkbenchShell
-                  options={activeOptions}
-                  locale={requestLocale}
-                  onRequestContextChange={handleWorkbenchRequestContextChange}
-                  onNavigate={navigation.navigate}
-                  initialNavigation={navigation.request}
-                  initializing={isClientSecretInitializing}
-                >
-                  {chat}
-                </WorkbenchShell>
-              ) : (
-                chat
-              )}
+              <AssistantInfoProvider>
+                {workbenchEnabled ? (
+                  <WorkbenchShell
+                    options={activeOptions}
+                    locale={requestLocale}
+                    onRequestContextChange={handleWorkbenchRequestContextChange}
+                    onNavigate={navigation.navigate}
+                    initialNavigation={navigation.request}
+                    projectCreation={
+                      navigation.session ? undefined : creationNavigation
+                    }
+                    initializing={isClientSecretInitializing}
+                  >
+                    {chat}
+                  </WorkbenchShell>
+                ) : (
+                  chat
+                )}
+              </AssistantInfoProvider>
             </StreamProvider>
           )}
         </A2UIProvider>

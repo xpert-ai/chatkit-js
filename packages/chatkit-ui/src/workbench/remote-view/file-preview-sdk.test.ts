@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 // Exercise the published SDK as well as the UI mocks: granted content must use
 // the authenticated grant route while retaining the trusted host's SDK transport.
 describe('installed SDK preview transport', () => {
-  it('reads content from the grant route while retaining the configured transport', async () => {
+  it('reads content through the runtime route without cookies while retaining the configured transport', async () => {
     const grantUrl =
       'https://platform.example/api/workspace-files/content/session/grant/proof.png';
     const bytes = new Uint8Array([137, 80, 78, 71, 0, 255]);
@@ -26,9 +26,9 @@ describe('installed SDK preview transport', () => {
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       'https://platform.example/api/ai/workspace-files/view-sessions/session/grants/grant/content/proof.png',
     );
-    expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe(
-      'Bearer cs-preview-test',
-    );
+    expect(
+      new Headers(fetch.mock.calls[0]?.[1]?.headers).get('Authorization'),
+    ).toBe('Bearer cs-preview-test');
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({
       credentials: 'omit',
       redirect: 'error',

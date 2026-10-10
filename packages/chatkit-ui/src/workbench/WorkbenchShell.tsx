@@ -1,5 +1,6 @@
 import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
 import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
+import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
 import { ResourceCardContext } from '../resource-cards/context';
 import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
 import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
@@ -14,7 +15,6 @@ import * as React from 'react';
 import { useParentMessenger } from '../hooks/useParentMessenger';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { useStreamContext } from '../providers/Stream';
-import { parseNavigation } from './client-command-payload';
 import type { WorkbenchPreview } from './preview/types';
 import type { WorkbenchContextValue } from './context';
 import { createHtmlArtifactPreview } from './html-preview/html-artifact-preview';
@@ -40,10 +40,7 @@ import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
 import { useResourceCardNavigation } from './resource-cards/useResourceCardNavigation';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
-import {
-  isWorkbenchNewTab,
-  useWorkbenchPages,
-} from './useWorkbenchPages';
+import { isWorkbenchNewTab, useWorkbenchPages } from './useWorkbenchPages';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
 import { useWorkbenchResize } from './useWorkbenchResize';
 import { useWorkbenchViews } from './useWorkbenchViews';
@@ -85,6 +82,7 @@ function WorkbenchContent({
   onRequestContextChange,
   onNavigate,
   initialNavigation,
+  projectCreation,
   initializing = false,
   stream,
 }: WorkbenchShellProps & { stream: WorkbenchRuntime }) {
@@ -140,6 +138,9 @@ function WorkbenchContent({
     Record<string, XpertViewQuery>
   >({});
 
+  const [viewResetKeys, setViewResetKeys] = React.useState<
+    Record<string, number>
+  >({});
   const [reloadVersion, setReloadVersion] = React.useState(0);
   const [notification, setNotification] = React.useState<{
     level: 'success' | 'error';
@@ -536,38 +537,20 @@ function WorkbenchContent({
     openMessage,
   });
 
-  React.useEffect(() => {
-    if (!initialNavigation || loading || viewsScope !== viewScopeKey) return;
-    const navigation = parseNavigation(initialNavigation.payload);
-    if (
-      navigation.target === 'assistant.conversation' &&
-      !navigation.preserveView
-    ) {
-      setExpanded(false);
-      setOpen(false);
-    }
-    const viewKey = navigation.viewKey;
-    if (viewKey && views.some((view) => view.key === viewKey)) {
-      // A conversation scope change clears old queries. Restore the explicitly
-      // requested resource even when keeping its panel open.
-      if (!navigation.preserveView || Object.keys(navigation.query).length > 0)
-        setViewQueries((current) => ({
-          ...current,
-          [viewKey]: navigation.query,
-        }));
-      selectView(viewKey);
-      setOpen(true);
-    }
-  }, [
+  useWorkbenchEntryNavigation({
     initialNavigation,
-    loading,
-    viewsScope,
-    viewScopeKey,
+    projectCreation,
+    ready: !loading && viewsScope === viewScopeKey,
+    runtimeScopeReady: stream.runtimeScopeReady !== false,
+    runtimeScope,
     views,
+    setViewQueries,
+    setViewResetKeys,
     selectView,
-    setOpen,
     setExpanded,
-  ]);
+    setOpen,
+    setNotification,
+  });
 
   const available =
     (Boolean(stream.group) && authenticated && stream.runtimeScopeReady) ||
@@ -841,6 +824,7 @@ function WorkbenchContent({
       visible={open}
       previews={previews}
       viewQueries={viewQueries}
+      viewResetKeys={viewResetKeys}
       newTabs={newTabs}
       recent={recent}
       browserHistory={browserHistory}

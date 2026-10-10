@@ -89,7 +89,7 @@ describe('Chat composer layout', () => {
       'max-h-32',
     );
     expect(composerEditor).not.toHaveClass('min-h-20');
-    const projectRail = document.querySelector(
+    const projectRail = document.querySelector<HTMLElement>(
       '[data-slot="composer-project-rail"]',
     );
     expect(projectRail).toBeInTheDocument();

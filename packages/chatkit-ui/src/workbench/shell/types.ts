@@ -3,6 +3,7 @@ import type {
   ChatKitWorkbenchClientCommandRequest,
 } from '@xpert-ai/chatkit-types';
 import type * as React from 'react';
+import type { ProjectCreationNavigation } from '../useProjectCreationEntry';
 import type { NavigationSession } from '../client-command-payload';
 
 export type WorkbenchAssistantContext = {
@@ -21,4 +22,5 @@ export type WorkbenchShellProps = {
   ) => void;
   initialNavigation?: ChatKitWorkbenchClientCommandRequest;
   initializing?: boolean;
+  projectCreation?: ProjectCreationNavigation;
 };
