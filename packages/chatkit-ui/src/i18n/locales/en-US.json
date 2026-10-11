@@ -143,6 +143,7 @@
       "expandAll": "Expand all",
       "collapseAll": "Collapse all",
       "files": "Changed files",
+      "resizeFiles": "Resize changed files panel",
       "diff": "Saved file differences",
       "before": "Before",
       "after": "After",

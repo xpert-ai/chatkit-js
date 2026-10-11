@@ -143,6 +143,7 @@
       "expandAll": "展开全部",
       "collapseAll": "收起全部",
       "files": "变更文件",
+      "resizeFiles": "调整变更文件面板宽度",
       "diff": "已保存的文件差异",
       "before": "变更前",
       "after": "变更后",

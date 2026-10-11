@@ -103,7 +103,7 @@ export function ReviewControls({
             )}
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-48 rounded-xl p-2">
+        <DropdownMenuContent className="min-w-48 rounded-chat-panel p-[calc(0.5rem*var(--chat-density-scale,1))]">
           <DropdownMenuRadioGroup
             value={scope}
             onValueChange={(value) => setScope(value as typeof scope)}
@@ -126,7 +126,7 @@ export function ReviewControls({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="review-menu min-w-60 rounded-2xl p-2"
+            className="review-menu min-w-60 rounded-chat-panel p-[calc(0.5rem*var(--chat-density-scale,1))]"
           >
             {(
               [
@@ -164,7 +164,7 @@ export function ReviewControls({
           </PopoverTrigger>
           <PopoverContent
             align="end"
-            className="review-jump-popover w-[min(440px,calc(100vw-24px))] rounded-2xl p-2"
+            className="review-jump-popover w-[min(440px,calc(100vw-24px))] rounded-chat-panel p-[calc(0.5rem*var(--chat-density-scale,1))]"
           >
             <ReviewJumpList
               entries={entries}

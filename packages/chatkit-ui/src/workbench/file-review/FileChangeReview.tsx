@@ -7,6 +7,7 @@ import type { FileChangeReviewOptions, FileReviewEntry } from './types';
 import { ReviewControls } from './ReviewControls';
 import { ReviewFileTree } from './ReviewNavigation';
 import { ReviewFile } from './ReviewFile';
+import { ReviewSidebar, clampReviewSidebarWidth } from './ReviewSidebar';
 import {
   defaultReviewSettings,
   reviewApplyCommand,
@@ -32,6 +33,7 @@ export function FileChangeReview({
   const [active, setActive] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState('');
   const [width, setWidth] = React.useState(0);
+  const [preferredSidebarWidth, setSidebarWidth] = React.useState(260);
   const sectionRefs = React.useRef(new Map<string, HTMLElement>());
   const rootRef = React.useRef<HTMLElement>(null);
   React.useEffect(() => {
@@ -123,9 +125,11 @@ export function FileChangeReview({
     entries.length > 0 && entries.every((entry) => collapsed.has(entry.key));
   const treeOpen = showTree ?? width >= 600;
   const treeVisible = treeOpen && width >= 600;
+  const sidebarWidth = clampReviewSidebarWidth(preferredSidebarWidth, width);
   const sideBySide =
     settings.layout === 'split' ||
-    (settings.layout === 'auto' && width - (treeVisible ? 260 : 0) >= 760);
+    (settings.layout === 'auto' &&
+      width - (treeVisible ? sidebarWidth : 0) >= 760);
   return (
     <section
       ref={rootRef}
@@ -172,7 +176,7 @@ export function FileChangeReview({
           {t('workbench.review.failed')}{' '}
           <button
             type="button"
-            className="rounded px-2 py-1 underline"
+            className="rounded-chat-item px-2 py-1 underline"
             onClick={retry}
           >
             {t('common.retry')}
@@ -207,8 +211,10 @@ export function FileChangeReview({
             ))}
           </Virtualizer>
           {treeOpen && (
-            <div
-              className={`review-sidebar ${width < 600 ? 'review-sidebar-overlay' : ''}`}
+            <ReviewSidebar
+              containerWidth={width}
+              width={sidebarWidth}
+              onWidthChange={setSidebarWidth}
             >
               <ReviewFileTree
                 entries={entries}
@@ -218,7 +224,7 @@ export function FileChangeReview({
                   if (width < 600) setShowTree(false);
                 }}
               />
-            </div>
+            </ReviewSidebar>
           )}
         </div>
       )}

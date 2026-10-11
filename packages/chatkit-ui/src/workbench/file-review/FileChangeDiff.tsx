@@ -11,6 +11,29 @@ const CodeEditor = React.lazy(
   () => import('../../components/code-editor/CodeEditor'),
 );
 
+// The diff renderer uses Shadow DOM; custom properties inherit from the review
+// surface, but its own controls need explicit theme-aware radius rules.
+const diffThemeCss = `
+  :host { --review-diff-radius: min(6px, var(--chat-item-radius, 6px)); }
+  [data-separator-content], [data-expand-button] { border-radius: var(--review-diff-radius); }
+  [data-diff-type=split] [data-gutter] [data-separator-content], [data-expand-button] {
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+  }
+  [data-separator][data-expand-index] [data-separator-content] {
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+  }
+  [data-additions] [data-separator=line-info] [data-separator-wrapper] {
+    border-top-right-radius: var(--review-diff-radius);
+    border-bottom-right-radius: var(--review-diff-radius);
+  }
+  @media (pointer: fine) {
+    [data-separator-multi-button] [data-expand-up] { border-bottom-left-radius: 0; }
+    [data-separator-multi-button] [data-expand-down] { border-top-left-radius: 0; }
+  }
+  [data-diff-span] { border-radius: min(3px, var(--chat-item-radius, 3px)); }
+  [data-utility-button] { border-radius: min(4px, var(--chat-item-radius, 4px)); }
+`;
+
 export function FileChangeDiff({
   report,
   sideBySide,
@@ -46,7 +69,7 @@ export function FileChangeDiff({
       lineDiffType: settings.wordDiff ? ('word' as const) : ('none' as const),
       hunkSeparators: 'line-info' as const,
       enableLineSelection: true,
-      unsafeCSS: `:host { --diffs-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; --diffs-font-size: 14px; --diffs-line-height: 24px; } [data-diffs] { border-radius: 0; }${selectors.length ? `${selectors.join(',')} { font-size: 0; } ${selectors.map((value) => value + ' *').join(',')} { font-size: 0 !important; } ${selectors.map((value) => value + '::after').join(',')} { content: '…'; font-size: 13px; opacity: .5; }` : ''}`,
+      unsafeCSS: `:host { --diffs-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; --diffs-font-size: 14px; --diffs-line-height: 24px; } [data-diffs] { border-radius: 0; }${diffThemeCss}${selectors.length ? `${selectors.join(',')} { font-size: 0; } ${selectors.map((value) => value + ' *').join(',')} { font-size: 0 !important; } ${selectors.map((value) => value + '::after').join(',')} { content: '…'; font-size: 13px; opacity: .5; }` : ''}`,
     };
   }, [isDarkMode, sideBySide, settings, report]);
   if (!diff)

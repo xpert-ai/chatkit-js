@@ -109,7 +109,9 @@ export function ReviewFileTree({
           <button
             type="button"
             className="review-tree-row"
-            style={{ paddingLeft: 8 + depth * 16 }}
+            style={{
+              paddingLeft: `calc(${8 + depth * 16}px * var(--chat-density-scale, 1))`,
+            }}
             title={entry?.path ?? node.path}
             aria-current={entry && active === entry.key ? 'true' : undefined}
             aria-expanded={

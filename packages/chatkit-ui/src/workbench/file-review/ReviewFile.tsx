@@ -101,7 +101,7 @@ export function ReviewFile({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="review-menu min-w-56 rounded-2xl p-2"
+              className="review-menu min-w-56 rounded-chat-panel p-[calc(0.5rem*var(--chat-density-scale,1))]"
             >
               <DropdownMenuItem
                 disabled={!entry.path}
