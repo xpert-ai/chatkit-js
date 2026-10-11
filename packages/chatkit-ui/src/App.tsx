@@ -210,28 +210,6 @@ export function App({
     },
     [],
   );
-  const handleProjectCreate = React.useCallback(
-    (name: string, projectType?: XpertProjectTypeRef) => {
-      sendEvent('public_event', [
-        'effect',
-        {
-          name: 'project.create',
-          data: {
-            name,
-            ...(projectType
-              ? {
-                  projectType: {
-                    applicationKey: projectType.applicationKey,
-                    projectTypeKey: projectType.projectTypeKey,
-                  },
-                }
-              : {}),
-          },
-        },
-      ]);
-    },
-    [sendEvent],
-  );
   const handleConnectorsChange = React.useCallback(
     (connectorBindingIds: string[]) => {
       sendEvent('public_event', ['connectors.change', { connectorBindingIds }]);
@@ -264,7 +242,6 @@ export function App({
       }
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
-      onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
       creationEnabled={projectCreationEnabled && !navigation.session}
       onProjectEntry={handleProjectEntry}
       onConnectorsChange={handleConnectorsChange}

@@ -795,16 +795,11 @@ describe('App', () => {
     expect(parentMessengerMocks.sendEvent).not.toHaveBeenCalled();
   });
 
-  it('preserves Project creation for hosts that have not disabled it', () => {
+  it('leaves direct Project creation inside ChatKit without a host effect', () => {
     render(<App clientSecret="secret" options={options} />);
-
+    expect(vi.mocked(Chat).mock.calls.at(-1)?.[0].onProjectCreate).toBeUndefined();
     fireEvent.click(screen.getByTestId('create-project'));
-
-    expect(parentMessengerMocks.sendEvent).toHaveBeenCalledOnce();
-    expect(parentMessengerMocks.sendEvent).toHaveBeenCalledWith(
-      'public_event',
-      ['effect', { name: 'project.create', data: { name: 'Launch project' } }],
-    );
+    expect(parentMessengerMocks.sendEvent).not.toHaveBeenCalled();
   });
 });
 

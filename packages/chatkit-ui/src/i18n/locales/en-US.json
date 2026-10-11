@@ -558,7 +558,9 @@
       "loadMoreError": "Could not load more projects. Loaded projects are still available.",
       "filters": "Filter application and type",
       "creationFailed": "Could not open project creation. Please try again.",
-      "creationViewUnavailable": "The project creation view is unavailable in this Assistant."
+      "creationViewUnavailable": "The project creation view is unavailable in this Assistant.",
+      "creating": "Creating…",
+      "createError": "Could not create the project. Please retry."
     },
     "connectors": {
       "search": "Search connectors",
