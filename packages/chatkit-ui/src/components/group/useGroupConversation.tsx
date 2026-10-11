@@ -466,7 +466,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
                         />
                         <span className="truncate">@{member.name}</span>
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                         {t(`group.kind.${member.kind}`)}
                       </span>
                     </button>
