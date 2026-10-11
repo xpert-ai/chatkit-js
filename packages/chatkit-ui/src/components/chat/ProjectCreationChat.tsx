@@ -1,4 +1,5 @@
 import * as React from 'react';
+import type { ProjectSelection } from '@xpert-ai/chatkit-types';
 import type {
   XpertProjectEntry,
   XpertProjectTypeRef,
@@ -8,6 +9,8 @@ import type { ChatProps } from './types';
 import { useStreamContext } from '../../providers/Stream';
 import { useWorkbench } from '../../workbench/context';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { useAssistantInfo } from '../../hooks/useAssistantInfo';
+import { resolveAssistantProjects } from '../../lib/assistant-projects';
 
 export type ProjectCreationEntry = Extract<
   XpertProjectEntry,
@@ -21,9 +24,26 @@ export function ProjectCreationChat({
   ...props
 }: ChatProps & {
   creationEnabled: boolean;
-  onProjectEntry: (entry: ProjectCreationEntry) => void;
+  onProjectEntry: (
+    entry: ProjectCreationEntry,
+    selection: ProjectSelection,
+  ) => void;
 }) {
   const stream = useStreamContext();
+  const assistant = useAssistantInfo(
+    stream.apiKey ? stream.client : null,
+    stream.assistantId,
+  );
+  const projects = resolveAssistantProjects(
+    assistant?.config,
+    props.options?.composer?.projects,
+  );
+  const options = props.options
+    ? { ...props.options, composer: { ...props.options.composer, projects } }
+    : props.options;
+  const projectSelection =
+    props.projectSelection ??
+    (projects?.autoNewEnabled ? { mode: 'auto-new' as const } : undefined);
   const workbench = useWorkbench();
   const { t } = useChatkitTranslation();
   const [error, setError] = React.useState<string | null>(null);
@@ -74,7 +94,9 @@ export function ProjectCreationChat({
       ) {
         throw new Error(t('composer.projects.creationViewUnavailable'));
       }
-      onProjectEntry(entry);
+      onProjectEntry(entry, {
+        mode: projects?.autoNewEnabled ? 'auto-new' : 'none',
+      });
     } catch (cause) {
       if (!controller.signal.aborted && currentScope.current === scope)
         setError(
@@ -99,6 +121,8 @@ export function ProjectCreationChat({
       )}
       <Chat
         {...props}
+        options={options}
+        projectSelection={projectSelection}
         onProjectTypeCreate={creationEnabled ? createEntry : undefined}
       />
     </div>

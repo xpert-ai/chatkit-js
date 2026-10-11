@@ -160,6 +160,59 @@ describe('Workbench built-in commands', () => {
       }),
     ).toMatchObject({ code: 'view_unavailable' });
   });
+  it('opens the current Project view without requesting a replacement session', async () => {
+    const { host, execute } = fixture();
+    host.projectId = 'project';
+    host.navigate = undefined;
+    const payload = {
+      target: 'assistant.project',
+      projectId: 'project',
+      viewKey: 'target',
+      selectionId: 'task',
+      parameters: { section: 'timeline' },
+    };
+    expect(await execute('workbench.navigation.open', payload)).toMatchObject({
+      success: true,
+      status: 'opened',
+      target: 'assistant.project',
+    });
+    expect(host.openView).toHaveBeenCalledWith('target', {
+      selectionId: 'task',
+      parameters: { section: 'timeline' },
+    });
+    expect(host.forward).not.toHaveBeenCalled();
+    vi.mocked(host.openView).mockReturnValue(false);
+    expect(await execute('workbench.navigation.open', payload)).toMatchObject({
+      code: 'view_unavailable',
+    });
+    expect(host.forward).not.toHaveBeenCalled();
+  });
+  it.each([
+    { projectId: 'other', viewKey: 'target' },
+    { projectId: 'project' },
+    { projectId: 'project', viewKey: 'target', xpertId: 'other-assistant' },
+    { projectId: 'project', viewKey: 'target', threadId: 'thread' },
+    { projectId: 'project', viewKey: 'target', conversationId: 'conversation' },
+  ])('keeps explicit scope navigation host-owned: %j', async (payload) => {
+    const { host, execute } = fixture({ success: true, status: 'opened' });
+    host.projectId = 'project';
+    await execute('workbench.navigation.open', {
+      target: 'assistant.project',
+      ...payload,
+    });
+    expect(host.openView).not.toHaveBeenCalled();
+    expect(host.forward).toHaveBeenCalledOnce();
+  });
+  it('does not infer the current Project from a navigation payload', async () => {
+    const { host, execute } = fixture({ success: true, status: 'opened' });
+    await execute('workbench.navigation.open', {
+      target: 'assistant.project',
+      projectId: 'project',
+      viewKey: 'target',
+    });
+    expect(host.openView).not.toHaveBeenCalled();
+    expect(host.forward).toHaveBeenCalledOnce();
+  });
   it('appends references without replacing composer text and tolerates focus failures', async () => {
     const { host, execute } = fixture();
     vi.mocked(host.focusComposer).mockRejectedValue(new Error('hidden'));

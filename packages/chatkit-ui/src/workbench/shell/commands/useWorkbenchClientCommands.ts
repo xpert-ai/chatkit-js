@@ -254,6 +254,8 @@ export function useWorkbenchClientCommands({
       };
       return executeWorkbenchCommand(request, {
         apiUrl: stream.apiUrl,
+        projectId:
+          stream.runtimeScopeReady === false ? undefined : stream.projectId,
         isCurrent: (navigation) =>
           currentContext.current === context ||
           Boolean(
