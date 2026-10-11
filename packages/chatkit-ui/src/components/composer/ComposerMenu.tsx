@@ -653,6 +653,7 @@ export function ComposerMenu({
       <DropdownMenuTrigger asChild>
         <Button
           ref={triggerRef}
+          data-slot="composer-menu-trigger"
           type="button"
           variant="ghost"
           size="icon"

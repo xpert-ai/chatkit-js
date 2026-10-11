@@ -107,6 +107,21 @@
   padding: calc(0.75rem * var(--chat-density-scale, 1))
     calc(1rem * var(--chat-density-scale, 1));
 }
+[data-slot='composer-input-shell'] {
+  /* At a 16px root: controls are 28/32/36px with 4/6/8px vertical padding. */
+  --composer-control-height: calc(1rem + 1rem * var(--chat-density-scale, 1));
+  --composer-context-padding: calc(
+    0.5rem * var(--chat-density-scale, 1) - 0.125rem
+  );
+  --composer-control-padding-inline: calc(
+    0.125rem + 0.5rem * var(--chat-density-scale, 1)
+  );
+  --composer-control-gap: calc(
+    0.125rem + 0.25rem * var(--chat-density-scale, 1)
+  );
+  --composer-action-size: calc(var(--composer-control-height) + 0.25rem);
+  --composer-action-inset: calc(0.75rem * var(--chat-density-scale, 1));
+}
 [data-slot='composer-input-shell'] [data-slot='composer-editor-surface'] {
   /* Both layers derive their shape and colors from the existing ChatKit theme. */
   border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
@@ -116,27 +131,31 @@
   );
   min-height: calc(8rem * var(--chat-density-scale, 1));
   padding: calc(0.625rem * var(--chat-density-scale, 1));
-  /* The action buttons retain an unscaled minimum target. */
-  padding-bottom: max(3rem, calc(3.75rem * var(--chat-density-scale, 1)));
+  /* Reserve the action row and its spacing below the text. */
+  padding-bottom: calc(
+    var(--composer-action-size) + 2 * var(--composer-action-inset)
+  );
 }
 [data-slot='composer-input-shell'] [data-slot='composer-context-surface'] {
   /* Tuck the inset toolbar behind the editor while keeping its menus unclipped. */
   margin: calc(-1rem * var(--chat-density-scale, 1))
     calc(0.75rem * var(--chat-density-scale, 1)) 0;
-  padding: calc(1rem * var(--chat-density-scale, 1))
-    calc(0.25rem * var(--chat-density-scale, 1))
-    calc(0.25rem * var(--chat-density-scale, 1));
+  padding: calc(
+      1rem * var(--chat-density-scale, 1) + var(--composer-context-padding)
+    )
+    calc(0.25rem * var(--chat-density-scale, 1)) var(--composer-context-padding);
   border-radius: 0 0 var(--chat-panel-radius, var(--radius))
     var(--chat-panel-radius, var(--radius));
   background: color-mix(in oklab, var(--secondary) 65%, var(--background));
 }
-[data-slot='composer-context-rail'] {
+[data-slot='composer-input-shell'] [data-slot='composer-context-rail'] {
   column-gap: calc(0.5rem * var(--chat-density-scale, 1));
+  row-gap: var(--composer-context-padding);
 }
 /* A configured context can still render no available selectors. */
-[data-slot='composer-context-surface']:has(> [data-slot='composer-context-rail']):not(
-  :has([data-slot='composer-context-rail'] [data-slot])
-) {
+[data-slot='composer-context-surface']:has(
+    > [data-slot='composer-context-rail']
+  ):not(:has([data-slot='composer-context-rail'] [data-slot])) {
   display: none;
 }
 [data-slot='composer-input-shell'] [data-slot='composer-body'] {
@@ -148,22 +167,42 @@
   min-height: calc(2.5rem * var(--chat-density-scale, 1));
 }
 [data-slot='composer-input-shell'] [data-slot='composer-action-bar'] {
-  inset-inline: calc(0.75rem * var(--chat-density-scale, 1));
-  bottom: calc(0.75rem * var(--chat-density-scale, 1));
-  min-height: max(2rem, calc(2.5rem * var(--chat-density-scale, 1)));
+  inset-inline: var(--composer-action-inset);
+  bottom: var(--composer-action-inset);
+  min-height: var(--composer-action-size);
   gap: calc(0.5rem * var(--chat-density-scale, 1));
 }
-[data-slot='composer-action-bar'] [data-slot='composer-send-button'] {
-  width: max(2rem, calc(2.5rem * var(--chat-density-scale, 1)));
-  height: max(2rem, calc(2.5rem * var(--chat-density-scale, 1)));
+[data-slot='composer-input-shell'] [data-slot='composer-send-button'] {
+  width: var(--composer-action-size);
+  height: var(--composer-action-size);
 }
-[data-slot='composer-context-rail']
+[data-slot='composer-input-shell'] [data-slot='composer-menu-trigger'] {
+  width: var(--composer-control-height);
+  height: var(--composer-control-height);
+}
+[data-slot='composer-input-shell']
+  [data-slot='composer-context-rail']
   :is(
     [data-slot='composer-project-rail'],
     [data-slot='composer-file-selector'],
     [data-slot='composer-resource-selector']
   ) {
-  height: max(2rem, calc(3rem * var(--chat-density-scale, 1)));
+  height: var(--composer-control-height);
+  padding-inline: 0;
+}
+[data-slot='composer-input-shell']
+  [data-slot='composer-context-rail']
+  :is(
+    [data-slot='composer-project-rail'],
+    [data-slot='composer-file-selector'],
+    [data-slot='composer-resource-selector']
+  )
+  > :is(button, [data-slot='composer-project-locked']) {
+  border-radius: var(--chat-item-radius, var(--radius, 0.625rem));
+  height: var(--composer-control-height);
+  min-height: var(--composer-control-height);
+  padding-inline: var(--composer-control-padding-inline);
+  gap: var(--composer-control-gap);
 }
 
 .chatkit-file-change-card {
