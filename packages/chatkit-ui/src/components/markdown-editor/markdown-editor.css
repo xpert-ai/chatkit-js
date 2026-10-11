@@ -1,0 +1,28 @@
+.markdown-editor-content {
+  min-height: 100%;
+  padding: calc(1rem * var(--chat-density-scale, 1));
+}
+.markdown-editor .tiptap:focus-visible {
+  outline: none;
+}
+.markdown-editor .file-preview-toolbar select {
+  height: calc(2rem * var(--chat-density-scale, 1));
+  padding-inline: calc(0.5rem * var(--chat-density-scale, 1));
+}
+.markdown-editor .tiptap ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+.markdown-editor .tiptap li[data-type='taskItem'] {
+  display: flex;
+  gap: 0.5em;
+}
+.markdown-editor .tiptap li[data-type='taskItem'] > div {
+  flex: 1;
+}
+.markdown-editor .tiptap .selectedCell {
+  background: var(--accent);
+}
+.markdown-editor .tiptap :is(td, th) > p {
+  margin: 0;
+}

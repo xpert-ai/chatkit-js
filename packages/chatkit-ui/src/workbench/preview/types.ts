@@ -3,7 +3,7 @@ import type { WorkbenchOpenFile } from '@xpert-ai/xpert-sdk';
 import type { FilePreviewSource } from '../../components/file-preview/types';
 import type { FileChangeReviewOptions } from '../file-review/types';
 
-type PreviewIdentity = { key: string; title: string };
+type PreviewIdentity = { key: string; title: string; edit?: () => void };
 
 export type UrlWorkbenchPreview = PreviewIdentity & {
   kind: 'file' | 'browser';
@@ -12,6 +12,7 @@ export type UrlWorkbenchPreview = PreviewIdentity & {
 };
 export type ResourceFileWorkbenchPreview = PreviewIdentity & {
   kind: 'resource-file';
+  savedVersion?: boolean;
   source: FilePreviewSource;
 };
 export type SnapshotWorkbenchPreview = PreviewIdentity & {

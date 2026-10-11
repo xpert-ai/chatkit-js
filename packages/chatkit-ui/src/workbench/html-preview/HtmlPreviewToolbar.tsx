@@ -5,6 +5,7 @@ import {
   Download,
   Globe,
   MoreHorizontal,
+  Pencil,
   MessageSquarePlus,
   RotateCw,
   Smartphone,
@@ -25,6 +26,7 @@ import type { HtmlPreviewViewportOptions } from './HtmlPreviewViewport';
 
 export function HtmlPreviewToolbar({
   title,
+  onEdit,
   file,
   sourceMode,
   setSourceMode,
@@ -37,6 +39,7 @@ export function HtmlPreviewToolbar({
   viewport,
 }: {
   title: string;
+  onEdit?: () => void;
   file: { name: string; downloadUrl: string; source: string } | null;
   sourceMode: boolean;
   setSourceMode: (value: boolean) => void;
@@ -68,6 +71,16 @@ export function HtmlPreviewToolbar({
         <span className="min-w-0 flex-1 truncate" title={file?.name ?? title}>
           {file?.name ?? title}
         </span>
+        {onEdit && (
+          <button
+            type="button"
+            className={`${previewButtonClass} rounded-chat-item`}
+            onClick={onEdit}
+          >
+            <Pencil className="size-4" />
+            {t('workbench.files.editWorkspace')}
+          </button>
+        )}
         <span className="text-muted-foreground">
           {t('fileActivity.savedVersion')}
         </span>

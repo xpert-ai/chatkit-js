@@ -18,7 +18,7 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { useStreamContext } from '../providers/Stream';
 import type { WorkbenchPreview } from './preview/types';
 import type { WorkbenchContextValue } from './context';
-import { createHtmlArtifactPreview } from './html-preview/html-artifact-preview';
+import { useArtifactActions } from './artifact-preview/useArtifactActions';
 import {
   collectExternalAssistantRuns,
   EXTERNAL_ASSISTANTS_VIEW_KEY,
@@ -632,6 +632,27 @@ function WorkbenchContent({
     remember: rememberResourceCard,
   });
 
+  const artifactActions = useArtifactActions({
+    stream,
+    enabled,
+    authenticated,
+    openPreview,
+    openWorkspaceFile: (file) => {
+      setActiveViewKey(native.openFile(file));
+      setOpen(true);
+    },
+    unavailableMessage: t('workbench.files.failed'),
+    onAnnotate: async (reference) => {
+      await parentMessenger.updateComposer({
+        appendReferences: true,
+        references: [reference],
+      });
+      setExpanded(false);
+      if (isNarrow) setOpen(false);
+      await parentMessenger.focusComposer();
+    },
+  });
+
   const contextValue = React.useMemo<WorkbenchContextValue>(
     () => ({
       enabled,
@@ -662,33 +683,7 @@ function WorkbenchContent({
             setOpen(true);
           }
         : undefined,
-      openHtmlArtifact: (resource, title) => {
-        if (!enabled || !authenticated || !stream.conversationId) return false;
-        const conversationId = stream.conversationId;
-        openPreview(
-          createHtmlArtifactPreview(
-            resource,
-            title,
-            (signal) =>
-              stream.client.workbench.downloadArtifact(
-                conversationId,
-                resource,
-                { signal },
-              ),
-            t('workbench.preview.htmlUnavailable'),
-            async (reference) => {
-              await parentMessenger.updateComposer({
-                appendReferences: true,
-                references: [reference],
-              });
-              setExpanded(false);
-              if (isNarrow) setOpen(false);
-              await parentMessenger.focusComposer();
-            },
-          ),
-        );
-        return true;
-      },
+      ...artifactActions,
       openFileReview: (resource) => {
         if (!enabled || !authenticated || !stream.conversationId) return false;
         openPreview(
@@ -724,6 +719,7 @@ function WorkbenchContent({
       },
     }),
     [
+      artifactActions,
       stream.group,
       groupRecord.select,
       executeClientCommand,

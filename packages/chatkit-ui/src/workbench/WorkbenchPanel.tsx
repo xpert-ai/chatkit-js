@@ -1,3 +1,4 @@
+import { workspaceFileScope } from './native/files/workspace-file-access';
 import type { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import {
   NativeWorkbenchContent,
@@ -217,13 +218,11 @@ export function WorkbenchPanel({
   );
   const fileScope = React.useMemo<WorkspaceFileScope | null>(
     () =>
-      stream.projectId
-        ? stream.conversationId
-          ? { kind: 'conversation', conversationId: stream.conversationId }
-          : null
-        : stream.assistantId
-          ? { kind: 'assistant', assistantId: stream.assistantId }
-          : null,
+      workspaceFileScope({
+        projectId: stream.projectId,
+        conversationId: stream.conversationId,
+        assistantId: stream.assistantId,
+      }),
     [stream.projectId, stream.conversationId, stream.assistantId],
   );
   const { theme } = useTheme();

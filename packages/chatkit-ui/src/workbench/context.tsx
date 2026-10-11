@@ -1,5 +1,9 @@
 import * as React from 'react';
 import type {
+  ArtifactIdentity,
+  ArtifactOpenOptions,
+} from './artifact-preview/artifact-preview';
+import type {
   ChatKitReference,
   FileChangeResource,
   FileChangeSetResource,
@@ -19,8 +23,15 @@ import {
 } from '../components/ui/tooltip';
 
 export type WorkbenchContextValue = {
-  openGroupAssistant?: (target: { messageId: string; participantId: string }) => void;
+  openGroupAssistant?: (target: {
+    messageId: string;
+    participantId: string;
+  }) => void;
   openProject?: (projectId: string, viewKey: string) => Promise<unknown>;
+  openArtifact?: (
+    resource: ArtifactIdentity,
+    options: ArtifactOpenOptions,
+  ) => boolean;
   openHtmlArtifact?: (
     resource: { artifactId: string; artifactVersionId: string },
     title: string,

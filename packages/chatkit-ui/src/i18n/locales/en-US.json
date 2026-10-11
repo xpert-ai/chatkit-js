@@ -252,7 +252,7 @@
       "terminalComputerRequired": "This conversation uses Computer. Open the Computer view, take control, and use its desktop terminal.",
       "terminalUnsupported": "This environment does not support an independent terminal.",
       "terminalSandboxDisabled": "The sandbox is disabled for this conversation.",
-      "readOnly": "Read only",
+      "readOnly": "Read only: editing permission is unavailable for this file.",
       "find": "Find",
       "replace": "Replace",
       "slide": "Slide",
@@ -283,7 +283,9 @@
       "copyPath": "Copy path",
       "copy": "Copy file contents",
       "copied": "Copied",
-      "copyFailed": "Could not copy. Please try again."
+      "copyFailed": "Could not copy. Please try again.",
+      "editWorkspace": "Edit workspace file",
+      "sheetPreviewLimit": "Preview shows the first {{count}} rows of each sheet."
     },
     "previewTools": {
       "annotate": "Annotate page",
@@ -314,6 +316,21 @@
       "width": "Viewport width",
       "height": "Viewport height",
       "rotate": "Rotate viewport"
+    },
+    "markdown": {
+      "document": "Markdown document",
+      "toolbar": "Markdown formatting",
+      "block": "Paragraph style",
+      "paragraph": "Paragraph",
+      "heading": "Heading {{level}}",
+      "bold": "Bold",
+      "italic": "Italic",
+      "bullets": "Bullet list",
+      "numbers": "Numbered list",
+      "undo": "Undo",
+      "redo": "Redo",
+      "richText": "Rich text",
+      "source": "Source"
     }
   },
   "chat": {
@@ -1156,7 +1173,6 @@
     "details": "Group details",
     "closeDetails": "Close group details",
     "noMatches": "No matching members",
-
     "loading": "Loading group…",
     "connected": "Connected",
     "reconnecting": "Reconnecting…",

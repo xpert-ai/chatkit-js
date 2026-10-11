@@ -22,12 +22,16 @@ The current conflict check downloads and compares the saved file before writing.
 | File type                 | Behavior                                                          |
 | ------------------------- | ----------------------------------------------------------------- |
 | Text and code             | Code editor and workspace save                                    |
-| Markdown                  | Editing and rendered preview                                      |
+| Markdown                  | Tiptap rich text by default, with optional source mode and read-only display |
 | HTML                      | Editing and isolated browser preview                              |
 | DOCX                      | Paginated document editor with formatting, tables, and images     |
 | CSV/XLS/XLSX              | Spreadsheet view; supported edits depend on the format and writer |
 | PPTX                      | Presentation canvas with supported object and slide editing       |
 | Images, PDF, audio, video | Browser-supported media previews                                  |
+
+Presented Markdown opens the current workspace file directly in Tiptap only when the scoped `readFile` response explicitly reports `capabilities.canWrite: true`. Otherwise, its immutable delivered version is displayed read-only. Workspace editors also require this capability, and check it again before saving. Servers without the additive capability field remain read-only; deploy the matching file-read controller changes to enable editing. The SDK document contract describes this optional field; existing SDK transports remain compatible.
+
+The rich editor persists Markdown via Tiptap's [Markdown extension](https://tiptap.dev/docs/editor/markdown/getting-started/basic-usage), preserving headings, links, tables, tasks, code blocks and images. Opening a file or changing permissions never emits a content change. Unsaved drafts survive conflicts and rejected saves. Saved artifact versions remain immutable.
 
 Office editors load on demand. They preserve unmodified package content and reject unsupported writes instead of silently discarding data. See [Office editing](../office-workbench.md) for the supported operations and format-specific limitations.
 

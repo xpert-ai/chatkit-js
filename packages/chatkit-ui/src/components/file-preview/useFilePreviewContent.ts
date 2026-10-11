@@ -27,7 +27,7 @@ export function useFilePreviewContent(
         if (text.includes('\0')) throw new Error('workbench.files.binary');
         if (!textFile && ['image', 'pdf', 'audio', 'video'].includes(kind))
           url = URL.createObjectURL(blob);
-        setState({ content: { fileName, kind, url, text } });
+        setState({ content: { fileName, kind, url, text, blob } });
       })().catch((error: unknown) => {
         if (!controller.signal.aborted)
           setState({

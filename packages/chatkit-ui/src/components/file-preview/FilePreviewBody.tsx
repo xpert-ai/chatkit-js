@@ -1,10 +1,12 @@
 import './file-preview.css';
 import * as React from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Check, Copy } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { FilePreviewContent } from './types';
+const MarkdownEditor = React.lazy(
+  () => import('../markdown-editor/MarkdownEditor'),
+);
+const OfficeFilePreview = React.lazy(() => import('./OfficeFilePreview'));
 const CodeEditor = React.lazy(() => import('../code-editor/CodeEditor'));
 
 /** Shared format rendering; authorization and file origins belong to adapters. */
@@ -63,11 +65,11 @@ export function FilePreviewBody({
           </p>
         )}
         {kind === 'markdown' && !source ? (
-          <article className="workspace-markdown h-full overflow-auto px-5 py-4 pr-12">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {content.text}
-            </ReactMarkdown>
-          </article>
+          <React.Suspense
+            fallback={<p className="p-4">{t('workbench.files.loading')}</p>}
+          >
+            <MarkdownEditor value={content.text} readOnly />
+          </React.Suspense>
         ) : kind === 'html' && !source ? (
           <iframe
             title={title}
@@ -88,6 +90,18 @@ export function FilePreviewBody({
           </React.Suspense>
         )}
       </div>
+    );
+  if (['docx', 'spreadsheet', 'pptx'].includes(kind) && content.blob)
+    return (
+      <React.Suspense
+        fallback={<p className="p-4">{t('workbench.files.loading')}</p>}
+      >
+        <OfficeFilePreview
+          blob={content.blob}
+          name={content.fileName}
+          kind={kind}
+        />
+      </React.Suspense>
     );
   if (kind === 'image')
     return (

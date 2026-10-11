@@ -148,6 +148,7 @@ export type BinaryEditorHandle = {
 export type BinaryEditorProps = {
   blob: Blob;
   name: string;
+  readOnly?: boolean;
   onDirty: (dirty?: boolean) => void;
   onSave?: () => void;
 };

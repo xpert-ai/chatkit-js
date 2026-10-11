@@ -24,11 +24,13 @@ type LoadedHtml = { source: string; downloadUrl: string; name: string };
 
 export function HtmlArtifactPreview({
   title,
+  onEdit,
   load,
   identity,
   onAnnotate,
 }: {
   title: string;
+  onEdit?: () => void;
   load: (signal: AbortSignal) => Promise<{ blob: Blob; name: string }>;
   identity?: HtmlPreviewIdentity;
   onAnnotate?: (reference: ChatKitQuoteReference) => Promise<void>;
@@ -88,6 +90,7 @@ export function HtmlArtifactPreview({
     >
       <HtmlPreviewToolbar
         title={title}
+        onEdit={onEdit}
         file={file}
         sourceMode={sourceMode}
         setSourceMode={(value) => {
