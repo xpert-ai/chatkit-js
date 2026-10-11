@@ -56,7 +56,7 @@ export function MessageTimestamp({
           dateTime={date.toISOString()}
           aria-label={label}
           tabIndex={0}
-          className="inline-block shrink-0 rounded-sm px-1 text-xs tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-block shrink-0 rounded-chat-item px-1 text-xs tabular-nums text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {formatCompactTime(date, i18n.language)}
         </time>

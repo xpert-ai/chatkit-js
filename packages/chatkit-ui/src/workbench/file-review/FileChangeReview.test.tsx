@@ -1,9 +1,10 @@
 import type * as React from 'react';
 import { Blob as NodeBlob } from 'node:buffer';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageFileActivity } from '../../components/task-summary/FileActivity';
 import { setupWorkbenchTests, fixture } from '../WorkbenchShell.test-fixture';
 import { createFileChangeReview } from './file-change-review';
+import { FileChangeReview } from './FileChangeReview';
 import { createReviewDiff } from './review-diff-model';
 import type { FileDiffMetadata } from '@pierre/diffs';
 import { Client } from '@xpert-ai/xpert-sdk';
@@ -115,6 +116,7 @@ const ui = () => (
 
 describe('ChatKit native change review', () => {
   setupWorkbenchTests();
+  afterEach(() => vi.restoreAllMocks());
   beforeEach(() => {
     vi.stubGlobal('Blob', NodeBlob);
     Element.prototype.scrollIntoView = vi.fn();
@@ -129,6 +131,68 @@ describe('ChatKit native change review', () => {
           ),
       );
     mocks.stream.client.conversations.listTaskSummaryItems.mockReset();
+  });
+  it('uses the resized sidebar width for automatic diff layout and preserves it when hidden', async () => {
+    let reviewWidth = 1100;
+    let measure = () => {};
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        return this.classList.contains('chatkit-file-review')
+          ? new DOMRect(0, 0, reviewWidth, 700)
+          : original.call(this);
+      },
+    );
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(element: Element) {
+          if (element.classList.contains('chatkit-file-review'))
+            measure = () =>
+              this.callback([], this as unknown as ResizeObserver);
+        }
+        disconnect() {}
+        unobserve() {}
+      },
+    );
+    const load = vi
+      .fn()
+      .mockResolvedValue([
+        { key: 'file', path: last.workspacePath, report: last },
+      ]);
+    render(<FileChangeReview options={{ selected: resource, load }} />);
+    const divider = await screen.findByRole('separator', {
+      name: 'Resize changed files panel',
+    });
+    expect(screen.getByTestId('pierre-diff')).toHaveAttribute(
+      'data-layout',
+      'split',
+    );
+    fireEvent.keyDown(divider, { key: 'End' });
+    expect(divider).toHaveAttribute('aria-valuenow', '520');
+    expect(screen.getByTestId('pierre-diff')).toHaveAttribute(
+      'data-layout',
+      'unified',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Changed files' }));
+    expect(screen.queryByRole('separator')).toBeNull();
+    expect(screen.getByTestId('pierre-diff')).toHaveAttribute(
+      'data-layout',
+      'split',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Changed files' }));
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '520',
+    );
+    reviewWidth = 620;
+    act(() => measure());
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '300',
+    );
+    expect(load).toHaveBeenCalledOnce();
   });
   it('opens the review command without a host, diffs first-before against last-after, and supports view controls', async () => {
     const { container, rerender } = render(ui());

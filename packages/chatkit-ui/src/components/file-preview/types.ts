@@ -2,6 +2,7 @@ import type { FileKind } from '../../lib/files/file-types';
 
 export type FilePreviewContent = {
   fileName: string;
+  blob?: Blob;
   kind: FileKind;
   url: string;
   text: string;
@@ -13,5 +14,5 @@ export type FilePreviewLoader = (signal: AbortSignal) => Promise<PreviewFile>;
 export type FilePreviewSource = {
   load: FilePreviewLoader;
   /** May download an original that differs from the preview, such as DOCX/PDF. */
-  download: () => Promise<void>;
+  download: (signal: AbortSignal) => Promise<void>;
 };

@@ -51,14 +51,18 @@ vi.mock('../office/presentation/PptxEditor', () => ({
     return <button onClick={() => onDirty()}>Edit office</button>;
   }),
 }));
-function setup(path = 'note.md') {
+function setup(path = 'note.txt') {
   const client = new Client({ apiUrl: 'http://example.test/api/ai' });
+  vi.spyOn(client.workbench, 'readFile').mockResolvedValue({
+    filePath: path,
+    capabilities: { canRead: true, canWrite: true },
+  } as Awaited<ReturnType<typeof client.workbench.readFile>>);
   const download = vi
     .spyOn(client.workbench, 'downloadFile')
     .mockResolvedValue(new Blob(['original']));
   const save = vi
     .spyOn(client.workbench, 'saveFile')
-    .mockResolvedValue({ filePath: 'note.md' });
+    .mockResolvedValue({ filePath: 'note.txt' });
   const register = vi.fn();
   const saved = vi.fn();
   const view = render(
@@ -88,7 +92,7 @@ describe('workspace file saving', () => {
     expect(download).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenCalledWith(
       { kind: 'assistant', assistantId: 'a1' },
-      'note.md',
+      'note.txt',
       'edited',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );

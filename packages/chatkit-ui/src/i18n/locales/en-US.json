@@ -143,6 +143,7 @@
       "expandAll": "Expand all",
       "collapseAll": "Collapse all",
       "files": "Changed files",
+      "resizeFiles": "Resize changed files panel",
       "diff": "Saved file differences",
       "before": "Before",
       "after": "After",
@@ -251,7 +252,7 @@
       "terminalComputerRequired": "This conversation uses Computer. Open the Computer view, take control, and use its desktop terminal.",
       "terminalUnsupported": "This environment does not support an independent terminal.",
       "terminalSandboxDisabled": "The sandbox is disabled for this conversation.",
-      "readOnly": "Read only",
+      "readOnly": "Read only: editing permission is unavailable for this file.",
       "find": "Find",
       "replace": "Replace",
       "slide": "Slide",
@@ -282,7 +283,9 @@
       "copyPath": "Copy path",
       "copy": "Copy file contents",
       "copied": "Copied",
-      "copyFailed": "Could not copy. Please try again."
+      "copyFailed": "Could not copy. Please try again.",
+      "editWorkspace": "Edit workspace file",
+      "sheetPreviewLimit": "Preview shows the first {{count}} rows of each sheet."
     },
     "previewTools": {
       "annotate": "Annotate page",
@@ -313,6 +316,21 @@
       "width": "Viewport width",
       "height": "Viewport height",
       "rotate": "Rotate viewport"
+    },
+    "markdown": {
+      "document": "Markdown document",
+      "toolbar": "Markdown formatting",
+      "block": "Paragraph style",
+      "paragraph": "Paragraph",
+      "heading": "Heading {{level}}",
+      "bold": "Bold",
+      "italic": "Italic",
+      "bullets": "Bullet list",
+      "numbers": "Numbered list",
+      "undo": "Undo",
+      "redo": "Redo",
+      "richText": "Rich text",
+      "source": "Source"
     }
   },
   "chat": {
@@ -448,6 +466,7 @@
     "recent": "Recent",
     "project": "By project",
     "projectFallback": "Project {{id}}",
+    "filterProject": "Filter by project: {{name}}",
     "current": "Current conversation",
     "count": "{{count}} of {{total}} conversations loaded",
     "loading": "Loading message history…",
@@ -539,7 +558,9 @@
       "loadMoreError": "Could not load more projects. Loaded projects are still available.",
       "filters": "Filter application and type",
       "creationFailed": "Could not open project creation. Please try again.",
-      "creationViewUnavailable": "The project creation view is unavailable in this Assistant."
+      "creationViewUnavailable": "The project creation view is unavailable in this Assistant.",
+      "creating": "Creating…",
+      "createError": "Could not create the project. Please retry."
     },
     "connectors": {
       "search": "Search connectors",
@@ -1154,7 +1175,6 @@
     "details": "Group details",
     "closeDetails": "Close group details",
     "noMatches": "No matching members",
-
     "loading": "Loading group…",
     "connected": "Connected",
     "reconnecting": "Reconnecting…",

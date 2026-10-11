@@ -50,6 +50,8 @@ const DEFAULT_LIMIT = 50;
 /** History browsing is independent of the Project selected for the next run. */
 export type ThreadHistoryScope = 'all' | 'current-project' | 'no-project';
 
+export type ThreadHistoryProject = { id: string; name: string };
+
 const getThreadTitle = (threadRecord: ThreadRecord): string => {
   const title = threadRecord.title?.trim();
   if (title) return title;

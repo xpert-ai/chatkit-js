@@ -54,6 +54,7 @@ describe('Workbench view loading', () => {
       initialProps: { ...props, ready: false },
     });
     expect(listSlotViews).not.toHaveBeenCalled();
+    expect(result.current.showLoading).toBe(true);
     rerender({
       ...props,
       ready: false,
@@ -72,6 +73,7 @@ describe('Workbench view loading', () => {
       runtimeScope: finalScope,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.showLoading).toBe(false);
     expect(listSlotViews).toHaveBeenCalledOnce();
     expect(listSlotViews).toHaveBeenCalledWith(
       'agent',
@@ -92,11 +94,13 @@ describe('Workbench view loading', () => {
     listSlotViews.mockReturnValueOnce(refresh.promise);
     rerender({ ...props, revision: 1 });
     expect(result.current.loading).toBe(true);
+    expect(result.current.showLoading).toBe(true);
     expect(result.current.views).toBe(original);
     expect(result.current.viewsScope).toBe('scope-1');
     await act(async () => refresh.reject(new Error('Temporary failure')));
     expect(result.current.views).toBe(original);
     expect(result.current.error).toBe('Temporary failure');
+    expect(result.current.showLoading).toBe(false);
     listSlotViews.mockResolvedValueOnce([]);
     rerender({ ...props, revision: 2 });
     await waitFor(() => expect(result.current.views).toEqual([]));
@@ -155,12 +159,55 @@ describe('Workbench view loading', () => {
     rerender({ ...next, ready: false });
     expect(result.current.views).toEqual([manifest]);
     expect(result.current.viewsScope).toBe('scope-1');
+    expect(result.current.loading).toBe(true);
+    expect(result.current.showLoading).toBe(false);
     const pending = deferred();
     listSlotViews.mockReturnValueOnce(pending.promise);
     rerender(next);
     expect(result.current.views).toEqual([manifest]);
+    expect(result.current.showLoading).toBe(false);
     await act(async () => pending.resolve([]));
     await waitFor(() => expect(result.current.viewsScope).toBe('next-project'));
     expect(result.current.views).toEqual([]);
   });
+
+  it.each([
+    { name: 'empty', views: [] },
+    { name: 'recommended', views: [manifest] },
+  ])(
+    'silently revalidates a $name result and shows explicit refresh feedback while revalidating',
+    async ({ views }) => {
+      const { props, listSlotViews } = setup();
+      listSlotViews.mockResolvedValue(views);
+      const initial = { ...props, retentionKey: 'assistant-1' };
+      const { result, rerender } = renderHook(useWorkbenchViews, {
+        initialProps: initial,
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      const background = deferred();
+      listSlotViews.mockReturnValueOnce(background.promise);
+      const next = {
+        ...initial,
+        scopeKey: 'conversation-created',
+        runtimeScope: {
+          projectId: null,
+          conversationId: 'conversation-created',
+        },
+      };
+      rerender(next);
+      expect(result.current.loading).toBe(true);
+      expect(result.current.showLoading).toBe(false);
+      expect(result.current.views).toEqual(views);
+      const manual = deferred();
+      listSlotViews.mockReturnValueOnce(manual.promise);
+      rerender({ ...next, revision: 1 });
+      expect(result.current.loading).toBe(true);
+      expect(result.current.showLoading).toBe(true);
+      await act(async () => manual.resolve(views));
+      expect(result.current.loading).toBe(false);
+      expect(result.current.showLoading).toBe(false);
+      await act(async () => background.resolve([]));
+      expect(result.current.views).toEqual(views);
+    },
+  );
 });

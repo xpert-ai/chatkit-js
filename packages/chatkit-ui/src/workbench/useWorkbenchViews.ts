@@ -12,6 +12,7 @@ type ViewState = {
   views: XpertExtensionViewManifest[];
   loading: boolean;
   loaded: boolean;
+  settledRevision: number | null;
   error: string | null;
 };
 const emptyState: ViewState = {
@@ -20,6 +21,7 @@ const emptyState: ViewState = {
   views: [],
   loading: false,
   loaded: false,
+  settledRevision: null,
   error: null,
 };
 
@@ -88,6 +90,7 @@ export function useWorkbenchViews({
           views,
           loading: false,
           loaded: true,
+          settledRevision: revision,
           error: null,
         });
       })
@@ -108,6 +111,7 @@ export function useWorkbenchViews({
             ? { ...emptyState, scope: scopeKey, retentionKey }
             : previous),
           loading: false,
+          settledRevision: revision,
           error: message,
         }));
       });
@@ -127,10 +131,18 @@ export function useWorkbenchViews({
 
   const current =
     enabled && state.retentionKey === retentionKey ? state : emptyState;
+  const loading =
+    enabled && (!ready || state.scope !== scopeKey || current.loading);
   return {
     views: current.views,
     viewsScope: current.loaded ? current.scope : null,
-    loading: enabled && (!ready || state.scope !== scopeKey || current.loading),
+    loading,
+    // Keep authorization pending without making retained discovery content jump.
+    // Initial discovery and an explicit reload still provide loading feedback.
+    showLoading:
+      loading &&
+      !current.error &&
+      (!current.loaded || current.settledRevision !== revision),
     error: current.error,
   };
 }

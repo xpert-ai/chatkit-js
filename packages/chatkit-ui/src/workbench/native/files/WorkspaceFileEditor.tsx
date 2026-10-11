@@ -4,14 +4,13 @@ import type {
   WorkspaceFileScope,
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Download, Loader2, Save } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import type { FileEditorHandle } from '../useNativeWorkbench';
 import { downloadBlob } from '../../../lib/files/download';
 import { fileName } from './workspace-file-utils';
+import { canWriteWorkspaceFile } from './workspace-file-access';
 import {
   editableKinds,
   fileKind,
@@ -19,6 +18,12 @@ import {
   type BinaryEditorHandle,
 } from '../../../lib/files/file-types';
 
+const OfficeFilePreview = React.lazy(
+  () => import('../../../components/file-preview/OfficeFilePreview'),
+);
+const MarkdownEditor = React.lazy(
+  () => import('../../../components/markdown-editor/MarkdownEditor'),
+);
 const CodeEditor = React.lazy(
   () => import('../../../components/code-editor/CodeEditor'),
 );
@@ -47,7 +52,8 @@ export function WorkspaceFileEditor({
 }) {
   const { t } = useChatkitTranslation();
   const kind = fileKind(file.filePath, file.mimeType);
-  const editable = editableKinds.includes(kind);
+  const [canWrite, setCanWrite] = React.useState(false);
+  const editable = canWrite && editableKinds.includes(kind);
   const textFile = kind === 'text' || kind === 'markdown' || kind === 'html';
   const [source, setSource] = React.useState<Blob | null>(null);
   const baseline = React.useRef<Blob | null>(null);
@@ -69,6 +75,7 @@ export function WorkspaceFileEditor({
     lifetime.current = abort;
     setLoading(true);
     setError('');
+    setCanWrite(false);
     if (kind === 'unsupported') {
       setLoading(false);
       return () => abort.abort();
@@ -76,6 +83,11 @@ export function WorkspaceFileEditor({
     void (async () => {
       if ((file.size ?? 0) > 50 * 1024 * 1024)
         throw new Error(t('workbench.files.large'));
+      const document = await client.workbench.readFile(scope, file.filePath, {
+        signal: abort.signal,
+      });
+      if (abort.signal.aborted) return;
+      setCanWrite(canWriteWorkspaceFile(document));
       const blob = await client.workbench.downloadFile(scope, file.filePath, {
         signal: abort.signal,
       });
@@ -121,11 +133,19 @@ export function WorkspaceFileEditor({
   const save = React.useCallback(async () => {
     if (savingRef.current) throw new Error(t('workbench.files.saving'));
     if (!baseline.current || !dirty) return;
+    if (!editable) throw new Error(t('workbench.files.readOnly'));
     const abort = lifetime.current;
     savingRef.current = true;
     setSaving(true);
     setError('');
     try {
+      const document = await client.workbench.readFile(scope, file.filePath, {
+        signal: abort?.signal,
+      });
+      if (!canWriteWorkspaceFile(document)) {
+        setCanWrite(false);
+        throw new Error(t('workbench.files.readOnly'));
+      }
       const fresh = await client.workbench.downloadFile(scope, file.filePath, {
         signal: abort?.signal,
       });
@@ -160,7 +180,17 @@ export function WorkspaceFileEditor({
       savingRef.current = false;
       if (!abort?.signal.aborted) setSaving(false);
     }
-  }, [client, scopeKey, file.filePath, dirty, text, textFile, t, onSaved]);
+  }, [
+    client,
+    scopeKey,
+    file.filePath,
+    dirty,
+    text,
+    textFile,
+    editable,
+    t,
+    onSaved,
+  ]);
   React.useEffect(() => {
     register(tabKey, { dirty, save });
     return () => register(tabKey, null);
@@ -174,7 +204,8 @@ export function WorkspaceFileEditor({
         blob: source,
         name: fileName(file.filePath),
         onDirty: markDirty,
-        onSave: saveFromToolbar,
+        onSave: editable ? saveFromToolbar : undefined,
+        readOnly: !editable,
       }
     : null;
   const content = () => {
@@ -190,17 +221,25 @@ export function WorkspaceFileEditor({
             className="h-full w-full border-0 bg-white"
           />
         );
-      if (preview && kind === 'markdown')
+      if (kind === 'markdown' && !preview)
         return (
-          <article className="prose dark:prose-invert max-w-none overflow-auto p-6">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-          </article>
+          <MarkdownEditor
+            value={text}
+            readOnly={!editable}
+            onChange={(value) => {
+              if (!editable) return;
+              setText(value);
+              setDirty(value !== originalText.current);
+            }}
+          />
         );
       return (
         <CodeEditor
           path={file.filePath}
           value={text}
+          readOnly={!editable}
           onChange={(value) => {
+            if (!editable) return;
             setText(value);
             setDirty(value !== originalText.current);
           }}
@@ -208,6 +247,14 @@ export function WorkspaceFileEditor({
         />
       );
     }
+    if (!editable && ['docx', 'spreadsheet', 'pptx'].includes(kind))
+      return (
+        <OfficeFilePreview
+          blob={source}
+          name={fileName(file.filePath)}
+          kind={kind}
+        />
+      );
     switch (kind) {
       case 'docx':
         return <DocxEditor ref={editor} {...editorProps} />;
@@ -247,7 +294,7 @@ export function WorkspaceFileEditor({
   };
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-y px-3 py-2">
+      <div className="file-preview-toolbar flex shrink-0 flex-wrap items-center border-y">
         <span
           className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
           title={file.filePath}
@@ -261,7 +308,15 @@ export function WorkspaceFileEditor({
             variant="ghost"
             onClick={() => setPreview((v) => !v)}
           >
-            {t(preview ? 'workbench.files.edit' : 'workbench.files.preview')}
+            {t(
+              kind === 'markdown'
+                ? preview
+                  ? 'workbench.markdown.richText'
+                  : 'workbench.markdown.source'
+                : preview
+                  ? 'workbench.files.edit'
+                  : 'workbench.files.preview',
+            )}
           </Button>
         )}
         <Button
@@ -304,6 +359,11 @@ export function WorkspaceFileEditor({
           </Button>
         )}
       </div>
+      {!loading && !canWrite && source && (
+        <p role="status" className="px-4 py-2 text-xs text-muted-foreground">
+          {t('workbench.files.readOnly')}
+        </p>
+      )}
       {error && (
         <div
           role="alert"

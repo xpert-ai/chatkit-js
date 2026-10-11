@@ -1,5 +1,9 @@
 import * as React from 'react';
 import type {
+  ArtifactIdentity,
+  ArtifactOpenOptions,
+} from './artifact-preview/artifact-preview';
+import type {
   ChatKitReference,
   FileChangeResource,
   FileChangeSetResource,
@@ -19,8 +23,15 @@ import {
 } from '../components/ui/tooltip';
 
 export type WorkbenchContextValue = {
-  openGroupAssistant?: (target: { messageId: string; participantId: string }) => void;
+  openGroupAssistant?: (target: {
+    messageId: string;
+    participantId: string;
+  }) => void;
   openProject?: (projectId: string, viewKey: string) => Promise<unknown>;
+  openArtifact?: (
+    resource: ArtifactIdentity,
+    options: ArtifactOpenOptions,
+  ) => boolean;
   openHtmlArtifact?: (
     resource: { artifactId: string; artifactVersionId: string },
     title: string,
@@ -72,7 +83,7 @@ export function WorkbenchToggleButton() {
       onClick={workbench.toggle}
       disabled={!workbench.available}
       className={cn(
-        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg',
+        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-chat-item',
         'text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground data-[state=open]:bg-muted',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',

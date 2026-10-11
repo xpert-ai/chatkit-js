@@ -620,7 +620,7 @@ export function useAssistantConversation({
           </div>
         )}
         {threadErrorMessage && (
-          <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
+          <div className="mb-3 rounded-chat-panel border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">
             {threadErrorMessage}
           </div>
         )}

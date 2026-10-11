@@ -114,7 +114,7 @@ export function AssistantPresence(props: AssistantPresenceProps) {
         aria-hidden={hideTrigger || undefined}
         inert={hideTrigger || undefined}
         tabIndex={hideTrigger ? -1 : undefined}
-        className="chatkit-presence-trigger pointer-events-auto grid justify-items-center rounded-2xl outline-offset-4"
+        className="chatkit-presence-trigger pointer-events-auto grid justify-items-center rounded-chat-panel outline-offset-4"
         onClick={() => props.onOpenChange(true)}
       >
         {/* Reserve the header height while expanded; the conversation must not jump. */}
@@ -129,7 +129,7 @@ export function AssistantPresence(props: AssistantPresenceProps) {
           }}
           style={{ opacity: 'var(--presence-bubble-opacity, 1)' }}
           transition={{ duration: still ? 0 : 0.18, ease: PRESENCE_EASE }}
-          className="chatkit-presence-bubble max-w-64 rounded-2xl border border-border/60 bg-popover/95 shadow-sm backdrop-blur-sm"
+          className="chatkit-presence-bubble max-w-64 rounded-chat-panel border border-border/60 bg-popover/95 shadow-sm backdrop-blur-sm"
         >
           <span className="block truncate text-sm font-medium">
             {props.name}
@@ -254,14 +254,14 @@ export function AssistantSummaryDialog({
                 </div>
                 <button
                   type="button"
-                  className="chatkit-presence-close flex shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                  className="chatkit-presence-close flex shrink-0 items-center justify-center rounded-chat-item text-muted-foreground hover:bg-muted"
                   aria-label={closeLabel ?? t('assistantPresence.close')}
                   onClick={() => presence.onOpenChange(false)}
                 >
                   <X className="size-[1.125rem]" />
                 </button>
               </div>
-              <div className="min-h-0 overflow-auto rounded-b-3xl">
+              <div className="min-h-0 overflow-auto rounded-b-chat-panel">
                 {voice?.dial}
                 {computers}
                 {children}
@@ -313,7 +313,7 @@ const PresenceDialogSurface = React.forwardRef<
           transformOrigin: 'top right',
           pointerEvents: isPresent ? 'auto' : 'none',
         }}
-        className="chatkit-presence-dialog pointer-events-auto relative flex min-h-0 flex-col rounded-3xl border border-border/70 bg-popover text-popover-foreground shadow-xl outline-none"
+        className="chatkit-presence-dialog pointer-events-auto relative flex min-h-0 flex-col rounded-chat-panel border border-border/70 bg-popover text-popover-foreground shadow-xl outline-none"
       >
         {children}
       </motion.div>

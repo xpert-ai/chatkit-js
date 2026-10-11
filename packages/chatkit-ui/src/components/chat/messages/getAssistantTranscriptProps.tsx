@@ -133,19 +133,19 @@ export function getAssistantTranscriptProps({
     before: (
       <>
         {errorMessage && (
-          <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mb-4 rounded-chat-panel border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {errorMessage}
           </div>
         )}
         {historyError && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="mb-4 rounded-chat-panel border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             {historyError}
           </div>
         )}
         {conversationBranch.error && (
           <div
             role="alert"
-            className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            className="mb-4 rounded-chat-panel border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
           >
             {t('messageActions.branchFailed')}
             <p className="mt-1 text-xs">
@@ -158,7 +158,7 @@ export function getAssistantTranscriptProps({
           </div>
         )}
         {showMissingConfig && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <div className="mb-4 rounded-chat-panel border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             {missingConfigDetailMessage}
           </div>
         )}

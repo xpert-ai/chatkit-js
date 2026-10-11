@@ -143,6 +143,7 @@
       "expandAll": "展开全部",
       "collapseAll": "收起全部",
       "files": "变更文件",
+      "resizeFiles": "调整变更文件面板宽度",
       "diff": "已保存的文件差异",
       "before": "变更前",
       "after": "变更后",
@@ -251,7 +252,7 @@
       "terminalComputerRequired": "当前会话使用 Computer。请切换到“电脑”视图，接管后使用桌面内的终端。",
       "terminalUnsupported": "当前环境不支持独立终端。",
       "terminalSandboxDisabled": "当前会话未启用沙箱。",
-      "readOnly": "只读",
+      "readOnly": "只读：当前没有此文件的编辑权限。",
       "find": "查找",
       "replace": "替换",
       "slide": "幻灯片",
@@ -282,7 +283,9 @@
       "copyPath": "复制路径",
       "copy": "复制文件内容",
       "copied": "已复制",
-      "copyFailed": "复制失败，请重试。"
+      "copyFailed": "复制失败，请重试。",
+      "editWorkspace": "编辑工作区文件",
+      "sheetPreviewLimit": "预览显示每个工作表的前 {{count}} 行。"
     },
     "previewTools": {
       "annotate": "注释网页",
@@ -313,6 +316,21 @@
       "width": "视口宽度",
       "height": "视口高度",
       "rotate": "旋转视口"
+    },
+    "markdown": {
+      "document": "Markdown 文档",
+      "toolbar": "Markdown 格式",
+      "block": "段落样式",
+      "paragraph": "正文",
+      "heading": "标题 {{level}}",
+      "bold": "加粗",
+      "italic": "斜体",
+      "bullets": "无序列表",
+      "numbers": "有序列表",
+      "undo": "撤销",
+      "redo": "重做",
+      "richText": "所见即所得",
+      "source": "源码"
     }
   },
   "chat": {
@@ -448,6 +466,7 @@
     "recent": "最近更新",
     "project": "按项目",
     "projectFallback": "项目 {{id}}",
+    "filterProject": "按项目过滤：{{name}}",
     "current": "当前对话",
     "count": "已加载 {{count}} / {{total}} 条对话",
     "loading": "正在加载消息历史…",
@@ -539,7 +558,9 @@
       "loadMoreError": "更多项目加载失败，已加载的项目仍可使用。",
       "filters": "筛选应用与类型",
       "creationFailed": "无法打开新建项目，请重试。",
-      "creationViewUnavailable": "当前助理中暂时无法打开项目创建视图。"
+      "creationViewUnavailable": "当前助理中暂时无法打开项目创建视图。",
+      "creating": "正在创建…",
+      "createError": "项目创建失败，请重试。"
     },
     "connectors": {
       "search": "搜索连接器",
@@ -1154,7 +1175,6 @@
     "details": "群组详情",
     "closeDetails": "关闭群组详情",
     "noMatches": "没有匹配的成员",
-
     "loading": "正在加载群聊…",
     "connected": "已连接",
     "reconnecting": "正在重连…",

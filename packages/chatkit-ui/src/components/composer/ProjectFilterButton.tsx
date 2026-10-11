@@ -23,7 +23,7 @@ export function ProjectFilterButton({
       aria-expanded={expanded}
       data-filter-active={active}
       className={cn(
-        'group/filter relative inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+        'group/filter relative inline-flex size-6 shrink-0 items-center justify-center rounded-chat-item text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
         className,
       )}
       onClick={onClick}

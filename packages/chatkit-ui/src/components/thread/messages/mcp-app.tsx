@@ -204,7 +204,7 @@ export function McpAppMessage({
         ref={state.containerRef}
         data-display-mode={state.displayMode}
         className={cn(
-          'relative flex flex-col overflow-hidden rounded-lg border bg-background shadow-sm',
+          'relative flex flex-col overflow-hidden rounded-chat-panel border bg-background shadow-sm',
           state.displayMode === 'fullscreen' &&
             'fixed inset-4 z-[80] shadow-2xl',
           state.displayMode === 'pip' &&
@@ -303,7 +303,7 @@ export function McpAppMessage({
             aria-labelledby={`mcp-app-approval-${state.pendingApproval.approvalId}`}
             className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm"
           >
-            <div className="flex max-h-full w-full max-w-lg flex-col gap-4 overflow-hidden rounded-lg border bg-background p-4 shadow-xl">
+            <div className="flex max-h-full w-full max-w-lg flex-col gap-4 overflow-hidden rounded-chat-panel border bg-background p-4 shadow-xl">
               <div className="flex items-start gap-3">
                 <div className="rounded-full bg-destructive/10 p-2 text-destructive">
                   <ShieldAlert className="size-5" />
@@ -338,7 +338,7 @@ export function McpAppMessage({
                 <div className="mb-1 text-xs font-medium">
                   {i18n.t('message.mcpApp.requestDetails')}
                 </div>
-                <pre className="max-h-48 overflow-auto rounded-md border bg-muted/40 p-3 text-[11px] leading-5 whitespace-pre-wrap break-all">
+                <pre className="max-h-48 overflow-auto rounded-chat-item border bg-muted/40 p-3 text-[11px] leading-5 whitespace-pre-wrap break-all">
                   {state.pendingApproval.details}
                 </pre>
               </div>

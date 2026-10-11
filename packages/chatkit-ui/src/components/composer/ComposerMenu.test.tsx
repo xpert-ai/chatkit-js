@@ -96,7 +96,7 @@ describe('ComposerMenu', () => {
     };
   }
 
-  it('smoothly rotates the standalone plus into a circular close control', () => {
+  it('smoothly rotates the standalone plus while retaining the theme radius', () => {
     render(<ComposerMenu />);
 
     const trigger = screen.getByRole('button', { name: 'Open menu' });
@@ -112,7 +112,7 @@ describe('ComposerMenu', () => {
       'duration-300',
     );
     expect(closeTrigger.querySelector('.lucide-x')).not.toBeInTheDocument();
-    expect(closeTrigger).toHaveClass('rounded-full', 'bg-muted');
+    expect(closeTrigger).toHaveClass('rounded-chat-item', 'bg-muted');
     expect(closeTrigger).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
@@ -171,7 +171,7 @@ describe('ComposerMenu', () => {
     }
   });
 
-  it('keeps theme panel radius while using a circular expanded close button', () => {
+  it('keeps theme radius on the panel and expanded close button', () => {
     themeMock.radius = 'pill';
     render(<ComposerMenu />);
     openMenu();
@@ -180,7 +180,7 @@ describe('ComposerMenu', () => {
       document.querySelector('[data-slot="composer-primary-panel"]'),
     ).toHaveClass('rounded-3xl');
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(
-      'rounded-full',
+      'rounded-chat-item',
     );
   });
 

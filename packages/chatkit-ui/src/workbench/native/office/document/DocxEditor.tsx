@@ -19,7 +19,7 @@ const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 const DocxEditor = React.forwardRef<BinaryEditorHandle, BinaryEditorProps>(
-  function DocxEditor({ blob, name, onDirty, onSave }, ref) {
+  function DocxEditor({ blob, name, onDirty, onSave, readOnly = false }, ref) {
     const { t, i18n } = useChatkitTranslation();
     const { isDarkMode } = useTheme();
     const editor = React.useRef<DocxEditorRef>(null);
@@ -74,17 +74,17 @@ const DocxEditor = React.forwardRef<BinaryEditorHandle, BinaryEditorProps>(
         locale={i18n.language}
         i18n={i18n.language.startsWith('zh') ? zhCN : undefined}
         colorMode={isDarkMode ? 'dark' : 'light'}
-        mode="edit"
+        mode={readOnly ? 'view' : 'edit'}
         onChange={(change) => {
-          if (!change.source) onDirty();
+          if (!readOnly && !change.source) onDirty();
         }}
-        onSave={onSave}
+        onSave={readOnly ? undefined : onSave}
         menu={{
           reportIssue: false,
           children: (
             <DocumentEditor.Menu.File preset={false}>
               {/* The workspace owns document identity and persistence. */}
-              <DocumentEditor.Menu.Save />
+              {!readOnly && <DocumentEditor.Menu.Save />}
               <DocumentEditor.Menu.Separator />
               <DocumentEditor.Menu.PageSetup />
             </DocumentEditor.Menu.File>

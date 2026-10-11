@@ -17,6 +17,8 @@ import type { ComposerValuePayload } from '../lib/references';
 
 export type WorkbenchCommandHost = {
   apiUrl: string;
+  /** Project bound to the current, resolved runtime, never supplied by the command payload. */
+  projectId?: string;
   isCurrent?: (navigation?: NavigationPayload) => boolean;
   openView: (key: string, query: XpertViewQuery) => boolean;
   openPreview: (preview: WorkbenchPreview) => void;
@@ -118,7 +120,19 @@ export async function executeWorkbenchCommand(
         );
       }
     }
-    if (navigation.target === 'workbench.view') {
+    // Opening a view of the current Project must not replace the active conversation.
+    const currentProjectView =
+      navigation.target === 'assistant.project' &&
+      Boolean(
+        navigation.projectId && navigation.projectId === host.projectId,
+      ) &&
+      Boolean(navigation.viewKey) &&
+      (!navigation.xpertId || navigation.xpertId === request.hostId) &&
+      !navigation.conversationId &&
+      !navigation.threadId &&
+      !navigation.executionId &&
+      !navigation.messageId;
+    if (navigation.target === 'workbench.view' || currentProjectView) {
       if (!navigation.viewKey) return invalid();
       return host.openView(navigation.viewKey, navigation.query)
         ? {

@@ -383,6 +383,8 @@ export function getAssistantComposerProps({
                 hasPendingInteractiveRequest,
               onAvailabilityChange: setHasSelectableProjects,
               onProjectChange: handleProjectSelectionChange,
+              createEnabled:
+                options?.composer?.projects?.createEnabled !== false,
               onProjectCreate,
               onProjectTypeCreate,
             }

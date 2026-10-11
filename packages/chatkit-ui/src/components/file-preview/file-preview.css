@@ -69,3 +69,13 @@
 .workspace-markdown img {
   max-width: 100%;
 }
+
+.file-preview-toolbar {
+  gap: calc(0.5rem * var(--chat-density-scale, 1));
+  padding: calc(0.75rem * var(--chat-density-scale, 1));
+}
+.file-preview-toolbar [data-slot='button'] {
+  border-radius: var(--chat-item-radius);
+  height: calc(2rem * var(--chat-density-scale, 1));
+  padding-inline: calc(0.625rem * var(--chat-density-scale, 1));
+}

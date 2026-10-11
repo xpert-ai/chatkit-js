@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { ProjectSelector } from '../../composer/ProjectSelector';
 import { WorkspaceFileSelector } from '../../composer/WorkspaceFileSelector';
 import { RuntimeResourceSelector } from '../../composer/RuntimeResourceSelector';
@@ -15,6 +15,12 @@ export function ComposerContextRail({
   files,
   resources,
 }: ComposerContextProps) {
+  let resourceSelector: ReactNode = null;
+  if (resources) {
+    const { key, ...props } = resources;
+    resourceSelector = <RuntimeResourceSelector key={key} {...props} />;
+  }
+
   return (
     <div
       data-slot="composer-context-rail"
@@ -24,7 +30,7 @@ export function ComposerContextRail({
         {project && <ProjectSelector {...project} />}
       </div>
       {files && <WorkspaceFileSelector {...files} />}
-      {resources && <RuntimeResourceSelector {...resources} />}
+      {resourceSelector}
     </div>
   );
 }

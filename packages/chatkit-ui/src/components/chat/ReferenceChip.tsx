@@ -32,7 +32,7 @@ export function ReferenceChip({
   return (
     <div
       className={cn(
-        'flex items-start gap-2 rounded-md px-2 py-1',
+        'flex items-start gap-2 rounded-chat-item px-2 py-1',
         isComposer ? 'bg-muted text-foreground' : 'bg-primary-foreground/20',
       )}
       title={getReferenceTitle(reference)}
@@ -71,7 +71,7 @@ export function ReferenceChip({
           type="button"
           onClick={onRemove}
           className={cn(
-            'ml-1 rounded-full p-0.5',
+            'ml-1 rounded-chat-item p-0.5',
             isComposer
               ? 'hover:bg-muted-foreground/20'
               : 'hover:bg-primary-foreground/20',

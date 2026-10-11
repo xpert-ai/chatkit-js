@@ -601,7 +601,7 @@ export function MessageList({
                               {humanAttachments.map((file, fileIndex) => (
                                 <div
                                   key={fileIndex}
-                                  className="flex items-center gap-1.5 rounded-md bg-primary-foreground/20 px-2 py-1 text-xs"
+                                  className="flex items-center gap-1.5 rounded-chat-item bg-primary-foreground/20 px-2 py-1 text-xs"
                                 >
                                   <FileText size={12} />
                                   <span className="max-w-[100px] truncate">

@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { HistorySidebar } from './HistorySidebar';
 import { setLanguage } from '../../i18n';
+import { ThemeProvider } from '../../providers/Theme';
 
 class ResizeObserverMock {
   observe() {}
@@ -33,24 +34,104 @@ function openSidebar(props: React.ComponentProps<typeof HistorySidebar> = {}) {
 }
 
 describe('HistorySidebar', () => {
-  it('defaults to all conversations and offers explicit Project filters', () => {
+  it('keeps the nested scope menu connected to radius and density while open', async () => {
+    const onScopeChange = vi.fn();
+    const { rerender } = render(
+      <ThemeProvider theme={{ radius: 'sharp', density: 'compact' }}>
+        <HistorySidebar
+          open
+          showTrigger={false}
+          onScopeChange={onScopeChange}
+        />
+      </ThemeProvider>,
+    );
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(
+      screen.getByRole('combobox', { name: 'Conversation scope' }),
+      { key: 'ArrowDown' },
+    );
+    const menu = await screen.findByRole('listbox');
+    expect(dialog.contains(menu)).toBe(false);
+    expect(menu.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
+    expect(menu.style.getPropertyValue('--chat-density-scale')).toBe('0.75');
+    rerender(
+      <ThemeProvider theme={{ radius: 'round', density: 'spacious' }}>
+        <HistorySidebar
+          open
+          showTrigger={false}
+          onScopeChange={onScopeChange}
+        />
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('listbox')).toBe(menu);
+    expect(menu.style.getPropertyValue('--chat-panel-radius')).toBe(
+      'calc(var(--radius, 0.625rem) + 4px)',
+    );
+    expect(menu.style.getPropertyValue('--chat-density-scale')).toBe('1.25');
+    fireEvent.keyDown(screen.getByRole('option', { name: 'No project' }), {
+      key: 'Enter',
+    });
+    expect(onScopeChange).toHaveBeenCalledWith('no-project');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('updates radius tokens across the dialog portal while it stays open', () => {
+    const { container, rerender } = render(
+      <ThemeProvider theme={{ radius: 'sharp' }}>
+        <HistorySidebar open showTrigger={false} />
+      </ThemeProvider>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Message history' });
+    expect(container.contains(dialog)).toBe(false);
+    expect(dialog.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
+    expect(dialog.style.getPropertyValue('--chat-item-radius')).toBe('0px');
+
+    rerender(
+      <ThemeProvider theme={{ radius: 'round' }}>
+        <HistorySidebar open showTrigger={false} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('dialog', { name: 'Message history' })).toBe(
+      dialog,
+    );
+    expect(dialog.style.getPropertyValue('--chat-panel-radius')).toBe(
+      'calc(var(--radius, 0.625rem) + 4px)',
+    );
+    expect(dialog.style.getPropertyValue('--chat-item-radius')).toBe(
+      'var(--radius, 0.625rem)',
+    );
+  });
+
+  it('defaults to all conversations and offers explicit Project filters', async () => {
     const onScopeChange = vi.fn();
     openSidebar({ onScopeChange, hasCurrentProject: true });
     const select = screen.getByRole('combobox', {
       name: 'Conversation scope',
     });
-    expect(select).toHaveValue('all');
-    fireEvent.change(select, { target: { value: 'current-project' } });
+    expect(select).toHaveTextContent('All conversations');
+    fireEvent.keyDown(select, { key: 'ArrowDown' });
+    fireEvent.keyDown(
+      await screen.findByRole('option', { name: 'Current project' }),
+      { key: 'Enter' },
+    );
     expect(onScopeChange).toHaveBeenLastCalledWith('current-project');
-    fireEvent.change(select, { target: { value: 'no-project' } });
+    fireEvent.keyDown(select, { key: 'ArrowDown' });
+    fireEvent.keyDown(
+      await screen.findByRole('option', { name: 'No project' }),
+      { key: 'Enter' },
+    );
     expect(onScopeChange).toHaveBeenLastCalledWith('no-project');
   });
 
-  it('disables the current Project filter when no Project is selected', () => {
+  it('disables the current Project filter when no Project is selected', async () => {
     openSidebar({ onScopeChange: vi.fn() });
+    fireEvent.keyDown(
+      screen.getByRole('combobox', { name: 'Conversation scope' }),
+      { key: 'ArrowDown' },
+    );
     expect(
-      screen.getByRole('option', { name: 'Current project' }),
-    ).toBeDisabled();
+      await screen.findByRole('option', { name: 'Current project' }),
+    ).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('manually refreshes the thread list from the panel header', () => {
@@ -137,7 +218,7 @@ describe('HistorySidebar', () => {
     expect(viewport).toHaveClass('[&>div]:!block', '[&>div]:!w-full');
   });
 
-  it('shows the update time without requiring hover', () => {
+  it('keeps the update time available to assistive technology in a single-line row', () => {
     const updatedAt = new Date();
     const expectedTime = new Intl.DateTimeFormat('en-US', {
       hour: '2-digit',
@@ -164,11 +245,81 @@ describe('HistorySidebar', () => {
 
     expect(time.tagName).toBe('TIME');
     expect(time).toHaveAttribute('dateTime', updatedAt.toISOString());
-    expect(time).not.toHaveClass('hidden');
+    expect(time).toHaveAccessibleName(/^Updated/);
+    expect(
+      screen.getByRole('button', { name: 'Thread one' }).querySelector('svg'),
+    ).toBeNull();
     expect(deleteButton).toBeInTheDocument();
   });
 
-  it('uses paired accent colors for active and hovered thread items', () => {
+  it('filters by a recent conversation project tag without opening the conversation', async () => {
+    const onProjectFilterChange = vi.fn();
+    const onSelectThread = vi.fn();
+    const onScopeChange = vi.fn();
+    const onOpenChange = vi.fn();
+    const props = {
+      open: true,
+      showTrigger: false,
+      onProjectFilterChange,
+      onSelectThread,
+      onScopeChange,
+      onOpenChange,
+      threads: [
+        {
+          id: 'a',
+          recordId: 'record-a',
+          title: 'Design review',
+          projectId: 'p1',
+          projectName: 'Design',
+          status: 'idle' as const,
+        },
+        {
+          id: 'b',
+          recordId: 'record-b',
+          title: 'Personal note',
+          status: 'idle' as const,
+        },
+      ],
+    };
+    const { rerender } = render(<HistorySidebar {...props} />);
+    expect(
+      screen.queryByRole('button', { name: 'Filter by project: Design' }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Recent' }));
+    const tag = screen.getByRole('button', {
+      name: 'Filter by project: Design',
+    });
+    expect(tag.closest('button')).toBe(tag);
+    fireEvent.click(tag);
+    expect(onProjectFilterChange).toHaveBeenCalledWith({
+      id: 'p1',
+      name: 'Design',
+    });
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    rerender(
+      <HistorySidebar
+        {...props}
+        projectFilter={{ id: 'p1', name: 'Design' }}
+      />,
+    );
+    expect(tag).toHaveAttribute('aria-pressed', 'true');
+    const scope = screen.getByRole('combobox', { name: 'Conversation scope' });
+    expect(scope).toHaveTextContent('Design');
+    fireEvent.keyDown(scope, { key: 'ArrowDown' });
+    fireEvent.keyDown(
+      await screen.findByRole('option', { name: 'All conversations' }),
+      { key: 'Enter' },
+    );
+    expect(onScopeChange).toHaveBeenCalledWith('all');
+    fireEvent.click(screen.getByRole('button', { name: 'Design review' }));
+    expect(onSelectThread).toHaveBeenCalledWith(props.threads[0]);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('identifies the active conversation for assistive technology', () => {
     openSidebar({
       threads: [
         {
@@ -223,9 +374,7 @@ describe('HistorySidebar', () => {
     expect(
       screen.queryByRole('button', { name: 'Design review' }),
     ).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Recent' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Recent' }));
     expect(
       screen.getByRole('button', { name: 'Design review' }),
     ).toBeInTheDocument();

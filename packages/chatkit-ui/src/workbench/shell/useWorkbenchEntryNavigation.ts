@@ -57,7 +57,7 @@ export function useWorkbenchEntryNavigation({
     }
     const viewKey = navigation.viewKey;
     if (viewKey && views.some((view) => view.key === viewKey)) {
-      // Scope changes clear old queries; restore an explicitly requested resource.
+      // Apply an explicitly requested resource after validating the destination.
       if (!navigation.preserveView || Object.keys(navigation.query).length > 0)
         setViewQueries((current) => ({
           ...current,

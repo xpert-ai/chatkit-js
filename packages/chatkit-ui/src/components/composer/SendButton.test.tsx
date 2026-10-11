@@ -4,13 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { SendButton } from './SendButton';
 
 describe('SendButton', () => {
-  it('uses the compact near-black circular send style', () => {
+  it('uses theme radius for the compact near-black send control', () => {
     render(<SendButton sendLabel="Send" />);
 
     const button = screen.getByRole('button', { name: 'Send' });
     expect(button).toHaveClass(
       'size-8',
-      'rounded-full',
+      'rounded-chat-item',
       'bg-foreground',
       'text-background',
     );
@@ -22,7 +22,7 @@ describe('SendButton', () => {
 
     expect(screen.getByRole('button', { name: 'Stop' })).toHaveClass(
       'size-8',
-      'rounded-full',
+      'rounded-chat-item',
       'bg-foreground',
     );
   });
@@ -37,7 +37,7 @@ describe('SendButton', () => {
     // An empty/disabled composer must not disable the active run control.
     expect(onStop).toHaveBeenCalledTimes(1);
   });
-  it('resumes from the same circular control without submitting the composer', () => {
+  it('resumes from the same themed control without submitting the composer', () => {
     const onResume = vi.fn();
     const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
     const { rerender } = render(
@@ -46,7 +46,7 @@ describe('SendButton', () => {
       </form>,
     );
     const button = screen.getByRole('button', { name: 'Resume' });
-    expect(button).toHaveClass('size-8', 'rounded-full', 'bg-foreground');
+    expect(button).toHaveClass('size-8', 'rounded-chat-item', 'bg-foreground');
     expect(button.querySelector('.lucide-play')).toBeInTheDocument();
     fireEvent.click(button);
     expect(onResume).toHaveBeenCalledTimes(1);

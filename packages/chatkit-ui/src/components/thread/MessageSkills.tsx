@@ -49,7 +49,7 @@ export function MessageSkills({
         <button
           type="button"
           aria-label={t('messageActions.skills.title')}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-chat-item p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onPointerEnter={(event) => {
             if (event.pointerType !== 'touch') show();
           }}
@@ -73,7 +73,7 @@ export function MessageSkills({
         align="start"
         sideOffset={8}
         aria-labelledby={titleId}
-        className="w-max max-w-[min(24rem,calc(100vw-2rem))] rounded-xl p-3"
+        className="w-max max-w-[min(24rem,calc(100vw-2rem))] rounded-chat-panel p-3"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={cancelClose}

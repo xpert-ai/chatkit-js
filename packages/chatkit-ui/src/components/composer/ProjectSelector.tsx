@@ -48,6 +48,7 @@ export type ProjectSelectorProps = {
     projectId: string | null,
     selection?: ProjectSelection,
   ) => void;
+  createEnabled?: boolean;
   onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
   onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
 };
@@ -69,6 +70,7 @@ export function ProjectSelector({
   onAvailabilityChange,
   onProjectChange,
   onProjectCreate,
+  createEnabled = false,
   onProjectTypeCreate,
 }: ProjectSelectorProps) {
   const { t, i18n } = useChatkitTranslation();
@@ -77,6 +79,18 @@ export function ProjectSelector({
   const [query, setQuery] = React.useState('');
   const [createMode, setCreateMode] = React.useState(false);
   const [newProjectName, setNewProjectName] = React.useState('');
+  const [creating, setCreating] = React.useState(false);
+  const [createError, setCreateError] = React.useState(false);
+  const createRequest = React.useRef<AbortController | null>(null);
+  React.useEffect(() => {
+    setCreating(false);
+    setCreateError(false);
+    return () => {
+      createRequest.current?.abort();
+      createRequest.current = null;
+    };
+  }, [client, xpertId]);
+
   const [projects, setProjects] = React.useState<XpertProject[]>([]);
   const [types, setTypes] = React.useState<XpertProjectTypeSummary[]>([]);
   const [defaultType, setDefaultType] = React.useState<
@@ -113,7 +127,8 @@ export function ProjectSelector({
     resolvedProject?.client === client && resolvedProject.id === activeProjectId
       ? resolvedProject.name
       : label;
-  const lockedProjectLabel = label?.trim() || activeLabel || activeProjectId || undefined;
+  const lockedProjectLabel =
+    label?.trim() || activeLabel || activeProjectId || undefined;
 
   React.useEffect(() => {
     if (disabled || locked) setOpen(false);
@@ -333,7 +348,7 @@ export function ProjectSelector({
     (types.length === 0 || Boolean(creationType?.available)) &&
     (creationType?.binding.kind === 'entity'
       ? Boolean(onProjectTypeCreate)
-      : Boolean(onProjectCreate));
+      : Boolean(onProjectCreate || (createEnabled && client && xpertId)));
   const hasAvailableProjects = locked
     ? Boolean(activeProjectId)
     : loadedFor?.client === client &&
@@ -342,7 +357,7 @@ export function ProjectSelector({
   const projectRailAvailable =
     autoNewEnabled ||
     hasAvailableProjects ||
-    Boolean(onProjectCreate) ||
+    Boolean(onProjectCreate || createEnabled) ||
     types.length > 0 ||
     Boolean(activeProjectId);
   const isLoadingProjects =
@@ -399,7 +414,7 @@ export function ProjectSelector({
       >
         <div
           data-slot="composer-project-locked"
-          className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground"
+          className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-chat-item px-2 text-sm text-muted-foreground"
           title={lockedProjectLabel}
         >
           <FolderLock className="size-3.5 shrink-0" />
@@ -432,7 +447,7 @@ export function ProjectSelector({
           <button
             type="button"
             disabled={disabled || !client || !xpertId}
-            className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-chat-item px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={t('composer.projects.select')}
           >
             <Folder className="size-3.5 shrink-0" />
@@ -440,7 +455,11 @@ export function ProjectSelector({
               {activeProject?.name ??
                 activeLabel ??
                 (selection?.mode === 'auto-new'
-                  ? t(autoNewMode === 'after-confirmation' ? 'composer.projects.confirmNew' : 'composer.projects.autoNew')
+                  ? t(
+                      autoNewMode === 'after-confirmation'
+                        ? 'composer.projects.confirmNew'
+                        : 'composer.projects.autoNew',
+                    )
                   : selection?.mode === 'none'
                     ? t('composer.projects.none')
                     : undefined) ??
@@ -467,7 +486,7 @@ export function ProjectSelector({
               <div className="grid gap-1 p-1">
                 <select
                   aria-label={t('composer.projects.application')}
-                  className="min-w-0 rounded border border-border bg-popover px-2 py-1 text-sm"
+                  className="min-w-0 rounded-chat-item border border-border bg-popover px-2 py-1 text-sm"
                   value={applicationKey}
                   onChange={(event) => {
                     setApplicationKey(event.target.value);
@@ -490,7 +509,7 @@ export function ProjectSelector({
                 {applicationKey && applicationKey !== '__unclassified' ? (
                   <select
                     aria-label={t('composer.projects.type')}
-                    className="min-w-0 rounded border border-border bg-popover px-2 py-1 text-sm"
+                    className="min-w-0 rounded-chat-item border border-border bg-popover px-2 py-1 text-sm"
                     value={projectTypeKey}
                     onChange={(event) => {
                       setProjectTypeKey(event.target.value);
@@ -516,17 +535,52 @@ export function ProjectSelector({
               <form
                 data-slot="composer-project-create-form"
                 className="space-y-3"
-                onSubmit={(event) => {
+                onSubmit={async (event) => {
                   event.preventDefault();
                   const name = newProjectName.trim();
-                  if (!name || disabled) return;
-                  if (creationType) onProjectCreate?.(name, creationType);
-                  else onProjectCreate?.(name);
-                  setOpen(false);
+                  if (!name || disabled || !canCreate || createRequest.current)
+                    return;
+                  if (onProjectCreate) {
+                    if (creationType) onProjectCreate(name, creationType);
+                    else onProjectCreate(name);
+                    setOpen(false);
+                    return;
+                  }
+                  if (!client || !xpertId || !createEnabled) return;
+                  const controller = new AbortController();
+                  createRequest.current = controller;
+                  setCreating(true);
+                  setCreateError(false);
+                  try {
+                    const project = await client.projects.create(
+                      {
+                        name,
+                        xpertIds: [xpertId],
+                        projectType: creationRef,
+                      },
+                      { signal: controller.signal },
+                    );
+                    if (controller.signal.aborted) return;
+                    onProjectChange?.(project.id, {
+                      mode: 'existing',
+                      projectId: project.id,
+                    });
+                    setCreateMode(false);
+                    setNewProjectName('');
+                    setOpen(false);
+                  } catch {
+                    if (!controller.signal.aborted) setCreateError(true);
+                  } finally {
+                    if (createRequest.current === controller) {
+                      createRequest.current = null;
+                      setCreating(false);
+                    }
+                  }
                 }}
               >
                 <Input
                   autoFocus
+                  disabled={creating}
                   value={newProjectName}
                   maxLength={120}
                   onChange={(event) => setNewProjectName(event.target.value)}
@@ -537,11 +591,18 @@ export function ProjectSelector({
                     menuItemRoundedClass,
                   )}
                 />
+                {createError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {t('composer.projects.createError')}
+                  </p>
+                )}
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
-                    className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    className="rounded-chat-item px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    disabled={creating}
                     onClick={() => {
+                      setCreateError(false);
                       setCreateMode(false);
                       setNewProjectName('');
                     }}
@@ -550,10 +611,14 @@ export function ProjectSelector({
                   </button>
                   <button
                     type="submit"
-                    disabled={!newProjectName.trim()}
-                    className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!newProjectName.trim() || creating}
+                    className="rounded-chat-item bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {t('composer.projects.create')}
+                    {t(
+                      creating
+                        ? 'composer.projects.creating'
+                        : 'composer.projects.create',
+                    )}
                   </button>
                 </div>
               </form>
@@ -616,7 +681,7 @@ export function ProjectSelector({
                       type="button"
                       aria-pressed={view === mode}
                       className={cn(
-                        'flex-1 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                        'flex-1 rounded-chat-item px-2 py-1.5 text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
                         view === mode
                           ? 'bg-accent font-medium text-accent-foreground'
                           : 'text-muted-foreground',
@@ -663,7 +728,7 @@ export function ProjectSelector({
                             <button
                               type="button"
                               disabled={loadingMore || refreshing}
-                              className="rounded px-2 py-1 font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                              className="rounded-chat-item px-2 py-1 font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                               onClick={() => {
                                 if (loadFailed) setRetry((value) => value + 1);
                                 else if (nextSkip !== null) setSkip(nextSkip);
@@ -702,7 +767,11 @@ export function ProjectSelector({
                         }}
                       >
                         <span className="flex-1">
-                          {t(autoNewMode === 'after-confirmation' ? 'composer.projects.confirmNew' : 'composer.projects.autoNew')}
+                          {t(
+                            autoNewMode === 'after-confirmation'
+                              ? 'composer.projects.confirmNew'
+                              : 'composer.projects.autoNew',
+                          )}
                         </span>
                         {!activeProjectId && selection?.mode === 'auto-new' ? (
                           <Check className="size-4 shrink-0" />
@@ -794,7 +863,7 @@ export function ProjectSelector({
                     )}
                   </div>
                 </ProjectListViewport>
-                {onProjectCreate || onProjectTypeCreate ? (
+                {createEnabled || onProjectCreate || onProjectTypeCreate ? (
                   <>
                     <Separator className="mt-1" />
                     <button

@@ -497,12 +497,7 @@ describe('WorkbenchShell', () => {
     );
   });
 
-  it.each([
-    'projectId',
-    'conversationId',
-    'organizationId',
-    'assistantId',
-  ] as const)(
+  it.each(['projectId', 'organizationId', 'assistantId'] as const)(
     'clears new tabs and recent files when %s changes',
     async (field) => {
       mocks.listSlotViews.mockResolvedValue([manifest]);

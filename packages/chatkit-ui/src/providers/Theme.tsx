@@ -38,9 +38,15 @@ const ThemeContext = React.createContext<ThemeContextValue | undefined>(
   undefined,
 );
 
-export function useTheme(): ThemeContextValue {
+export function useTheme(): ThemeContextValue;
+export function useTheme(options: {
+  optional: true;
+}): ThemeContextValue | undefined;
+export function useTheme(options?: {
+  optional: true;
+}): ThemeContextValue | undefined {
   const context = React.useContext(ThemeContext);
-  if (context === undefined) {
+  if (context === undefined && !options?.optional) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;

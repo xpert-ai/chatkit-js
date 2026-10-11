@@ -1,5 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 
@@ -664,6 +670,109 @@ describe('App', () => {
     expect(projectMocks.getAssistant).toHaveBeenCalledTimes(1);
   });
 
+  it('inherits confirmation policy in Desktop and keeps new-project intent until the created Project opens', async () => {
+    projectMocks.apiKey = 'secret';
+    projectMocks.getAssistant.mockResolvedValue({
+      name: 'Bid Studio',
+      config: {
+        options: {
+          workspaceScope: {
+            mode: 'project-required',
+            onMissing: 'confirm',
+          },
+        },
+      },
+    });
+    const entry = {
+      kind: 'assistant',
+      xpertId: 'xpert-1',
+      slug: 'bid',
+      viewKey: 'bid.studio',
+    };
+    projectMocks.typeEntry.mockResolvedValue(entry);
+    const desktopOptions = {
+      ...options,
+      api: { ...options.api, projectId: undefined },
+    };
+    const { rerender } = render(
+      <App clientSecret="secret" options={desktopOptions} />,
+    );
+    await waitFor(() =>
+      expect(vi.mocked(Chat).mock.calls.at(-1)?.[0]).toMatchObject({
+        projectSelection: { mode: 'auto-new' },
+        options: {
+          composer: {
+            projects: {
+              enabled: true,
+              autoNewEnabled: true,
+              autoNewMode: 'after-confirmation',
+              allowNone: false,
+            },
+          },
+        },
+      }),
+    );
+    fireEvent.click(screen.getByTestId('create-entity-project'));
+    await waitFor(() =>
+      expect(StreamProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          projectSelection: { mode: 'auto-new' },
+          projectId: undefined,
+          initialThread: null,
+          runtimeKey: 'project-create:1',
+        }),
+        undefined,
+      ),
+    );
+    rerender(
+      <App
+        clientSecret="secret"
+        options={{ ...desktopOptions, initialThread: null }}
+      />,
+    );
+    expect(vi.mocked(Chat).mock.calls.at(-1)?.[0].projectSelection).toEqual({
+      mode: 'auto-new',
+    });
+    const shell = vi.mocked(WorkbenchShell).mock.calls.at(-1)?.[0];
+    if (!shell) throw new Error('Workbench was not rendered');
+    expect(shell.projectCreation).toEqual({ id: 1, entry });
+    act(() =>
+      shell.onNavigate?.(
+        {
+          assistantId: 'xpert-1',
+          projectId: 'created-project',
+          threadId: null,
+          secret: 'project-secret',
+          organizationId: 'org-1',
+        },
+        {
+          commandKey: 'workbench.navigation.open',
+          payload: {
+            target: 'assistant.project',
+            projectId: 'created-project',
+          },
+          hostType: 'agent',
+          hostId: 'xpert-1',
+          viewKey: 'bid.studio',
+        },
+      ),
+    );
+    await waitFor(() =>
+      expect(vi.mocked(Chat).mock.calls.at(-1)?.[0]).toMatchObject({
+        activeProjectId: 'created-project',
+        projectsEnabled: true,
+        options: { composer: { projects: { locked: true } } },
+      }),
+    );
+    expect(
+      vi.mocked(WorkbenchShell).mock.calls.at(-1)?.[0].projectCreation,
+    ).toBeUndefined();
+    expect(vi.mocked(StreamProvider).mock.calls.at(-1)?.[0]).toMatchObject({
+      projectId: 'created-project',
+      projectSelection: undefined,
+    });
+  });
+
   it('does not expose Project creation when the host disables it', () => {
     render(
       <App
@@ -686,16 +795,11 @@ describe('App', () => {
     expect(parentMessengerMocks.sendEvent).not.toHaveBeenCalled();
   });
 
-  it('preserves Project creation for hosts that have not disabled it', () => {
+  it('leaves direct Project creation inside ChatKit without a host effect', () => {
     render(<App clientSecret="secret" options={options} />);
-
+    expect(vi.mocked(Chat).mock.calls.at(-1)?.[0].onProjectCreate).toBeUndefined();
     fireEvent.click(screen.getByTestId('create-project'));
-
-    expect(parentMessengerMocks.sendEvent).toHaveBeenCalledOnce();
-    expect(parentMessengerMocks.sendEvent).toHaveBeenCalledWith(
-      'public_event',
-      ['effect', { name: 'project.create', data: { name: 'Launch project' } }],
-    );
+    expect(parentMessengerMocks.sendEvent).not.toHaveBeenCalled();
   });
 });
 

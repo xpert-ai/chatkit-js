@@ -385,6 +385,55 @@ describe('RemoteViewFrame', () => {
     );
   });
 
+  it('updates iframe radius tokens when only the radius preset changes', async () => {
+    const view = renderFrame({ radius: 'sharp' });
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+
+    const presets = [
+      ['sharp', '0px', '0px', '0px'],
+      [
+        'round',
+        'max(0px, calc(0.625rem - 2px))',
+        '0.625rem',
+        'calc(0.625rem + 4px)',
+      ],
+      [
+        'pill',
+        'max(0px, calc(calc(0.625rem + 4px) - 2px))',
+        'calc(0.625rem + 4px)',
+        'calc(0.625rem + 12px)',
+      ],
+      [
+        'soft',
+        'max(0px, calc(max(0px, calc(0.625rem - 2px)) - 2px))',
+        'max(0px, calc(0.625rem - 2px))',
+        '0.625rem',
+      ],
+      ['sharp', '0px', '0px', '0px'],
+    ] as const;
+    for (const [radius, radiusSm, radiusMd, radiusLg] of presets) {
+      view.rerender(renderFrameElement({ radius }));
+      await waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'init',
+            theme: expect.objectContaining({
+              tokens: expect.objectContaining({ radiusSm, radiusMd, radiusLg }),
+            }),
+          }),
+          '*',
+        ),
+      );
+      expect(screen.getByTitle('Documents')).toBe(iframe);
+      postMessage.mockClear();
+    }
+    expect(
+      mocks.client.viewHosts.getRemoteComponentEntry,
+    ).toHaveBeenCalledTimes(1);
+  });
+
   it('checks frame identity and declared commands before dispatching local navigation', async () => {
     const navigationManifest: XpertExtensionViewManifest = {
       ...manifest,

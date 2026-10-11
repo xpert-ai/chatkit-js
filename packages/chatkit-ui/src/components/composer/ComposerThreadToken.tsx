@@ -17,7 +17,7 @@ export function ComposerThreadToken({
     <span
       contentEditable={false}
       data-composer-thread-key={part.key}
-      className="mx-0.5 inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 align-middle text-primary"
+      className="mx-0.5 inline-flex max-w-full items-center gap-1 rounded-chat-item bg-muted px-1.5 align-middle text-primary"
       title={label}
     >
       <MessageCircle className="size-4 shrink-0" />
@@ -28,7 +28,7 @@ export function ComposerThreadToken({
         aria-label={t('composer.threadMentions.remove', { title: label })}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => onRemove(part.key)}
-        className="rounded-sm p-0.5 hover:bg-accent"
+        className="rounded-chat-item p-0.5 hover:bg-accent"
       >
         <X className="size-3" />
       </button>

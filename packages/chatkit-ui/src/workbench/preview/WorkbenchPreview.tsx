@@ -59,6 +59,8 @@ export function WorkbenchPreviewContent(props: {
     return (
       <FilePreview
         key={props.preview.key}
+        onEdit={props.preview.edit}
+        savedVersion={props.preview.savedVersion}
         file={props.preview.source}
         title={props.preview.title}
       />
@@ -77,6 +79,7 @@ export function WorkbenchPreviewContent(props: {
     return (
       <HtmlArtifactPreview
         title={props.preview.title}
+        onEdit={props.preview.edit}
         load={props.preview.html.load}
         identity={props.preview.html.identity}
         onAnnotate={props.preview.html.onAnnotate}

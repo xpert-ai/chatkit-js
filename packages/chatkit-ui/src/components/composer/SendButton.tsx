@@ -48,7 +48,7 @@ export function SendButton({
         onClick={showStop ? onStop : onResume}
         disabled={showStop ? stopDisabled : resumeDisabled}
         className={cn(
-          'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full',
+          'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-chat-item',
           'bg-foreground text-background',
           'transition-transform duration-150 ease-out',
           'hover:scale-105 active:scale-95',
@@ -73,7 +73,7 @@ export function SendButton({
       type="submit"
       disabled={disabled}
       className={cn(
-        'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full',
+        'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-chat-item',
         'bg-foreground text-background',
         'transition-all duration-150 ease-out',
         'hover:scale-105 active:scale-95',
@@ -98,7 +98,7 @@ export function SendButton({
         hideArrow
         className={cn(
           'min-w-36 border border-border/70 bg-background px-3 py-2 text-foreground shadow-lg',
-          'rounded-lg',
+          'rounded-chat-panel',
         )}
       >
         <div className="space-y-1">
@@ -108,7 +108,7 @@ export function SendButton({
               className="flex items-center justify-between gap-4 text-sm"
             >
               <span className="font-medium">{shortcut.label}</span>
-              <kbd className="inline-flex min-w-16 items-center justify-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              <kbd className="inline-flex min-w-16 items-center justify-center rounded-chat-item bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                 {shortcut.keys}
               </kbd>
             </div>

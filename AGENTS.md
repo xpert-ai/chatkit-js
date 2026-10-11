@@ -17,6 +17,32 @@ app and follow existing patterns.
 - Apply this through normal development and review; do not add dedicated line-count
   scripts, CI gates, or lint rules unless explicitly requested.
 
+## UI theme adaptation
+
+- Every new or modified UI component must respect the active theme's radius,
+  density, and colors. Reuse shared components and theme tokens, including for
+  hover, selected, focus, disabled, loading, and error states.
+- Use `rounded-chat-panel` for surfaces and `rounded-chat-item` for controls and
+  list items, backed by `--chat-panel-radius` and `--chat-item-radius`. Avoid fixed
+  radius values or utility overrides that bypass the theme. Reserve fixed circles
+  for shapes whose meaning requires them, such as status dots and progress rings.
+- Derive control heights, padding, gaps, and margins from the existing density
+  tokens/helpers. Keep containers, buttons, selects, icons, and text proportionate
+  across `compact`, `normal`, and `spacious`, while preserving legibility and usable
+  hit areas. Density changes should not introduce a different layout.
+- Use semantic color tokens with matching foreground/background pairs (for
+  example, `background`/`foreground`, `accent`/`accent-foreground`, and
+  `primary`/`primary-foreground`). Avoid hardcoded colors that bypass light/dark
+  mode, custom themes, or interaction-state contrast.
+- Theme inheritance must survive rendering boundaries. For Radix portals, apply
+  the current surface tokens with `getSurfaceThemeStyle`; for Workbench iframes,
+  pass the current theme through the existing bridge and consume its tokens in
+  the View. Verify updates while the surface is open, not only its initial render.
+- Check the affected UI with sharp and rounded presets, compact and spacious
+  density, and light/dark colors. Include nested controls and floating surfaces;
+  validate relevant theme propagation with focused coverage when crossing a
+  portal or iframe boundary. Keep unrelated layout and behavior unchanged.
+
 ## Types and platform APIs
 
 - AVOID using arbitrary type checks `asRecord`, for example:

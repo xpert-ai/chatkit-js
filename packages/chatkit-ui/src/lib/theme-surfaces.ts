@@ -22,25 +22,31 @@ export function getDensitySpacing(density: 'compact' | 'normal' | 'spacious'): {
 }
 
 // Match the existing panel/menu presets, without turning multi-row surfaces into pills.
-const panelRadius = {
-  sharp: '0px',
-  soft: 'var(--radius, 0.625rem)',
-  round: 'calc(var(--radius, 0.625rem) + 4px)',
-  pill: 'calc(var(--radius, 0.625rem) + 12px)',
-};
-const itemRadius = {
-  sharp: '0px',
-  soft: 'max(0px, calc(var(--radius, 0.625rem) - 2px))',
-  round: 'var(--radius, 0.625rem)',
-  pill: 'calc(var(--radius, 0.625rem) + 4px)',
-};
+export function getThemeRadii(
+  radius: ChatKitTheme['radius'] = 'soft',
+  baseRadius = 'var(--radius, 0.625rem)',
+) {
+  const panelRadius = {
+    sharp: '0px',
+    soft: baseRadius,
+    round: `calc(${baseRadius} + 4px)`,
+    pill: `calc(${baseRadius} + 12px)`,
+  };
+  const itemRadius = {
+    sharp: '0px',
+    soft: `max(0px, calc(${baseRadius} - 2px))`,
+    round: baseRadius,
+    pill: `calc(${baseRadius} + 4px)`,
+  };
+  return { panel: panelRadius[radius], item: itemRadius[radius] };
+}
 
 /** Explicit tokens also work in Radix portals, outside the ThemeProvider DOM root. */
 export function getSurfaceThemeStyle(theme: ChatKitTheme): CSSProperties {
-  const radius = theme.radius ?? 'soft';
+  const radius = getThemeRadii(theme.radius);
   return {
-    '--chat-panel-radius': panelRadius[radius],
-    '--chat-item-radius': itemRadius[radius],
+    '--chat-panel-radius': radius.panel,
+    '--chat-item-radius': radius.item,
     '--chat-density-scale': getDensitySpacing(theme.density ?? 'normal')
       .spacing,
   } as CSSProperties;

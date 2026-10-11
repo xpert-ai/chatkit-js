@@ -1,3 +1,4 @@
+import { workspaceFileScope } from './native/files/workspace-file-access';
 import type { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import {
   NativeWorkbenchContent,
@@ -116,6 +117,7 @@ type WorkbenchPanelProps = {
   notification: { level: 'success' | 'error'; message: string } | null;
   error: string | null;
   loading: boolean;
+  startPageLoading?: boolean;
   expanded: boolean;
   onClose: () => void;
   onRequestCloseSideChat: () => void;
@@ -178,6 +180,7 @@ export function WorkbenchPanel({
   notification,
   error,
   loading,
+  startPageLoading = loading,
   expanded,
   onClose,
   onRequestCloseSideChat,
@@ -215,13 +218,11 @@ export function WorkbenchPanel({
   );
   const fileScope = React.useMemo<WorkspaceFileScope | null>(
     () =>
-      stream.projectId
-        ? stream.conversationId
-          ? { kind: 'conversation', conversationId: stream.conversationId }
-          : null
-        : stream.assistantId
-          ? { kind: 'assistant', assistantId: stream.assistantId }
-          : null,
+      workspaceFileScope({
+        projectId: stream.projectId,
+        conversationId: stream.conversationId,
+        assistantId: stream.assistantId,
+      }),
     [stream.projectId, stream.conversationId, stream.assistantId],
   );
   const { theme } = useTheme();
@@ -490,7 +491,7 @@ export function WorkbenchPanel({
               recent={recent}
               locale={locale}
               apiUrl={stream.apiUrl}
-              loading={loading}
+              loading={startPageLoading}
               error={error}
               onReload={onReload}
               onSelectView={(viewKey) => onNavigateNewTab(key, viewKey)}

@@ -27,6 +27,9 @@ vi.mock('../../providers/Stream', () => ({
 vi.mock('../../workbench/context', () => ({
   useWorkbench: () => ({ enabled: mocks.enabled }),
 }));
+vi.mock('../../hooks/useAssistantInfo', () => ({
+  useAssistantInfo: () => undefined,
+}));
 vi.mock('../../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -74,7 +77,9 @@ describe('ProjectCreationChat', () => {
       { xpertId: 'assistant', signal: expect.any(AbortSignal) },
     );
     await act(async () => resolve(entry));
-    expect(onProjectEntry).toHaveBeenCalledExactlyOnceWith(entry);
+    expect(onProjectEntry).toHaveBeenCalledExactlyOnceWith(entry, {
+      mode: 'none',
+    });
   });
 
   it('displays failures and lets the next click retry', async () => {

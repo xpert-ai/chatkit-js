@@ -173,7 +173,7 @@ function ComputerRow({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="chatkit-presence-computer-row flex w-full items-center rounded-xl text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:text-muted-foreground disabled:hover:bg-transparent"
+      className="chatkit-presence-computer-row flex w-full items-center rounded-chat-item text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:text-muted-foreground disabled:hover:bg-transparent"
     >
       <span className="relative shrink-0 text-muted-foreground">
         <Icon className="size-5" />

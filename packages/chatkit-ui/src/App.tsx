@@ -44,21 +44,26 @@ export function App({
   const apiKey =
     navigation.session?.secret ||
     (clientSecret.trim() ? clientSecret : undefined);
-  const activeOptions = navigation.session
-    ? {
-        ...options!,
-        initialThread: navigation.session.threadId,
-        api: {
-          ...options!.api,
-          xpertId: navigation.session.assistantId,
-          projectId: navigation.session.projectId ?? undefined,
-        },
-        header: {
-          ...options?.header,
-          title: { ...options?.header?.title, text: undefined },
-        },
-      }
-    : options;
+  const activeOptions =
+    navigation.session && options
+      ? {
+          ...options,
+          initialThread: navigation.session.threadId,
+          api: {
+            ...options.api,
+            xpertId: navigation.session.assistantId,
+            projectId: navigation.session.projectId ?? undefined,
+          },
+          header: {
+            ...options?.header,
+            title: { ...options?.header?.title, text: undefined },
+          },
+          composer: {
+            ...options?.composer,
+            projects: { ...options?.composer?.projects, locked: true },
+          },
+        }
+      : options;
   const xpertId = import.meta.env.VITE_XPERTAI_XPERT_ID as string | undefined;
   const apiUrl = import.meta.env.VITE_XPERTAI_API_URL as string | undefined;
 
@@ -194,9 +199,9 @@ export function App({
     [sendEvent, projectBinding],
   );
   const handleProjectEntry = React.useCallback(
-    (entry: ProjectCreationEntry) => {
+    (entry: ProjectCreationEntry, selection: ProjectSelection) => {
       const id = ++creationSequence.current;
-      setProjectSelection({ mode: 'none' });
+      setProjectSelection(selection);
       setProjectConversationRequest(null);
       setScopedInitialThread(null);
       setWorkbenchRequestContext({});
@@ -204,28 +209,6 @@ export function App({
       setCreationNavigation({ id, entry });
     },
     [],
-  );
-  const handleProjectCreate = React.useCallback(
-    (name: string, projectType?: XpertProjectTypeRef) => {
-      sendEvent('public_event', [
-        'effect',
-        {
-          name: 'project.create',
-          data: {
-            name,
-            ...(projectType
-              ? {
-                  projectType: {
-                    applicationKey: projectType.applicationKey,
-                    projectTypeKey: projectType.projectTypeKey,
-                  },
-                }
-              : {}),
-          },
-        },
-      ]);
-    },
-    [sendEvent],
   );
   const handleConnectorsChange = React.useCallback(
     (connectorBindingIds: string[]) => {
@@ -253,10 +236,12 @@ export function App({
           ? (navigation.session.projectId ?? undefined)
           : (activeProjectId ?? undefined)
       }
-      projectsEnabled={projectsEnabled && !navigation.session}
+      projectsEnabled={
+        projectsEnabled &&
+        (!navigation.session || Boolean(navigation.session.projectId))
+      }
       connectorsEnabled={connectorsEnabled}
       onProjectChange={handleProjectChange}
-      onProjectCreate={projectCreationEnabled ? handleProjectCreate : undefined}
       creationEnabled={projectCreationEnabled && !navigation.session}
       onProjectEntry={handleProjectEntry}
       onConnectorsChange={handleConnectorsChange}

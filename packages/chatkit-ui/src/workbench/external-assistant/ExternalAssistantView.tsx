@@ -140,7 +140,7 @@ export function ExternalAssistantView({
               type="button"
               onClick={() => onSelect(null)}
               aria-label={t('workbench.externalAssistants.back')}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-chat-item p-1.5 text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
