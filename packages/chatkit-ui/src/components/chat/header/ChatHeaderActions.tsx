@@ -27,7 +27,7 @@ export function ChatHeaderActions({
 }) {
   const { t } = useChatkitTranslation();
   const actionClass =
-    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150';
+    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-chat-item text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150';
   return (
     <>
       {menu && (

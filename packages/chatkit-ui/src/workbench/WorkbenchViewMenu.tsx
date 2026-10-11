@@ -82,7 +82,7 @@ export function WorkbenchViewMenu({
         sideOffset={8}
         collisionPadding={12}
         aria-labelledby={titleId}
-        className="w-72 max-w-[calc(100vw-1.5rem)] rounded-2xl border-border/60 p-2 shadow-lg"
+        className="w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-chat-panel border-border/60 py-[calc(0.5rem*var(--chat-density-scale,1))] pl-[calc(0.5rem*var(--chat-density-scale,1))] pr-0 shadow-lg"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           if (keyboardOpen.current) firstViewRef.current?.focus();
@@ -99,11 +99,11 @@ export function WorkbenchViewMenu({
       >
         <div
           id={titleId}
-          className="px-2.5 pb-2 pt-1 text-sm font-medium text-muted-foreground"
+          className="px-[calc(0.625rem*var(--chat-density-scale,1))] pb-[calc(0.5rem*var(--chat-density-scale,1))] pt-[calc(0.25rem*var(--chat-density-scale,1))] text-sm font-medium text-muted-foreground"
         >
           {t('workbench.views')}
         </div>
-        <div className="max-h-72 space-y-0.5 overflow-y-auto overscroll-contain">
+        <div className="max-h-72 space-y-[calc(0.125rem*var(--chat-density-scale,1))] overflow-y-auto overscroll-contain">
           {views.map((view, index) => {
             const label = resolveManifestText(
               view.workbench?.menu?.label ?? view.title,
@@ -116,7 +116,7 @@ export function WorkbenchViewMenu({
                 ref={index === 0 ? firstViewRef : undefined}
                 type="button"
                 title={label}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className="flex w-full items-center gap-[calc(0.625rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.625rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 onClick={() => {
                   close();
                   onSelect(view.key);

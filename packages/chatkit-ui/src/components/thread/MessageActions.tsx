@@ -37,7 +37,7 @@ function MessageActionButton({
       aria-label={label}
       disabled={disabled}
       className={cn(
-        'rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+        'rounded-chat-item p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
     />
@@ -56,7 +56,7 @@ function MessageActionButton({
             tabIndex={0}
             aria-label={label}
             aria-disabled="true"
-            className="inline-flex rounded-md"
+            className="inline-flex rounded-chat-item"
           >
             {button}
           </span>
@@ -68,7 +68,7 @@ function MessageActionButton({
         side="bottom"
         sideOffset={8}
         hideArrow
-        className="max-w-64 rounded-full bg-zinc-900 px-3 py-2 text-sm text-white shadow-lg"
+        className="max-w-64 rounded-chat-item bg-zinc-900 px-3 py-2 text-sm text-white shadow-lg"
       >
         {tooltip}
       </TooltipContent>

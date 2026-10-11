@@ -27,7 +27,7 @@ export function MessageEditor({
     }
   }
   return (
-    <div className="w-full space-y-2 rounded-2xl border border-input bg-background p-3">
+    <div className="w-full space-y-2 rounded-chat-panel border border-input bg-background p-3">
       <textarea
         aria-label={t('threadControl.editMessage')}
         value={text}

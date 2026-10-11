@@ -448,6 +448,7 @@
     "recent": "最近更新",
     "project": "按项目",
     "projectFallback": "项目 {{id}}",
+    "filterProject": "按项目过滤：{{name}}",
     "current": "当前对话",
     "count": "已加载 {{count}} / {{total}} 条对话",
     "loading": "正在加载消息历史…",

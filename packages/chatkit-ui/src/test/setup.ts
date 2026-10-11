@@ -1,5 +1,18 @@
 import '@testing-library/jest-dom/vitest';
 
+// jsdom has no layout or scrolling. Radix Select calls this while moving focus;
+// actual scrolling and menu positioning are verified in the browser.
+if (
+  typeof Element !== 'undefined' &&
+  typeof Element.prototype.scrollIntoView !== 'function'
+) {
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    writable: true,
+    value() {},
+  });
+}
+
 // Node 24's Response.blob() uses jsdom's Blob, which lacks arrayBuffer().
 // Keep jsdom's Blob/File constructors so FileReader continues to accept them.
 if (typeof Blob.prototype.arrayBuffer !== 'function') {

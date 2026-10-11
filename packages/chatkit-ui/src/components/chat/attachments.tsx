@@ -454,7 +454,7 @@ export const ChatAttachments = React.forwardRef<
             <div
               key={item.localId}
               className={cn(
-                'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                'flex items-center gap-2 rounded-chat-item px-2 py-1 text-sm',
                 item.status === 'error' || parseFailed
                   ? 'bg-destructive/10 border border-destructive/30'
                   : 'bg-muted',
@@ -492,7 +492,7 @@ export const ChatAttachments = React.forwardRef<
                 <button
                   type="button"
                   onClick={() => retryUpload(item.localId)}
-                  className="ml-1 rounded-full p-0.5 text-destructive hover:bg-destructive/20"
+                  className="ml-1 rounded-chat-item p-0.5 text-destructive hover:bg-destructive/20"
                   title={retryUploadLabel}
                 >
                   <RefreshCw size={12} />
@@ -503,7 +503,7 @@ export const ChatAttachments = React.forwardRef<
                 type="button"
                 onClick={() => removeAttachment(item.localId)}
                 className={cn(
-                  'ml-1 rounded-full p-0.5',
+                  'ml-1 rounded-chat-item p-0.5',
                   item.status === 'error'
                     ? 'text-destructive hover:bg-destructive/20'
                     : 'hover:bg-muted-foreground/20',

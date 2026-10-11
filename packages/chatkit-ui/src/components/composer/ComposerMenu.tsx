@@ -43,7 +43,6 @@ import {
   cn,
   getMenuItemRoundedClass,
   getPanelRoundedClass,
-  getRoundedClass,
 } from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
 import { RuntimeCapabilityIcon } from '../runtime-capability-icon';
@@ -115,13 +114,13 @@ function Toggle({ checked }: { checked: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        'relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors',
+        'relative inline-flex h-6 w-10 shrink-0 items-center rounded-chat-item transition-colors',
         checked ? 'bg-primary' : 'bg-muted-foreground/20',
       )}
     >
       <span
         className={cn(
-          'inline-block h-5 w-5 rounded-full bg-background shadow-sm transition-transform',
+          'inline-block h-5 w-5 rounded-chat-item bg-background shadow-sm transition-transform',
           checked ? 'translate-x-[18px]' : 'translate-x-0.5',
         )}
       />
@@ -165,7 +164,7 @@ export function ComposerMenu({
     React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
 
-  const roundedClass = getRoundedClass(theme.radius);
+  const roundedClass = 'rounded-chat-item';
   const panelRoundedClass = getPanelRoundedClass(theme.radius);
   const menuItemRoundedClass = getMenuItemRoundedClass(theme.radius);
   const attachmentsEnabled = composer?.attachments?.enabled ?? false;
@@ -278,13 +277,13 @@ export function ComposerMenu({
           {values.slice(0, 6).map((value) => (
             <span
               key={value}
-              className="max-w-full truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
+              className="max-w-full truncate rounded-chat-item bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
             >
               {value}
             </span>
           ))}
           {values.length > 6 ? (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            <span className="rounded-chat-item bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
               +{values.length - 6}
             </span>
           ) : null}
@@ -329,14 +328,14 @@ export function ComposerMenu({
         ) : null}
 
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-md bg-muted px-2 py-1">
+          <div className="rounded-chat-item bg-muted px-2 py-1">
             <span className="block text-[11px] text-muted-foreground">
               {t('composer.capabilities.type')}
             </span>
             <span className="font-medium">{agentKind}</span>
           </div>
           {subAgent.agentKey || subAgent.xpertId ? (
-            <div className="rounded-md bg-muted px-2 py-1">
+            <div className="rounded-chat-item bg-muted px-2 py-1">
               <span className="block text-[11px] text-muted-foreground">
                 {t('composer.capabilities.identifier')}
               </span>
@@ -370,7 +369,7 @@ export function ComposerMenu({
           type="button"
           aria-label={t('composer.capabilities.agentDetails')}
           data-slot="runtime-sub-agent-info-trigger"
-          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-chat-item text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
@@ -524,7 +523,7 @@ export function ComposerMenu({
               key={tool.id}
               type="button"
               className={cn(
-                'flex w-full items-center gap-3 rounded-md p-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted',
+                'flex w-full items-center gap-3 rounded-chat-item p-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted',
                 selectedTool?.id === tool.id && 'bg-muted',
               )}
               onClick={() => {
@@ -662,7 +661,8 @@ export function ComposerMenu({
           aria-label={open ? t('composer.closeMenu') : t('composer.openMenu')}
           className={cn(
             'size-9 shrink-0 transition-[background-color,border-radius] duration-300 hover:bg-muted',
-            open ? 'rounded-full bg-muted' : roundedClass,
+            roundedClass,
+            open && 'bg-muted',
           )}
         >
           <Plus
@@ -845,7 +845,7 @@ function PrimaryPanelItem({
       {React.cloneElement(icon, { className: 'size-5' })}
       <span className="min-w-0 flex-1 text-base">{label}</span>
       {count > 0 ? (
-        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary">
+        <span className="rounded-chat-item bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary">
           {count}
         </span>
       ) : null}

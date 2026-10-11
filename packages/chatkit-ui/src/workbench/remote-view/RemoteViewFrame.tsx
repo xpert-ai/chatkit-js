@@ -8,6 +8,7 @@ import type {
   XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
 import { useTheme } from '../../providers/Theme';
+import { getThemeRadii } from '../../lib/theme-surfaces';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { isWorkbenchDebugEnabled, workbenchDebug } from '../debug';
 import { matchesHostEventSubscription } from '../host-events';
@@ -77,7 +78,7 @@ export function RemoteViewFrame({
   onNotify,
   onClientCommand,
 }: RemoteViewFrameProps) {
-  const { isDarkMode, themeRootRef, themeRevision } = useTheme();
+  const { theme, isDarkMode, themeRootRef, themeRevision } = useTheme();
   const { t } = useChatkitTranslation();
   const frameRef = React.useRef<HTMLIFrameElement>(null);
   const [html, setHtml] = React.useState<string | null>(null);
@@ -136,8 +137,8 @@ export function RemoteViewFrame({
     void themeRevision;
     const element =
       themeRootRef.current ?? frameRef.current ?? document.documentElement;
-    return createRemoteTheme(element, isDarkMode);
-  }, [isDarkMode, themeRevision, themeRootRef]);
+    return createRemoteTheme(element, isDarkMode, theme.radius);
+  }, [isDarkMode, theme.radius, themeRevision, themeRootRef]);
 
   // Revalidating a scope must not reset an already initialized remote view.
   // Theme, navigation and manifest changes still require an updated init payload.
@@ -721,6 +722,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 function createRemoteTheme(
   element: HTMLElement,
   isDarkMode: boolean,
+  radiusPreset: Parameters<typeof getThemeRadii>[0],
 ): RemoteTheme {
   const style = getComputedStyle(element);
   const bodyStyle = getComputedStyle(document.body);
@@ -781,7 +783,12 @@ function createRemoteTheme(
     isDarkMode ? '#f87171' : '#dc2626',
   );
   const success = readThemeColor(style, '--success', '#047857');
-  const radius = readThemeValue(style, '--radius', '0.625rem');
+  // Share ChatKit's preset scale, resolving the base in the host so no host-only
+  // CSS variable references cross the isolated document boundary.
+  const radius = getThemeRadii(
+    radiusPreset,
+    readThemeValue(style, '--radius', '0.625rem'),
+  );
 
   return {
     mode,
@@ -838,9 +845,12 @@ function createRemoteTheme(
       // rem values inside the isolated view must use the host document root size.
       densityRootFontSize:
         getComputedStyle(document.documentElement).fontSize || '16px',
-      radiusSm: `max(0px, calc(${radius} - 4px))`,
-      radiusMd: `max(0px, calc(${radius} - 2px))`,
-      radiusLg: radius,
+      radiusSm:
+        radiusPreset === 'sharp'
+          ? '0px'
+          : `max(0px, calc(${radius.item} - 2px))`,
+      radiusMd: radius.item,
+      radiusLg: radius.panel,
       fontSizeXs: readThemeValue(
         style,
         '--workbench-extension-font-size-xs',

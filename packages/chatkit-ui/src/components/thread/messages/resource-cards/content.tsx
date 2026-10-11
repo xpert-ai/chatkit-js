@@ -48,7 +48,7 @@ function FileItem({ file }: { file: ResourceCardFile }) {
           onClick={() => void download()}
           disabled={!downloadResourceCardFile || busy}
           aria-label={`${t('actions.files.download')} ${file.title}`}
-          className="rounded-md border p-2 hover:bg-muted disabled:opacity-50"
+          className="rounded-chat-item border p-2 hover:bg-muted disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />

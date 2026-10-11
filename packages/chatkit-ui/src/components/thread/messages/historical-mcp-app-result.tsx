@@ -9,7 +9,7 @@ export function HistoricalMcpAppResult({
 }) {
   const { t } = useChatkitTranslation();
   return (
-    <details className="rounded-lg border p-3" open>
+    <details className="rounded-chat-panel border p-3" open>
       <summary className="cursor-pointer text-sm font-medium">
         {t('message.historicalAppResult')}
       </summary>

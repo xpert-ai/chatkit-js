@@ -448,6 +448,7 @@
     "recent": "Recent",
     "project": "By project",
     "projectFallback": "Project {{id}}",
+    "filterProject": "Filter by project: {{name}}",
     "current": "Current conversation",
     "count": "{{count}} of {{total}} conversations loaded",
     "loading": "Loading message history…",

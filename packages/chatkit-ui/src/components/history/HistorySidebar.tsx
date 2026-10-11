@@ -11,16 +11,30 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Trash2,
   X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
+import { useTheme } from '../../providers/Theme';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import type { ThreadHistoryScope, ThreadItem } from '../../hooks/useThreads';
+import type {
+  ThreadHistoryProject,
+  ThreadHistoryScope,
+  ThreadItem,
+} from '../../hooks/useThreads';
+import { HistoryThreadItem } from './HistoryThreadItem';
 
 export type HistorySidebarProps = {
   open?: boolean;
@@ -49,6 +63,8 @@ export type HistorySidebarProps = {
   disabled?: boolean;
   scope?: ThreadHistoryScope;
   onScopeChange?: (scope: ThreadHistoryScope) => void;
+  projectFilter?: ThreadHistoryProject | null;
+  onProjectFilterChange?: (project: ThreadHistoryProject) => void;
   hasCurrentProject?: boolean;
 };
 
@@ -77,9 +93,12 @@ export function HistorySidebar({
   disabled = false,
   scope = 'all',
   onScopeChange,
+  projectFilter,
+  onProjectFilterChange,
   hasCurrentProject = false,
 }: HistorySidebarProps) {
   const { t, i18n } = useChatkitTranslation();
+  const themeContext = useTheme({ optional: true });
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = (value: boolean) => {
@@ -113,7 +132,7 @@ export function HistorySidebar({
   React.useEffect(() => {
     setCollapsed(new Set());
     setDeleteError(false);
-  }, [query, scope, open]);
+  }, [query, scope, projectFilter?.id, open]);
 
   const projectLabel = (thread: ThreadItem) =>
     thread.projectId
@@ -172,12 +191,13 @@ export function HistorySidebar({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <Dialog.Content
           data-slot="message-history-dialog"
+          style={themeContext && getSurfaceThemeStyle(themeContext.theme)}
           onCloseAutoFocus={onCloseAutoFocus}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             searchRef.current?.focus();
           }}
-          className="fixed left-1/2 top-1/2 z-50 flex h-[min(40rem,calc(100dvh-2rem))] w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-background text-foreground shadow-xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="fixed left-1/2 top-1/2 z-50 flex h-[min(40rem,calc(100dvh-2rem))] w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-chat-panel border border-border bg-background text-foreground shadow-xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-6">
             <div className="min-w-0">
@@ -235,17 +255,14 @@ export function HistorySidebar({
                 onChange={(event) => onQueryChange?.(event.target.value)}
                 aria-label={t('history.search')}
                 placeholder={t('history.searchPlaceholder')}
-                className="rounded-lg pl-9"
+                className="pl-9"
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               {onScopeChange && (
-                <select
-                  aria-label={t('history.scope.label')}
-                  value={scope}
-                  className="h-8 max-w-full rounded-md border border-input bg-background px-2 text-sm"
-                  onChange={(event) => {
-                    const value = event.target.value;
+                <Select
+                  value={projectFilter ? 'selected-project' : scope}
+                  onValueChange={(value) => {
                     if (
                       value === 'all' ||
                       value === 'current-project' ||
@@ -254,19 +271,45 @@ export function HistorySidebar({
                       onScopeChange(value);
                   }}
                 >
-                  <option value="all">{t('history.scope.all')}</option>
-                  <option value="current-project" disabled={!hasCurrentProject}>
-                    {t('history.scope.currentProject')}
-                  </option>
-                  <option value="no-project">
-                    {t('history.scope.noProject')}
-                  </option>
-                </select>
+                  <SelectTrigger
+                    aria-label={t('history.scope.label')}
+                    className="max-w-full bg-background *:data-[slot=select-value]:min-w-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    position="popper"
+                    align="start"
+                    className="max-w-[min(28rem,calc(100vw-2rem))]"
+                  >
+                    <SelectGroup>
+                      <SelectItem value="all">
+                        {t('history.scope.all')}
+                      </SelectItem>
+                      {projectFilter && (
+                        <SelectItem value="selected-project">
+                          <span className="truncate" title={projectFilter.name}>
+                            {projectFilter.name}
+                          </span>
+                        </SelectItem>
+                      )}
+                      <SelectItem
+                        value="current-project"
+                        disabled={!hasCurrentProject}
+                      >
+                        {t('history.scope.currentProject')}
+                      </SelectItem>
+                      <SelectItem value="no-project">
+                        {t('history.scope.noProject')}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               )}
               <div
                 role="group"
                 aria-label={t('history.grouping')}
-                className="flex rounded-lg bg-muted p-0.5"
+                className="flex rounded-chat-item bg-muted p-0.5"
               >
                 {(['recent', 'project'] as const).map((mode) => (
                   <button
@@ -275,7 +318,7 @@ export function HistorySidebar({
                     aria-pressed={view === mode}
                     onClick={() => setView(mode)}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      'flex items-center gap-1.5 rounded-chat-item px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       view === mode
                         ? 'bg-background text-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground',
@@ -296,7 +339,7 @@ export function HistorySidebar({
           {(error || deleteError) && (
             <div
               role="alert"
-              className="mx-5 mt-3 flex items-center justify-between gap-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-6"
+              className="mx-5 mt-3 flex items-center justify-between gap-3 rounded-chat-item bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-6"
             >
               <span>
                 {t(deleteError ? 'history.deleteFailed' : 'history.loadFailed')}
@@ -339,7 +382,10 @@ export function HistorySidebar({
                 </div>
               ) : (
                 Array.from(groups, ([key, group], index) => (
-                  <section key={key} className="mb-3 last:mb-0">
+                  <section
+                    key={key}
+                    className="mb-[calc(0.75rem*var(--chat-density-scale,1))] last:mb-0"
+                  >
                     {view === 'project' && (
                       <button
                         type="button"
@@ -353,7 +399,7 @@ export function HistorySidebar({
                             return next;
                           })
                         }
-                        className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="mb-[calc(0.25rem*var(--chat-density-scale,1))] flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {collapsed.has(key) ? (
                           <ChevronRight size={14} />
@@ -380,76 +426,47 @@ export function HistorySidebar({
                           updatedAt && !Number.isNaN(updatedAt.getTime());
                         const active = currentThreadId === thread.id;
                         return (
-                          <li
+                          <HistoryThreadItem
                             key={thread.recordId}
-                            data-active={active}
-                            className="group flex min-w-0 items-center gap-1 rounded-xl pr-2 transition-colors hover:bg-accent hover:text-accent-foreground data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onSelectThread?.(thread);
-                                setOpen(false);
-                              }}
-                              disabled={disabled || Boolean(deletingId)}
-                              aria-current={active ? 'true' : undefined}
-                              aria-label={thread.title}
-                              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:opacity-50"
-                            >
-                              <MessageSquare
-                                size={17}
-                                className="shrink-0 text-muted-foreground"
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span
-                                  className="block truncate text-sm font-medium"
-                                  title={thread.title}
-                                >
-                                  {thread.title}
-                                </span>
-                                <span className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                                  {view === 'recent' && (
-                                    <span className="truncate">
-                                      {projectLabel(thread)}
-                                    </span>
-                                  )}
-                                  {validDate && (
-                                    <time
-                                      dateTime={updatedAt.toISOString()}
-                                      title={dateFormat.full.format(updatedAt)}
-                                    >
-                                      {updatedAt.toDateString() ===
-                                      new Date().toDateString()
-                                        ? dateFormat.time.format(updatedAt)
-                                        : dateFormat.compact.format(updatedAt)}
-                                    </time>
-                                  )}
-                                  {active && (
-                                    <span className="shrink-0">
-                                      {t('history.current')}
-                                    </span>
-                                  )}
-                                </span>
-                              </span>
-                            </button>
-                            {showDelete && onDeleteThread && (
-                              <button
-                                type="button"
-                                onClick={() => void deleteThread(thread)}
-                                disabled={disabled || Boolean(deletingId)}
-                                aria-label={t('history.deleteThread', {
-                                  title: thread.title,
-                                })}
-                                className="shrink-0 rounded-md p-2 text-muted-foreground transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                              >
-                                {deletingId === thread.recordId ? (
-                                  <Loader2 size={15} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={15} />
-                                )}
-                              </button>
-                            )}
-                          </li>
+                            thread={thread}
+                            active={active}
+                            disabled={disabled || Boolean(deletingId)}
+                            deleting={deletingId === thread.recordId}
+                            project={
+                              view === 'recent' && thread.projectId
+                                ? {
+                                    id: thread.projectId,
+                                    name: projectLabel(thread),
+                                  }
+                                : undefined
+                            }
+                            projectSelected={
+                              projectFilter?.id === thread.projectId
+                            }
+                            onFilterProject={onProjectFilterChange}
+                            updatedLabel={
+                              validDate
+                                ? updatedAt.toDateString() ===
+                                  new Date().toDateString()
+                                  ? dateFormat.time.format(updatedAt)
+                                  : dateFormat.compact.format(updatedAt)
+                                : undefined
+                            }
+                            updatedTitle={
+                              validDate
+                                ? dateFormat.full.format(updatedAt)
+                                : undefined
+                            }
+                            onSelect={() => {
+                              onSelectThread?.(thread);
+                              setOpen(false);
+                            }}
+                            onDelete={
+                              showDelete && onDeleteThread
+                                ? () => void deleteThread(thread)
+                                : undefined
+                            }
+                          />
                         );
                       })}
                     </ul>

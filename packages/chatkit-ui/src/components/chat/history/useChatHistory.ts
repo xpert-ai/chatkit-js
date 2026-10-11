@@ -1,13 +1,21 @@
 import * as React from 'react';
 import { useMessageHistory } from '../../../hooks/useMessageHistory';
-import { useThreads, type ThreadHistoryScope } from '../../../hooks/useThreads';
+import {
+  useThreads,
+  type ThreadHistoryProject,
+  type ThreadHistoryScope,
+} from '../../../hooks/useThreads';
 import type { useChatEnvironment } from '../session/useChatEnvironment';
 
 type ChatHistoryOptions = Pick<
   ReturnType<typeof useChatEnvironment>,
-  'activeProjectId' | 'history' | 'stream' | 'missingConfig' | 't'
+  'activeProjectId' | 'history' | 'missingConfig' | 't'
 > & {
   surface: 'main' | 'side';
+  stream: Pick<
+    ReturnType<typeof useChatEnvironment>['stream'],
+    'client' | 'assistantId' | 'isReady' | 'threadId' | 'conversationId'
+  >;
 };
 
 export function useChatHistory({
@@ -19,8 +27,18 @@ export function useChatHistory({
   t,
 }: ChatHistoryOptions) {
   const [historyOpen, setHistoryOpen] = React.useState(false);
-  const [historyScope, setHistoryScope] =
+  const [historyScope, updateHistoryScope] =
     React.useState<ThreadHistoryScope>('all');
+  const [historyProjectFilter, setHistoryProjectFilter] =
+    React.useState<ThreadHistoryProject | null>(null);
+  const setHistoryScope = (scope: ThreadHistoryScope) => {
+    setHistoryProjectFilter(null);
+    updateHistoryScope(scope);
+  };
+
+  React.useEffect(() => {
+    setHistoryProjectFilter(null);
+  }, [stream.client, stream.assistantId]);
 
   const [historyQuery, setHistoryQuery] = React.useState('');
   const effectiveHistoryScope =
@@ -36,7 +54,7 @@ export function useChatHistory({
   const messageHistory = useMessageHistory({
     client: stream.client,
     assistantId: stream.assistantId,
-    projectId: activeProjectId,
+    projectId: historyProjectFilter?.id ?? activeProjectId,
     enabled:
       historyOpen &&
       surface === 'main' &&
@@ -44,7 +62,7 @@ export function useChatHistory({
       !missingConfig &&
       stream.isReady,
     query: historyQuery,
-    scope: effectiveHistoryScope,
+    scope: historyProjectFilter ? 'current-project' : effectiveHistoryScope,
   });
 
   const currentThread = React.useMemo(
@@ -74,5 +92,7 @@ export function useChatHistory({
     setHistoryQuery,
     effectiveHistoryScope,
     setHistoryScope,
+    historyProjectFilter,
+    setHistoryProjectFilter,
   };
 }

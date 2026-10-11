@@ -62,7 +62,7 @@ function ResourceCard({
   };
   return (
     <div
-      className="rounded-xl border border-border bg-card px-4 py-3"
+      className="rounded-chat-panel border border-border bg-card px-4 py-3"
       data-testid="resource-card"
     >
       <div className="flex items-center gap-3">
@@ -86,7 +86,7 @@ function ResourceCard({
           onClick={open}
           disabled={!available || busy}
           aria-label={`${openLabel} ${card.data.title}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1 rounded-chat-item border border-border px-3 py-1.5 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
           {busy && (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

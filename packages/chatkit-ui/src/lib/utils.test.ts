@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  cn,
   getComposerInputRoundedClass,
   getMenuItemRoundedClass,
   getPanelRoundedClass,
 } from './utils';
 
 describe('theme utility classes', () => {
+  it('lets component radius overrides replace semantic defaults', () => {
+    const smallButtonRadius =
+      'rounded-[min(var(--chat-item-radius,var(--radius-md)),8px)]';
+
+    expect(cn('rounded-chat-item', smallButtonRadius)).toBe(smallButtonRadius);
+    expect(cn('rounded-md', 'rounded-chat-item')).toBe('rounded-chat-item');
+    expect(cn('rounded-chat-panel', 'rounded-none')).toBe('rounded-none');
+    expect(cn('rounded-chat-item', 'rounded-chat-panel')).toBe(
+      'rounded-chat-panel',
+    );
+  });
+
   it('uses radius-sized panel rounding without turning pill panels into capsules', () => {
     expect(getPanelRoundedClass('pill')).toBe('rounded-3xl');
     expect(getPanelRoundedClass('round')).toBe('rounded-xl');

@@ -399,7 +399,7 @@ export function ProjectSelector({
       >
         <div
           data-slot="composer-project-locked"
-          className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground"
+          className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-chat-item px-2 text-sm text-muted-foreground"
           title={lockedProjectLabel}
         >
           <FolderLock className="size-3.5 shrink-0" />
@@ -432,7 +432,7 @@ export function ProjectSelector({
           <button
             type="button"
             disabled={disabled || !client || !xpertId}
-            className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-chat-item px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={t('composer.projects.select')}
           >
             <Folder className="size-3.5 shrink-0" />
@@ -467,7 +467,7 @@ export function ProjectSelector({
               <div className="grid gap-1 p-1">
                 <select
                   aria-label={t('composer.projects.application')}
-                  className="min-w-0 rounded border border-border bg-popover px-2 py-1 text-sm"
+                  className="min-w-0 rounded-chat-item border border-border bg-popover px-2 py-1 text-sm"
                   value={applicationKey}
                   onChange={(event) => {
                     setApplicationKey(event.target.value);
@@ -490,7 +490,7 @@ export function ProjectSelector({
                 {applicationKey && applicationKey !== '__unclassified' ? (
                   <select
                     aria-label={t('composer.projects.type')}
-                    className="min-w-0 rounded border border-border bg-popover px-2 py-1 text-sm"
+                    className="min-w-0 rounded-chat-item border border-border bg-popover px-2 py-1 text-sm"
                     value={projectTypeKey}
                     onChange={(event) => {
                       setProjectTypeKey(event.target.value);
@@ -540,7 +540,7 @@ export function ProjectSelector({
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
-                    className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    className="rounded-chat-item px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     onClick={() => {
                       setCreateMode(false);
                       setNewProjectName('');
@@ -551,7 +551,7 @@ export function ProjectSelector({
                   <button
                     type="submit"
                     disabled={!newProjectName.trim()}
-                    className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-chat-item bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {t('composer.projects.create')}
                   </button>
@@ -616,7 +616,7 @@ export function ProjectSelector({
                       type="button"
                       aria-pressed={view === mode}
                       className={cn(
-                        'flex-1 rounded-md px-2 py-1.5 text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                        'flex-1 rounded-chat-item px-2 py-1.5 text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
                         view === mode
                           ? 'bg-accent font-medium text-accent-foreground'
                           : 'text-muted-foreground',
@@ -663,7 +663,7 @@ export function ProjectSelector({
                             <button
                               type="button"
                               disabled={loadingMore || refreshing}
-                              className="rounded px-2 py-1 font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                              className="rounded-chat-item px-2 py-1 font-medium outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                               onClick={() => {
                                 if (loadFailed) setRetry((value) => value + 1);
                                 else if (nextSkip !== null) setSkip(nextSkip);

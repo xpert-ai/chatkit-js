@@ -41,6 +41,8 @@ type AssistantHeaderProps = Pick<
     | 'setHistoryQuery'
     | 'effectiveHistoryScope'
     | 'setHistoryScope'
+    | 'historyProjectFilter'
+    | 'setHistoryProjectFilter'
   > &
   Pick<ReturnType<typeof useChatBranchState>, 'isChangingBranch'> &
   Pick<
@@ -110,6 +112,8 @@ export function getAssistantHeaderProps({
   setHistoryQuery,
   effectiveHistoryScope,
   setHistoryScope,
+  historyProjectFilter,
+  setHistoryProjectFilter,
   handleSelectThread,
   handleDeleteThread,
   characterPresentation = false,
@@ -220,6 +224,8 @@ export function getAssistantHeaderProps({
             loadMoreError={messageHistory.loadMoreError}
             scope={effectiveHistoryScope}
             onScopeChange={setHistoryScope}
+            projectFilter={historyProjectFilter}
+            onProjectFilterChange={setHistoryProjectFilter}
             hasCurrentProject={Boolean(activeProjectId)}
             currentThreadId={stream.threadId ?? undefined}
             onNewThread={handleNewThread}

@@ -50,7 +50,7 @@ export function WorkbenchPanelHeader({
               type="button"
               onClick={onToggleExpanded}
               className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+                'flex h-8 w-8 items-center justify-center rounded-chat-item text-muted-foreground transition-colors',
                 'hover:bg-muted hover:text-foreground',
                 expanded && 'bg-muted text-foreground',
               )}
@@ -75,7 +75,7 @@ export function WorkbenchPanelHeader({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground transition-colors hover:bg-muted/80"
+              className="flex h-8 w-8 items-center justify-center rounded-chat-item bg-muted text-foreground transition-colors hover:bg-muted/80"
               aria-label={t('workbench.toggleSidebar')}
               aria-pressed={true}
             >

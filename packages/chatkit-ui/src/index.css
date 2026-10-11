@@ -131,6 +131,8 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  --radius-chat-panel: var(--chat-panel-radius, var(--radius));
+  --radius-chat-item: var(--chat-item-radius, max(0px, calc(var(--radius) - 2px)));
   --radius-composer-shell: var(--chat-panel-radius, var(--radius));
   --radius-composer-editor: max(
     0px,
