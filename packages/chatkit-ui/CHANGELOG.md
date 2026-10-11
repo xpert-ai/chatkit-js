@@ -1,5 +1,24 @@
 # @xpert-ai/chatkit-ui
 
+## 0.13.1
+
+### Patch Changes
+
+- 172613b: Create ordinary Projects inside ChatKit through the scoped SDK, with pending and error states and cancellation when the Assistant context changes. The built-in flow no longer requires Desktop or Cloud to handle a project.create effect. Entity-backed project creation retains its governed application entry.
+
+  Upgrade @xpert-ai/xpert-sdk to ^0.10.0 for the published ProjectsClient.create API.
+
+- 3bf75d2: Open presented file artifacts in Workbench before falling back to the host. Preserve the delivered version for preview and download, and offer a separate authorized workspace editor with existing draft and conflict protection. Add read-only Office previews alongside Markdown, images, PDF, and text.
+
+  Use Tiptap for Markdown editing and read-only display. Open writable Markdown deliveries directly in their workspace editor, require explicit server file capabilities, and recheck write permission before saving.
+
+  Update `@xpert-ai/xpert-sdk` to `^0.9.2` and use its workspace file capabilities contract. Missing server capabilities continue to mean read-only access.
+
+- ae06dbe: Keep Workbench panels and browser tabs mounted when creating or clearing a conversation. Finish initial layout restoration after the panel opens, preserve workspace view navigation, and revalidate conversation access without rebuilding the panel or flashing loading indicators in an existing new tab. Initial discovery and manual refresh retain loading feedback. Clear conversation-bound previews and queries when their scope changes.
+  - @xpert-ai/chatkit-types@0.13.1
+  - @xpert-ai/chatkit-web-shared@0.13.1
+  - @xpert-ai/a2ui-react@0.13.1
+
 ## 0.13.0
 
 ### Minor Changes
