@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type {
   XpertExtensionViewManifest,
@@ -289,6 +289,8 @@ export function setupWorkbenchTests() {
     mocks.stream.threadId = 'thread-1';
     mocks.stream.conversationId = 'conversation-1';
     window.localStorage.clear();
+    window.sessionStorage.clear();
+    history.replaceState({}, '');
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   });
 }

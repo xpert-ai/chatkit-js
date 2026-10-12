@@ -5,6 +5,7 @@ import {
   type XpertViewQuery,
 } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
+import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
 import type { useParentMessenger } from '../../../hooks/useParentMessenger';
 import type { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { buildHumanMessageInputPayload } from '../../../lib/references';
@@ -32,6 +33,7 @@ import {
 } from './request-context';
 
 type WorkbenchClientCommandsOptions = {
+  rememberViewNavigation: (target: ResourceCardOpenTarget) => void;
   onRequestContextChange: WorkbenchShellProps['onRequestContextChange'];
   contextsRef: React.RefObject<Map<string, WorkbenchAssistantContext>>;
   t: ReturnType<typeof useChatkitTranslation>['t'];
@@ -56,6 +58,7 @@ type WorkbenchClientCommandsOptions = {
 };
 
 export function useWorkbenchClientCommands({
+  rememberViewNavigation,
   onRequestContextChange,
   contextsRef,
   t,
@@ -269,6 +272,14 @@ export function useWorkbenchClientCommands({
           setViewQueries((current) => ({ ...current, [key]: query }));
           selectView(key);
           setOpen(true);
+          // Resource cards already persist after their verified navigation receipt.
+          if (!resourceCard)
+            rememberViewNavigation({
+              target: 'workbench.view',
+              viewKey: key,
+              ...(query.selectionId ? { selectionId: query.selectionId } : {}),
+              ...(query.parameters ? { parameters: query.parameters } : {}),
+            });
           return true;
         },
         openPreview,
@@ -301,6 +312,7 @@ export function useWorkbenchClientCommands({
       });
     },
     [
+      rememberViewNavigation,
       options?.request,
       openPreview,
       views,

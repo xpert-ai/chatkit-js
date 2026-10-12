@@ -501,31 +501,42 @@ function WorkbenchContent({
 
   useParentMessenger({ onFocusMessage: openMessage });
 
-  const rememberResourceCard = useResourceCardNavigation({
-    scope: layoutKey ?? '',
-    enabled: remoteViewsEnabled && authenticated,
-    ready: !loading && viewsScope === viewScopeKey,
-    restore: (target) => {
-      if (
-        target.target !== 'workbench.view' ||
-        !views.some((view) => view.key === target.viewKey)
-      )
-        return false;
-      setViewQueries((current) => ({
-        ...current,
-        [target.viewKey]: {
-          selectionId: target.selectionId,
-          parameters: target.parameters,
-        },
-      }));
-      selectView(target.viewKey);
-      setOpen(true);
-      return true;
-    },
-    close: () => setOpen(false),
-  });
+  const { remember: rememberResourceCard, forget: forgetViewNavigation } =
+    useResourceCardNavigation({
+      scope: JSON.stringify([layoutKey, runtimeScope.projectId]),
+      conversationId: runtimeScope.conversationId,
+      isConversationScoped: (key) => {
+        const workbench = views.find((view) => view.key === key)?.workbench;
+        return Boolean(
+          workbench &&
+          'contextScope' in workbench &&
+          workbench.contextScope === 'conversation',
+        );
+      },
+      enabled: remoteViewsEnabled && authenticated,
+      ready: !loading && viewsScope === viewScopeKey,
+      restore: (target) => {
+        if (
+          target.target !== 'workbench.view' ||
+          !views.some((view) => view.key === target.viewKey)
+        )
+          return false;
+        setViewQueries((current) => ({
+          ...current,
+          [target.viewKey]: {
+            selectionId: target.selectionId,
+            parameters: target.parameters,
+          },
+        }));
+        selectView(target.viewKey);
+        setOpen(true);
+        return true;
+      },
+      close: () => setOpen(false),
+    });
 
   const { executeClientCommand } = useWorkbenchClientCommands({
+    rememberViewNavigation: rememberResourceCard,
     onRequestContextChange,
     contextsRef,
     t,
@@ -586,9 +597,10 @@ function WorkbenchContent({
               : undefined;
 
   const closeWorkbench = React.useCallback(() => {
+    forgetViewNavigation();
     setOpen(false);
     setExpanded(false);
-  }, [setOpen, setExpanded]);
+  }, [setOpen, setExpanded, forgetViewNavigation]);
 
   const { askInSideChat, requestCloseSideChat, confirmCloseSideChat } =
     useWorkbenchSideChat({
@@ -869,6 +881,7 @@ function WorkbenchContent({
       views={scopedViews}
       availableViews={menuViews}
       onCloseView={(key) => {
+        forgetViewNavigation(key);
         closeView(key);
         if (activeViewKey === key) {
           const next = adjacentTab(key);
