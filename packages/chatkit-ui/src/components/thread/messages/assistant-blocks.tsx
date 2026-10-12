@@ -105,10 +105,7 @@ export function ReasoningBlock({
   isReasoning?: boolean;
 }) {
   const { t } = useChatkitTranslation();
-  const [expanded, setExpanded] = React.useState(isReasoning);
-  React.useEffect(() => {
-    setExpanded(isReasoning);
-  }, [isReasoning]);
+  const [expanded, setExpanded] = React.useState(false);
   const contentId = React.useId();
   const blocks = reasoning.filter((item) => item.text?.trim());
   if (blocks.length === 0) return null;
@@ -124,7 +121,14 @@ export function ReasoningBlock({
       >
         <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
           <Brain aria-hidden="true" className="h-4 w-4 shrink-0" />
-          <span className="truncate">{t('message.reasoning')}</span>
+          <span
+            className={cn(
+              'truncate',
+              isReasoning && 'ck-tool-call-running-text',
+            )}
+          >
+            {t('message.reasoning')}
+          </span>
         </span>
         <ChevronRight
           aria-hidden="true"

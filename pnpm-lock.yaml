@@ -495,8 +495,8 @@ importers:
         specifier: workspace:~
         version: link:../chatkit-web-shared
       '@xpert-ai/xpert-sdk':
-        specifier: ^0.11.0
-        version: 0.11.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@xterm/addon-fit':
         specifier: 0.11.0
         version: 0.11.0
@@ -4927,8 +4927,8 @@ packages:
     engines: {node: '>=22'}
     hasBin: true
 
-  '@xpert-ai/xpert-sdk@0.11.0':
-    resolution: {integrity: sha512-HhtKYr737pgC3zgQOdPlN69SECAoTvOgjdTUB9lQjTvTgiQWta2iIh32KYBfj//cAijlg4N+Ye9PjHX1IOtBRQ==}
+  '@xpert-ai/xpert-sdk@0.12.0':
+    resolution: {integrity: sha512-wAqmwgo2kHEjBM/eE0BHsmgy9eUQ/9wybOi6H+Ay7ppd++hISkf7tuTU8RMvd78FU1/XstZJtyhMca8EYJwaiQ==}
 
   '@xterm/addon-fit@0.11.0':
     resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
@@ -14364,7 +14364,7 @@ snapshots:
       - react
       - rxjs
 
-  '@xpert-ai/xpert-sdk@0.11.0':
+  '@xpert-ai/xpert-sdk@0.12.0':
     dependencies:
       p-queue: 6.6.2
       p-retry: 4.6.2

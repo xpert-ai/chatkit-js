@@ -903,6 +903,26 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
+      "history": {
+        "expired": "交互会话已过期。",
+        "unavailable": "交互应用暂时不可用。",
+        "forbidden": "你已无权查看此应用及其历史结果。",
+        "title": "历史结果",
+        "queriedAt": "查询时间",
+        "loading": "正在读取历史结果…",
+        "truncated": "保存的结果已被截断，内容可能不完整。",
+        "truncatedMissing": "原始结果过大，未完整保存在此对话中。",
+        "missing": "此消息没有保存结果快照。",
+        "empty": "保存的工具结果没有内容。",
+        "mediaOnly": "保存的结果包含此预览无法显示的媒体内容。",
+        "unavailableSnapshot": "暂时无法读取历史结果，请尝试重新打开此对话。",
+        "structured": "结构化结果",
+        "toolFailed": "原始工具返回了错误。",
+        "resume": "恢复交互",
+        "resuming": "正在恢复…",
+        "resumeHint": "恢复应用交互，不会重新执行原始查询。",
+        "resumeFailed": "未能恢复交互。历史结果仍可查看，你可以重试。"
+      },
       "openProjectFailed": "暂时无法打开此项目。",
       "refresh": "刷新数据",
       "refreshFailed": "数据刷新失败，请重试。",

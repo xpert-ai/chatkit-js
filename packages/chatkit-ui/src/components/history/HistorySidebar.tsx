@@ -245,8 +245,7 @@ export function HistorySidebar({
           <div className="space-y-3 border-b px-5 pb-4 sm:px-6">
             <div className="relative">
               <Search
-                size={17}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute left-[calc(0.75rem*var(--chat-density-scale,1))] top-1/2 size-[max(0.875rem,calc(1.0625rem*var(--chat-density-scale,1)))] -translate-y-1/2 text-muted-foreground"
               />
               <Input
                 ref={searchRef}
@@ -255,7 +254,7 @@ export function HistorySidebar({
                 onChange={(event) => onQueryChange?.(event.target.value)}
                 aria-label={t('history.search')}
                 placeholder={t('history.searchPlaceholder')}
-                className="pl-9"
+                className="h-[calc(2.5rem*var(--chat-density-scale,1))] min-h-8 px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] pl-[calc(2.25rem*var(--chat-density-scale,1))]"
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">

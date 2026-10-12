@@ -23,7 +23,7 @@ describe('explicit Resource Card navigation', () => {
     };
     const view = renderHook(() => useResourceCardNavigation(options));
     expect(restore).not.toHaveBeenCalled();
-    act(() => view.result.current(first));
+    act(() => view.result.current.remember(first));
     view.unmount();
     renderHook(() => useResourceCardNavigation(options));
     expect(restore).toHaveBeenCalledWith(first);
@@ -49,9 +49,9 @@ describe('explicit Resource Card navigation', () => {
         close,
       }),
     );
-    act(() => result.current(first));
+    act(() => result.current.remember(first));
     const previous = history.state;
-    act(() => result.current({ ...first, selectionId: 'two' }));
+    act(() => result.current.remember({ ...first, selectionId: 'two' }));
     act(() =>
       window.dispatchEvent(new PopStateEvent('popstate', { state: previous })),
     );
@@ -59,10 +59,90 @@ describe('explicit Resource Card navigation', () => {
     act(() =>
       window.dispatchEvent(
         new PopStateEvent('popstate', {
-          state: { xpertResourceCard: { scope: 'conversation', target: null } },
+          state: {
+            xpertResourceCardV2: { scope: 'conversation', target: null },
+          },
         }),
       ),
     );
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('ignores history from another project or conversation without closing the current panel', () => {
+    const restore = vi.fn(() => true),
+      close = vi.fn();
+    const options = {
+      scope: 'project-one',
+      conversationId: 'conversation-one',
+      isConversationScoped: () => true,
+      enabled: true,
+      ready: true,
+      restore,
+      close,
+    };
+    const view = renderHook((context) => useResourceCardNavigation(context), {
+      initialProps: options,
+    });
+    act(() => view.result.current.remember(first));
+    const original = structuredClone(history.state);
+    view.rerender({ ...options, conversationId: 'conversation-two' });
+    act(() =>
+      window.dispatchEvent(new PopStateEvent('popstate', { state: original })),
+    );
+    view.rerender({ ...options, scope: 'project-two' });
+    act(() =>
+      window.dispatchEvent(new PopStateEvent('popstate', { state: original })),
+    );
+    expect(restore).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    view.unmount();
+    renderHook(() => useResourceCardNavigation(options));
+    expect(restore).toHaveBeenCalledWith(first);
+  });
+
+  it('does not discard the remembered view when a different tab is closed', () => {
+    const restore = vi.fn(() => true);
+    const options = {
+      scope: 'project',
+      enabled: true,
+      ready: true,
+      restore,
+      close: vi.fn(),
+    };
+    const view = renderHook(() => useResourceCardNavigation(options));
+    act(() => view.result.current.remember(first));
+    act(() => view.result.current.forget('another-view'));
+    view.unmount();
+    renderHook(() => useResourceCardNavigation(options));
+    expect(restore).toHaveBeenCalledWith(first);
+  });
+
+  it('ignores legacy unscoped selections and malformed history entries', () => {
+    sessionStorage.setItem('xpertResourceCard:project', JSON.stringify(first));
+    const restore = vi.fn(() => true),
+      close = vi.fn();
+    renderHook(() =>
+      useResourceCardNavigation({
+        scope: 'project',
+        enabled: true,
+        ready: true,
+        restore,
+        close,
+      }),
+    );
+    act(() =>
+      window.dispatchEvent(
+        new PopStateEvent('popstate', {
+          state: {
+            xpertResourceCardV2: {
+              scope: 'project',
+              target: { ...first, parameters: undefined },
+            },
+          },
+        }),
+      ),
+    );
+    expect(restore).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 });

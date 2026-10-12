@@ -707,24 +707,16 @@ export function MessageList({
         {approvalIndex < 0 && approval && (
           <MessageBubble mode={mode}>{approval}</MessageBubble>
         )}
-        {/* Show loading indicator with minimum display time */}
-        {showLoadingDots &&
+        {/* Only waiting for a new reply needs a separate activity indicator. */}
+        {isLoading &&
+          showLoadingDots &&
           (() => {
             const lastMessage = messages[messages.length - 1];
             const lastMessageType = lastMessage ? String(lastMessage.type) : '';
             const isLastMessageFromAI =
               lastMessageType === 'ai' || lastMessageType === 'assistant';
-            const lastAssistantStatus = isLastMessageFromAI
-              ? getAssistantStreamingStatus(
-                  {
-                    ...(lastMessage as ChatkitMessage),
-                    lastStreamOutputAt,
-                  },
-                  isLoading,
-                  { now: streamingNow },
-                )
-              : null;
-            if (lastAssistantStatus) return null;
+            // Assistant rows own their activity state, including completion.
+            if (isLastMessageFromAI) return null;
             const fallbackStreamingStatus = getAssistantStreamingStatus(
               {
                 status: undefined,

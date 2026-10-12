@@ -903,6 +903,26 @@
       "moreTags": "+{{count}}"
     },
     "mcpApp": {
+      "history": {
+        "expired": "The interactive session has expired.",
+        "unavailable": "The interactive app is currently unavailable.",
+        "forbidden": "You no longer have permission to view this app or its saved result.",
+        "title": "Saved result",
+        "queriedAt": "Queried at",
+        "loading": "Loading the saved result…",
+        "truncated": "This saved result was truncated and may be incomplete.",
+        "truncatedMissing": "The full result was too large to save in this conversation.",
+        "missing": "No result snapshot was saved for this message.",
+        "empty": "The saved tool result contains no content.",
+        "mediaOnly": "The saved result contains media that cannot be displayed in this preview.",
+        "unavailableSnapshot": "The saved result could not be loaded. Please try opening this conversation again.",
+        "structured": "Structured result",
+        "toolFailed": "The original tool reported an error.",
+        "resume": "Restore interaction",
+        "resuming": "Restoring…",
+        "resumeHint": "Restores the app without repeating the original query.",
+        "resumeFailed": "Interaction could not be restored. Your saved result is still available; you can try again."
+      },
       "openProjectFailed": "Unable to open this project.",
       "refresh": "Refresh data",
       "refreshFailed": "Unable to refresh data. Please try again.",

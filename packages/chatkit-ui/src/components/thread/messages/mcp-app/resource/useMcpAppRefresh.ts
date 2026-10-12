@@ -7,6 +7,8 @@ import type { McpAppJsonRpcRequest } from '../host';
 /** Refresh data in place; never reload an iframe or replay its opening tool. */
 export function useMcpAppRefresh(options: {
   identity: string;
+  getResourceEpoch: () => number;
+  isResourceEpochCurrent: (epoch: number) => boolean;
   refresh: NormalizedMcpAppResource['refresh'];
   ready: React.RefObject<boolean>;
   call: (request: McpAppJsonRpcRequest) => Promise<unknown>;
@@ -26,7 +28,10 @@ export function useMcpAppRefresh(options: {
   }, [options.identity]);
   const refresh = async () => {
     if (!options.refresh || !options.ready.current || active.current) return;
+    // The symbol distinguishes refresh attempts; the epoch ties this attempt
+    // to its iframe session, even when recovery reuses the same App ID.
     const operation = Symbol();
+    const epoch = options.getResourceEpoch();
     active.current = operation;
     setRefreshing(true);
     setError(null);
@@ -40,7 +45,11 @@ export function useMcpAppRefresh(options: {
           arguments: options.refresh.arguments ?? {},
         },
       });
-      if (active.current !== operation) return;
+      if (
+        active.current !== operation ||
+        !options.isResourceEpochCurrent(epoch)
+      )
+        return;
       if (!isRecord(response) || response.error || !('result' in response))
         throw Error(options.failureMessage);
       const result = normalizeCallToolResult(response.result);
@@ -56,12 +65,15 @@ export function useMcpAppRefresh(options: {
         params: result,
       });
     } catch (cause) {
-      if (active.current === operation)
+      if (active.current === operation && options.isResourceEpochCurrent(epoch))
         setError(
           cause instanceof Error ? cause.message : options.failureMessage,
         );
     } finally {
-      if (active.current === operation) {
+      if (
+        active.current === operation &&
+        options.isResourceEpochCurrent(epoch)
+      ) {
         active.current = null;
         setRefreshing(false);
       }

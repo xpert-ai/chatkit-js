@@ -59,7 +59,12 @@ type McpAppBridgeOptions = Pick<
   | 'setError'
   | 'modelContextRef'
 > &
-  Pick<ReturnType<typeof useMcpAppResource>, 'sendInitialToolNotifications'> &
+  Pick<
+    ReturnType<typeof useMcpAppResource>,
+    | 'sendInitialToolNotifications'
+    | 'getResourceEpoch'
+    | 'isResourceEpochCurrent'
+  > &
   Pick<
     ReturnType<typeof useMcpAppApprovals>,
     'clearPendingApproval' | 'dispatchHostRpc'
@@ -89,6 +94,8 @@ export function useMcpAppBridge({
   resource,
   data,
   sendInitialToolNotifications,
+  getResourceEpoch,
+  isResourceEpochCurrent,
   setHeight,
   teardownStartedRef,
   runtimeAppInstanceTokenRef,
@@ -151,6 +158,14 @@ export function useMcpAppBridge({
         return;
       }
 
+      // The sender check authenticates this event's iframe. Capture its session
+      // as well, since async handlers can outlive that iframe during recovery.
+      const epoch = getResourceEpoch();
+      const isCurrent = () => isResourceEpochCurrent(epoch);
+      if (!isCurrent()) return;
+      const postResponse = (message: unknown) => {
+        if (isCurrent()) postToApp(message);
+      };
       const request = normalizeJsonRpcMessage(event.data);
       if (!request?.method) {
         return;
@@ -163,7 +178,7 @@ export function useMcpAppBridge({
       ) {
         const permissions = resource?.permissions ?? data.permissions;
         const csp = resource?.csp ?? data.csp;
-        postToApp({
+        postResponse({
           jsonrpc: '2.0',
           method: 'ui/notifications/sandbox-resource-ready',
           params: {
@@ -198,7 +213,7 @@ export function useMcpAppBridge({
           return;
         }
         teardownStartedRef.current = true;
-        postToApp({
+        postResponse({
           jsonrpc: '2.0',
           id: `xpert-teardown-${data.appInstanceId}`,
           method: 'ui/resource-teardown',
@@ -217,10 +232,14 @@ export function useMcpAppBridge({
               query,
             );
           }
+          if (!isCurrent()) return;
           await client.mcp.apps.teardown(data.appInstanceId, query);
+          if (!isCurrent()) return;
           clearPendingApproval();
           setIsTornDown(true);
         } catch (teardownError) {
+          if (!isCurrent()) return;
+          // TODO: Route direct teardown failures through the lifecycle handler.
           teardownStartedRef.current = false;
           setError(getErrorMessage(teardownError));
         }
@@ -242,17 +261,18 @@ export function useMcpAppBridge({
             title:
               resolveLocalizedText(rawToolInfo.tool.title, i18n.language) ??
               rawToolInfo.tool.name,
-            description: resolveLocalizedText(
-              rawToolInfo.tool.description,
-              i18n.language,
-            ) ?? undefined,
+            description:
+              resolveLocalizedText(
+                rawToolInfo.tool.description,
+                i18n.language,
+              ) ?? undefined,
           },
         };
         const theme = buildMcpAppTheme(containerRef.current);
         const hostLocale = normalizeHostLocale(i18n.language);
         const hostLanguage = getLocaleLanguage(hostLocale);
         const hostDirection = getLocaleDirection(hostLocale);
-        postToApp(
+        postResponse(
           jsonRpcResult(request.id, {
             protocolVersion: '2026-01-26',
             hostInfo: {
@@ -352,23 +372,23 @@ export function useMcpAppBridge({
               projectLink.viewKey,
             );
             if (!isRecord(response) || response.success !== true) {
-              postToApp(
+              postResponse(
                 jsonRpcError(
                   request.id,
                   i18n.t('message.mcpApp.openProjectFailed'),
                 ),
               );
             } else {
-              postToApp(jsonRpcResult(request.id, {}));
+              postResponse(jsonRpcResult(request.id, {}));
             }
           } catch (cause) {
-            postToApp(jsonRpcError(request.id, getErrorMessage(cause)));
+            postResponse(jsonRpcError(request.id, getErrorMessage(cause)));
           }
           return;
         }
         if (!href || !isHttpUrl(href)) {
           if (request.id !== undefined) {
-            postToApp(jsonRpcError(request.id, 'Invalid URL'));
+            postResponse(jsonRpcError(request.id, 'Invalid URL'));
           }
           return;
         }
@@ -377,12 +397,13 @@ export function useMcpAppBridge({
             ...request,
             params: { url: href },
           });
+          if (!isCurrent()) return;
           if (isMcpAppRpcSuccess(response)) {
             window.open(href, '_blank', 'noopener,noreferrer');
           }
-          postToApp(response);
+          postResponse(response);
         } catch (linkError) {
-          postToApp(jsonRpcError(request.id, getErrorMessage(linkError)));
+          postResponse(jsonRpcError(request.id, getErrorMessage(linkError)));
         }
         return;
       }
@@ -390,12 +411,13 @@ export function useMcpAppBridge({
       if (request.method === 'ui/update-model-context') {
         try {
           const response = await callHostRpc(request);
+          if (!isCurrent()) return;
           if (isMcpAppRpcSuccess(response)) {
             modelContextRef.current = request.params;
           }
-          postToApp(response);
+          postResponse(response);
         } catch (rpcError) {
-          postToApp(jsonRpcError(request.id, getErrorMessage(rpcError)));
+          postResponse(jsonRpcError(request.id, getErrorMessage(rpcError)));
         }
         return;
       }
@@ -413,8 +435,9 @@ export function useMcpAppBridge({
           }
 
           const hostResponse = await callHostRpc(request);
+          if (!isCurrent()) return;
           if (isRecord(hostResponse) && hostResponse.error) {
-            postToApp(hostResponse);
+            postResponse(hostResponse);
             return;
           }
 
@@ -432,7 +455,7 @@ export function useMcpAppBridge({
               messageInput.input,
               messageInput.files,
             );
-            postToApp(hostResponse);
+            postResponse(hostResponse);
             return;
           }
 
@@ -461,14 +484,25 @@ export function useMcpAppBridge({
             },
           );
 
-          postToApp(hostResponse);
+          postResponse(hostResponse);
         } catch (messageError) {
-          postToApp(jsonRpcError(request.id, getErrorMessage(messageError)));
+          postResponse(jsonRpcError(request.id, getErrorMessage(messageError)));
         }
         return;
       }
 
-      if (request.id === undefined && request.method.startsWith('ui/')) {
+      if (request.id === undefined) {
+        // JSON-RPC notifications never receive replies, including error replies.
+        // Logging is the only remaining notification handled by the RPC gateway.
+        // Cancellation is advisory: this gateway has no server cancellation API,
+        // and the App SDK already discards the cancelled local request.
+        if (request.method === 'notifications/message') {
+          try {
+            await callHostRpc(request);
+          } catch {
+            // The gateway records failures; do not synthesize an id:null reply.
+          }
+        }
         return;
       }
 
@@ -481,6 +515,8 @@ export function useMcpAppBridge({
     };
   }, [
     callHostRpc,
+    getResourceEpoch,
+    isResourceEpochCurrent,
     clearPendingApproval,
     client,
     data,

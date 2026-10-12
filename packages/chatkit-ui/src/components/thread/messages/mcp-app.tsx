@@ -31,6 +31,7 @@ import {
 import { useMcpAppApprovalExpiry } from './mcp-app/approval/useMcpAppApprovalExpiry';
 import { useMcpAppApprovals } from './mcp-app/approval/useMcpAppApprovals';
 import { useMcpAppBridge } from './mcp-app/bridge/useMcpAppBridge';
+import { McpAppHistory } from './mcp-app/presentation/McpAppHistory';
 import { useMcpAppRefresh } from './mcp-app/resource/useMcpAppRefresh';
 import { useMcpAppResource } from './mcp-app/resource/useMcpAppResource';
 import { useMcpAppState } from './mcp-app/session/useMcpAppState';
@@ -90,27 +91,58 @@ export function McpAppMessage({
     [sandboxProxy?.origin],
   );
 
+  const resourceLifecycle = useMcpAppResource({
+    ...state,
+    postToApp,
+    data,
+    client,
+    messageId,
+    i18n,
+  });
+
   const callHostRpc = React.useCallback(
     async (request: JsonRpcRequest) => {
-      return client.mcp.apps.rpc(
-        data.appInstanceId,
-        {
-          jsonrpc: '2.0',
-          id: request.id ?? null,
-          method: request.method,
-          params: request.params,
-        },
-        buildMcpAppReviveQuery(data, {
-          appInstanceToken: state.runtimeAppInstanceToken,
-          messageId,
-        }),
-      );
+      const resourceEpoch = resourceLifecycle.getResourceEpoch();
+      try {
+        const response = await client.mcp.apps.rpc(
+          data.appInstanceId,
+          {
+            jsonrpc: '2.0',
+            id: request.id ?? null,
+            method: request.method,
+            params: request.params,
+          },
+          buildMcpAppReviveQuery(data, {
+            appInstanceToken: state.runtimeAppInstanceToken,
+            messageId,
+          }),
+        );
+        // Guard successful responses too: callers may open links, submit a
+        // follow-up message or download a file after the RPC resolves.
+        if (!resourceLifecycle.isResourceEpochCurrent(resourceEpoch)) {
+          throw new DOMException('MCP App session changed', 'AbortError');
+        }
+        return response;
+      } catch (error) {
+        await resourceLifecycle.handleRuntimeError(error, resourceEpoch);
+        throw error;
+      }
     },
-    [client, data, messageId, state.runtimeAppInstanceToken],
+    [
+      client,
+      data,
+      messageId,
+      state.runtimeAppInstanceToken,
+      resourceLifecycle.handleRuntimeError,
+      resourceLifecycle.getResourceEpoch,
+      resourceLifecycle.isResourceEpochCurrent,
+    ],
   );
 
   const refresh = useMcpAppRefresh({
-    identity: data.appInstanceId,
+    identity: `${data.appInstanceId}:${resourceLifecycle.resourceEpoch}`,
+    getResourceEpoch: resourceLifecycle.getResourceEpoch,
+    isResourceEpochCurrent: resourceLifecycle.isResourceEpochCurrent,
     refresh: state.resource?.refresh,
     ready: state.initializedRef,
     call: callHostRpc,
@@ -120,20 +152,13 @@ export function McpAppMessage({
 
   const approvals = useMcpAppApprovals({
     ...state,
+    getResourceEpoch: resourceLifecycle.getResourceEpoch,
+    isResourceEpochCurrent: resourceLifecycle.isResourceEpochCurrent,
     postToApp,
     callHostRpc,
     data,
     messageId,
     client,
-  });
-
-  const resourceLifecycle = useMcpAppResource({
-    ...state,
-    postToApp,
-    data,
-    client,
-    messageId,
-    i18n,
   });
 
   useMcpAppTeardown({ ...state, data, sandboxProxy, messageId, client });
@@ -389,7 +414,18 @@ export function McpAppMessage({
           </div>
         ) : null}
 
-        {state.isLoading ? (
+        {resourceLifecycle.failure ? (
+          <McpAppHistory
+            failure={resourceLifecycle.failure}
+            history={resourceLifecycle.history}
+            loading={resourceLifecycle.historyLoading}
+            historyUnavailable={resourceLifecycle.historyUnavailable}
+            resuming={resourceLifecycle.resuming}
+            resumeFailed={resourceLifecycle.resumeFailed}
+            onResume={() => void resourceLifecycle.resume()}
+            className={cn(elevatedDisplayMode && 'min-h-0 flex-1')}
+          />
+        ) : state.isLoading ? (
           <div
             className={cn(
               'flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground',

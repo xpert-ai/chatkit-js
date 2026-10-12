@@ -82,7 +82,7 @@ export function WorkbenchViewMenu({
         sideOffset={8}
         collisionPadding={12}
         aria-labelledby={titleId}
-        className="w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-chat-panel border-border/60 py-[calc(0.5rem*var(--chat-density-scale,1))] pl-[calc(0.5rem*var(--chat-density-scale,1))] pr-0 shadow-lg"
+        className="w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-chat-panel border-border/60 p-[calc(0.5rem*var(--chat-density-scale,1))] shadow-lg"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           if (keyboardOpen.current) firstViewRef.current?.focus();
@@ -103,7 +103,8 @@ export function WorkbenchViewMenu({
         >
           {t('workbench.views')}
         </div>
-        <div className="max-h-72 space-y-[calc(0.125rem*var(--chat-density-scale,1))] overflow-y-auto overscroll-contain">
+        {/* Reserve equal gutters even without overflow; keep their width stable on hover. */}
+        <div className="max-h-72 space-y-[calc(0.125rem*var(--chat-density-scale,1))] overflow-y-auto overscroll-contain [scrollbar-gutter:stable_both-edges] [scrollbar-width:thin]!">
           {views.map((view, index) => {
             const label = resolveManifestText(
               view.workbench?.menu?.label ?? view.title,
