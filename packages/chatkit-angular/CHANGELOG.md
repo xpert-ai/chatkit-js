@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-angular
 
+## 0.14.2
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.14.2
+- @xpert-ai/chatkit-web-component@0.14.2
+
 ## 0.14.1
 
 ### Patch Changes
