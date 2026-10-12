@@ -1203,7 +1203,7 @@
       "pending": "Received",
       "starting": "Starting",
       "steering": "Steering",
-      "blocked": "Waiting for action",
+      "blocked": "Blocked",
       "canceled": "Canceled",
       "failed": "Failed"
     },
@@ -1241,6 +1241,17 @@
     "runtimeHint": "Select an assistant name in the chat to view its conversation record.",
     "executionRecord": "Assistant execution record",
     "closeRuntime": "Close execution record",
-    "otherAssistant": "Other Assistant"
+    "otherAssistant": "Other Assistant",
+    "project": {
+      "none": "No project yet. Ask the group owner to set one up.",
+      "members": "Participating Assistants",
+      "bind": "Save participants",
+      "enable": "Confirm Project and participants",
+      "manage": "Manage participating Assistants",
+      "viewMembers": "View participating Assistants",
+      "locked": "This group is linked to a Project and cannot switch or clear it. You can manage participating Assistants here.",
+      "memberHint": "Existing participants remain linked to preserve conversations and task history. You can add other group members.",
+      "confirmDescription": "Confirm which Assistants will collaborate in this Project. The primary Assistant must participate."
+    }
   }
 }

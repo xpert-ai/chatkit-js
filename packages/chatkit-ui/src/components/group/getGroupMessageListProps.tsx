@@ -89,9 +89,36 @@ export function getGroupMessageListProps({
             </time>
           )}
           {pendingDeliveries.map((delivery) => (
-            <span key={delivery.participantId}>
+            <span
+              key={delivery.participantId}
+              className={
+                delivery.status === 'failed' ? 'text-destructive' : undefined
+              }
+            >
               @{name(delivery.participantId)} ·{' '}
               {t(`group.delivery.${delivery.status}`)}
+              {delivery.error && (
+                <span
+                  role="alert"
+                  className="block whitespace-pre-wrap break-words text-left"
+                >
+                  {delivery.error}
+                </span>
+              )}
+              {delivery.status === 'failed' &&
+                onOpenRuntime &&
+                message.runtimeParticipantIds?.includes(
+                  delivery.participantId,
+                ) && (
+                  <button
+                    className="ml-1 underline"
+                    onClick={() =>
+                      onOpenRuntime(message.id, delivery.participantId)
+                    }
+                  >
+                    {t('group.executionRecord')}
+                  </button>
+                )}
               {(self || owner) &&
                 ['pending', 'blocked'].includes(delivery.status) && (
                   <button

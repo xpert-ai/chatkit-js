@@ -30,6 +30,7 @@ import { Separator } from '../ui/separator';
 import { groupProjects } from './project-groups';
 import { ProjectFilterButton } from './ProjectFilterButton';
 import { ProjectListViewport } from './ProjectListViewport';
+import { ProjectManagementMenu } from './ProjectManagementMenu';
 
 export type ProjectSelectorProps = {
   client: Client | null;
@@ -51,6 +52,13 @@ export type ProjectSelectorProps = {
   createEnabled?: boolean;
   onProjectCreate?: (name: string, projectType?: XpertProjectTypeRef) => void;
   onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
+  /** Limit creation to types supported by the caller's setup flow; discovery is unchanged. */
+  createProjectTypes?: readonly XpertProjectTypeRef[];
+  management?: { label: string; onSelect: () => void; lockedReason?: string };
+  triggerRef?: React.Ref<HTMLButtonElement>;
+  onCloseAutoFocus?: React.ComponentProps<
+    typeof PopoverContent
+  >['onCloseAutoFocus'];
 };
 
 const PROJECT_PAGE_SIZE = 20;
@@ -72,6 +80,10 @@ export function ProjectSelector({
   onProjectCreate,
   createEnabled = false,
   onProjectTypeCreate,
+  createProjectTypes,
+  management,
+  triggerRef,
+  onCloseAutoFocus,
 }: ProjectSelectorProps) {
   const { t, i18n } = useChatkitTranslation();
   const { theme } = useTheme();
@@ -345,6 +357,12 @@ export function ProjectSelector({
   const canCreate =
     catalogReady &&
     !catalogFailed &&
+    (!createProjectTypes ||
+      createProjectTypes.some(
+        (type) =>
+          type.applicationKey === creationRef.applicationKey &&
+          type.projectTypeKey === creationRef.projectTypeKey,
+      )) &&
     (types.length === 0 || Boolean(creationType?.available)) &&
     (creationType?.binding.kind === 'entity'
       ? Boolean(onProjectTypeCreate)
@@ -359,7 +377,8 @@ export function ProjectSelector({
     hasAvailableProjects ||
     Boolean(onProjectCreate || createEnabled) ||
     types.length > 0 ||
-    Boolean(activeProjectId);
+    Boolean(activeProjectId) ||
+    Boolean(management);
   const isLoadingProjects =
     !locked &&
     Boolean(client && xpertId) &&
@@ -406,7 +425,19 @@ export function ProjectSelector({
     </button>
   );
 
-  if (locked && activeProjectId) {
+  if (locked && management) {
+    return (
+      <ProjectManagementMenu
+        label={lockedProjectLabel}
+        management={management}
+        disabled={disabled || !client || !xpertId}
+        triggerRef={triggerRef}
+        onCloseAutoFocus={onCloseAutoFocus}
+      />
+    );
+  }
+
+  if (locked && activeProjectId && !management) {
     return (
       <div
         data-slot="composer-project-rail"
@@ -445,6 +476,7 @@ export function ProjectSelector({
       >
         <PopoverTrigger asChild>
           <button
+            ref={triggerRef}
             type="button"
             disabled={disabled || !client || !xpertId}
             className="inline-flex h-5 max-w-full items-center gap-1.5 rounded-chat-item px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -469,6 +501,7 @@ export function ProjectSelector({
           </button>
         </PopoverTrigger>
         <PopoverContent
+          onCloseAutoFocus={onCloseAutoFocus}
           side="top"
           align="start"
           sideOffset={8}

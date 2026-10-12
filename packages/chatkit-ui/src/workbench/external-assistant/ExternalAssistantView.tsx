@@ -201,6 +201,14 @@ export function ExternalAssistantView({
               enableQuotes={false}
               showActions={false}
             />
+            {conversation.error && (
+              <p
+                role="alert"
+                className="whitespace-pre-wrap break-words text-sm text-destructive"
+              >
+                {conversation.error}
+              </p>
+            )}
           </div>
         ) : run ? (
           <div

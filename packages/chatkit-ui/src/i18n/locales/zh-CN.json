@@ -1203,7 +1203,7 @@
       "pending": "已接收",
       "starting": "正在启动",
       "steering": "正在引导",
-      "blocked": "等待处理",
+      "blocked": "已阻塞",
       "canceled": "已取消",
       "failed": "失败"
     },
@@ -1241,6 +1241,17 @@
     "runtimeHint": "点击群消息中的助手名称，查看对应的对话记录。",
     "executionRecord": "助手处理记录",
     "closeRuntime": "关闭处理记录",
-    "otherAssistant": "其他助手"
+    "otherAssistant": "其他助手",
+    "project": {
+      "none": "尚未关联项目，请群主设置。",
+      "members": "参与项目的数字专家",
+      "bind": "保存参与成员",
+      "enable": "确认项目与参与成员",
+      "manage": "管理参与的数字专家",
+      "viewMembers": "查看参与的数字专家",
+      "locked": "此群已关联项目，不能切换或取消。你可以在此管理参与的数字专家。",
+      "memberHint": "已参与的数字专家保留关联，以保护现有会话和任务记录；可以添加其他群成员。",
+      "confirmDescription": "确认参与此项目的数字专家。保存后，所选成员将在同一项目中协作，主数字专家必须参与。"
+    }
   }
 }

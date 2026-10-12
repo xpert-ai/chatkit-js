@@ -82,6 +82,7 @@ vi.mock('./useGroupChat', () => {
   const client = {
     forGroupComposer: () => mocks.scoped,
     groups: {
+      project: vi.fn().mockResolvedValue(null),
       control: mocks.control,
       composerContext: mocks.composerContext,
       preferences: vi.fn().mockResolvedValue({}),
@@ -174,6 +175,45 @@ describe('group conversation UI', () => {
     cleanup();
     vi.unstubAllGlobals();
   });
+  it('shows a durable delivery error and opens the failed execution instead of offering cancellation', async () => {
+    const snapshot = mocks.snapshot;
+    if (!snapshot) throw new Error('Expected the group snapshot fixture');
+    const message = snapshot.messages[0];
+    message.communication.senderId = 'b';
+    message.communication.recipientIds = ['c'];
+    message.runtimeParticipantIds = ['c'];
+    message.deliveries = [
+      {
+        participantId: 'c',
+        status: 'failed',
+        error:
+          '403 The request failed because your account has an overdue balance.',
+      },
+    ];
+    snapshot.runs = [{ participantId: 'c', runId: 'rc', status: 'error' }];
+    render(<Chat options={groupOptions} />, { wrapper: ThemeProvider });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'overdue balance',
+    );
+    expect(screen.getByText(/group.delivery.failed/)).toBeVisible();
+    expect(screen.queryByText('group.cancelDelivery')).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'group.executionRecord' }),
+    );
+    expect(mocks.openRuntime).toHaveBeenCalledWith({
+      messageId: 'm1',
+      participantId: 'c',
+    });
+  });
+  it('keeps one Project entry in the Composer and none in the group header', async () => {
+    render(<Chat options={groupOptions} />, { wrapper: ThemeProvider });
+    expect(
+      await screen.findByRole('button', { name: 'composer.projects.select' }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: 'group.project.title' }),
+    ).toBeNull();
+  });
   it('keeps default skills available for submission without showing them as draft tags', async () => {
     const skills = ['drawing', 'design', 'quality'].map((id) => ({
       id,
@@ -209,6 +249,16 @@ describe('group conversation UI', () => {
     });
   });
   it('uses the original avatar details dialog and a separate members dialog', async () => {
+    if (typeof ResizeObserver === 'undefined') {
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+    }
     const { container, rerender } = render(<Chat options={groupOptions} />, {
       wrapper: ThemeProvider,
     });
@@ -264,6 +314,33 @@ describe('group conversation UI', () => {
       container.querySelector('[data-slot="assistant-presence"]'),
     ).toBeNull();
     expect(mocks.assistantRuntime).not.toHaveBeenCalled();
+  });
+  it('refreshes the Composer Project after group setup changes the revision without starting a run', async () => {
+    const snapshot = mocks.snapshot;
+    if (!snapshot) throw new Error('Expected the group snapshot fixture');
+    mocks.composerContext
+      .mockReset()
+      .mockResolvedValue({ projectId: null, locked: false, busy: false });
+    const { rerender } = render(<Chat options={groupOptions} />, {
+      wrapper: ThemeProvider,
+    });
+    await waitFor(() => expect(mocks.composerContext).toHaveBeenCalled());
+    mocks.composerContext.mockClear().mockResolvedValue({
+      projectId: 'shared-project',
+      locked: true,
+      busy: false,
+    });
+    mocks.snapshot = {
+      ...snapshot,
+      revision: snapshot.revision + 1,
+    };
+    rerender(<Chat options={groupOptions} />);
+    await waitFor(() => expect(mocks.composerContext).toHaveBeenCalled());
+    mocks.composerContext.mockResolvedValue({
+      projectId: null,
+      locked: false,
+      busy: false,
+    });
   });
   it('retains the shared more-actions menu and settings dialog', async () => {
     if (typeof ResizeObserver === 'undefined') {
