@@ -177,6 +177,36 @@ describe('message visibility helpers', () => {
       ),
     ).toBe('answering');
   });
+
+  it.each([
+    'success',
+    'completed',
+    'fail',
+    'failed',
+    'error',
+    'timeout',
+    'paused',
+    'pausing',
+    'pending',
+    'aborted',
+    'interrupted',
+    'canceled',
+    'cancelled',
+    'SUCCESS',
+  ])('does not report streaming for %s while the transport finishes', (status) => {
+    for (const reasoning of [
+      undefined,
+      [{ type: 'reasoning' as const, text: 'Earlier thought' }],
+    ]) {
+      expect(
+        getAssistantStreamingStatus(
+          { status, reasoning, lastStreamOutputAt: 0 },
+          true,
+          { now: ASSISTANT_STREAM_IDLE_TO_THINKING_MS + 1 },
+        ),
+      ).toBeNull();
+    }
+  });
 });
 
 describe('appendMessageContent', () => {

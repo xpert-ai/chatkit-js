@@ -1,4 +1,5 @@
 import { isNonTranscriptMessageContent } from './message-content-presentation'
+import { getMessageCompletionStatus } from './message-status'
 import { parseFileActivityContent, projectMessageFileActivity, upsertFileActivityContent } from '@xpert-ai/chatkit-types'
 import { parseResourceCardContent, upsertResourceCardContent } from '@xpert-ai/chatkit-types'
 import type {
@@ -109,7 +110,8 @@ export function getAssistantStreamingStatus(
     now?: number
   },
 ): AssistantStreamingStatus | null {
-  if (!isStreaming) {
+  // The transport can remain busy reconciling history after a message ends.
+  if (!isStreaming || getMessageCompletionStatus(message.status)) {
     return null
   }
 
