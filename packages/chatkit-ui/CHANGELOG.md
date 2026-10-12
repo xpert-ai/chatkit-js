@@ -1,5 +1,206 @@
 # @xpert-ai/chatkit-ui
 
+## 0.13.1
+
+### Patch Changes
+
+- 172613b: Create ordinary Projects inside ChatKit through the scoped SDK, with pending and error states and cancellation when the Assistant context changes. The built-in flow no longer requires Desktop or Cloud to handle a project.create effect. Entity-backed project creation retains its governed application entry.
+
+  Upgrade @xpert-ai/xpert-sdk to ^0.10.0 for the published ProjectsClient.create API.
+
+- 3bf75d2: Open presented file artifacts in Workbench before falling back to the host. Preserve the delivered version for preview and download, and offer a separate authorized workspace editor with existing draft and conflict protection. Add read-only Office previews alongside Markdown, images, PDF, and text.
+
+  Use Tiptap for Markdown editing and read-only display. Open writable Markdown deliveries directly in their workspace editor, require explicit server file capabilities, and recheck write permission before saving.
+
+  Update `@xpert-ai/xpert-sdk` to `^0.9.2` and use its workspace file capabilities contract. Missing server capabilities continue to mean read-only access.
+
+- ae06dbe: Keep Workbench panels and browser tabs mounted when creating or clearing a conversation. Finish initial layout restoration after the panel opens, preserve workspace view navigation, and revalidate conversation access without rebuilding the panel or flashing loading indicators in an existing new tab. Initial discovery and manual refresh retain loading feedback. Clear conversation-bound previews and queries when their scope changes.
+  - @xpert-ai/chatkit-types@0.13.1
+  - @xpert-ai/chatkit-web-shared@0.13.1
+  - @xpert-ai/a2ui-react@0.13.1
+
+## 0.13.0
+
+### Minor Changes
+
+- fe79435: Extend the existing Chat, Header, Composer, and Workbench for shared group conversations, member invitations, authored message groups, and Assistant execution records. Reuse ChatKit credentials and preserve the hosted iframe during navigation. Use the published Xpert SDK 0.9.0 for group APIs.
+
+### Patch Changes
+
+- 01aba84: Upgrade to the published @xpert-ai/xpert-sdk 0.8.2 release to read authorized Workbench file previews and downloads without third-party cookies. This fixes document previews in Desktop and cross-site embeddings while preserving Remote View isolation and file grant checks. Requires the platform's authenticated runtime file-content endpoint.
+- 806699c: Define public options for shared group conversations and host session identity. Preserve existing surface colors without Hex conversion and align neutral surface variables and input derivation with the host. Hosts and ChatKit UI must use matching group-enabled versions.
+- 9c5c919: Handle application project creation inside ChatKit's Workbench. Resolve the creation entry through the SDK and open it in a fresh conversation/project scope instead of delegating a project.create-entry effect to the embedding host. Show failures inline and discard stale or duplicate requests.
+
+  Keep the current Assistant profile outside the project-specific chat lifecycle so creating or switching projects does not clear its name, avatar, or published presentation settings or refetch the profile merely because Chat remounts.
+
+- Updated dependencies [806699c]
+  - @xpert-ai/chatkit-types@0.13.0
+  - @xpert-ai/chatkit-web-shared@0.13.0
+  - @xpert-ai/a2ui-react@0.13.0
+
+## 0.12.2
+
+### Patch Changes
+
+- 91035b1: Carry the shell's transient user activation snapshot through the Workbench host command bridge, independently of plugin payloads. Keep command policy and payload validation with host implementations, and discard forwarded results when the originating Workbench context has changed.
+- 3ff3731: Restore an explicitly requested View query after conversation navigation with preserveView enabled, once the destination scope confirms that the View is available. Preserve existing queries when no query is supplied within the same scope, while retaining the normal query reset across scopes.
+- 39f1ff6: Fix Workbench terminal crashes during rapid tab changes and React StrictMode
+  cleanup by upgrading xterm and ignoring callbacks from disposed sessions. Keep
+  terminal connections and output when switching languages, and avoid focusing
+  hidden terminals.
+
+  Show localized guidance when the server requires the Computer desktop terminal
+  or reports an unsupported or disabled sandbox. Disable the terminal launcher for
+  that Workbench context while preserving reconnect for transient failures. Isolate
+  native view loading failures so other tabs remain usable, with a localized reload
+  action and documented development recovery steps.
+
+- Updated dependencies [91035b1]
+  - @xpert-ai/chatkit-types@0.12.2
+  - @xpert-ai/chatkit-web-shared@0.12.2
+  - @xpert-ai/a2ui-react@0.12.2
+
+## 0.12.1
+
+### Patch Changes
+
+- 7cce5b3: Keep resource image and file preview tabs selected when Workbench views refresh.
+  - @xpert-ai/chatkit-types@0.12.1
+  - @xpert-ai/chatkit-web-shared@0.12.1
+  - @xpert-ai/a2ui-react@0.12.1
+
+## 0.12.0
+
+### Minor Changes
+
+- 3d8d526: Add the public `focusMessage` control for authorized exact-thread message navigation. ChatKit loads missing history, scrolls and highlights the target, and acknowledges success or a specific failure. Workbench navigation accepts message anchors and preserves its source view without sending messages or cancelling runs. Parent message handlers cleanly reject stale, unavailable and failed targets; old navigation payloads remain supported.
+
+### Patch Changes
+
+- acf5e17: Wait for scope-bound credentials before loading Assistant projects, tool continuations, and conversation resources. Share host initialization with refresh, cancel obsolete requests without retry warnings, and keep embedded thread navigation in memory to avoid repeated long-URL updates.
+- 868b473: Keep the character header within the available chat width when resizing the window. Constrain the shared grid column and allow its children to shrink so long hidden conversation titles do not clip the header actions.
+- f1ea28d: Resume the most recently updated conversation when selecting a project, while preserving explicit new-chat actions and preventing stale navigation responses. Keep loaded message-history results visible when reopening the dialog and remove duplicate conversation-list loading.
+- c27ab91: Display committed resource cards from all plugin namespaces during streaming, using a common Open action and a single card surface. Apply live card updates without project-task-specific rendering branches.
+
+  Render file delivery and file change cards without an extra message bubble, while preserving their saved-version and review actions.
+
+- Updated dependencies [3d8d526]
+  - @xpert-ai/chatkit-types@0.12.0
+  - @xpert-ai/chatkit-web-shared@0.12.0
+  - @xpert-ai/a2ui-react@0.12.0
+
+## 0.11.2
+
+### Patch Changes
+
+- 2f71ed6: Use the published `@xpert-ai/xpert-sdk` 0.8.0 release for authenticated workspace
+  file reads and snapshot-free pause requests. Remove the temporary SDK patch and
+  its dependency configuration. Keep file previews and downloads working in
+  isolated Workbench views through the trusted host's SDK transport.
+  - @xpert-ai/chatkit-types@0.11.2
+  - @xpert-ai/chatkit-web-shared@0.11.2
+  - @xpert-ai/a2ui-react@0.11.2
+
+## 0.11.1
+
+### Patch Changes
+
+- 41eb96a: Keep observing the selected conversation after an answer ends. Automatically
+  join background runs, reconcile quickly completed answers, and update task
+  resource cards without refreshing. Resume each run with its own cursor and
+  preserve pause and conversation-switch boundaries.
+  Refresh task cards independently while an asynchronous answer is still streaming.
+
+  Upgrade to the published `@xpert-ai/xpert-sdk` 0.7.0 release for the thread activity
+  API and remove the temporary SDK 0.6.0 patch.
+  - @xpert-ai/chatkit-types@0.11.1
+  - @xpert-ai/chatkit-web-shared@0.11.1
+  - @xpert-ai/a2ui-react@0.11.1
+
+## 0.11.0
+
+### Minor Changes
+
+- 6c68e83: Add an optional realtime voice host bridge, dialing in the assistant appearance
+  dialog, persistent call controls above the dialog, and durable Call ended timeline
+  receipts with duration. Float the panels inside the chat viewport and retain mute
+  and hangup controls when the appearance dialog closes.
+- af571d3: Use Pierre Diffs for the Workbench change review with syntax and word highlighting,
+  virtualized split/unified layouts, expandable context, and full-file display. Add a
+  compact toolbar, searchable file tree and keyboard file picker, per-file actions,
+  read-only snapshot tabs, rendered HTML/Markdown previews, and git apply export.
+
+### Patch Changes
+
+- Updated dependencies [6c68e83]
+  - @xpert-ai/chatkit-types@0.11.0
+  - @xpert-ai/chatkit-web-shared@0.11.0
+  - @xpert-ai/a2ui-react@0.11.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 2875454: Add configurable Assistant appearance types, character rendering, and support for
+  extensible pet catalogs and v2 sprite atlases. Show the Assistant's published
+  avatar and live activity above bubble conversations, with animated transitions to
+  a non-modal details dialog that includes customization and computer shortcuts.
+  Honor reduced motion and scale dialog spacing with the theme's font size and
+  density.
+- 2875454: Handle HTML artifact previews and file-change review inside ChatKit Workbench.
+  Add isolated HTML previews with annotations, downloads, source inspection, and
+  developer panels, plus file-change navigation and diffs. Route supported task
+  summary resources to these native views through the Xpert SDK without requiring
+  the host application to implement the preview or review flow.
+- 2875454: Upgrade to the published `@xpert-ai/xpert-sdk` 0.6.0 release for Workbench files,
+  terminals, artifact downloads, and remote-view context events. Remove the local
+  SDK patch and supplementary dependency configuration. Make shell-command text
+  follow the base font size, limit its inline preview to two lines with the full
+  command available on hover or keyboard focus, and use a one-pixel Workbench
+  divider.
+- 2875454: Use bounded, theme-aware corners for Todo and pending follow-up panels. Keep tool
+  image previews stable during streamed text updates and size thumbnails to fit
+  their content. Stop automatically displaying ordinary tool image artifacts in
+  transcripts and bubbles, while retaining the underlying artifacts and explicitly
+  supported user-facing result renderers.
+
+### Patch Changes
+
+- cdfe147: Preserve mounted Assistant Workbench views when switching conversations or projects, revalidate access in the target context, and notify retained views through `view.context.changed`. Cancel obsolete requests and file-access sessions, and prevent late navigation results from affecting the new context. Reset chat state and the composer on project changes without recreating the Workbench views.
+- 880deca: Preserve history callbacks and mounted views when client credentials first become
+  available or rotate, while still resetting the session when credentials are
+  cleared or the organization changes. Avoid redundant remote-view initialization
+  after context validation, without suppressing theme or navigation updates. Run
+  SDK routing tests with matching native Fetch and Blob implementations on Node 24.
+- Updated dependencies [2875454]
+  - @xpert-ai/chatkit-types@0.10.0
+  - @xpert-ai/chatkit-web-shared@0.10.0
+  - @xpert-ai/a2ui-react@0.10.0
+
+## 0.9.0
+
+### Minor Changes
+
+- 8c4adb8: Add opt-in `messagePresentation.mode: 'bubbles'` across chat and Workbench transcripts. Render content blocks and interactive results as themed bubbles while hiding ordinary process output. Preserve source message actions, approval controls, interactive component state, and scroll position when changing presentation. The default transcript presentation is unchanged.
+
+### Patch Changes
+
+- 6b230fb: Add validated persisted Resource Card message parts and a reply-bottom card renderer with explicit Workbench navigation. Repeated resources update within one reply, remain independent across replies, and do not enter transcript/model text. Explicit task-card navigation supports selection restoration, history and refresh. The host command request carries the persisted card identity for authorization.
+
+  Resource Cards appear together with file review receipts only after their Assistant reply stops streaming. Incoming cards remain in message state for completion, interruption and history recovery without mounting the card UI during output.
+
+- 28dda2b: Show compact summaries instead of embedded image data URLs in legacy tool results,
+  including JSON tree, raw, and copy views. Continue resolving immutable tool-output
+  image attachments through the trusted host for thumbnails and full previews.
+- 4051e5f: Add the generic `tool` image source to the shared immutable attachment contract,
+  attachment parser, and localized source labels.
+- Updated dependencies [6b230fb]
+- Updated dependencies [8c4adb8]
+- Updated dependencies [4051e5f]
+  - @xpert-ai/chatkit-types@0.9.0
+  - @xpert-ai/chatkit-web-shared@0.9.0
+  - @xpert-ai/a2ui-react@0.9.0
+
 ## 0.8.0
 
 ### Minor Changes

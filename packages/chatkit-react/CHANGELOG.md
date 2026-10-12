@@ -1,5 +1,87 @@
 # @xpert-ai/chatkit-react
 
+## 0.13.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.13.1
+- @xpert-ai/chatkit-web-component@0.13.1
+
+## 0.13.0
+
+### Patch Changes
+
+- Updated dependencies [806699c]
+  - @xpert-ai/chatkit-types@0.13.0
+  - @xpert-ai/chatkit-web-component@0.13.0
+
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [91035b1]
+  - @xpert-ai/chatkit-types@0.12.2
+  - @xpert-ai/chatkit-web-component@0.12.2
+
+## 0.12.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.12.1
+- @xpert-ai/chatkit-web-component@0.12.1
+
+## 0.12.0
+
+### Minor Changes
+
+- 3d8d526: Add the public `focusMessage` control for authorized exact-thread message navigation. ChatKit loads missing history, scrolls and highlights the target, and acknowledges success or a specific failure. Workbench navigation accepts message anchors and preserves its source view without sending messages or cancelling runs. Parent message handlers cleanly reject stale, unavailable and failed targets; old navigation payloads remain supported.
+
+### Patch Changes
+
+- Updated dependencies [3d8d526]
+  - @xpert-ai/chatkit-types@0.12.0
+  - @xpert-ai/chatkit-web-component@0.12.0
+
+## 0.11.2
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.11.2
+- @xpert-ai/chatkit-web-component@0.11.2
+
+## 0.11.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.11.1
+- @xpert-ai/chatkit-web-component@0.11.1
+
+## 0.11.0
+
+### Patch Changes
+
+- Updated dependencies [6c68e83]
+  - @xpert-ai/chatkit-types@0.11.0
+  - @xpert-ai/chatkit-web-component@0.11.0
+
+## 0.10.0
+
+### Patch Changes
+
+- Updated dependencies [2875454]
+  - @xpert-ai/chatkit-types@0.10.0
+  - @xpert-ai/chatkit-web-component@0.10.0
+
+## 0.9.0
+
+### Patch Changes
+
+- Updated dependencies [6b230fb]
+- Updated dependencies [8c4adb8]
+- Updated dependencies [4051e5f]
+  - @xpert-ai/chatkit-types@0.9.0
+  - @xpert-ai/chatkit-web-component@0.9.0
+
 ## 0.8.0
 
 ### Patch Changes

@@ -90,7 +90,7 @@ describe('resource images in the actual Workbench shell', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:inline');
   });
 
-  it('composes an image preview, summary and authorized file download', async () => {
+  it('keeps an image preview selected across view refreshes and downloads authorized files', async () => {
     let count = 0;
     f.vi.stubGlobal(
       'URL',
@@ -150,17 +150,19 @@ describe('resource images in the actual Workbench shell', () => {
       ],
       open: { target: 'workbench.view', viewKey: f.manifest.key },
     });
-    const ui = f.render(
+    const onRequestContextChange = f.vi.fn();
+    const shell = (locale: string) => (
       <f.WorkbenchShell
         options={{ ...f.baseOptions, workbench: { enabled: true } }}
-        locale="zh-CN"
-        onRequestContextChange={() => undefined}
+        locale={locale}
+        onRequestContextChange={onRequestContextChange}
       >
         <MessageResourceCards
           message={{ id: 'reply', type: 'assistant', content: [card] }}
         />
-      </f.WorkbenchShell>,
+      </f.WorkbenchShell>
     );
+    const ui = f.render(shell('zh-CN'));
     const thumbnail = await f.screen.findByRole('img', { name: '施工平面图' });
     f.fireEvent.click(thumbnail);
     await f.waitFor(() =>
@@ -181,11 +183,30 @@ describe('resource images in the actual Workbench shell', () => {
     );
     expect(files.readFileAccess).toHaveBeenCalledTimes(2);
     expect(f.screen.getByText('已验收')).toBeVisible();
-    files.createFileAccessGrant.mockResolvedValueOnce({
-      url: '/report-grant',
-      mimeType: 'application/pdf',
-      fileName: '施工说明.pdf',
+    // Changing locale refreshes manifests in the same workspace. The selected
+    // resource preview must survive both the pending request and its response.
+    let resolveViews!: (views: (typeof f.manifest)[]) => void;
+    f.mocks.listSlotViews.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveViews = resolve;
+      }),
+    );
+    ui.rerender(shell('en-US'));
+    expect(f.screen.getByRole('tab', { name: '施工平面图' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await f.act(async () => {
+      resolveViews([f.manifest]);
     });
+    expect(f.screen.getByRole('tab', { name: '施工平面图' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(f.screen.getAllByRole('img', { name: '施工平面图' })).toHaveLength(
+      2,
+    );
+    expect(files.readFileAccess).toHaveBeenCalledTimes(2);
     const downloadedNames: string[] = [];
     const click = f.vi
       .spyOn(HTMLAnchorElement.prototype, 'click')

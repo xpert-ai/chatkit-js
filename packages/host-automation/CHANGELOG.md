@@ -1,5 +1,73 @@
 # @xpert-ai/chatkit-host-automation
 
+## 0.13.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.13.1
+
+## 0.13.0
+
+### Patch Changes
+
+- Updated dependencies [806699c]
+  - @xpert-ai/chatkit-types@0.13.0
+
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [91035b1]
+  - @xpert-ai/chatkit-types@0.12.2
+
+## 0.12.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.12.1
+
+## 0.12.0
+
+### Patch Changes
+
+- Updated dependencies [3d8d526]
+  - @xpert-ai/chatkit-types@0.12.0
+
+## 0.11.2
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.11.2
+
+## 0.11.1
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.11.1
+
+## 0.11.0
+
+### Patch Changes
+
+- Updated dependencies [6c68e83]
+  - @xpert-ai/chatkit-types@0.11.0
+
+## 0.10.0
+
+### Patch Changes
+
+- Updated dependencies [2875454]
+  - @xpert-ai/chatkit-types@0.10.0
+
+## 0.9.0
+
+### Patch Changes
+
+- Updated dependencies [6b230fb]
+- Updated dependencies [8c4adb8]
+- Updated dependencies [4051e5f]
+  - @xpert-ai/chatkit-types@0.9.0
+
 ## 0.8.0
 
 ### Patch Changes

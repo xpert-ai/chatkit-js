@@ -1,5 +1,66 @@
 # @xpert-ai/chatkit-types
 
+## 0.13.1
+
+## 0.13.0
+
+### Minor Changes
+
+- 806699c: Define public options for shared group conversations and host session identity. Preserve existing surface colors without Hex conversion and align neutral surface variables and input derivation with the host. Hosts and ChatKit UI must use matching group-enabled versions.
+
+## 0.12.2
+
+### Patch Changes
+
+- 91035b1: Carry the shell's transient user activation snapshot through the Workbench host command bridge, independently of plugin payloads. Keep command policy and payload validation with host implementations, and discard forwarded results when the originating Workbench context has changed.
+
+## 0.12.1
+
+## 0.12.0
+
+### Minor Changes
+
+- 3d8d526: Add the public `focusMessage` control for authorized exact-thread message navigation. ChatKit loads missing history, scrolls and highlights the target, and acknowledges success or a specific failure. Workbench navigation accepts message anchors and preserves its source view without sending messages or cancelling runs. Parent message handlers cleanly reject stale, unavailable and failed targets; old navigation payloads remain supported.
+
+## 0.11.2
+
+## 0.11.1
+
+## 0.11.0
+
+### Minor Changes
+
+- 6c68e83: Add an optional realtime voice host bridge, dialing in the assistant appearance
+  dialog, persistent call controls above the dialog, and durable Call ended timeline
+  receipts with duration. Float the panels inside the chat viewport and retain mute
+  and hangup controls when the appearance dialog closes.
+
+## 0.10.0
+
+### Minor Changes
+
+- 2875454: Add configurable Assistant appearance types, character rendering, and support for
+  extensible pet catalogs and v2 sprite atlases. Show the Assistant's published
+  avatar and live activity above bubble conversations, with animated transitions to
+  a non-modal details dialog that includes customization and computer shortcuts.
+  Honor reduced motion and scale dialog spacing with the theme's font size and
+  density.
+
+## 0.9.0
+
+### Minor Changes
+
+- 8c4adb8: Add opt-in `messagePresentation.mode: 'bubbles'` across chat and Workbench transcripts. Render content blocks and interactive results as themed bubbles while hiding ordinary process output. Preserve source message actions, approval controls, interactive component state, and scroll position when changing presentation. The default transcript presentation is unchanged.
+
+### Patch Changes
+
+- 6b230fb: Add validated persisted Resource Card message parts and a reply-bottom card renderer with explicit Workbench navigation. Repeated resources update within one reply, remain independent across replies, and do not enter transcript/model text. Explicit task-card navigation supports selection restoration, history and refresh. The host command request carries the persisted card identity for authorization.
+
+  Resource Cards appear together with file review receipts only after their Assistant reply stops streaming. Incoming cards remain in message state for completion, interruption and history recovery without mounting the card UI during output.
+
+- 4051e5f: Add the generic `tool` image source to the shared immutable attachment contract,
+  attachment parser, and localized source labels.
+
 ## 0.8.0
 
 ## 0.7.0

@@ -127,7 +127,11 @@ describe('McpAppMessage host controls', () => {
   it('refreshes through the declared server tool without remounting, mutation replay or chat submission', async () => {
     mocks.getResource.mockResolvedValueOnce({ text: '<main>settings</main>', title: { en_US: 'Project settings', zh_Hans: '项目设置' }, refresh: { toolName: 'read_settings', arguments: { refresh: true } } });
     mocks.rpc.mockResolvedValueOnce({ result: { content: [{ type: 'text', text: '{"revision":5}' }] } });
-    render(<McpAppMessage data={data} messageId="message-1" />);
+    // Settle the resource update and its bridge effect before simulating the
+    // iframe's initialization message; a changed title alone is not readiness.
+    await act(async () => {
+      render(<McpAppMessage data={data} messageId="message-1" />);
+    });
     const iframe = asIframe(await screen.findByTitle('Project settings'));
     const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
     await act(async () => { window.dispatchEvent(new MessageEvent('message', { source: iframe.contentWindow, data: { jsonrpc: '2.0', method: 'ui/initialize', id: 'init', params: {} } })); });
