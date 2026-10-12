@@ -363,33 +363,20 @@ export function ThemeProvider({
         });
       }
 
-      // Accent color with level adjustment
+      // Keep hover/selection surfaces subtle instead of using the solid primary.
       if (color.accent?.primary) {
-        // const level = color.accent.level ?? 2; // Default to level 2 (no adjustment)
-        // const { primary, ring } = adjustAccentByLevel(color.accent.primary, level);
-        const primary = color.accent?.primary;
+        const primary = color.accent.primary;
+        const primaryForeground =
+          getLuminance(primary) > 0.5
+            ? 'oklch(0.145 0 0)'
+            : 'oklch(0.985 0 0)';
+        const accent = `color-mix(in oklab, var(--primary) ${isDarkMode ? 20 : 10}%, var(--background))`;
 
-        el.style.setProperty('--primary', primary);
-        el.style.setProperty('--accent', primary);
-        // el.style.setProperty('--ring', ring);
-        root.style.setProperty('--primary', primary);
-        root.style.setProperty('--accent', primary);
-        // root.style.setProperty('--ring', ring);
-
-        // Calculate and set primary-foreground based on luminance
-        const primaryLuminance = getLuminance(color.accent.primary);
-        if (primaryLuminance > 0.5) {
-          // Light primary color -> dark foreground text
-          el.style.setProperty('--primary-foreground', 'oklch(0.145 0 0)');
-          el.style.setProperty('--accent-foreground', 'oklch(0.145 0 0)');
-          root.style.setProperty('--primary-foreground', 'oklch(0.145 0 0)');
-          root.style.setProperty('--accent-foreground', 'oklch(0.145 0 0)');
-        } else {
-          // Dark primary color -> light foreground text
-          el.style.setProperty('--primary-foreground', 'oklch(0.985 0 0)');
-          el.style.setProperty('--accent-foreground', 'oklch(0.985 0 0)');
-          root.style.setProperty('--primary-foreground', 'oklch(0.985 0 0)');
-          root.style.setProperty('--accent-foreground', 'oklch(0.985 0 0)');
+        for (const element of [el, root]) {
+          element.style.setProperty('--primary', primary);
+          element.style.setProperty('--primary-foreground', primaryForeground);
+          element.style.setProperty('--accent', accent);
+          element.style.setProperty('--accent-foreground', 'var(--foreground)');
         }
       }
 
