@@ -22,10 +22,40 @@ function setup(projectId?: string) {
 }
 
 describe('persisted conversation Project scope', () => {
+  it('hydrates pending confirmation and refreshes to the first confirmed binding', async () => {
+    const { get, props } = setup();
+    const pending = {
+      id: 'conversation-1',
+      options: {
+        projectCreation: { status: 'awaiting_confirmation' },
+        projectSelection: { mode: 'none' as const },
+      },
+    };
+    get.mockResolvedValue(pending);
+    const { result } = renderHook(useConversationProject, {
+      initialProps: props,
+    });
+    act(() => result.current.hydrate(pending, 'thread-1'));
+    expect(result.current.awaitingConfirmation).toBe(true);
+    await waitFor(() => expect(get).toHaveBeenCalledOnce());
+    get.mockRejectedValueOnce(new Error('temporary failure'));
+    await act(async () => result.current.refresh());
+    expect(result.current.awaitingConfirmation).toBe(true);
+
+    get.mockResolvedValue({ ...pending, projectId: 'created-project' });
+    await act(async () => result.current.refresh());
+    await waitFor(() =>
+      expect(result.current.projectId).toBe('created-project'),
+    );
+    expect(result.current.awaitingConfirmation).toBe(false);
+  });
+
   it('preserves a known Project while reloading the same conversation history', async () => {
     const { get, props } = setup();
     get.mockResolvedValue({ id: 'conversation-1', projectId: 'project-1' });
-    const { result, rerender } = renderHook(useConversationProject, { initialProps: props });
+    const { result, rerender } = renderHook(useConversationProject, {
+      initialProps: props,
+    });
     await waitFor(() => expect(result.current.projectId).toBe('project-1'));
     rerender({ ...props, historyReady: false });
     expect(result.current.projectId).toBe('project-1');

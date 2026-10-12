@@ -178,9 +178,11 @@ export function useStreamTransport({
           connectorBindingIdsRef.current,
           conversationProject.projectId
             ? { mode: 'existing', projectId: conversationProject.projectId }
-            : conversationProject.fromHistory
-              ? { mode: 'none' }
-              : projectSelection,
+            : conversationProject.awaitingConfirmation
+              ? { mode: 'auto-new' }
+              : conversationProject.fromHistory
+                ? { mode: 'none' }
+                : projectSelection,
         );
         const stream =
           options?.joinExistingThread && runId
@@ -409,6 +411,7 @@ export function useStreamTransport({
       streamSendEvent,
       projectId,
       conversationProject.projectId,
+      conversationProject.awaitingConfirmation,
       conversationProject.fromHistory,
       handleInterrupt,
       projectSelection,
