@@ -330,6 +330,38 @@ describe('thread history restoration', () => {
     },
   );
 
+  it.each([undefined, { mode: 'none' }, { mode: 'auto-new' }])(
+    'retains pending Project confirmation after history restoration with saved selection %j',
+    async (projectSelection) => {
+      mocks.getConversation.mockImplementation(async (id: string) => ({
+        id,
+        status: 'idle',
+        options: {
+          projectCreation: { status: 'awaiting_confirmation' },
+          projectSelection,
+        },
+      }));
+      render(provider('thread-1'));
+      await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+      expect(stream.projectId).toBeUndefined();
+      await act(async () => {
+        await stream.submit({
+          input: { input: 'Keep configuring the project' },
+        });
+      });
+      expect(mocks.runStream).toHaveBeenCalledWith(
+        'thread-1',
+        'assistant-1',
+        expect.objectContaining({
+          input: expect.objectContaining({
+            projectId: undefined,
+            projectSelection: { mode: 'auto-new' },
+          }),
+        }),
+      );
+    },
+  );
+
   it('finds cross-project history when protocol metadata is unavailable', async () => {
     mocks.getThread.mockResolvedValue({ metadata: {} });
     mocks.searchConversations.mockResolvedValue({
