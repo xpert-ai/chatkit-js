@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui
 
+## 0.14.2
+
+### Patch Changes
+
+- 5e8de3d: Preserve pending project confirmation when restoring conversations instead of sending a no-project selection. Refresh the scope after the first confirmed project binding.
+  - @xpert-ai/chatkit-types@0.14.2
+  - @xpert-ai/chatkit-web-shared@0.14.2
+  - @xpert-ai/a2ui-react@0.14.2
+
 ## 0.14.1
 
 ### Patch Changes
