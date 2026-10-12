@@ -1,5 +1,19 @@
 # @xpert-ai/chatkit-ui
 
+## 0.14.0
+
+### Minor Changes
+
+- 9b6a6d2: Manage group Projects through the existing Composer Project menu: create or select a Project, confirm participating Assistants, and add members through the same entry. Preserve retry identity, current permissions, theme settings, and focus when opening or closing confirmation.
+
+  Upgrade `@xpert-ai/xpert-sdk` to `^0.11.0` for the published group Project APIs. Localize participation labels and hints in English and Chinese, and show persisted Assistant failures in group messages and execution records.
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.14.0
+- @xpert-ai/chatkit-web-shared@0.14.0
+- @xpert-ai/a2ui-react@0.14.0
+
 ## 0.13.1
 
 ### Patch Changes
