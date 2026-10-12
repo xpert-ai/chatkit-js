@@ -25,6 +25,8 @@ type McpAppApprovalsOptions = Pick<
 > & {
   postToApp: (message: unknown) => void;
   callHostRpc: (request: JsonRpcRequest) => Promise<unknown>;
+  getResourceEpoch: () => number;
+  isResourceEpochCurrent: (epoch: number) => boolean;
   data: TMessageComponentMcpAppData;
   messageId: string | undefined;
   client: StreamContextType['client'];
@@ -39,6 +41,8 @@ export function useMcpAppApprovals({
   postToApp,
   setDisplayMode,
   callHostRpc,
+  getResourceEpoch,
+  isResourceEpochCurrent,
   data,
   runtimeAppInstanceToken,
   messageId,
@@ -98,18 +102,30 @@ export function useMcpAppApprovals({
 
   const dispatchHostRpc = React.useCallback(
     async (request: JsonRpcRequest) => {
+      const epoch = getResourceEpoch();
       try {
-        processHostRpcResponse(request, await callHostRpc(request));
+        const response = await callHostRpc(request);
+        if (!isResourceEpochCurrent(epoch)) return;
+        processHostRpcResponse(request, response);
       } catch (rpcError) {
+        if (!isResourceEpochCurrent(epoch)) return;
         postToApp(jsonRpcError(request.id, getErrorMessage(rpcError)));
       }
     },
-    [callHostRpc, postToApp, processHostRpcResponse],
+    [
+      callHostRpc,
+      getResourceEpoch,
+      isResourceEpochCurrent,
+      postToApp,
+      processHostRpcResponse,
+    ],
   );
 
   const resolvePendingApproval = React.useCallback(
     async (action: 'approve' | 'reject') => {
       const approval = pendingApprovalRef.current;
+      const epoch = getResourceEpoch();
+      if (!isResourceEpochCurrent(epoch)) return;
       if (!approval || approvalActionRef.current) return;
       if (approval.expiresAt <= Date.now()) {
         clearPendingApproval();
@@ -137,6 +153,7 @@ export function useMcpAppApprovals({
             approval.approvalId,
             query,
           );
+          if (!isResourceEpochCurrent(epoch)) return;
           clearPendingApproval();
           postToApp(
             jsonRpcError(
@@ -154,14 +171,20 @@ export function useMcpAppApprovals({
           approval.approvalId,
           query,
         );
+        // Approval belongs to the session that requested it. Never retry its
+        // tool call against an iframe restored while approval was in flight.
+        if (!isResourceEpochCurrent(epoch)) return;
         const retryRequest = withMcpAppApprovalId(
           approval.request,
           approval.approvalId,
         );
         const response = await callHostRpc(retryRequest);
+        if (!isResourceEpochCurrent(epoch)) return;
         clearPendingApproval();
         processHostRpcResponse(retryRequest, response);
       } catch (approvalRequestError) {
+        if (!isResourceEpochCurrent(epoch)) return;
+        // TODO: Route direct approval failures through the lifecycle handler.
         approvalActionRef.current = null;
         setApprovalAction(null);
         setApprovalError(getErrorMessage(approvalRequestError));
@@ -169,6 +192,8 @@ export function useMcpAppApprovals({
     },
     [
       callHostRpc,
+      getResourceEpoch,
+      isResourceEpochCurrent,
       clearPendingApproval,
       client,
       data,

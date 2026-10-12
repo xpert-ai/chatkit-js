@@ -151,6 +151,104 @@ describe('McpAppMessage host controls', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('ignores cancellation and unknown notifications without creating null-id replies', async () => {
+    await act(async () => {
+      render(<McpAppMessage data={data} />);
+    });
+    const iframe = asIframe(await screen.findByTitle('Example App'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    post.mockClear();
+    for (const method of ['notifications/cancelled', 'notifications/unknown']) {
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: iframe.contentWindow,
+            data: {
+              jsonrpc: '2.0',
+              method,
+              params: { requestId: 17, reason: 'Superseded viewport' },
+            },
+          }),
+        );
+      });
+    }
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('forwards logging notifications without replying, even when the gateway rejects them', async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ jsonrpc: '2.0', id: null, result: {} })
+      .mockRejectedValueOnce(new Error('Gateway unavailable'));
+    await act(async () => {
+      render(<McpAppMessage data={data} />);
+    });
+    const iframe = asIframe(await screen.findByTitle('Example App'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    post.mockClear();
+    for (const message of ['first', 'second']) {
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: iframe.contentWindow,
+            data: {
+              jsonrpc: '2.0',
+              method: 'notifications/message',
+              params: { level: 'info', data: message },
+            },
+          }),
+        );
+      });
+    }
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('preserves errors for requests with an id while rejecting messages from unrelated frames', async () => {
+    const response = {
+      jsonrpc: '2.0',
+      id: 'request-1',
+      error: { code: -32601, message: 'Unsupported method' },
+    };
+    mocks.rpc
+      .mockResolvedValueOnce(response)
+      .mockRejectedValueOnce(new Error('Gateway unavailable'));
+    await act(async () => {
+      render(<McpAppMessage data={data} />);
+    });
+    const iframe = asIframe(await screen.findByTitle('Example App'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    post.mockClear();
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: window,
+          data: { jsonrpc: '2.0', id: 'unrelated', method: 'tools/list' },
+        }),
+      );
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    for (const id of ['request-1', 'request-2']) {
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            source: iframe.contentWindow,
+            data: { jsonrpc: '2.0', id, method: 'tools/list' },
+          }),
+        );
+      });
+    }
+    expect(post).toHaveBeenCalledWith(response, '*');
+    expect(post).toHaveBeenCalledWith(
+      {
+        jsonrpc: '2.0',
+        id: 'request-2',
+        error: { code: -32000, message: 'Gateway unavailable' },
+      },
+      '*',
+    );
+  });
+
   it('opens project links through the Workbench host without exposing session credentials', async () => {
     const openProject = vi.fn().mockResolvedValue({ success: true, session: { clientSecret: 'host-only' } });
     render(<WorkbenchContext.Provider value={{ ...disabledWorkbenchContext, enabled: true, openProject }}><McpAppMessage data={data}/></WorkbenchContext.Provider>);
