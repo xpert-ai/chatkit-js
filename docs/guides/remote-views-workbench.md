@@ -4,6 +4,10 @@ ChatKit can discover iframe-based Xpert extension views and display them in a
 workbench that starts on the right. The feature is opt-in and remains disabled unless
 `workbench.enabled` is exactly `true`.
 
+Group conversations use the shared Composer Project menu for creation, selection
+and participant management. See [Group Project menu](group-project-menu.md) for
+its state, authentication boundaries and release prerequisites.
+
 ```ts
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 

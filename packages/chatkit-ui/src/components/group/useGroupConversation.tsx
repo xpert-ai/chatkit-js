@@ -6,6 +6,7 @@ import {
 } from './group-mentions';
 import { useWorkbench } from '../../workbench/context';
 import { useGroupComposer } from './useGroupComposer';
+import { useGroupProject } from './useGroupProject';
 import { useGroupHeaderActions } from './useGroupHeaderActions';
 import {
   Dialog,
@@ -52,6 +53,7 @@ import { ChatkitAvatar, normalizeChatkitAvatar } from '../ui/chatkit-avatar';
 import { useTheme } from '../../providers/Theme';
 import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 import type { ChatViewModel } from '../chat/ChatViewModel';
 import { getGroupMessageListProps } from './getGroupMessageListProps';
@@ -150,12 +152,14 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
               member.id === recipients[0] && member.kind === 'assistant',
           )
         : undefined,
-    activityKey:
-      group?.runs
-        .map((run) => `${run.participantId}:${run.status}`)
-        .join(',') ?? '',
+    activityKey: `${group?.revision ?? ''}:${group?.runs.map((run) => `${run.participantId}:${run.status}`).join(',') ?? ''}`,
   });
   const composerKey = JSON.stringify(composer.input);
+  const groupProject = useGroupProject({
+    client,
+    group,
+    onSaved: composer.refreshProject,
+  });
   useEffect(() => {
     pending.current = null;
   }, [composerKey]);
@@ -207,18 +211,23 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     group,
     membersOpen,
     membersButton: (
-      <Button
-        variant="ghost"
-        ref={membersTrigger}
-        onClick={() => changeMembersOpen(!membersOpen)}
-        aria-haspopup="dialog"
-        size="icon"
-        aria-label={t('group.membersTitle')}
-        title={t('group.membersTitle')}
-        aria-expanded={membersOpen}
-      >
-        <Users className="size-4" />
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            ref={membersTrigger}
+            onClick={() => changeMembersOpen(!membersOpen)}
+            aria-haspopup="dialog"
+            size="icon"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
+            aria-label={t('group.membersTitle')}
+            aria-expanded={membersOpen}
+          >
+            <Users className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{t('group.membersTitle')}</TooltipContent>
+      </Tooltip>
     ),
     onMembers: () => changeMembersOpen(true),
     onLoadMore: () => void loadMore().catch(fail),
@@ -394,6 +403,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     },
     composerBefore: (
       <>
+        {groupProject.error}
         {group && (
           <GroupInteractions client={client} group={group} onError={fail} />
         )}
@@ -415,6 +425,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     ),
     composer: {
       ...composer.controls,
+      context: { ...composer.controls.context, project: groupProject.selector },
       onSubmit: (event) => void submit(event),
       style: getSurfaceThemeStyle(theme),
       leadingActions: (
@@ -629,6 +640,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     },
     footer: (
       <>
+        {groupProject.dialog}
         {headerActions.footer}
         <Dialog open={membersOpen} onOpenChange={changeMembersOpen}>
           <DialogContent

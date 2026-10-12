@@ -140,7 +140,10 @@ it('acknowledges Office edits only after the server accepts the exported bytes',
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(officeSaved).toHaveBeenCalledOnce());
   expect(officeSaved).toHaveBeenCalledWith(persist.mock.calls[1][2]);
-  expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false);
+  // markSaved runs before React commits the clean state to the registered handle.
+  await waitFor(() =>
+    expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false),
+  );
   // The next conflict check compares against the successfully saved file.
   download.mockResolvedValue(new Blob(['edited office']));
   fireEvent.click(screen.getByText('Edit office'));

@@ -209,6 +209,12 @@ export function useGroupComposer({
     controls,
     input,
     blocked,
+    refreshProject: () => {
+      setScope(null);
+      setSelection(null);
+      setReferences({ key: '', files: [] });
+      setReload((value) => value + 1);
+    },
     attachments: (
       <>
         {failure && (
