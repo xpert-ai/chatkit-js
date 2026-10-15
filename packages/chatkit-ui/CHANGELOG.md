@@ -1,5 +1,44 @@
 # @xpert-ai/chatkit-ui
 
+## 0.14.2
+
+### Patch Changes
+
+- 5e8de3d: Preserve pending project confirmation when restoring conversations instead of sending a no-project selection. Refresh the scope after the first confirmed project binding.
+  - @xpert-ai/chatkit-types@0.14.2
+  - @xpert-ai/chatkit-web-shared@0.14.2
+  - @xpert-ai/a2ui-react@0.14.2
+
+## 0.14.1
+
+### Patch Changes
+
+- fbf518d: Scale the message history search field height, padding, and search icon with the active density, including live theme changes while the dialog is open.
+- fec3dac: Keep reasoning collapsed by default during streaming and allow expansion or collapse only through user interaction. Show the existing tool-call shimmer on the active reasoning label and preserve the user's expanded state as streaming progresses or ends.
+- 4dfc1fc: Show authorized saved results when MCP App sessions expire and support explicit interaction recovery. Isolate responses from replaced sessions and use the published SDK history APIs.
+- 78e65fe: Use subtle theme-aware accent backgrounds for hover and selection states when a custom brand color is configured, including portaled menus.
+- 246415c: Keep available-view menu items evenly inset whether or not the list overflows, and prevent hover from changing the reserved scrollbar width.
+- 59b9b6d: Stop showing thinking indicators when an assistant message completes, even while the transport reconciles history. Remove delayed loading indicators that could briefly reappear after a reply ends, while preserving activity feedback for new and ongoing replies.
+- 846fe53: Restore plugin view selections and tab parameters after reload and browser navigation. Scope saved navigation to the project and, for conversation-scoped views, the conversation; normalize optional history fields and clear automatic restoration when a view or panel is explicitly closed.
+- 36654ee: Upgrade @xpert-ai/xpert-sdk to 0.12.0.
+  - @xpert-ai/chatkit-types@0.14.1
+  - @xpert-ai/chatkit-web-shared@0.14.1
+  - @xpert-ai/a2ui-react@0.14.1
+
+## 0.14.0
+
+### Minor Changes
+
+- 9b6a6d2: Manage group Projects through the existing Composer Project menu: create or select a Project, confirm participating Assistants, and add members through the same entry. Preserve retry identity, current permissions, theme settings, and focus when opening or closing confirmation.
+
+  Upgrade `@xpert-ai/xpert-sdk` to `^0.11.0` for the published group Project APIs. Localize participation labels and hints in English and Chinese, and show persisted Assistant failures in group messages and execution records.
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.14.0
+- @xpert-ai/chatkit-web-shared@0.14.0
+- @xpert-ai/a2ui-react@0.14.0
+
 ## 0.13.1
 
 ### Patch Changes
