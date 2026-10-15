@@ -1203,6 +1203,8 @@
     "assistant": "Assistant",
     "person": "Person",
     "remove": "Remove",
+    "loadMoreCandidates": "Load more members",
+    "retryCandidates": "Retry loading members",
     "memberKind": "Member type",
     "memberId": "Member ID",
     "invite": "Invite",

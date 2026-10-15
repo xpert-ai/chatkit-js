@@ -1203,6 +1203,8 @@
     "assistant": "数字专家",
     "person": "用户",
     "remove": "移除",
+    "loadMoreCandidates": "加载更多成员",
+    "retryCandidates": "重试加载成员",
     "memberKind": "成员类型",
     "memberId": "成员 ID",
     "invite": "邀请",

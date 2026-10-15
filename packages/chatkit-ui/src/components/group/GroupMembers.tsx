@@ -1,5 +1,6 @@
 import { GroupMemberAvatar } from './GroupMemberAvatar';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useGroupCandidates } from './useGroupCandidates';
+import { useId, useState, type FormEvent } from 'react';
 import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type {
@@ -33,9 +34,7 @@ export function GroupMembers({
   const [kind, setKind] = useState<'user' | 'assistant'>('user');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ChatGroupCandidate | null>(null);
-  const [candidates, setCandidates] = useState<ChatGroupCandidate[]>([]);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const owner =
@@ -48,32 +47,21 @@ export function GroupMembers({
         member.kind === candidate.kind &&
         member.subjectId === candidate.subjectId,
     );
-  useEffect(() => {
-    if (!owner || !open) return;
-    const controller = new AbortController();
-    setLoading(true);
-    setCandidates([]);
-    const timer = setTimeout(() => {
-      void client.groups
-        .candidates(
-          { kind, search, groupId: group.id },
-          { signal: controller.signal },
-        )
-        .then((rows) => {
-          if (!controller.signal.aborted) setCandidates(rows);
-        })
-        .catch((error) => {
-          if (!controller.signal.aborted) onError(error);
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
-        });
-    }, 200);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [client, group.id, owner, kind, search, open]);
+  const membershipKey = group.members
+    .filter((member) => member.active)
+    .map((member) => `${member.kind}:${member.subjectId}`)
+    .sort()
+    .join('|');
+  const { candidates, loading, loadingMore, hasMore, failed, loadMore } =
+    useGroupCandidates({
+      client,
+      groupId: group.id,
+      kind,
+      search,
+      membershipKey,
+      enabled: owner && open,
+      onError,
+    });
   async function invite(event: FormEvent) {
     event.preventDefault();
     if (!selected || !eligible(selected) || inviting) return;
@@ -106,7 +94,6 @@ export function GroupMembers({
     setKind(value === 'assistant' ? 'assistant' : 'user');
     setSelected(null);
     setSearch('');
-    setCandidates([]);
     setOpen(false);
   };
   return (
@@ -253,7 +240,10 @@ export function GroupMembers({
                     value={search}
                     onValueChange={setSearch}
                   />
-                  <CommandList id={`${id}-candidates`} aria-busy={loading}>
+                  <CommandList
+                    id={`${id}-candidates`}
+                    aria-busy={loading || loadingMore}
+                  >
                     {loading ? (
                       <div
                         role="status"
@@ -264,7 +254,9 @@ export function GroupMembers({
                       </div>
                     ) : (
                       <>
-                        <CommandEmpty>{t('group.noMatches')}</CommandEmpty>
+                        {!failed && (
+                          <CommandEmpty>{t('group.noMatches')}</CommandEmpty>
+                        )}
                         {candidates.filter(eligible).map((candidate) => (
                           <CommandItem
                             key={candidate.subjectId}
@@ -291,6 +283,23 @@ export function GroupMembers({
                       </>
                     )}
                   </CommandList>
+                  {(hasMore || failed) && !loading && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={loadingMore}
+                      onClick={loadMore}
+                    >
+                      {loadingMore && (
+                        <Loader2 className="size-4 animate-spin" />
+                      )}
+                      {t(
+                        failed
+                          ? 'group.retryCandidates'
+                          : 'group.loadMoreCandidates',
+                      )}
+                    </Button>
+                  )}
                 </Command>
               </PopoverContent>
             </Popover>
