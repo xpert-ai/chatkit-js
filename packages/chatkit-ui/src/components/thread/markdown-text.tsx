@@ -441,9 +441,13 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   };
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-t-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white">
+    <div className="flex items-center justify-between gap-[var(--density-gap,0.5rem)] bg-muted px-[var(--density-padding,1rem)] py-[var(--density-gap,0.5rem)] text-sm font-semibold text-foreground">
       <span className="lowercase [&>span]:text-xs">{language}</span>
-      <TooltipIconButton tooltip={t('markdown.copy')} onClick={onCopy}>
+      <TooltipIconButton
+        tooltip={t('markdown.copy')}
+        onClick={onCopy}
+        className="size-[calc(1.5rem*var(--density-spacing,1))] rounded-chat-item"
+      >
         {!isCopied && <CopyIcon />}
         {isCopied && <CheckIcon />}
       </TooltipIconButton>
@@ -611,7 +615,7 @@ const defaultComponents: any = {
     ) : (
       <div
         className={cn(
-          'max-w-4xl overflow-x-auto rounded-lg text-sm bg-black text-white dark:bg-zinc-800',
+          'max-w-4xl overflow-hidden rounded-chat-panel border border-border bg-muted/30 text-sm text-foreground',
           className,
         )}
       >
@@ -650,7 +654,7 @@ const defaultComponents: any = {
       return (
         <code
           className={cn(
-            'block min-w-full whitespace-pre px-4 py-4 font-mono text-inherit',
+            'block w-full overflow-x-auto whitespace-pre p-[var(--density-padding,1rem)] font-mono text-inherit',
             className,
           )}
           {...stripMarkdownNode(props)}

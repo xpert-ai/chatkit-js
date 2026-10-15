@@ -264,7 +264,8 @@ describe('external Assistant execution selection', () => {
     const [run] = collectExternalAssistantRuns([first, next]);
     const transcript = toExternalAssistantMessages(run);
     expect(transcript).toHaveLength(3);
-    expect(JSON.parse(transcript[0].content as string)).toEqual({
+    expect(transcript[0].content).toBe('Review');
+    expect(run.info.inputs).toEqual({
       input: 'Review',
       documentId: 'doc',
     });
@@ -273,5 +274,40 @@ describe('external Assistant execution selection', () => {
       [expect.objectContaining({ text: 'Next round' })],
     ]);
     expect(new Set(transcript.map((message) => message.id)).size).toBe(3);
+  });
+
+  it.each([
+    ['Review this', 'Review this'],
+    [{ input: 'Review this' }, 'Review this'],
+    [{ taskId: 'task-1', input: 'Review\nthis', context: { revision: 2 } }, 'Review\nthis'],
+    [{ taskId: 'task-1' }, null],
+    [{ input: '', taskId: 'task-1' }, null],
+    [{ input: { taskId: 'task-1' } }, null],
+    [null, null],
+  ])('projects only prompt text from inputs %j without changing execution data', (inputs, expected) => {
+    const message: AssistantMessageWithAgentRuns = {
+      id: 'reply',
+      type: 'assistant',
+      executionId: 'root',
+      content: [{ type: 'text', text: 'Expert reply', executionId: 'external' }],
+      agentRuns: [{
+        id: 'external',
+        parentId: 'root',
+        invocationKind: 'external_assistant',
+        inputs,
+      }],
+    };
+    const original = structuredClone(message);
+    const [run] = collectExternalAssistantRuns([message]);
+    const transcript = toExternalAssistantMessages(run);
+    const userMessages = transcript.filter((item) => item.type === 'user');
+    expect(userMessages).toEqual(expected === null ? [] : [{
+      id: 'external:input', type: 'user', content: expected,
+    }]);
+    expect(transcript.at(-1)?.content).toEqual([
+      expect.objectContaining({ text: 'Expert reply' }),
+    ]);
+    expect(run.info.inputs).toEqual(inputs);
+    expect(message).toEqual(original);
   });
 });
