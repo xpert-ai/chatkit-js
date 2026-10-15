@@ -56,6 +56,61 @@ function setup() {
   return { ...hook, fetch };
 }
 describe('resource catalog cache', () => {
+  it('restores hidden assistant packages without exposing them in candidate searches or menu caches', async () => {
+    const hidden = { ...resource('agent_plugin'), title: 'Assistant template' };
+    const visible = resource('agent_plugin', 1);
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockImplementation(async (input) => {
+        const url = new URL(String(input));
+        const items =
+          url.searchParams.get('purpose') === 'selection'
+            ? [hidden, visible]
+            : [visible];
+        return new Response(JSON.stringify({ items, total: items.length }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      });
+    const client = new Client<unknown>({
+      apiUrl: 'https://example.test/api/ai',
+      callerOptions: { fetch },
+    });
+    const selectedResources = [
+      { bindingId: hidden.bindingId, version: hidden.version },
+    ];
+    const { result, rerender } = renderHook(
+      ({ kind, query }: { kind?: RuntimeResourceKind; query: string }) =>
+        useRuntimeResourceCatalog({
+          client,
+          assistantId: 'assistant',
+          enabled: true,
+          kind,
+          query,
+          selectedResources,
+        }),
+      {
+        initialProps: {
+          kind: 'agent_plugin' as RuntimeResourceKind | undefined,
+          query: '',
+        },
+      },
+    );
+    await waitFor(() =>
+      expect(result.current.selectedItems[0]).toEqual(hidden),
+    );
+    expect(result.current.items).toEqual([visible]);
+    expect(result.current.total).toBe(1);
+    rerender({ kind: undefined, query: '' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.items).toEqual([visible]);
+    rerender({ kind: 'agent_plugin', query: 'template' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.selectedItems[0]).toEqual(hidden);
+    expect(result.current.items).not.toContainEqual(hidden);
+    expect(selectedResources).toEqual([
+      { bindingId: hidden.bindingId, version: hidden.version },
+    ]);
+  });
   function selectionSetup(selected = resource('middleware')) {
     const client = new Client<unknown>({
       apiUrl: 'https://example.test/api/ai',
@@ -151,7 +206,9 @@ describe('resource catalog cache', () => {
       expect(result.current.selectedItems[0].status).toBe('ready'),
     );
     expect(result.current.selectedItems[0].kind).toBe('external_xpert');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(
+      fetch.mock.calls.filter(([, options]) => options && 'purpose' in options),
+    ).toHaveLength(2);
     expect(validate).not.toHaveBeenCalled();
   });
 
@@ -267,12 +324,12 @@ describe('resource catalog cache', () => {
 
   it('keeps catalog failures distinct from revocation and recovers on refresh', async () => {
     const { result, fetch, selected, validate } = selectionSetup();
-    fetch.mockRejectedValueOnce(new Error('catalog offline'));
+    fetch.mockRejectedValue(new Error('catalog offline'));
     await waitFor(() =>
       expect(result.current.selectedItems[0].status).toBe('unverified'),
     );
     expect(result.current.loadError).toBe('catalog offline');
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(validate).not.toHaveBeenCalled();
     fetch.mockResolvedValue({ items: [selected], total: 1 });
     act(() => result.current.refresh());

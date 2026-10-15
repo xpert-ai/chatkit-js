@@ -20,16 +20,21 @@ interface CachedCatalog {
 
 type CatalogQuery = {
   kind?: RuntimeResourceKind;
+  purpose?: 'selection';
   search: string;
   allPages: boolean;
 };
-const catalogKey = ({ kind, search }: CatalogQuery) =>
-  JSON.stringify([kind ?? 'all', search]);
+const catalogKey = ({ kind, search, purpose }: CatalogQuery) =>
+  JSON.stringify([kind ?? 'all', search, purpose ?? 'browse']);
 const resourceKey = ({ bindingId, version }: RuntimeResourceReference) =>
   JSON.stringify([bindingId, version]);
 const noSelection: RuntimeResourceReference[] = [];
 const noItems: RuntimeResourceCatalogItem[] = [];
-const fullCatalog: CatalogQuery = { search: '', allPages: true };
+const fullCatalog: CatalogQuery = {
+  search: '',
+  allPages: true,
+  purpose: 'selection',
+};
 
 /** One cache per client / Assistant / project. Menu navigation never invalidates it. */
 export function useRuntimeResourceCatalog({
@@ -118,6 +123,7 @@ export function useRuntimeResourceCatalog({
             projectId: projectId ?? undefined,
             search: target.search || undefined,
             kind: target.kind,
+            ...(target.purpose ? { purpose: target.purpose } : {}),
             offset: entry.offset,
             limit: 100,
             signal: abort.signal,
@@ -162,7 +168,8 @@ export function useRuntimeResourceCatalog({
     return () => window.clearTimeout(timer);
   }, [enabled, cache, key, load, search, kind, allPages, revision]);
 
-  // Resolve selections against the unfiltered catalog, independently of menu/search.
+  // Restore labels/status for assistant-role packages without offering them in menus.
+  // Selection inventory has its own cache, independent of candidate menu/search.
   // Finish pagination before treating a missing item as an old or removed version.
   React.useEffect(() => {
     if (!enabled || !hasSelected) return;

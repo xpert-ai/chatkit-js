@@ -169,6 +169,53 @@ async function openCategory(label: string) {
   }
 }
 describe('hierarchical resource picker', () => {
+  it('shows every template in plugin details and adds the package as one selection', async () => {
+    const templates: RuntimeResourceCatalogItem = {
+      ...plugin,
+      status: 'ready',
+      diagnostics: [],
+      components: [
+        {
+          key: 'reviewer',
+          kind: 'assistant_template',
+          title: 'Reviewer',
+          description: 'Review evidence',
+          status: 'ready',
+        },
+        {
+          key: 'writer',
+          kind: 'assistant_template',
+          title: 'Writer',
+          description: 'Write reports',
+          status: 'ready',
+        },
+      ],
+    };
+    const { toggle } = setup([], [templates]);
+    await openCategory('composer.resources.connectPlugins');
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: 'composer.resources.details: Example plugin',
+      }),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Reviewer/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Writer/)).toBeInTheDocument();
+    expect(
+      within(dialog).getAllByText(/composer.resources.assistant_template/),
+    ).toHaveLength(2);
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'composer.resources.add' }),
+    );
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveBeenCalledWith(
+      expect.objectContaining({ bindingId: 'plugin', version: 'v1' }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'composer.resources.remove' }),
+    );
+    expect(toggle).toHaveBeenCalledTimes(2);
+  });
   it('keeps retry reachable after a conversation read fails while blocking resource changes', async () => {
     const client = new Client<unknown>({
       apiUrl: 'https://example.test/api/ai',
@@ -411,6 +458,34 @@ describe('hierarchical resource picker', () => {
     expect(
       await screen.findByRole('menuitemcheckbox', { name: /Available plugin/ }),
     ).toHaveAttribute('data-disabled');
+  });
+  it('keeps an assistant-role selection removable but never offers it as a new plugin', async () => {
+    const { catalog, toggle } = setup([plugin], [other]);
+    catalog.mockImplementation(async (_id, options) => {
+      const items =
+        options && 'purpose' in options && options.purpose === 'selection'
+          ? [plugin, other]
+          : [other];
+      return { items, total: items.length };
+    });
+    const selected = await screen.findByRole('menuitemcheckbox', {
+      name: /Example plugin/,
+    });
+    expect(selected).not.toHaveAttribute('data-disabled');
+    fireEvent.click(selected);
+    expect(toggle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bindingId: plugin.bindingId,
+        version: plugin.version,
+      }),
+    );
+    await openCategory('composer.resources.connectPlugins');
+    expect(
+      await screen.findByRole('menuitemcheckbox', { name: /Available plugin/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: /Example plugin/ }),
+    ).not.toBeInTheDocument();
   });
   it('uses a second-level page with Back on narrow screens', async () => {
     compact = true;

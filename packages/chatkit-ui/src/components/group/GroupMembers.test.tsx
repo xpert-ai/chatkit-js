@@ -87,14 +87,12 @@ function setup(snapshot = group) {
       avatar: { url: '/f.png' },
     },
   ]);
-  const add = vi
-    .spyOn(client.groups, 'addMember')
-    .mockResolvedValue({
-      ...group.members[2],
-      id: 'f',
-      subjectId: 'f',
-      name: 'Assistant F',
-    });
+  const add = vi.spyOn(client.groups, 'addMember').mockResolvedValue({
+    ...group.members[2],
+    id: 'f',
+    subjectId: 'f',
+    name: 'Assistant F',
+  });
   const remove = vi
     .spyOn(client.groups, 'removeMember')
     .mockResolvedValue({ removed: true });
@@ -159,7 +157,13 @@ describe('group member management', () => {
     );
     await waitFor(() =>
       expect(candidates).toHaveBeenLastCalledWith(
-        { kind: 'assistant', search: 'F', groupId: 'team' },
+        {
+          kind: 'assistant',
+          search: 'F',
+          groupId: 'team',
+          limit: 51,
+          offset: 0,
+        },
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       ),
     );
@@ -175,6 +179,34 @@ describe('group member management', () => {
       expect(
         screen.getByRole('button', { name: 'group.invite' }),
       ).toBeDisabled(),
+    );
+  });
+  it('lets the user load and invite an expert beyond the first page', async () => {
+    const { candidates, add } = setup();
+    const rows = Array.from({ length: 51 }, (_, i) => ({
+      kind: 'assistant' as const,
+      subjectId: `expert-${i}`,
+      name: `Expert ${i}`,
+    }));
+    candidates
+      .mockResolvedValueOnce(rows)
+      .mockResolvedValueOnce(rows.slice(50));
+    fireEvent.click(screen.getByRole('tab', { name: 'group.assistant 2' }));
+    fireEvent.click(
+      screen.getByRole('combobox', { name: 'group.selectMember' }),
+    );
+    await screen.findByRole('option', { name: 'Expert 49' });
+    expect(screen.queryByRole('option', { name: 'Expert 50' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'group.loadMoreCandidates' }),
+    );
+    fireEvent.click(await screen.findByRole('option', { name: 'Expert 50' }));
+    fireEvent.click(screen.getByRole('button', { name: 'group.invite' }));
+    await waitFor(() =>
+      expect(add).toHaveBeenCalledWith('team', {
+        kind: 'assistant',
+        subjectId: 'expert-50',
+      }),
     );
   });
   it('clears a selected candidate when changing member type', async () => {

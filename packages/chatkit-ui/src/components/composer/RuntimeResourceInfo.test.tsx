@@ -118,6 +118,58 @@ describe('resource information hover lifecycle', () => {
     expect(screen.queryAllByRole('region')).toHaveLength(0);
   });
 
+  it('updates radius and density tokens while a template information portal stays open', () => {
+    const item: RuntimeResourceCatalogItem = {
+      bindingId: 'templates',
+      version: 'v1',
+      kind: 'agent_plugin',
+      title: 'Templates',
+      status: 'ready',
+      diagnostics: [],
+      components: [
+        {
+          key: 'reviewer',
+          kind: 'assistant_template',
+          title: 'Reviewer',
+          status: 'ready',
+        },
+      ],
+    };
+    const contents = (
+      <RuntimeResourceInfo item={item}>
+        <button>Template info</button>
+      </RuntimeResourceInfo>
+    );
+    const { rerender } = render(
+      <ThemeProvider
+        theme={{ radius: 'sharp', density: 'compact', colorScheme: 'dark' }}
+      >
+        {contents}
+      </ThemeProvider>,
+    );
+    fireEvent.focus(screen.getByRole('button', { name: 'Template info' }));
+    expect(
+      screen.getByRole('region').style.getPropertyValue('--chat-panel-radius'),
+    ).toBe('0px');
+    expect(
+      screen.getByRole('region').style.getPropertyValue('--chat-density-scale'),
+    ).toBe('0.75');
+    rerender(
+      <ThemeProvider
+        theme={{ radius: 'round', density: 'spacious', colorScheme: 'light' }}
+      >
+        {contents}
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('region')).toHaveTextContent('Reviewer');
+    expect(
+      screen.getByRole('region').style.getPropertyValue('--chat-panel-radius'),
+    ).not.toBe('0px');
+    expect(
+      screen.getByRole('region').style.getPropertyValue('--chat-density-scale'),
+    ).toBe('1.25');
+  });
+
   it('shows only the latest card and lets the pointer enter its content', () => {
     render(<Cards />);
     for (const name of ['A', 'B', 'C']) {
