@@ -1,5 +1,20 @@
 # @xpert-ai/chatkit-ui
 
+## 0.15.0
+
+### Minor Changes
+
+- 933836b: Show selected plugin command/subcommand shortcuts with descriptive labels on the ChatKit start screen, and keep them available through the slash palette after a conversation starts. Insert normal skill chips with editable slash arguments, preserve pinned skill references in messages, and avoid treating skill arguments as global commands. Upgrade the Xpert SDK dependency to ^0.14.0 for getResourceCommands.
+
+### Patch Changes
+
+- f8ca3ec: Show only the input prompt in external assistant human messages while preserving custom parameters in execution data.
+- f8ca3ec: Make message code blocks follow the active light or dark theme, including syntax highlighting, surfaces, and copy controls.
+- Updated dependencies [933836b]
+  - @xpert-ai/chatkit-types@0.15.0
+  - @xpert-ai/chatkit-web-shared@0.15.0
+  - @xpert-ai/a2ui-react@0.15.0
+
 ## 0.14.3
 
 ### Patch Changes
