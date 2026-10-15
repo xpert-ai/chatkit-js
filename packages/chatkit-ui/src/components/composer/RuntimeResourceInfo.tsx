@@ -8,6 +8,8 @@ import { IconDefinitionRenderer } from '../ui/icon-definition';
 import { PanelsTopLeft } from 'lucide-react';
 import { useResourceInfo } from './useResourceInfo';
 import { resourceDescription } from './resource-description';
+import { ResourceComponentInfo } from './ResourceComponentInfo';
+import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
 
 export function RuntimeResourceInfo({
   item,
@@ -57,6 +59,7 @@ export function RuntimeResourceInfo({
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
+          style={getSurfaceThemeStyle(theme)}
           side="right"
           align="start"
           sideOffset={8}
@@ -130,12 +133,10 @@ export function RuntimeResourceInfo({
               </div>
             )}
             {item.components.map((component) => (
-              <p
+              <ResourceComponentInfo
                 key={`${component.kind}:${component.key}`}
-                className="text-xs text-muted-foreground"
-              >
-                {component.key} · {t(`composer.resources.${component.status}`)}
-              </p>
+                component={component}
+              />
             ))}
             {item.diagnostics.map((diagnostic, index) => (
               <p key={index} className="text-xs text-muted-foreground">

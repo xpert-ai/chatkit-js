@@ -9,6 +9,7 @@ import { IconDefinitionRenderer } from '../ui/icon-definition';
 import type { ConnectorRuntimeOption } from '@xpert-ai/xpert-sdk';
 import { SELECTOR_SEARCH_CLASS } from './selector-styles';
 import * as React from 'react';
+import { ResourceComponentInfo } from './ResourceComponentInfo';
 import * as Dialog from '@radix-ui/react-dialog';
 import { DropdownMenu as Menu } from 'radix-ui';
 import {
@@ -38,6 +39,8 @@ import {
   getMenuItemRoundedClass,
 } from '../../lib/utils';
 import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
 import { ResourceIcon, RuntimeResourceRow } from './RuntimeResourceRow';
 import { ResourceInfoProvider } from './useResourceInfo';
 import type { ResourceDisplayItem } from './resource-display';
@@ -704,18 +707,25 @@ export function RuntimeResourceSelector({
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" />
             <Dialog.Content
+              style={getSurfaceThemeStyle(theme)}
               className={cn(
                 'fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto border border-border bg-popover p-4 text-popover-foreground shadow-md sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[36rem] sm:max-w-[95vw] sm:-translate-x-1/2 sm:-translate-y-1/2',
                 getPanelRoundedClass(theme.radius),
               )}
             >
               <Dialog.Title className="mb-1 pr-8 text-lg font-semibold">
-                {detail?.kind === 'agent_plugin'
+                {detail?.kind === 'agent_plugin' &&
+                detail.components.some(
+                  (component) => component.status === 'requires_auth',
+                )
                   ? `${t('composer.resources.connect')}: ${detail.title}`
                   : (detail?.title ?? t('composer.resources.browse'))}
               </Dialog.Title>
               <Dialog.Description className="mb-4 text-sm text-muted-foreground">
-                {(detail?.kind !== 'agent_plugin' &&
+                {((detail?.kind !== 'agent_plugin' ||
+                  detail.components.some(
+                    (component) => component.kind === 'assistant_template',
+                  )) &&
                   resourceDescription(detail?.description, i18n?.language)) ||
                   t('composer.resources.scope')}
               </Dialog.Description>
@@ -735,6 +745,7 @@ export function RuntimeResourceSelector({
                     .filter(
                       (component) =>
                         detail.kind !== 'agent_plugin' ||
+                        component.kind === 'assistant_template' ||
                         component.status === 'requires_auth',
                     )
                     .map((component) => (
@@ -742,10 +753,7 @@ export function RuntimeResourceSelector({
                         key={`${component.kind}:${component.key}`}
                         className="flex items-center justify-between gap-3 border-b border-border py-3 text-sm"
                       >
-                        <span>
-                          {component.key} ·{' '}
-                          {t(`composer.resources.${component.status}`)}
-                        </span>
+                        <ResourceComponentInfo component={component} />
                         {component.status === 'requires_auth' && (
                           <ConnectionAuthorizationDialog
                             inline
@@ -767,6 +775,28 @@ export function RuntimeResourceSelector({
                         {diagnostic.component}: {diagnostic.message}
                       </p>
                     ))}
+                  {detail.components.some(
+                    (component) => component.kind === 'assistant_template',
+                  ) && (
+                    <Button
+                      variant="outline"
+                      type="button"
+                      disabled={
+                        busy ||
+                        !canEditResources ||
+                        (!selected.has(detail.bindingId) &&
+                          !['ready', 'partial'].includes(detail.status))
+                      }
+                      onClick={() => void onToggle(detail)}
+                      className="mt-4 h-auto min-h-[calc(2rem*var(--chat-density-scale,1))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))]"
+                    >
+                      {t(
+                        selected.has(detail.bindingId)
+                          ? 'composer.resources.remove'
+                          : 'composer.resources.add',
+                      )}
+                    </Button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

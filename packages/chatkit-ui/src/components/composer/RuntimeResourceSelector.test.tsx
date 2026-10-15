@@ -169,6 +169,53 @@ async function openCategory(label: string) {
   }
 }
 describe('hierarchical resource picker', () => {
+  it('shows every template in plugin details and adds the package as one selection', async () => {
+    const templates: RuntimeResourceCatalogItem = {
+      ...plugin,
+      status: 'ready',
+      diagnostics: [],
+      components: [
+        {
+          key: 'reviewer',
+          kind: 'assistant_template',
+          title: 'Reviewer',
+          description: 'Review evidence',
+          status: 'ready',
+        },
+        {
+          key: 'writer',
+          kind: 'assistant_template',
+          title: 'Writer',
+          description: 'Write reports',
+          status: 'ready',
+        },
+      ],
+    };
+    const { toggle } = setup([], [templates]);
+    await openCategory('composer.resources.connectPlugins');
+    fireEvent.click(
+      await screen.findByRole('menuitem', {
+        name: 'composer.resources.details: Example plugin',
+      }),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/Reviewer/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Writer/)).toBeInTheDocument();
+    expect(
+      within(dialog).getAllByText(/composer.resources.assistant_template/),
+    ).toHaveLength(2);
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'composer.resources.add' }),
+    );
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveBeenCalledWith(
+      expect.objectContaining({ bindingId: 'plugin', version: 'v1' }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'composer.resources.remove' }),
+    );
+    expect(toggle).toHaveBeenCalledTimes(2);
+  });
   it('keeps retry reachable after a conversation read fails while blocking resource changes', async () => {
     const client = new Client<unknown>({
       apiUrl: 'https://example.test/api/ai',

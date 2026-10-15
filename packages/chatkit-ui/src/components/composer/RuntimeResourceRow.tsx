@@ -75,6 +75,11 @@ export function RuntimeResourceRow({
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
   const rounded = getMenuItemRoundedClass(theme.radius);
+  const hasDetails =
+    item.kind !== 'agent_plugin' ||
+    item.components.some(
+      (component) => component.kind === 'assistant_template',
+    );
   const blocked =
     !selected &&
     ['unavailable', 'configuration_required'].includes(item.status);
@@ -133,7 +138,7 @@ export function RuntimeResourceRow({
           >
             {label}
           </Menu.CheckboxItem>
-          {item.kind !== 'agent_plugin' && (
+          {hasDetails && (
             <RuntimeResourceInfo item={item}>
               <Menu.Item
                 aria-label={detailLabel}
@@ -156,7 +161,7 @@ export function RuntimeResourceRow({
           >
             {label}
           </button>
-          {item.kind !== 'agent_plugin' && (
+          {hasDetails && (
             <RuntimeResourceInfo item={item}>
               <button
                 type="button"
