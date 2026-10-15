@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-word-addin
 
+## 0.14.3
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.14.3
+- @xpert-ai/chatkit-react@0.14.3
+
 ## 0.14.2
 
 ### Patch Changes

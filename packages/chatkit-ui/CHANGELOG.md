@@ -1,5 +1,25 @@
 # @xpert-ai/chatkit-ui
 
+## 0.14.3
+
+### Patch Changes
+
+- db7ebda: Restore existing conversation resources through the selection-purpose catalog while keeping it separate from plugin candidate menus and search caches. Assistant-role packages remain removable in existing conversations without being offered as new additions.
+
+  Requires an Xpert API that accepts purpose=selection on resource catalog requests.
+
+- 116f15e: Show Assistant template components as sub-agents in plugin information and details, with one add/remove action for the whole package. Preserve existing connector authorization and resource selection behavior.
+
+  Upgrade @xpert-ai/xpert-sdk to ^0.13.2 for assistant_template catalog components and their display metadata. Requires the matching Xpert API.
+
+- 97c6324: Let the composer dock inherit the surrounding chat surface instead of drawing an opaque background, preserving the active theme behind the input area.
+- 9d23d0c: Let group owners load additional invitation candidates and retry failed pages without losing previously loaded results. Reset pagination when the search, group, member type, or active membership changes, and ignore stale responses after cancellation.
+
+  Use the matching Xpert SDK candidate-pagination support and backend filtering for latest Agent versions and existing group members. Preserve group-owner controls and localize the load-more and retry actions in English and Chinese.
+  - @xpert-ai/chatkit-types@0.14.3
+  - @xpert-ai/chatkit-web-shared@0.14.3
+  - @xpert-ai/a2ui-react@0.14.3
+
 ## 0.14.2
 
 ### Patch Changes
