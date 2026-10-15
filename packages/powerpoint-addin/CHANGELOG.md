@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-powerpoint-addin
 
+## 0.15.0
+
+### Patch Changes
+
+- Updated dependencies [933836b]
+  - @xpert-ai/chatkit-types@0.15.0
+  - @xpert-ai/chatkit-react@0.15.0
+
 ## 0.14.3
 
 ### Patch Changes
