@@ -61,6 +61,13 @@ export function WorkspaceFileTree({
 }) {
   const { t } = useChatkitTranslation();
   const root = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const selected = Array.from(
+      root.current?.querySelectorAll<HTMLButtonElement>('[role="treeitem"]') ??
+        [],
+    ).find((element) => element.title === selectedPath);
+    selected?.scrollIntoView({ block: 'nearest' });
+  }, [selectedPath, directories, expanded, query]);
   const [focused, setFocused] = React.useState('');
   const needle = query.trim().toLocaleLowerCase();
   const children = (path: string) =>
