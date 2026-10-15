@@ -336,7 +336,11 @@ export interface ChatkitMessage {
   historical?: boolean;
   branching?: {
     available: boolean;
-    reason?: 'message_not_complete' | 'checkpoint_unavailable' | 'graph_changed' | 'state_not_supported';
+    reason?:
+      | 'message_not_complete'
+      | 'checkpoint_unavailable'
+      | 'graph_changed'
+      | 'state_not_supported';
   };
   status?: string;
   content: TMessageItems | string;
@@ -581,6 +585,8 @@ export type TChatRequestHuman = {
   referenceComposition?: ChatKitReferenceCompositionMode;
   planMode?: boolean;
   runtimeResources?: import('./runtime-resources.js').RuntimeResourcesSelection;
+  /** Explicit skills within selected, version-pinned plugins. */
+  resourceSkills?: import('./runtime-resources.js').RuntimeResourceSkillReference[];
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   commandSource?: ChatKitCommandSource;
   [key: string]: unknown;

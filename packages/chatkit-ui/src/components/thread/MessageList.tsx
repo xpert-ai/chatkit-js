@@ -66,6 +66,7 @@ export type HumanMessageWithMeta = Message & {
   references?: ChatKitReference[];
   submittedInput?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
+  resourceSkills?: import('@xpert-ai/chatkit-types').RuntimeResourceSkillReference[];
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   runtimeCapabilityOptions?: RuntimeCapabilityOption[];
   model?: string;
@@ -346,13 +347,22 @@ export function MessageList({
             humanReferences,
           );
           const humanRuntimeCapabilityOptions = isHumanMessage
-            ? (humanMessage.runtimeCapabilityOptions ??
-              getRuntimeCapabilityOptionsForSelection(
-                getRecommendedRuntimeCapabilitiesSelection(
-                  humanMessage.runtimeCapabilities,
-                ),
-                runtimeCapabilityOptions,
-              ))
+            ? [
+                ...new Map(
+                  [
+                    ...getRuntimeCapabilityOptionsForSelection(
+                      getRecommendedRuntimeCapabilitiesSelection(
+                        humanMessage.runtimeCapabilities,
+                      ),
+                      runtimeCapabilityOptions,
+                    ),
+                    ...(humanMessage.runtimeCapabilityOptions ?? []),
+                  ].map(
+                    (option) =>
+                      [`${option.type}:${option.id}`, option] as const,
+                  ),
+                ).values(),
+              ]
             : [];
           const hasHumanAttachments =
             isHumanMessage && humanAttachments.length > 0;

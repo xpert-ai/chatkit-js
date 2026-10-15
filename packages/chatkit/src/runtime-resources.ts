@@ -56,3 +56,27 @@ export interface RuntimeResourceCatalog {
   total: number;
 }
 import type { LocalizedText } from './localized-text.js';
+
+/** Presentation only. Executable instructions stay in the referenced SKILL.md. */
+export interface AgentPluginCommandPresentation {
+  label?: LocalizedText;
+  description?: LocalizedText;
+  argsHint?: string;
+}
+
+export interface AgentPluginCommand extends AgentPluginCommandPresentation {
+  /** Arguments interpreted by the skill, not separately executable commands. */
+  subcommands?: Record<string, AgentPluginCommandPresentation>;
+}
+
+/** A skill in an exact selected plugin version; never a workspace skill authorization. */
+export interface RuntimeResourceSkillReference extends RuntimeResourceReference {
+  skillKey: string;
+}
+
+export interface RuntimeResourceCommand {
+  skill: RuntimeResourceSkillReference;
+  packageName: string;
+  description: string;
+  command: AgentPluginCommand;
+}

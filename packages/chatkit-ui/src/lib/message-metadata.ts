@@ -1,3 +1,4 @@
+import type { RuntimeResourceSkillReference } from '@xpert-ai/chatkit-types';
 import type { Message } from '@langchain/core/messages';
 import type { ToolCall } from '@langchain/core/messages/tool';
 import {
@@ -263,4 +264,29 @@ export function extractMessageExecutionId(
 ): string | undefined {
   const executionId = value.executionId ?? value.execution_id;
   return typeof executionId === 'string' ? executionId : undefined;
+}
+
+/** Presentation metadata only; the API re-authorizes these references on execution. */
+export function extractResourceSkills(
+  value: MessageMetadataContainer,
+): RuntimeResourceSkillReference[] | undefined {
+  const candidates = [
+    value.resourceSkills,
+    toMessageMetadataContainer(value.input)?.resourceSkills,
+    toMessageMetadataContainer(value.metadata)?.resourceSkills,
+    getHumanMetadataContainer(value)?.resourceSkills,
+  ];
+  const valid = (ref: unknown): ref is RuntimeResourceSkillReference =>
+    typeof ref === 'object' &&
+    ref !== null &&
+    'bindingId' in ref &&
+    typeof ref.bindingId === 'string' &&
+    'version' in ref &&
+    typeof ref.version === 'string' &&
+    'skillKey' in ref &&
+    typeof ref.skillKey === 'string';
+  return candidates.find(
+    (refs): refs is RuntimeResourceSkillReference[] =>
+      Array.isArray(refs) && refs.length <= 50 && refs.every(valid),
+  );
 }

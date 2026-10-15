@@ -30,7 +30,7 @@ export function resolveRuntimeCapabilityPalette(
   }
 
   const beforeCaret = value.slice(0, selectionStart);
-  const match = /(^|\s)([/$])([^\s/]*)$/.exec(beforeCaret);
+  const match = /(^|\s)([/$])([^\s/]*(?:\/[^\s/]*)?)$/.exec(beforeCaret);
   if (!match) {
     return null;
   }
@@ -115,10 +115,7 @@ function getCommandPaletteDescription(
   command: ResolvedSlashCommand,
   language?: string | null,
 ) {
-  return [
-    command.argsHint,
-    resolveCommandText(command.description, language),
-  ]
+  return [command.argsHint, resolveCommandText(command.description, language)]
     .filter(Boolean)
     .join(' ');
 }
@@ -148,7 +145,8 @@ function getCommandPaletteOption(
   return {
     kind: 'command' as const,
     id: command.id,
-    label: resolveCommandText(command.label, language, command.name) ?? command.name,
+    label:
+      resolveCommandText(command.label, language, command.name) ?? command.name,
     description: getCommandPaletteDescription(command, language),
     command,
     ...(capabilityType ? { capabilityType } : {}),

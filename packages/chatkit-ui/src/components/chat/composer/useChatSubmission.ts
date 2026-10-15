@@ -1,3 +1,8 @@
+import {
+  getResourceSkills,
+  getResourceSkillOptions,
+  resourceSkillIsSelected,
+} from '../../../lib/resource-commands';
 import type {
   ChatKitCommandSource,
   ChatKitOptions,
@@ -49,7 +54,10 @@ type ChatSubmissionOptions = Pick<
     | 'setReferencedWorkspaceFiles'
   > &
   Pick<ReturnType<typeof useChatEnvironment>, 'stream' | 't'> &
-  Pick<ReturnType<typeof useChatRunControl>, 'isRunPaused' | 'clearRunControlError'> &
+  Pick<
+    ReturnType<typeof useChatRunControl>,
+    'isRunPaused' | 'clearRunControlError'
+  > &
   Pick<
     ReturnType<typeof useRuntimeCapabilitiesState>,
     | 'getRuntimeCapabilitiesForSubmit'
@@ -105,6 +113,17 @@ export function useChatSubmission({
     (submitOptions: SubmitDraftOptions = {}) => {
       if (isSubmissionBlocked) return;
 
+      const resourceSkills = getResourceSkills(composerPartsRef.current);
+      if (
+        resourceSkills.some(
+          (skill) =>
+            !resourceSkillIsSelected(skill, runtimeResources.selection),
+        )
+      )
+        return;
+      const resourceSkillOptions = getResourceSkillOptions(
+        composerPartsRef.current,
+      );
       const contentToSubmit = (submitOptions.inputText ?? trimmedDraft).trim();
       const mergedFiles = mergeSubmittedFiles(
         uploadedFiles,
@@ -126,7 +145,7 @@ export function useChatSubmission({
         buildHumanMessageInputPayload({
           content: contentToSubmit,
           references: referencesToSend,
-        }) ?? (filesToSend ? { input: '' } : null);
+        }) ?? (filesToSend || resourceSkills.length ? { input: '' } : null);
 
       if (!humanInput) {
         return;
@@ -143,17 +162,19 @@ export function useChatSubmission({
           undefined,
       );
 
+      runtimeCapabilityOptionsForMessage.push(...resourceSkillOptions);
       const displayContent =
         submitOptions.displayText ||
         contentToSubmit ||
         (referencesToSend || filesToSend
           ? t('chat.referencedContentOnly')
-          : '');
+          : resourceSkills.map((skill) => skill.skillKey).join(', '));
       const newMessage: HumanMessageWithMeta = {
         id: createMessageId(),
         type: 'human',
         content: displayContent,
         submittedInput: humanInput.input,
+        ...(resourceSkills.length ? { resourceSkills } : {}),
         ...(humanInput.referenceComposition
           ? { referenceComposition: humanInput.referenceComposition }
           : {}),
@@ -175,11 +196,13 @@ export function useChatSubmission({
         referenceComposition?: ChatKitReferenceCompositionMode;
         planMode?: boolean;
         runtimeResources?: import('@xpert-ai/chatkit-types').RuntimeResourcesSelection;
+        resourceSkills?: import('@xpert-ai/chatkit-types').RuntimeResourceSkillReference[];
         runtimeCapabilities?: RuntimeCapabilitiesSelection;
         commandSource?: ChatKitCommandSource;
         model?: string;
       } = {
         ...humanInput,
+        ...(resourceSkills.length ? { resourceSkills } : {}),
         ...(stream.selectedModelId ? { model: stream.selectedModelId } : {}),
       };
       if (
@@ -375,6 +398,9 @@ export function useChatSubmission({
       const retryTarget = messages[messageIndex];
       const retryInput = {
         ...humanInput,
+        ...(lastHumanMessage?.resourceSkills?.length
+          ? { resourceSkills: lastHumanMessage.resourceSkills }
+          : {}),
         ...(lastHumanMessage?.runtimeCapabilities
           ? { runtimeCapabilities: lastHumanMessage.runtimeCapabilities }
           : {}),
