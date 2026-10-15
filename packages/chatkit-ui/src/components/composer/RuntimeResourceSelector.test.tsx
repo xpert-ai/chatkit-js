@@ -412,6 +412,34 @@ describe('hierarchical resource picker', () => {
       await screen.findByRole('menuitemcheckbox', { name: /Available plugin/ }),
     ).toHaveAttribute('data-disabled');
   });
+  it('keeps an assistant-role selection removable but never offers it as a new plugin', async () => {
+    const { catalog, toggle } = setup([plugin], [other]);
+    catalog.mockImplementation(async (_id, options) => {
+      const items =
+        options && 'purpose' in options && options.purpose === 'selection'
+          ? [plugin, other]
+          : [other];
+      return { items, total: items.length };
+    });
+    const selected = await screen.findByRole('menuitemcheckbox', {
+      name: /Example plugin/,
+    });
+    expect(selected).not.toHaveAttribute('data-disabled');
+    fireEvent.click(selected);
+    expect(toggle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bindingId: plugin.bindingId,
+        version: plugin.version,
+      }),
+    );
+    await openCategory('composer.resources.connectPlugins');
+    expect(
+      await screen.findByRole('menuitemcheckbox', { name: /Available plugin/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: /Example plugin/ }),
+    ).not.toBeInTheDocument();
+  });
   it('uses a second-level page with Back on narrow screens', async () => {
     compact = true;
     setup();
