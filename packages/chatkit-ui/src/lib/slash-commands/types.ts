@@ -12,6 +12,7 @@ import type {
   RuntimeCapabilitiesSelection,
   RuntimeCapabilityOption,
 } from '../runtime-capabilities';
+import type { ResourceCommandEntry } from '../resource-commands';
 
 export type RuntimeCapabilitiesWithCommands = RuntimeCapabilitiesResponse & {
   commands?: ChatKitSlashCommand[];
@@ -47,6 +48,7 @@ export type ResolvedSlashCommand = {
 };
 
 export type SlashPaletteOption =
+  | ({ kind: 'resource_command' } & ResourceCommandEntry)
   | {
       kind: 'command';
       id: string;

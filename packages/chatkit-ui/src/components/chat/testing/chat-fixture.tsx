@@ -20,9 +20,20 @@ const mocks = vi.hoisted(() => {
           get: vi.fn().mockResolvedValue(null),
           getModels: vi.fn(),
           setModelPreference: vi.fn(),
+          getResourceCommands: vi.fn().mockResolvedValue([]),
+          getResources: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+          validateResources: vi
+            .fn()
+            .mockImplementation(async (_id, value) => value),
           getRuntimeCapabilities: vi.fn().mockRejectedValue({ status: 404 }),
         },
         conversations: {
+          getRuntimeResources: vi
+            .fn()
+            .mockResolvedValue({ revision: 0, resources: [] }),
+          updateRuntimeResources: vi
+            .fn()
+            .mockImplementation(async (_id, value) => value),
           search: vi.fn().mockResolvedValue({ items: [] }),
           update: vi.fn(),
         },
@@ -271,10 +282,24 @@ vi.mock('../../composer/ComposerMenu', () => ({
 }));
 
 vi.mock('../../composer/SendButton', () => ({
-  SendButton: ({ disabled, showStop, onStop }: { disabled?: boolean; showStop?: boolean; onStop?: () => void }) => (
+  SendButton: ({
+    disabled,
+    showStop,
+    onStop,
+  }: {
+    disabled?: boolean;
+    showStop?: boolean;
+    onStop?: () => void;
+  }) => (
     <>
-      {showStop && <button type="button" onClick={onStop}>stop</button>}
-      <button type="submit" disabled={disabled}>send</button>
+      {showStop && (
+        <button type="button" onClick={onStop}>
+          stop
+        </button>
+      )}
+      <button type="submit" disabled={disabled}>
+        send
+      </button>
     </>
   ),
 }));
@@ -555,6 +580,12 @@ export function setupChatTest() {
   beforeEach(() => {
     mocks.theme = { radius: 'soft', density: 'normal' };
     globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
+    mocks.stream.client.assistants.getResourceCommands
+      .mockReset()
+      .mockResolvedValue([]);
+    mocks.stream.client.conversations.getRuntimeResources
+      .mockReset()
+      .mockResolvedValue({ revision: 0, resources: [] });
     mocks.stream.client.assistants.getRuntimeCapabilities.mockReset();
     mocks.stream.client.assistants.getRuntimeCapabilities.mockRejectedValue({
       status: 404,

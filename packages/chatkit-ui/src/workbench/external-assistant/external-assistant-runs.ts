@@ -75,8 +75,7 @@ export function toExternalAssistantMessages(
 ): AssistantMessageWithAgentRuns[] {
   const messages: AssistantMessageWithAgentRuns[] = [];
   const inputs = run.info.inputs;
-  // External tools accept { input: string, ...customParameters }. Keep custom
-  // parameters visible when present, but present a plain prompt as a user turn.
+  // Only the prompt belongs in the transcript; custom parameters stay in run inputs.
   const inputText =
     inputs == null
       ? ''
@@ -84,10 +83,9 @@ export function toExternalAssistantMessages(
         ? inputs
         : typeof inputs === 'object' &&
             'input' in inputs &&
-            typeof inputs.input === 'string' &&
-            Object.keys(inputs).length === 1
+            typeof inputs.input === 'string'
           ? inputs.input
-          : JSON.stringify(inputs, null, 2);
+          : '';
   if (inputText) {
     messages.push({ id: `${run.id}:input`, type: 'user', content: inputText });
   }

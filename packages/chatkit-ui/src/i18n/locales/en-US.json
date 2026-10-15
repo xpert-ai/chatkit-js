@@ -693,6 +693,7 @@
       "submit": "Confirm"
     },
     "resources": {
+      "commandsUnavailable": "Plugin commands are not available in this client.",
       "selectedResources": "Selected resources",
       "noSelected": "No resources added yet",
       "browsePlugins": "Browse all plugins",

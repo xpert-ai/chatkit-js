@@ -1,4 +1,6 @@
+import { getResourceSkills } from '../../../lib/resource-commands';
 import * as React from 'react';
+import type { RuntimeResourceCommand } from '@xpert-ai/xpert-sdk';
 import {
   getComposerEditingLength,
   setComposerSelectionOffset,
@@ -59,6 +61,12 @@ type ChatCommandsOptions = Pick<
   Pick<ReturnType<typeof useChatFiles>, 'setReferences'> & {
     setPlanModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     pendingFollowUps: ReturnType<typeof useStreamContext>['pendingFollowUps'];
+    resourceCommands: RuntimeResourceCommand[];
+    onSelectResourceCommand: (
+      item: RuntimeResourceCommand,
+      subcommand?: string,
+      range?: { start: number; end: number },
+    ) => void;
   };
 
 export function useChatCommands({
@@ -90,6 +98,8 @@ export function useChatCommands({
   stream,
   setReferences,
   composerInputRef,
+  resourceCommands,
+  onSelectResourceCommand,
 }: ChatCommandsOptions) {
   const slashPaletteRef = React.useRef<HTMLDivElement>(null);
   const slashPaletteOptionRefs = React.useRef<Array<HTMLButtonElement | null>>(
@@ -98,7 +108,7 @@ export function useChatCommands({
 
   const {
     slashPaletteOptions,
-    executeSlashCommandFromDraft,
+    executeSlashCommandFromDraft: executeGlobalSlashCommand,
     selectSlashPaletteOption,
   } = useSlashCommands({
     hostCommands: composer?.slashCommands,
@@ -125,7 +135,14 @@ export function useChatCommands({
     submitPrompt: submitDraft,
     onSelectPromptWorkflow: promptWorkflow.select,
     isPromptDraftActive: !!promptWorkflow.selected,
+    resourceCommands,
+    onSelectResourceCommand,
   });
+
+  const executeSlashCommandFromDraft = () =>
+    getResourceSkills(composerPartsRef.current).length
+      ? false
+      : executeGlobalSlashCommand();
 
   const slashPaletteEmptyLabel = runtimeCapabilityPalette
     ? t(

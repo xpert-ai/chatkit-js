@@ -52,6 +52,8 @@ export type ChatKitAIMessage = Message & {
   submittedInput?: string;
   model?: string;
   referenceComposition?: ChatKitReferenceCompositionMode;
+  resourceSkills?: import('@xpert-ai/chatkit-types').RuntimeResourceSkillReference[];
+  runtimeCapabilityOptions?: import('../../lib/runtime-capabilities').RuntimeCapabilityOption[];
   runtimeCapabilities?: RuntimeCapabilitiesSelection;
   followUpMode?: FollowUpBehavior;
   followUpStatus?: FollowUpStatus;

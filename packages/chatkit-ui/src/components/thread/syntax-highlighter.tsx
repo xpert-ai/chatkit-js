@@ -1,8 +1,9 @@
 import { PrismAsyncLight as SyntaxHighlighterPrism } from "react-syntax-highlighter";
 import tsx from "react-syntax-highlighter/dist/esm/languages/prism/tsx";
 import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
-import { coldarkDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { coldarkCold, coldarkDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { type FC } from "react";
+import { useTheme } from "../../providers/Theme";
 
 // Register languages you want to support
 SyntaxHighlighterPrism.registerLanguage("js", tsx);
@@ -22,16 +23,20 @@ export const SyntaxHighlighter: FC<SyntaxHighlighterProps> = ({
   language,
   className,
 }) => {
+  const { isDarkMode } = useTheme();
+
   return (
     <SyntaxHighlighterPrism
       language={language}
-      style={coldarkDark}
+      style={isDarkMode ? coldarkDark : coldarkCold}
       customStyle={{
         margin: 0,
         width: "100%",
         background: "transparent",
-        padding: "1.5rem 1rem",
+        color: "var(--foreground)",
+        padding: "calc(var(--density-padding, 1rem) * 1.5) var(--density-padding, 1rem)",
       }}
+      codeTagProps={{ style: { color: "inherit" } }}
       className={className}
     >
       {children}

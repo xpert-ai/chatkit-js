@@ -1,4 +1,6 @@
 import * as React from 'react';
+import type { RuntimeResourceCommand } from '@xpert-ai/xpert-sdk';
+import { getResourceCommandEntries } from '../../lib/resource-commands';
 import type {
   ChatKitCommandSource,
   ChatKitOptions,
@@ -95,6 +97,8 @@ export function useSlashCommands({
   submitPrompt,
   onSelectPromptWorkflow,
   isPromptDraftActive,
+  resourceCommands = [],
+  onSelectResourceCommand,
 }: {
   hostCommands?: NonNullable<ChatKitOptions['composer']>['slashCommands'];
   runtimeCapabilities: RuntimeCapabilitiesWithCommands | null;
@@ -129,6 +133,12 @@ export function useSlashCommands({
     args: string,
   ) => boolean;
   isPromptDraftActive?: boolean;
+  resourceCommands?: RuntimeResourceCommand[];
+  onSelectResourceCommand?: (
+    item: RuntimeResourceCommand,
+    subcommand?: string,
+    range?: ComposerReplaceRange,
+  ) => void;
 }) {
   const { t, i18n } = useChatkitTranslation();
   const resolvedCommands = React.useMemo(
@@ -171,9 +181,20 @@ export function useSlashCommands({
     [i18n.language, resolvedCommands, t],
   );
 
-  const slashPaletteOptions = React.useMemo<SlashPaletteOption[]>(
-    () =>
-      createSlashPaletteOptions({
+  const slashPaletteOptions = React.useMemo<SlashPaletteOption[]>(() => {
+    const resourceOptions: SlashPaletteOption[] =
+      palette && palette.trigger !== '$' && !palette.capabilityTypes?.length
+        ? getResourceCommandEntries(resourceCommands, i18n.language)
+            .filter((entry) =>
+              [entry.name, entry.label, entry.description].some((text) =>
+                text.toLowerCase().includes(palette.query.trim().toLowerCase()),
+              ),
+            )
+            .map((entry) => ({ kind: 'resource_command', ...entry }))
+        : [];
+    return [
+      ...resourceOptions,
+      ...createSlashPaletteOptions({
         palette,
         resolvedCommands: localizedResolvedCommands,
         runtimeCapabilitiesReady,
@@ -182,16 +203,17 @@ export function useSlashCommands({
         recommendedRuntimeCapabilities,
         language: i18n.language,
       }),
-    [
-      localizedResolvedCommands,
-      i18n.language,
-      palette,
-      recommendedRuntimeCapabilities,
-      runtimeCapabilities,
-      runtimeCapabilitiesReady,
-      runtimeCapabilityOptions,
-    ],
-  );
+    ];
+  }, [
+    localizedResolvedCommands,
+    i18n.language,
+    palette,
+    recommendedRuntimeCapabilities,
+    runtimeCapabilities,
+    runtimeCapabilitiesReady,
+    runtimeCapabilityOptions,
+    resourceCommands,
+  ]);
 
   const showPalette = React.useCallback(
     (capabilityTypes?: RuntimeCapabilityOption['type'][]) => {
@@ -423,6 +445,14 @@ export function useSlashCommands({
         return;
       }
 
+      if (option.kind === 'resource_command') {
+        onSelectResourceCommand?.(option.item, option.subcommand, {
+          start: palette.start,
+          end: palette.end,
+        });
+        return;
+      }
+
       if (option.kind === 'capability') {
         insertComposerCapabilityToken(option.capability, {
           start: palette.start,
@@ -453,6 +483,7 @@ export function useSlashCommands({
       executeSlashCommand,
       focusComposerAt,
       insertComposerCapabilityToken,
+      onSelectResourceCommand,
       palette,
       setGoalPanelOpen,
       setComposerText,

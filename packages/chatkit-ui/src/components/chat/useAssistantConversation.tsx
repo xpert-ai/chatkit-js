@@ -1,3 +1,10 @@
+import { ResourceCommandShortcuts } from '../composer/ResourceCommandShortcuts';
+import { useResourceCommands } from './useResourceCommands';
+import {
+  insertResourceCommand,
+  getResourceSkills,
+  resourceSkillIsSelected,
+} from '../../lib/resource-commands';
 import {
   mergeCompletedCalls,
   useRealtimeVoice,
@@ -5,6 +12,7 @@ import {
 import { AssistantComputers } from './header/AssistantComputers';
 import { ArrowDown } from 'lucide-react';
 import * as React from 'react';
+import type { RuntimeResourceCommand } from '@xpert-ai/xpert-sdk';
 import { getComposerThreadReferences } from '../../lib/composer-parts';
 import { sortVisiblePendingFollowUps } from '../../lib/follow-ups';
 import {
@@ -238,6 +246,39 @@ export function useAssistantConversation({
     threadId: session.stream.threadId,
   });
 
+  const resourceCommands = useResourceCommands({
+    client: session.xpertPlatformClient,
+    assistantId: session.stream.assistantId,
+    projectId: session.activeProjectId,
+    selection: runtimeResources.selection,
+    enabled:
+      resourcesEnabled && runtimeResources.ready && !runtimeResources.busy,
+  });
+
+  // Removing a selected plugin removes its skill chip, preserving the user's editable text.
+  React.useEffect(() => {
+    if (!runtimeResources.ready || runtimeResources.busy) return;
+    const parts = draft.composerPartsRef.current;
+    const next = parts.filter(
+      (part) =>
+        part.type !== 'capability' ||
+        part.capability.type !== 'skill' ||
+        !part.capability.capability.resource ||
+        resourceSkillIsSelected(
+          part.capability.capability.resource,
+          runtimeResources.selection,
+        ),
+    );
+    if (next.length !== parts.length)
+      draft.commitComposerParts(next, { resetDom: true });
+  }, [
+    runtimeResources.ready,
+    runtimeResources.busy,
+    runtimeResources.selection,
+    draft.composerPartsRef,
+    draft.commitComposerParts,
+  ]);
+
   const hasUploadingFiles = files.attachmentState.hasUploadingFiles;
   const isSubmissionBlocked =
     Boolean(conversation.conversationBranch.pendingMessageId) ||
@@ -273,6 +314,23 @@ export function useAssistantConversation({
     [session.stream.pendingFollowUps],
   );
 
+  const selectResourceCommand = (
+    item: RuntimeResourceCommand,
+    subcommand?: string,
+    range?: { start: number; end: number },
+  ) => {
+    const parts = insertResourceCommand(
+      draft.composerPartsRef.current,
+      item,
+      subcommand,
+      range,
+    );
+    draft.commitComposerParts(parts, { resetDom: true });
+    runtime.setRuntimeCapabilityPalette(null);
+    capabilities.promptWorkflow.clear();
+    draft.focusComposerAt();
+  };
+
   const commands = useChatCommands({
     ...session,
     ...runtime,
@@ -285,6 +343,8 @@ export function useAssistantConversation({
     ...files,
     setPlanModeEnabled,
     pendingFollowUps,
+    resourceCommands: resourceCommands.commands,
+    onSelectResourceCommand: selectResourceCommand,
   });
 
   const inputPlaceholder =
@@ -342,6 +402,7 @@ export function useAssistantConversation({
 
   const hasComposerInput = Boolean(
     draft.trimmedDraft ||
+    getResourceSkills(draft.composerParts).length > 0 ||
     files.hasReferences ||
     files.attachmentState.uploadedFiles.length,
   );
@@ -644,6 +705,18 @@ export function useAssistantConversation({
             }}
             onScenario={capabilities.promptWorkflow.chooseScenario}
             onBack={capabilities.promptWorkflow.showPrompts}
+          />
+        )}
+        {resourceCommands.error && (
+          <div role="alert" className="mb-2 text-sm text-destructive">
+            {resourceCommands.error}
+          </div>
+        )}
+        {isInitialComposer && (
+          <ResourceCommandShortcuts
+            commands={resourceCommands.commands}
+            disabled={isSubmissionBlocked}
+            onSelect={selectResourceCommand}
           />
         )}
         <ChatComposerAttachments {...files} {...session} />

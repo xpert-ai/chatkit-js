@@ -693,6 +693,7 @@
       "submit": "确认"
     },
     "resources": {
+      "commandsUnavailable": "当前客户端暂不支持加载插件命令。",
       "selectedResources": "已选资源",
       "noSelected": "尚未添加资源",
       "browsePlugins": "浏览全部插件",

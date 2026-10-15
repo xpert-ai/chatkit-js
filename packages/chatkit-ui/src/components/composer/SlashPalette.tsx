@@ -79,7 +79,7 @@ export function SlashPalette({
       ref={paletteRef}
       data-slot="slash-palette"
       className={cn(
-        'mb-2 max-h-56 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md',
+        'mb-[calc(var(--chat-density-scale,1)*0.5rem)] max-h-56 overflow-y-auto rounded-chat-panel border border-border bg-popover text-popover-foreground p-[calc(var(--chat-density-scale,1)*0.25rem)] shadow-md',
         panelRoundedClass,
       )}
     >
@@ -109,12 +109,11 @@ export function SlashPalette({
                   onSelect(option);
                 }}
                 className={cn(
-                  'flex h-8 w-full items-center gap-1 rounded-md px-2 text-left text-sm hover:bg-muted',
+                  'flex h-[calc(var(--chat-density-scale,1)*2rem)] w-full items-center gap-[calc(var(--chat-density-scale,1)*0.25rem)] rounded-chat-item px-[calc(var(--chat-density-scale,1)*0.5rem)] text-left text-sm hover:bg-accent hover:text-accent-foreground',
                   itemRoundedClass,
-                  option.kind === 'capability' &&
-                    option.depth === 1 &&
-                    'pl-9',
-                  index === palette.activeIndex && 'bg-muted',
+                  option.kind === 'capability' && option.depth === 1 && 'pl-9',
+                  index === palette.activeIndex &&
+                    'bg-accent text-accent-foreground',
                 )}
               >
                 <span
@@ -128,7 +127,9 @@ export function SlashPalette({
                     capabilityColor ? { color: capabilityColor } : undefined
                   }
                 >
-                  {option.kind === 'command' ? (
+                  {option.kind === 'resource_command' ? (
+                    <Sparkles size={16} />
+                  ) : option.kind === 'command' ? (
                     <SlashCommandIcon command={option.command} />
                   ) : (
                     <RuntimeCapabilityIcon
@@ -182,8 +183,7 @@ export function SlashPalette({
                   data-slot="slash-palette-group-empty"
                   className="px-3 py-1.5 pl-12 text-xs text-muted-foreground"
                 >
-                  {capabilityEmptyLabels?.[option.capabilityType] ??
-                    emptyLabel}
+                  {capabilityEmptyLabels?.[option.capabilityType] ?? emptyLabel}
                 </div>
               ) : null}
             </React.Fragment>

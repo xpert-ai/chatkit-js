@@ -1,3 +1,5 @@
+import { extractResourceSkills } from '../../../lib/message-metadata';
+import { resourceSkillOption } from '../../../lib/resource-commands';
 import type { Message } from '@langchain/core/messages';
 import type { ToolCall } from '@langchain/core/messages/tool';
 import type {
@@ -80,6 +82,7 @@ export function mapChatMessageToUiMessage(
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(message);
   const runtimeCapabilities = extractRuntimeCapabilities(message);
+  const resourceSkills = extractResourceSkills(message);
   const attachments = normalizeMessageFiles(message.attachments);
   const fileAssets = normalizeMessageFiles(message.fileAssets);
   const taskSummary = normalizeTaskSummaryContribution(message.taskSummary);
@@ -113,6 +116,19 @@ export function mapChatMessageToUiMessage(
     ...(typeof message.model === 'string' ? { model: message.model } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
+    ...(resourceSkills?.length
+      ? {
+          resourceSkills,
+          runtimeCapabilityOptions: resourceSkills.map((skill) =>
+            resourceSkillOption({
+              skill,
+              packageName: '',
+              description: '',
+              command: {},
+            }),
+          ),
+        }
+      : {}),
     ...(taskSummary ? { taskSummary } : {}),
     ...(message.followUpMode ? { followUpMode: message.followUpMode } : {}),
     ...(message.followUpStatus
@@ -196,6 +212,7 @@ export function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     (type === 'human' && typeof content === 'string' ? content : undefined);
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const resourceSkills = extractResourceSkills(raw);
   const toolCalls = extractClientToolCalls(raw);
   const attachments = normalizeMessageFiles(
     (raw as { attachments?: unknown }).attachments,
@@ -239,6 +256,19 @@ export function createMessageFromData(data: unknown): ChatKitAIMessage | null {
     ...(submittedInput !== undefined ? { submittedInput } : {}),
     ...(referenceComposition ? { referenceComposition } : {}),
     ...(runtimeCapabilities ? { runtimeCapabilities } : {}),
+    ...(resourceSkills?.length
+      ? {
+          resourceSkills,
+          runtimeCapabilityOptions: resourceSkills.map((skill) =>
+            resourceSkillOption({
+              skill,
+              packageName: '',
+              description: '',
+              command: {},
+            }),
+          ),
+        }
+      : {}),
     ...(agentRuns.length > 0 ? { agentRuns } : {}),
     ...(taskSummary ? { taskSummary } : {}),
   };
@@ -257,6 +287,7 @@ export function extractMessageMeta(raw: MessageMetadataContainer) {
     references?: ChatKitReference[];
     submittedInput?: string;
     referenceComposition?: ChatKitReferenceCompositionMode;
+    resourceSkills?: import('@xpert-ai/chatkit-types').RuntimeResourceSkillReference[];
     runtimeCapabilities?: RuntimeCapabilitiesSelection;
     attachments?: Record<string, unknown>[];
     fileAssets?: Record<string, unknown>[];
@@ -285,6 +316,7 @@ export function extractMessageMeta(raw: MessageMetadataContainer) {
   const submittedInput = extractSubmittedInput(raw);
   const referenceComposition = extractReferenceComposition(raw);
   const runtimeCapabilities = extractRuntimeCapabilities(raw);
+  const resourceSkills = extractResourceSkills(raw);
   const attachments = normalizeMessageFiles(
     (raw as { attachments?: unknown }).attachments,
   );
@@ -301,6 +333,7 @@ export function extractMessageMeta(raw: MessageMetadataContainer) {
   if (referenceComposition) {
     meta.referenceComposition = referenceComposition;
   }
+  if (resourceSkills) meta.resourceSkills = resourceSkills;
   if (runtimeCapabilities) {
     meta.runtimeCapabilities = runtimeCapabilities;
   }
