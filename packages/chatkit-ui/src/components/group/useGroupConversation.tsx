@@ -62,12 +62,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 import type { ChatViewModel } from '../chat/ChatViewModel';
 import { getGroupMessageListProps } from './getGroupMessageListProps';
+import { useSendTransition } from '../chat/messages/SendTransition';
 export function useGroupConversation(props: ChatProps): ChatViewModel {
   const groupId = props.options?.group?.id ?? '';
 
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
   const draft = useChatDraft();
+  const sendTransition = useSendTransition();
   const editor = draft.composerInputRef;
   const text = draft.draft;
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -277,6 +279,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     };
     pending.current = input;
     setSending(true);
+    const cancelSendTransition = sendTransition?.prepare(input.clientMessageId);
     try {
       await send(input);
       draft.setComposerText('');
@@ -286,6 +289,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       pending.current = null;
       nearEnd.current = true;
     } catch (reason) {
+      cancelSendTransition?.();
       fail(reason);
     } finally {
       setSending(false);

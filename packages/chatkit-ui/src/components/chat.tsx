@@ -1,4 +1,5 @@
 import { ChatView } from './chat/ChatView';
+import { SendTransitionProvider } from './chat/messages/SendTransition';
 import type { ReactNode } from 'react';
 import { useAssistantConversation } from './chat/useAssistantConversation';
 import { useGroupConversation } from './group/useGroupConversation';
@@ -37,8 +38,10 @@ function GroupChatRuntime({ children, ...props }: RuntimeProps) {
 export function Chat(props: ChatProps) {
   const Runtime = props.options?.group ? GroupRuntime : AssistantRuntime;
   return (
-    <Runtime key={props.options?.group?.id ?? 'assistant'} {...props}>
-      {(view) => <ChatView view={view} surface={props.surface} />}
-    </Runtime>
+    <SendTransitionProvider key={props.options?.group?.id ?? 'assistant'}>
+      <Runtime key={props.options?.group?.id ?? 'assistant'} {...props}>
+        {(view) => <ChatView view={view} surface={props.surface} />}
+      </Runtime>
+    </SendTransitionProvider>
   );
 }

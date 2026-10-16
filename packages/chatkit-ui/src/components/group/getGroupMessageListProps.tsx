@@ -79,6 +79,7 @@ export function getGroupMessageListProps({
             }
           : undefined,
       isSelf: self,
+      sendTransitionId: self ? message.clientMessageId : undefined,
       after: (showTime || visibleDeliveries.length > 0 || canReply) && (
         <div
           className={`mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground ${self ? 'justify-end' : ''}`}
