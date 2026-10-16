@@ -45,7 +45,10 @@ export function ChatComposerForm({
           data-slot="composer-action-bar"
           className="pointer-events-none absolute inset-x-3 bottom-2 flex min-h-10 items-center justify-between gap-2"
         >
-          <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5">
+          <div
+            data-slot="composer-leading-actions"
+            className="pointer-events-none flex min-w-0 flex-1 items-center gap-1.5"
+          >
             {menu && (
               <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
                 <ComposerMenu {...menu} />
@@ -54,7 +57,9 @@ export function ChatComposerForm({
             {leadingActions}
           </div>
           <div className="pointer-events-auto flex shrink-0 items-center gap-1">
-            {trailingActions}
+            <div data-slot="composer-trailing-actions" className="contents">
+              {trailingActions}
+            </div>
             <SendButton {...send} />
           </div>
         </div>

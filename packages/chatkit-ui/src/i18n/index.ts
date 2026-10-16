@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 
 import enUS from './locales/en-US.json';
 import zhCN from './locales/zh-CN.json';
+import { floatingChatTranslations } from './floating-chat';
 
 const localeStorageKey = 'chatkit:locale';
 
@@ -37,25 +38,41 @@ function getBrowserLocale(): string | null {
 export function initI18n() {
   if (i18n.isInitialized) return i18n;
 
-  const initialLocale = normalizeLocale(getStoredLocale() ?? getBrowserLocale());
+  const initialLocale = normalizeLocale(
+    getStoredLocale() ?? getBrowserLocale(),
+  );
 
-  void i18n
-    .use(initReactI18next)
-    .init({
-      resources: {
-        'en-US': { translation: enUS },
-        'zh-CN': { translation: zhCN },
+  void i18n.use(initReactI18next).init({
+    resources: {
+      'en-US': {
+        translation: {
+          ...enUS,
+          workbench: {
+            ...enUS.workbench,
+            floatingChat: floatingChatTranslations['en-US'],
+          },
+        },
       },
-      lng: initialLocale,
-      fallbackLng: defaultLocale,
-      interpolation: {
-        escapeValue: false,
+      'zh-CN': {
+        translation: {
+          ...zhCN,
+          workbench: {
+            ...zhCN.workbench,
+            floatingChat: floatingChatTranslations['zh-CN'],
+          },
+        },
       },
-      react: {
-        useSuspense: false,
-      },
-      initImmediate: false,
-    });
+    },
+    lng: initialLocale,
+    fallbackLng: defaultLocale,
+    interpolation: {
+      escapeValue: false,
+    },
+    react: {
+      useSuspense: false,
+    },
+    initImmediate: false,
+  });
 
   return i18n;
 }

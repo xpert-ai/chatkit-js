@@ -3,6 +3,7 @@ import { cn } from '../../../lib/utils';
 import { MessageList, type MessageListProps } from '../../thread/MessageList';
 
 export type ChatTranscriptProps = {
+  hidden?: boolean;
   isInitialComposer?: boolean;
   chatColumnStyle?: CSSProperties;
   before?: ReactNode;
@@ -12,6 +13,7 @@ export type ChatTranscriptProps = {
 };
 
 export function ChatTranscript({
+  hidden,
   isInitialComposer,
   chatColumnStyle,
   before,
@@ -21,6 +23,7 @@ export function ChatTranscript({
 }: ChatTranscriptProps) {
   return (
     <div
+      hidden={hidden}
       data-slot="chatkit-chat-content"
       className={cn(
         'mx-auto w-full p-4',

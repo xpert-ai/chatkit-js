@@ -2,6 +2,10 @@ import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { resolveMessagePresentation } from '../../../lib/message-presentation';
 import * as React from 'react';
 import {
+  isTranscriptHidden,
+  useWorkbenchChat,
+} from '../../../workbench/floating-chat/context';
+import {
   buildMessageNavigationItems,
   MESSAGE_NAVIGATION_MIN_ITEMS,
   type MessageNavigationItem,
@@ -37,6 +41,7 @@ export function useChatViewport({
   clearQuoteSelection,
   setHistoryError,
 }: ChatViewportOptions) {
+  const workbenchChat = useWorkbenchChat();
   const [isAtBottom, setIsAtBottom] = React.useState(true);
   const [hasUpdatesBelow, setHasUpdatesBelow] = React.useState(false);
   const messageNavigationAnchorsRef = React.useRef(
@@ -136,7 +141,7 @@ export function useChatViewport({
         autoScrollFrameRef.current = null;
 
         const viewport = viewportRef.current;
-        if (viewport) {
+        if (viewport && !isTranscriptHidden(viewport)) {
           if (!force && !shouldAutoScrollRef.current) {
             return;
           }
@@ -189,6 +194,7 @@ export function useChatViewport({
     };
 
     const updateAutoScrollState = () => {
+      if (isTranscriptHidden(viewport)) return;
       const nextScrollTop = viewport.scrollTop;
       const isScrollingUp = nextScrollTop < previousScrollTopRef.current - 1;
       previousScrollTopRef.current = nextScrollTop;
@@ -278,6 +284,18 @@ export function useChatViewport({
       window.removeEventListener('pointercancel', stopPointerTracking);
     };
   }, [cancelPendingAutoScroll, disableAutoFollow]);
+
+  React.useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || isTranscriptHidden(viewport)) return;
+    viewport.scrollTop = previousScrollTopRef.current;
+    if (shouldAutoScrollRef.current) scrollToBottom();
+  }, [
+    workbenchChat?.floating,
+    workbenchChat?.mode,
+    viewportRef,
+    scrollToBottom,
+  ]);
 
   React.useEffect(() => {
     shouldAutoScrollRef.current = true;

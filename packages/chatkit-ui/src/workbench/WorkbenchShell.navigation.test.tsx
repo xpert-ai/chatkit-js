@@ -882,8 +882,10 @@ describe('WorkbenchShell', () => {
     );
     expect(screen.getByLabelText('Draft message')).toBeVisible();
     fireEvent.pointerMove(window, { clientX: 191, pointerId: 1 });
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Draft message')).not.toBeVisible();
+    expect(
+      screen.queryByRole('separator', { name: 'Resize views panel' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
     fireEvent.click(screen.getByLabelText('Restore panel'));
     expect(screen.getByLabelText('Draft message')).toHaveValue('Keep my draft');
     expect(screen.getByRole('separator')).toHaveAttribute(

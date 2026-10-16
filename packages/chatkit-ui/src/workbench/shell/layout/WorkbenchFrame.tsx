@@ -13,6 +13,7 @@ import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
 import type { useWorkbenchPanelHost } from '../../useWorkbenchPanelHost';
 import type { useWorkbenchResize } from '../../useWorkbenchResize';
 import { WorkbenchDivider } from '../../WorkbenchDivider';
+import { useWorkbenchChat } from '../../floating-chat/context';
 
 export const WORKBENCH_NARROW_BREAKPOINT = 960;
 
@@ -72,6 +73,7 @@ export function WorkbenchFrame({
   children,
 }: WorkbenchFrameProps) {
   const { t } = useChatkitTranslation();
+  const floatingChat = useWorkbenchChat();
   return (
     <div
       ref={rootRef}
@@ -154,6 +156,18 @@ export function WorkbenchFrame({
         }}
       >
         <SheetContent
+          onEscapeKeyDown={(event) => {
+            if (
+              event.target instanceof Element &&
+              event.target.closest('.chatkit-floating-chat-layer')
+            ) {
+              event.preventDefault();
+              if (floatingChat?.mode !== 'minimized')
+                floatingChat?.setMode(
+                  floatingChat.mode === 'expanded' ? 'compact' : 'minimized',
+                );
+            }
+          }}
           side="right"
           showCloseButton={false}
           className={cn(

@@ -5,6 +5,10 @@ import {
   hasUnboundMention,
 } from './group-mentions';
 import { useWorkbench } from '../../workbench/context';
+import {
+  isTranscriptHidden,
+  useWorkbenchChat,
+} from '../../workbench/floating-chat/context';
 import { useGroupComposer } from './useGroupComposer';
 import { useGroupProject } from './useGroupProject';
 import { useGroupHeaderActions } from './useGroupHeaderActions';
@@ -27,6 +31,7 @@ import {
 import {
   Fragment,
   useEffect,
+  useLayoutEffect,
   useId,
   useRef,
   useState,
@@ -72,6 +77,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
   const group = state.snapshot;
   const [mentions, setMentions] = useState<ChatGroupMention[]>([]);
   const workbench = useWorkbench();
+  const workbenchChat = useWorkbenchChat();
   const [mention, setMention] = useState<string | null>(null);
   const [reply, setReply] = useState<ChatGroupMessage | null>(null);
   const [sending, setSending] = useState(false);
@@ -88,17 +94,30 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
   const pending = useRef<ChatGroupSendInput | null>(null);
   const viewport = useRef<HTMLDivElement>(null);
   const nearEnd = useRef(true);
+  const readingPosition = useRef(0);
+  useLayoutEffect(() => {
+    if (viewport.current && !isTranscriptHidden(viewport.current))
+      viewport.current.scrollTop = nearEnd.current
+        ? viewport.current.scrollHeight
+        : readingPosition.current;
+  }, [workbenchChat?.floating, workbenchChat?.mode]);
   useEffect(() => {
-    if (nearEnd.current && viewport.current)
+    if (
+      nearEnd.current &&
+      viewport.current &&
+      !isTranscriptHidden(viewport.current)
+    )
       viewport.current.scrollTop = viewport.current.scrollHeight;
-  }, [state]);
+  }, [state, workbenchChat?.floating, workbenchChat?.mode]);
   const newestSequence = group?.messages.at(-1)?.sequence;
   useEffect(() => {
     const acknowledge = () => {
       if (
         newestSequence &&
         nearEnd.current &&
-        document.visibilityState === 'visible'
+        document.visibilityState === 'visible' &&
+        viewport.current &&
+        !isTranscriptHidden(viewport.current)
       )
         void client.groups
           .preferences(groupId, { readSequence: newestSequence })
@@ -273,6 +292,23 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     }
   }
   return {
+    workbench:
+      props.surface !== 'side'
+        ? {
+            title: groupTitle,
+            running:
+              sending ||
+              !!group?.runs.some(
+                (run) => run.status === 'busy' || run.status === 'pausing',
+              ),
+            error: Boolean(error),
+            attentionKey:
+              group?.interactions
+                ?.map((item) => item.id)
+                .sort()
+                .join(':') || undefined,
+          }
+        : undefined,
     layout: {
       viewportRef: viewport,
       className: props.className,
@@ -311,6 +347,8 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       onFiles: () => false,
       onScroll: (event) => {
         const element = event.currentTarget;
+        if (isTranscriptHidden(element)) return;
+        readingPosition.current = element.scrollTop;
         nearEnd.current =
           element.scrollHeight - element.scrollTop - element.clientHeight < 100;
       },
@@ -405,7 +443,9 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       <>
         {groupProject.error}
         {group && (
-          <GroupInteractions client={client} group={group} onError={fail} />
+          <div className="contents" data-chat-auxiliary="">
+            <GroupInteractions client={client} group={group} onError={fail} />
+          </div>
         )}
         {error && (
           <div
