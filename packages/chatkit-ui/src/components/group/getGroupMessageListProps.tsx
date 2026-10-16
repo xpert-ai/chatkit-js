@@ -47,8 +47,11 @@ export function getGroupMessageListProps({
     const showTime = next
       ? gap > MESSAGE_TIME_GAP_MS || gap < 0
       : !hasLiveMessages;
-    const pendingDeliveries = message.deliveries.filter(
-      (delivery) => delivery.status !== 'consumed',
+    const visibleDeliveries = message.deliveries.filter(
+      (delivery) =>
+        delivery.status !== 'consumed' ||
+        (member(delivery.participantId)?.kind === 'assistant' &&
+          message.runtimeParticipantIds?.includes(delivery.participantId)),
     );
     const canReply =
       !self &&
@@ -76,7 +79,7 @@ export function getGroupMessageListProps({
             }
           : undefined,
       isSelf: self,
-      after: (showTime || pendingDeliveries.length > 0 || canReply) && (
+      after: (showTime || visibleDeliveries.length > 0 || canReply) && (
         <div
           className={`mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground ${self ? 'justify-end' : ''}`}
         >
@@ -88,7 +91,7 @@ export function getGroupMessageListProps({
               })}
             </time>
           )}
-          {pendingDeliveries.map((delivery) => (
+          {visibleDeliveries.map((delivery) => (
             <span
               key={delivery.participantId}
               className={

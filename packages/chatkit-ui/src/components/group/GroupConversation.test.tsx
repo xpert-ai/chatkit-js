@@ -175,6 +175,67 @@ describe('group conversation UI', () => {
     cleanup();
     vi.unstubAllGlobals();
   });
+  it.each(['busy', 'idle'] as const)(
+    'shows an Assistant read receipt independently of a %s run',
+    async (status) => {
+      const snapshot = mocks.snapshot;
+      if (!snapshot) throw new Error('Expected the group snapshot fixture');
+      const message = snapshot.messages[0];
+      message.communication.senderId = 'b';
+      message.communication.recipientIds = ['c'];
+      message.runtimeParticipantIds = ['c'];
+      message.deliveries = [{ participantId: 'c', status: 'consumed' }];
+      snapshot.runs = [{ participantId: 'c', runId: 'rc', status }];
+      const { container } = render(<Chat options={groupOptions} />, {
+        wrapper: ThemeProvider,
+      });
+      expect(
+        await screen.findByText(/@C · group.delivery.consumed/),
+      ).toBeVisible();
+      expect(screen.queryByText(/group.delivery.starting/)).toBeNull();
+      expect(screen.queryByText('group.cancelDelivery')).toBeNull();
+      const activity = container.querySelector(
+        '[data-slot="group-run-status"]',
+      );
+      expect(activity).toHaveTextContent(
+        status === 'busy' ? 'message.thinking' : 'group.run.idle',
+      );
+      if (status === 'busy')
+        expect(
+          screen.getByRole('button', { name: 'group.stop' }),
+        ).toBeVisible();
+    },
+  );
+  it.each(['pending', 'starting', 'steering'] as const)(
+    'keeps a %s delivery unread even while the Assistant is busy',
+    async (status) => {
+      const snapshot = mocks.snapshot;
+      if (!snapshot) throw new Error('Expected the group snapshot fixture');
+      snapshot.messages[0].runtimeParticipantIds = ['c'];
+      snapshot.messages[0].deliveries = [{ participantId: 'c', status }];
+      render(<Chat options={groupOptions} />, { wrapper: ThemeProvider });
+      expect(
+        await screen.findByText(new RegExp(`group.delivery.${status}`)),
+      ).toBeVisible();
+      expect(screen.queryByText(/group.delivery.consumed/)).toBeNull();
+    },
+  );
+  it.each(['human', 'non-waking'])(
+    'does not claim a %s delivery was read without Assistant consumption',
+    async (recipient) => {
+      const snapshot = mocks.snapshot;
+      if (!snapshot) throw new Error('Expected the group snapshot fixture');
+      snapshot.messages[0].deliveries = [
+        {
+          participantId: recipient === 'human' ? 'b' : 'c',
+          status: 'consumed',
+        },
+      ];
+      render(<Chat options={groupOptions} />, { wrapper: ThemeProvider });
+      expect(await screen.findByText('Question from A')).toBeVisible();
+      expect(screen.queryByText(/group.delivery.consumed/)).toBeNull();
+    },
+  );
   it('shows a durable delivery error and opens the failed execution instead of offering cancellation', async () => {
     const snapshot = mocks.snapshot;
     if (!snapshot) throw new Error('Expected the group snapshot fixture');

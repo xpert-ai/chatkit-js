@@ -1238,9 +1238,10 @@
     "placeholder": "发送消息，@ 成员一起讨论…",
     "send": "发送",
     "delivery": {
-      "pending": "已接收",
-      "starting": "正在启动",
-      "steering": "正在引导",
+      "pending": "等待送达",
+      "starting": "正在送达",
+      "steering": "等待处理",
+      "consumed": "已读",
       "blocked": "已阻塞",
       "canceled": "已取消",
       "failed": "失败"

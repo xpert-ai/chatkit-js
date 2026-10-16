@@ -1238,9 +1238,10 @@
     "placeholder": "Message the group, @ someone to ask…",
     "send": "Send",
     "delivery": {
-      "pending": "Received",
-      "starting": "Starting",
-      "steering": "Steering",
+      "pending": "Queued",
+      "starting": "Delivering",
+      "steering": "Awaiting processing",
+      "consumed": "Read",
       "blocked": "Blocked",
       "canceled": "Canceled",
       "failed": "Failed"
