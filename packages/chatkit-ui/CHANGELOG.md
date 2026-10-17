@@ -1,5 +1,30 @@
 # @xpert-ai/chatkit-ui
 
+## 0.16.0
+
+### Minor Changes
+
+- 878fe17: Add a floating conversation to fullscreen Workbench views with minimized, compact, and expanded modes. Keep the conversation title synchronized with its full chat tab, preserve drafts and streaming state across layouts, and expand once for new requests that need user input.
+
+  Support dragging the panel and minimized button, resizing the panel width, and opening the current conversation or a new side chat from the title menu. Reveal the compact header upward on focus without moving the input, and restore the compact position after minimizing an expanded panel. Adapt controls to narrow screens, themes, keyboard focus, and Escape navigation.
+
+  Prevent stopping or resuming a run from accidentally submitting the composer again.
+
+### Patch Changes
+
+- 7367a34: Animate newly sent human messages from their composer position into the conversation, blending a subtle elastic shape change into arrival. Keep text and attachments steady while the bubble gently compresses, stretches, and settles without jumping vertically.
+
+  Support regular and group chats, preserve draft recovery on failure, and respect reduced-motion preferences. Cancel animations when leaving a conversation and avoid replaying them for history, queued follow-ups, or hidden floating transcripts.
+
+  Keep human message bubbles sized to their content when replies reveal message actions and timestamps, preventing extra space after short messages.
+
+- 9fd1b4d: Show read acknowledgements for group messages consumed by an Assistant runtime, separately from its thinking or execution status. Clarify delivery and queued follow-up labels without treating non-waking messages or human recipients as read.
+- 8f5b0f6: Display image references as thumbnail previews in the composer and sent messages. Open the existing image viewer from a thumbnail while preserving removal, reference metadata, and readable fallbacks for unavailable images.
+- 0dc389a: Add relative path navigation to workspace file trees and breadcrumb folders, resizable file sidebars, density-aware search fields, and image preview zoom, rotation and reset controls. Support cursor-centered wheel zoom and drag-to-pan for inspecting image details.
+  - @xpert-ai/chatkit-types@0.16.0
+  - @xpert-ai/chatkit-web-shared@0.16.0
+  - @xpert-ai/a2ui-react@0.16.0
+
 ## 0.15.0
 
 ### Minor Changes
