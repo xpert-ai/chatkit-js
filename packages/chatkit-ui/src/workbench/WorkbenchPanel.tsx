@@ -65,6 +65,8 @@ import type { TerminalRestriction } from './native/terminal/terminal-restriction
 
 export { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
 export const MAIN_CHAT_VIEW_KEY = 'chatkit.native.main-chat';
+import { FloatingChat } from './floating-chat/FloatingChat';
+import { useWorkbenchChat } from './floating-chat/context';
 
 type WorkbenchViewHostsClient = Pick<Client['viewHosts'], 'listSlotViews'> &
   RemoteViewHostsClient;
@@ -191,6 +193,7 @@ export function WorkbenchPanel({
   onClientCommand,
 }: WorkbenchPanelProps) {
   const { t } = useChatkitTranslation();
+  const mainChat = useWorkbenchChat();
   const terminalScope = JSON.stringify([
     stream.apiUrl,
     stream.organizationId,
@@ -290,7 +293,9 @@ export function WorkbenchPanel({
             {mainChatHost && (
               <WorkbenchTab
                 key={MAIN_CHAT_VIEW_KEY}
-                label={t('workbench.mainChat')}
+                label={
+                  mainChat?.metadata?.title?.trim() || t('workbench.mainChat')
+                }
                 icon={<MessageSquare size={16} />}
                 selected={activeViewKey === MAIN_CHAT_VIEW_KEY}
                 id={mainChatTabId}
@@ -446,8 +451,29 @@ export function WorkbenchPanel({
             hidden={activeViewKey !== MAIN_CHAT_VIEW_KEY}
             className="h-full min-h-0"
           >
-            <div ref={mainChatHost} className="contents" />
+            <div
+              ref={
+                activeViewKey === MAIN_CHAT_VIEW_KEY ? mainChatHost : undefined
+              }
+              className="contents"
+            />
           </div>
+        )}
+        {mainChatHost && (
+          <FloatingChat
+            host={mainChatHost}
+            active={
+              visible &&
+              activeViewKey !== MAIN_CHAT_VIEW_KEY &&
+              activeViewKey !== SIDE_CHAT_VIEW_KEY
+            }
+            onOpenChat={() => onSelect(MAIN_CHAT_VIEW_KEY)}
+            onNewSideChat={
+              sideChatEnabled && stream.threadId && onOpenNative
+                ? () => onOpenNative('side-chat')
+                : undefined
+            }
+          />
         )}
         {native && onOpenNativeFile && (
           <NativeWorkbenchContent

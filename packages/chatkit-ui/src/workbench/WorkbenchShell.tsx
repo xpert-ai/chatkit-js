@@ -48,6 +48,7 @@ import { useWorkbenchViews } from './useWorkbenchViews';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY, WorkbenchPanel } from './WorkbenchPanel';
 import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
+import { WorkbenchChatProvider } from './floating-chat/context';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
@@ -945,41 +946,46 @@ function WorkbenchContent({
 
   return (
     <ResourceCardContext.Provider value={resourceCardActions}>
-      <WorkbenchShellLayout
-        contextValue={contextValue}
-        rootRef={rootRef}
-        isNarrow={isNarrow}
-        workbenchSide={workbenchSide}
-        initialLoading={initialLoading}
-        t={t}
-        notification={notification}
-        open={open}
-        setNotification={setNotification}
-        resizing={resizing}
-        mainChatInWorkbench={mainChatInWorkbench}
-        chatHost={chatHost}
-        chat={chat}
-        sideChat={sideChat}
-        externalViewOpen={externalViewOpen}
-        expanded={expanded}
-        containerWidth={containerWidth}
-        resolvedPanelWidth={resolvedPanelWidth}
-        startResize={startResize}
-        setPanelWidth={setPanelWidth}
-        setExpanded={setExpanded}
-        swapSides={swapSides}
-        panelHost={panelHost}
-        setOpen={setOpen}
-        closeWorkbench={closeWorkbench}
-        panel={panel}
-        native={native}
-        activeViewKey={activeViewKey}
-        adjacentTab={adjacentTab}
-        setActiveViewKey={setActiveViewKey}
-        sideChatCloseDialogOpen={sideChatCloseDialogOpen}
-        setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
-        confirmCloseSideChat={confirmCloseSideChat}
-      />
+      <WorkbenchChatProvider
+        scope={viewScopeKey}
+        floating={mainChatInWorkbench && activeViewKey !== MAIN_CHAT_VIEW_KEY}
+      >
+        <WorkbenchShellLayout
+          contextValue={contextValue}
+          rootRef={rootRef}
+          isNarrow={isNarrow}
+          workbenchSide={workbenchSide}
+          initialLoading={initialLoading}
+          t={t}
+          notification={notification}
+          open={open}
+          setNotification={setNotification}
+          resizing={resizing}
+          mainChatInWorkbench={mainChatInWorkbench}
+          chatHost={chatHost}
+          chat={chat}
+          sideChat={sideChat}
+          externalViewOpen={externalViewOpen}
+          expanded={expanded}
+          containerWidth={containerWidth}
+          resolvedPanelWidth={resolvedPanelWidth}
+          startResize={startResize}
+          setPanelWidth={setPanelWidth}
+          setExpanded={setExpanded}
+          swapSides={swapSides}
+          panelHost={panelHost}
+          setOpen={setOpen}
+          closeWorkbench={closeWorkbench}
+          panel={panel}
+          native={native}
+          activeViewKey={activeViewKey}
+          adjacentTab={adjacentTab}
+          setActiveViewKey={setActiveViewKey}
+          sideChatCloseDialogOpen={sideChatCloseDialogOpen}
+          setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
+          confirmCloseSideChat={confirmCloseSideChat}
+        />
+      </WorkbenchChatProvider>
     </ResourceCardContext.Provider>
   );
 }

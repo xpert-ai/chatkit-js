@@ -134,7 +134,9 @@ describe('WorkbenchShell', () => {
       '384',
     );
     fireEvent.pointerMove(window, { clientX: 1109, pointerId: 1 });
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('separator', { name: 'Resize views panel' }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Restore panel'));
     expect(root).toHaveClass('flex-row-reverse');
     expect(screen.getByRole('separator')).toHaveAttribute(
@@ -226,7 +228,7 @@ describe('WorkbenchShell', () => {
     const second = render(tree());
     setObservedWidth(1400);
     await screen.findByLabelText('Restore panel');
-    expect(screen.getByLabelText('Draft message')).not.toBeVisible();
+    expect(screen.getByLabelText('Draft message')).toBeVisible();
     fireEvent.click(screen.getByLabelText('Restore panel'));
     expect(screen.getByRole('separator')).toHaveAttribute(
       'aria-valuenow',
@@ -238,7 +240,9 @@ describe('WorkbenchShell', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Open views')).toBeEnabled(),
     );
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('separator', { name: 'Resize views panel' }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Open views'));
     fireEvent.keyDown(screen.getByRole('separator'), { key: 'End' });
     expect(screen.getByRole('separator')).toHaveAttribute(
@@ -266,7 +270,9 @@ describe('WorkbenchShell', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Open views')).toBeEnabled(),
     );
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('separator', { name: 'Resize views panel' }),
+    ).not.toBeInTheDocument();
   });
 
   it('keeps desktop preferences while narrow drawers use a temporary layout', async () => {
@@ -458,7 +464,7 @@ describe('WorkbenchShell', () => {
         'aria-selected',
         'true',
       );
-      expect(draft).not.toBeVisible();
+      expect(draft).toBeVisible();
       fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
       expect(
         within(screen.getByRole('tabpanel', { name: 'Chat' })).getByLabelText(
@@ -619,7 +625,9 @@ describe('WorkbenchShell', () => {
       'true',
     );
     expect(screen.queryByLabelText('Close views')).not.toBeInTheDocument();
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('separator', { name: 'Resize views panel' }),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId('remote-view')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('Restore panel'));
@@ -667,13 +675,15 @@ describe('WorkbenchShell', () => {
       'aria-selected',
       'true',
     );
-    expect(screen.queryByText('No compatible views are available.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('No compatible views are available.'),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
     fireEvent.click(screen.getByLabelText('Open views'));
     expect(screen.getAllByRole('tab', { name: 'New tab' })).toHaveLength(1);
   });
 
-  it('maximizes the narrow drawer across the frame, hides chat and restores both without remounting', async () => {
+  it('maximizes the narrow drawer across the frame, floats chat and restores both without remounting', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     render(
       <WorkbenchShell
@@ -703,7 +713,9 @@ describe('WorkbenchShell', () => {
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeInTheDocument();
     expect(screen.getByTestId('remote-view')).toBeInTheDocument();
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('separator', { name: 'Resize views panel' }),
+    ).not.toBeInTheDocument();
     const draft = screen.getByLabelText('Draft message');
     const remoteView = screen.getByTestId('remote-view');
     expect(draft).toBeVisible();
@@ -716,7 +728,7 @@ describe('WorkbenchShell', () => {
       'sm:max-w-none',
     );
     expect(dialog).not.toHaveClass('sm:max-w-sm');
-    expect(draft).not.toBeVisible();
+    expect(draft).toBeVisible();
     expect(screen.getByTestId('remote-view')).toBe(remoteView);
     expect(screen.getByLabelText('Restore panel')).toHaveAttribute(
       'aria-pressed',

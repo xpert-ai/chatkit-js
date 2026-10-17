@@ -48,6 +48,7 @@ import { ChatGoalStatus } from './goal/ChatGoalStatus';
 import { useChatGoal } from './goal/useChatGoal';
 import { getAssistantHeaderProps } from './header/getAssistantHeaderProps';
 import { useChatHistory } from './history/useChatHistory';
+import { useConversationTitle } from './history/useConversationTitle';
 import { useChatHost } from './host/useChatHost';
 import { ChatQuoteActions } from './messages/ChatQuoteActions';
 import { getAssistantTranscriptProps } from './messages/getAssistantTranscriptProps';
@@ -127,6 +128,11 @@ export function useAssistantConversation({
   });
 
   const historyState = useChatHistory({ ...session, surface });
+  const conversationTitle = useConversationTitle(
+    session.stream,
+    historyState.currentThread?.title,
+    surface,
+  );
   const draft = useChatDraft({ ...runtime });
   const goal = useChatGoal({
     ...session,
@@ -506,6 +512,21 @@ export function useAssistantConversation({
         : undefined,
   };
   return {
+    workbench:
+      surface === 'main'
+        ? {
+            title: conversationTitle,
+            running: currentThreadIsRunning,
+            error: Boolean(threadErrorMessage),
+            attentionKey:
+              [
+                session.stream.pendingHITLRequest?.id,
+                session.stream.pendingRequestUserInput?.id,
+              ]
+                .filter(Boolean)
+                .join(':') || undefined,
+          }
+        : undefined,
     layout: {
       viewportRef: viewportRef,
       taskSummaryDocked: summary.taskSummaryDocked,
@@ -546,7 +567,10 @@ export function useAssistantConversation({
             summary.taskSummaryAvailable &&
             summary.taskSummaryDocked &&
             summary.taskSummaryOpen && (
-              <div className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80">
+              <div
+                data-chat-auxiliary=""
+                className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80"
+              >
                 <TaskSummaryPanel
                   {...summary.taskSummaryProps}
                   className="pointer-events-auto max-h-full"
@@ -685,7 +709,9 @@ export function useAssistantConversation({
             {threadErrorMessage}
           </div>
         )}
-        <ChatGoalStatus {...goal} {...session} {...draft} />
+        <div className="contents" data-chat-auxiliary="">
+          <ChatGoalStatus {...goal} {...session} {...draft} />
+        </div>
         <ChatPendingActions
           {...session}
           {...commands}
@@ -695,17 +721,19 @@ export function useAssistantConversation({
           pendingFollowUps={pendingFollowUps}
         />
         {isInitialComposer && (
-          <PromptWorkflowShortcuts
-            commands={capabilities.promptWorkflow.commands}
-            selected={capabilities.promptWorkflow.shortcutCommand}
-            disabled={isSubmissionBlocked}
-            onSelect={(command) => {
-              capabilities.promptWorkflow.selectShortcut(command);
-              runtime.setRuntimeCapabilityPalette(null);
-            }}
-            onScenario={capabilities.promptWorkflow.chooseScenario}
-            onBack={capabilities.promptWorkflow.showPrompts}
-          />
+          <div className="contents" data-chat-auxiliary="">
+            <PromptWorkflowShortcuts
+              commands={capabilities.promptWorkflow.commands}
+              selected={capabilities.promptWorkflow.shortcutCommand}
+              disabled={isSubmissionBlocked}
+              onSelect={(command) => {
+                capabilities.promptWorkflow.selectShortcut(command);
+                runtime.setRuntimeCapabilityPalette(null);
+              }}
+              onScenario={capabilities.promptWorkflow.chooseScenario}
+              onBack={capabilities.promptWorkflow.showPrompts}
+            />
+          </div>
         )}
         {resourceCommands.error && (
           <div role="alert" className="mb-2 text-sm text-destructive">
@@ -713,11 +741,13 @@ export function useAssistantConversation({
           </div>
         )}
         {isInitialComposer && (
-          <ResourceCommandShortcuts
-            commands={resourceCommands.commands}
-            disabled={isSubmissionBlocked}
-            onSelect={selectResourceCommand}
-          />
+          <div className="contents" data-chat-auxiliary="">
+            <ResourceCommandShortcuts
+              commands={resourceCommands.commands}
+              disabled={isSubmissionBlocked}
+              onSelect={selectResourceCommand}
+            />
+          </div>
         )}
         <ChatComposerAttachments {...files} {...session} />
         {draft.threadMention && (

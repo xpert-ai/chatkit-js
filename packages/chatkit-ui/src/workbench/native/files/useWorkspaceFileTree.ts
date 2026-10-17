@@ -4,7 +4,7 @@ import type {
   WorkspaceFileScope,
   XpertWorkspaceFile,
 } from '@xpert-ai/xpert-sdk';
-import { normalizeWorkspaceFiles } from './workspace-file-utils';
+import { isFolder, normalizeWorkspaceFiles } from './workspace-file-utils';
 
 export type DirectoryState = {
   files: XpertWorkspaceFile[];
@@ -36,28 +36,32 @@ export function useWorkspaceFileTree(
         ...current,
         [path]: { files: current[path]?.files ?? [], loading: true },
       }));
-      void client.workbench
+      return client.workbench
         .listFiles(scope, path, { signal: abort.signal })
         .then((files) => {
-          if (!abort.signal.aborted)
-            setDirectories((current) => ({
-              ...current,
-              [path]: {
-                files: normalizeWorkspaceFiles(files, path),
-                loading: false,
-              },
-            }));
+          if (abort.signal.aborted) return null;
+          const normalized = normalizeWorkspaceFiles(files, path);
+          setDirectories((current) => ({
+            ...current,
+            [path]: {
+              files: normalized,
+              loading: false,
+            },
+          }));
+          return { files: normalized };
         })
         .catch((error: unknown) => {
-          if (!abort.signal.aborted)
-            setDirectories((current) => ({
-              ...current,
-              [path]: {
-                files: current[path]?.files ?? [],
-                loading: false,
-                error: error instanceof Error ? error.message : failure,
-              },
-            }));
+          if (abort.signal.aborted) return null;
+          const message = error instanceof Error ? error.message : failure;
+          setDirectories((current) => ({
+            ...current,
+            [path]: {
+              files: current[path]?.files ?? [],
+              loading: false,
+              error: message,
+            },
+          }));
+          return { error: message };
         })
         .finally(() => {
           if (requests.current.get(path) === abort)
@@ -90,12 +94,42 @@ export function useWorkspaceFileTree(
     },
     [directories, load],
   );
+  const locate = async (
+    path: string,
+    signal: AbortSignal,
+  ): Promise<XpertWorkspaceFile | null> => {
+    const parts = path.split('/').filter(Boolean);
+    const parents: string[] = [];
+    let directory = '';
+    let target: XpertWorkspaceFile = { filePath: '', fileType: 'directory' };
+    for (const [index, part] of parts.entries()) {
+      const result = await load(directory);
+      if (signal.aborted || !result) return null;
+      if ('error' in result) throw new Error(result.error);
+      const nextPath = [directory, part].filter(Boolean).join('/');
+      const file = result.files.find((file) => file.filePath === nextPath);
+      if (!file || (index < parts.length - 1 && !isFolder(file))) return null;
+      parents.push(directory);
+      directory = nextPath;
+      target = file;
+    }
+    if (isFolder(target)) {
+      const result = await load(target.filePath);
+      if (signal.aborted || !result) return null;
+      if ('error' in result) throw new Error(result.error);
+      parents.push(target.filePath);
+    }
+    if (!signal.aborted)
+      setExpanded((current) => new Set([...current, ...parents]));
+    return target;
+  };
   return {
     directories,
     expanded,
     refresh,
     load,
     reveal,
+    locate,
     toggle: (path: string) => {
       const opening = !expanded.has(path);
       setExpanded((current) => {

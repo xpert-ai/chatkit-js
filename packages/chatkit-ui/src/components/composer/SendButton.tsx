@@ -45,7 +45,12 @@ export function SendButton({
       <button
         data-slot="composer-send-button"
         type="button"
-        onClick={showStop ? onStop : onResume}
+        onClick={(event) => {
+          // A synchronous runtime update may turn this same DOM button into
+          // a submit button before the browser performs its default action.
+          event.preventDefault();
+          (showStop ? onStop : onResume)?.();
+        }}
         disabled={showStop ? stopDisabled : resumeDisabled}
         className={cn(
           'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-chat-item',

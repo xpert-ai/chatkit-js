@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { ImagePreview } from '../../../components/file-preview/ImagePreview';
 import type {
   Client,
   WorkspaceFileScope,
@@ -264,13 +265,7 @@ export function WorkspaceFileEditor({
         return <PptxEditor ref={editor} {...editorProps} />;
       case 'image':
         return (
-          <div className="flex h-full items-center justify-center overflow-auto p-4">
-            <img
-              src={url}
-              alt={fileName(file.filePath)}
-              className="max-h-full max-w-full object-contain"
-            />
-          </div>
+          <ImagePreview src={url} title={fileName(file.filePath)} />
         );
       case 'pdf':
         return (

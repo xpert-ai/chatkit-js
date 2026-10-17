@@ -1,6 +1,7 @@
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import { FileText, ImageIcon, MessageCircle, Quote, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { ImageReferenceChip } from './ImageReferenceChip';
 import {
   getReferenceLabel,
   getReferenceMetaLine,
@@ -18,16 +19,25 @@ export function ReferenceChip({
   onRemove?: () => void;
   removeLabel?: string;
 }) {
+  if (reference.type === 'image' && reference.url?.trim()) {
+    return (
+      <ImageReferenceChip
+        reference={reference}
+        onRemove={onRemove}
+        removeLabel={removeLabel}
+      />
+    );
+  }
   const metaLine = getReferenceMetaLine(reference);
   const isComposer = variant === 'composer';
   const Icon =
     reference.type === 'thread'
       ? MessageCircle
       : reference.type === 'quote'
-      ? Quote
-      : reference.type === 'image'
-        ? ImageIcon
-        : FileText;
+        ? Quote
+        : reference.type === 'image'
+          ? ImageIcon
+          : FileText;
 
   return (
     <div

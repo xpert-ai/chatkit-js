@@ -2,6 +2,7 @@ import type * as React from 'react';
 import { ExternalLink } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { UrlWorkbenchPreview } from '../preview/types';
+import { ImagePreview } from '../../components/file-preview/ImagePreview';
 
 export function UrlPreviewContent({
   preview,
@@ -49,14 +50,11 @@ export function UrlPreviewContent({
         </div>
       )}
       {preview.file?.mimeType?.startsWith('image/') ? (
-        <div className="min-h-0 flex-1 overflow-auto p-3">
-          <img
-            className="mx-auto max-w-full"
-            src={url.href}
-            alt={preview.title}
-            referrerPolicy="no-referrer"
-          />
-        </div>
+        <ImagePreview
+          src={url.href}
+          title={preview.title}
+          referrerPolicy="no-referrer"
+        />
       ) : (
         <iframe
           key={reloadKey}

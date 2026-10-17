@@ -12,6 +12,24 @@ export const validRelativePath = (path: string) =>
   !path.includes('\0') &&
   path.split('/').every((part) => !!part && part !== '..' && part !== '.');
 
+/** Resolve user-entered paths without allowing traversal outside the workspace. */
+export function resolveWorkspacePath(
+  value: string,
+  basePath: string,
+): string | null {
+  const input = value.trim();
+  if (!input || input.startsWith('/') || /[\\\0]/.test(input)) return null;
+  const parts = basePath.split('/').filter(Boolean);
+  for (const part of input.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (!parts.length) return null;
+      parts.pop();
+    } else parts.push(part);
+  }
+  return parts.join('/');
+}
+
 /** Use workspace-relative paths internally; the API's filePath is an entry name. */
 export function normalizeWorkspaceFiles(
   files: XpertWorkspaceFile[],
