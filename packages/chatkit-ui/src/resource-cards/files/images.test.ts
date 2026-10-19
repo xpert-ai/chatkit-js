@@ -10,14 +10,14 @@ function fixture() {
   const client = {
     createFileAccessSession: vi.fn(async () => ({
       sessionId: 'session',
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     })),
     createFileAccessGrant: vi.fn(async () => ({
       url: '/authorized',
       fileName: 'image.png',
       mimeType: 'image/png',
       size: 6,
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     })),
     readFileAccess: vi.fn(
       async () => new Blob(['pixels'], { type: 'image/png' }),
@@ -74,7 +74,7 @@ describe('resource image file authorization', () => {
       fileName: 'image.png',
       mimeType: 'image/png',
       size: 51 * 1024 * 1024,
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     });
     await expect(f.load()).rejects.toThrow('Resource file unavailable');
     expect(f.client.readFileAccess).not.toHaveBeenCalled();
@@ -87,13 +87,13 @@ describe('resource image file authorization', () => {
       fileName: 'x',
       mimeType: 'text/html',
       size: 1,
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     });
     await expect(f.load()).rejects.toThrow('Resource file unavailable');
     expect(f.client.readFileAccess).not.toHaveBeenCalled();
     f.client.createFileAccessSession.mockImplementationOnce(async () => {
       f.controller.abort();
-      return { sessionId: 'aborted', expiresAt: 'future' };
+      return { sessionId: 'aborted', expiresAt: '2099-01-01T00:00:00Z' };
     });
     await expect(f.load()).rejects.toThrow();
     expect(f.client.revokeFileAccessSession).toHaveBeenLastCalledWith(

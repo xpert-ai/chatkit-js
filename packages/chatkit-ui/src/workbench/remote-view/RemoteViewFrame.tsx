@@ -487,7 +487,7 @@ export function RemoteViewFrame({
               actionKey,
               {
                 ...parseActionRequest(message),
-                file: file.buffer,
+                file: new Blob([file.buffer], { type: file.type }),
                 fileName: file.name,
               },
               { signal, runtimeScope },

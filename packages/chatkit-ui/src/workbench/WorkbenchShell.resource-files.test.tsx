@@ -28,10 +28,11 @@ describe('export resource files in Workbench', () => {
     const files = f.mocks.stream.client.viewHosts;
     files.createFileAccessSession.mockResolvedValue({
       sessionId: 's',
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     });
     files.createFileAccessGrant.mockResolvedValueOnce({
       url: '/preview',
+      expiresAt: '2099-01-01T00:00:00Z',
       mimeType: 'application/pdf',
       fileName: '标书.pdf',
       size: 512,
@@ -97,6 +98,7 @@ describe('export resource files in Workbench', () => {
     );
     files.createFileAccessGrant.mockResolvedValueOnce({
       url: '/original',
+      expiresAt: '2099-01-01T00:00:00Z',
       mimeType:
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       fileName: '标书.docx',
