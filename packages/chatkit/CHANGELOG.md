@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-types
 
+## 0.16.1
+
+### Patch Changes
+
+- 80df500: Add resource-based Workbench file commands with scoped SDK authorization and
+  independent download grants. Reuse the shared file viewer for legacy inline file
+  content and the resource-card file transport, preserving cancellation, grant
+  expiry and browser navigation restrictions.
+
 ## 0.16.0
 
 ## 0.15.0
