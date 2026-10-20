@@ -86,6 +86,7 @@ describe('RemoteViewFrame', () => {
     mocks.client.viewHosts.getRemoteComponentEntry.mockResolvedValue(
       '<!doctype html><html><body><div id="root"></div></body></html>',
     );
+    mocks.client.viewHosts.getManifest.mockResolvedValue(manifest);
     mocks.client.viewHosts.getData.mockResolvedValue({
       items: [{ id: 'doc-1' }],
     });
@@ -216,6 +217,11 @@ describe('RemoteViewFrame', () => {
       mocks.client.viewHosts.readFileAccess.mockRejectedValue(
         new Error('Forbidden'),
       );
+      mocks.client.viewHosts.getManifest.mockResolvedValue(
+        failure === 'undeclared'
+          ? { ...manifest, fileAccess: { purposes: ['preview'] } }
+          : manifest,
+      );
       renderFrame(
         undefined,
         failure === 'undeclared'
@@ -268,6 +274,89 @@ describe('RemoteViewFrame', () => {
         ).not.toHaveBeenCalled();
         expect(mocks.client.viewHosts.readFileAccess).not.toHaveBeenCalled();
       }
+    },
+  );
+
+  it('uses the current manifest allowlist when the slot listing predates deployment', async () => {
+    const current: XpertExtensionViewManifest = {
+      ...manifest,
+      actions: [
+        { key: 'summary', label: { en_US: 'Summary' }, actionType: 'invoke' },
+      ],
+    };
+    mocks.client.viewHosts.getManifest.mockResolvedValue(current);
+    mocks.client.viewHosts.executeAction.mockResolvedValue({ success: true });
+    renderFrame();
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    const init = post.mock.calls.find(
+      ([m]) => isObject(m) && Reflect.get(m, 'type') === 'init',
+    )?.[0];
+    expect(init).toEqual(expect.objectContaining({ manifest: current }));
+    expect(mocks.client.viewHosts.getManifest).toHaveBeenCalledWith(
+      'agent',
+      'agent-1',
+      manifest.key,
+      expect.objectContaining({ runtimeScope }),
+    );
+    const instanceId = isObject(init)
+      ? Reflect.get(init, 'instanceId')
+      : undefined;
+    for (const actionKey of ['approve', 'summary']) {
+      act(() =>
+        dispatchFrameMessage(iframe, {
+          channel: REMOTE_COMPONENT_CHANNEL,
+          protocolVersion: 1,
+          instanceId,
+          type: 'executeAction',
+          requestId: actionKey,
+          actionKey,
+          input: {},
+        }),
+      );
+    }
+    await waitFor(() =>
+      expect(mocks.client.viewHosts.executeAction).toHaveBeenCalledOnce(),
+    );
+    expect(mocks.client.viewHosts.executeAction).toHaveBeenCalledWith(
+      'agent',
+      'agent-1',
+      manifest.key,
+      'summary',
+      expect.any(Object),
+      expect.objectContaining({ runtimeScope }),
+    );
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        requestId: 'approve',
+        message: "Action 'approve' is not available.",
+      }),
+      '*',
+    );
+  });
+
+  it.each(['denied', 'wrong-key', 'hidden'])(
+    'does not load new code when its manifest is %s',
+    async (reason) => {
+      if (reason === 'denied')
+        mocks.client.viewHosts.getManifest.mockRejectedValue(
+          new Error('Forbidden'),
+        );
+      else
+        mocks.client.viewHosts.getManifest.mockResolvedValue({
+          ...manifest,
+          ...(reason === 'wrong-key' ? { key: 'other' } : { visible: false }),
+        });
+      renderFrame();
+      await waitFor(() =>
+        expect(mocks.client.viewHosts.getManifest).toHaveBeenCalledOnce(),
+      );
+      await waitFor(() => expect(screen.queryByTitle('Documents')).toBeNull());
+      expect(
+        mocks.client.viewHosts.getRemoteComponentEntry,
+      ).not.toHaveBeenCalled();
     },
   );
 
@@ -447,6 +536,7 @@ describe('RemoteViewFrame', () => {
     const onClientCommand = vi
       .fn()
       .mockResolvedValue({ success: true, status: 'opened' });
+    mocks.client.viewHosts.getManifest.mockResolvedValue(navigationManifest);
     render(
       <ThemeProvider>
         <RemoteViewFrame
