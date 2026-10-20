@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
+import { Client } from '@xpert-ai/xpert-sdk';
 import { ThemeProvider } from '../../providers/Theme';
 
 const mocks = vi.hoisted(() => ({
@@ -86,6 +87,7 @@ describe('RemoteViewFrame', () => {
     mocks.client.viewHosts.getRemoteComponentEntry.mockResolvedValue(
       '<!doctype html><html><body><div id="root"></div></body></html>',
     );
+    mocks.client.viewHosts.getManifest.mockResolvedValue(manifest);
     mocks.client.viewHosts.getData.mockResolvedValue({
       items: [{ id: 'doc-1' }],
     });
@@ -119,6 +121,98 @@ describe('RemoteViewFrame', () => {
       '*',
     );
   });
+
+  it.each([
+    ['proof.png', 'image/png'],
+    ['proof.pdf', 'application/pdf'],
+  ])(
+    'preserves %s MIME and bytes through the SDK multipart upload',
+    async (name, type) => {
+      const fetchRequest = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new Client({
+        apiUrl: 'https://host.test/api/ai',
+        callerOptions: { fetch: fetchRequest },
+      });
+      mocks.client.viewHosts.executeFileAction.mockImplementation(
+        client.viewHosts.executeFileAction.bind(client.viewHosts),
+      );
+      const uploadManifest: XpertExtensionViewManifest = {
+        ...manifest,
+        actions: [
+          {
+            key: 'upload',
+            label: { en_US: 'Upload' },
+            actionType: 'invoke',
+            transport: 'file',
+          },
+        ],
+      };
+      mocks.client.viewHosts.getManifest.mockResolvedValue(uploadManifest);
+      renderFrame(undefined, uploadManifest);
+      const iframe = (await screen.findByTitle(
+        'Documents',
+      )) as HTMLIFrameElement;
+      const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+      fireEvent.load(iframe);
+      const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+      expect(instanceId).toEqual(expect.any(String));
+      const bytes =
+        type === 'image/png'
+          ? Uint8Array.from(
+              atob(
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+              ),
+              (c) => c.charCodeAt(0),
+            )
+          : Uint8Array.from(new TextEncoder().encode('%PDF-1.7\n%%EOF'));
+      act(() =>
+        dispatchFrameMessage(iframe, {
+          channel: REMOTE_COMPONENT_CHANNEL,
+          protocolVersion: 1,
+          instanceId,
+          type: 'executeFileAction',
+          requestId: 'upload-request',
+          actionKey: 'upload',
+          targetId: 'asset',
+          input: { understandImage: false },
+          file: { name, type, size: bytes.length, buffer: bytes.buffer },
+        }),
+      );
+      await waitFor(() => expect(fetchRequest).toHaveBeenCalledOnce());
+      const body = fetchRequest.mock.calls[0][1]?.body;
+      expect(body).toBeInstanceOf(FormData);
+      if (!(body instanceof FormData))
+        throw new Error('Expected multipart upload');
+      const uploaded = body.get('file');
+      expect(uploaded).toBeInstanceOf(File);
+      if (!(uploaded instanceof File))
+        throw new Error('Expected an uploaded file');
+      expect(uploaded.name).toBe(name);
+      expect(uploaded.type).toBe(type);
+      expect(new Uint8Array(await uploaded.arrayBuffer())).toEqual(bytes);
+      expect(body.get('targetId')).toBe('asset');
+      expect(body.get('input')).toBe(
+        JSON.stringify({ understandImage: false }),
+      );
+      expect(
+        mocks.client.viewHosts.executeFileAction.mock.calls[0][5],
+      ).toMatchObject({ runtimeScope });
+      await waitFor(() =>
+        expect(post).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'fileActionResult',
+            requestId: 'upload-request',
+            result: { success: true },
+          }),
+          '*',
+        ),
+      );
+    },
+  );
 
   it.each(['preview', 'download'] as const)(
     'materializes authorized %s bytes in the host and revokes the session when the view closes',
@@ -215,6 +309,11 @@ describe('RemoteViewFrame', () => {
       });
       mocks.client.viewHosts.readFileAccess.mockRejectedValue(
         new Error('Forbidden'),
+      );
+      mocks.client.viewHosts.getManifest.mockResolvedValue(
+        failure === 'undeclared'
+          ? { ...manifest, fileAccess: { purposes: ['preview'] } }
+          : manifest,
       );
       renderFrame(
         undefined,
@@ -447,6 +546,7 @@ describe('RemoteViewFrame', () => {
     const onClientCommand = vi
       .fn()
       .mockResolvedValue({ success: true, status: 'opened' });
+    mocks.client.viewHosts.getManifest.mockResolvedValue(navigationManifest);
     render(
       <ThemeProvider>
         <RemoteViewFrame

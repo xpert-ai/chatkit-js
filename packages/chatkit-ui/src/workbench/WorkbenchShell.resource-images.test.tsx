@@ -31,10 +31,11 @@ describe('resource images in the actual Workbench shell', () => {
     const files = f.mocks.stream.client.viewHosts;
     files.createFileAccessSession.mockResolvedValue({
       sessionId: 's',
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     });
     files.createFileAccessGrant.mockResolvedValue({
       url: '/grant',
+      expiresAt: '2099-01-01T00:00:00Z',
       mimeType: 'image/png',
       fileName: 'site.png',
     });
@@ -103,10 +104,11 @@ describe('resource images in the actual Workbench shell', () => {
     const files = f.mocks.stream.client.viewHosts;
     files.createFileAccessSession.mockResolvedValue({
       sessionId: 's',
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     });
     files.createFileAccessGrant.mockResolvedValue({
       url: '/grant',
+      expiresAt: '2099-01-01T00:00:00Z',
       mimeType: 'image/png',
       fileName: 'site.png',
     });
@@ -216,6 +218,7 @@ describe('resource images in the actual Workbench shell', () => {
     // Images opened from galleries use the same file tab/download capability.
     files.createFileAccessGrant.mockReset().mockResolvedValue({
       url: '/image-original',
+      expiresAt: '2099-01-01T00:00:00Z',
       mimeType: 'image/png',
       fileName: 'site.png',
     });
@@ -230,6 +233,7 @@ describe('resource images in the actual Workbench shell', () => {
     );
     files.createFileAccessGrant.mockResolvedValueOnce({
       url: '/report-grant',
+      expiresAt: '2099-01-01T00:00:00Z',
       mimeType: 'application/pdf',
       fileName: '施工说明.pdf',
     });

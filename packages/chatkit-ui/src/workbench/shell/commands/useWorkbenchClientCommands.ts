@@ -13,6 +13,7 @@ import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import { createMessageId } from '../../../lib/utils';
 import type { WorkbenchRuntime } from '../../WorkbenchRuntime';
 import type { WorkbenchPreview } from '../../preview/types';
+import { ViewFilePreviewAccess } from '../../remote-view/view-file-preview-access';
 import {
   executeWorkbenchCommand,
   unsupportedCommand,
@@ -90,6 +91,16 @@ export function useWorkbenchClientCommands({
     stream.assistantId,
     stream.projectId,
   ]);
+  const filePreviews = React.useMemo(
+    () => new ViewFilePreviewAccess(stream.client.viewHosts),
+    [stream.client],
+  );
+  React.useEffect(
+    () => () => filePreviews.clear(),
+    [filePreviews, contextKey, stream.runtimeScopeReady],
+  );
+  const fileScopeReady = React.useRef(true);
+  fileScopeReady.current = stream.runtimeScopeReady !== false;
   const currentContext = React.useRef({
     key: contextKey,
     navigationScope,
@@ -103,7 +114,7 @@ export function useWorkbenchClientCommands({
     };
   const publishContexts = React.useCallback(() => {
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
-  }, [onRequestContextChange]);
+  }, [onRequestContextChange, contextsRef]);
 
   const executeClientCommand = React.useCallback(
     async (
@@ -257,6 +268,17 @@ export function useWorkbenchClientCommands({
       };
       return executeWorkbenchCommand(request, {
         apiUrl: stream.apiUrl,
+        resolveFile: (resource) =>
+          filePreviews.open(resource, {
+            hostId: stream.assistantId,
+            viewKey: manifest.key,
+            runtimeScope: {
+              projectId: stream.projectId,
+              conversationId: stream.conversationId,
+            },
+            isCurrent: () =>
+              currentContext.current === context && fileScopeReady.current,
+          }),
         projectId:
           stream.runtimeScopeReady === false ? undefined : stream.projectId,
         isCurrent: (navigation) =>
@@ -327,6 +349,10 @@ export function useWorkbenchClientCommands({
       parentMessenger,
       publishContexts,
       stream,
+      filePreviews,
+      contextsRef,
+      setNotification,
+      setViewQueries,
       t,
     ],
   );

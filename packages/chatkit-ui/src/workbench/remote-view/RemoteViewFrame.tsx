@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { isEqual } from 'lodash-es';
 import type {
   Client,
   XpertViewQuery,
@@ -29,6 +30,7 @@ import {
 
 export type RemoteViewHostsClient = Pick<
   Client['viewHosts'],
+  | 'getManifest'
   | 'getRemoteComponentEntry'
   | 'getData'
   | 'getParameterOptions'
@@ -66,7 +68,7 @@ type RemoteTheme = {
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function RemoteViewFrame({
-  manifest,
+  manifest: incomingManifest,
   initialQuery,
   hostId,
   runtimeScope,
@@ -78,9 +80,16 @@ export function RemoteViewFrame({
   onNotify,
   onClientCommand,
 }: RemoteViewFrameProps) {
+  // Equal discovery results must not restart a load or revoke active file access.
+  const listedManifestRef = React.useRef(incomingManifest);
+  if (!isEqual(listedManifestRef.current, incomingManifest)) {
+    listedManifestRef.current = incomingManifest;
+  }
+  const listedManifest = listedManifestRef.current;
   const { theme, isDarkMode, themeRootRef, themeRevision } = useTheme();
   const { t } = useChatkitTranslation();
   const frameRef = React.useRef<HTMLIFrameElement>(null);
+  const [manifest, setManifest] = React.useState(listedManifest);
   const [html, setHtml] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -185,21 +194,45 @@ export function RemoteViewFrame({
     setLoading(true);
     revokeSession();
     workbenchDebug.debug('entry.load.started', {
-      viewKey: manifest.key,
+      viewKey: listedManifest.key,
       hostId,
     });
 
+    // A long-lived Workbench may retain an older slot listing after deployment.
+    // Revalidate the exact manifest before loading code; never broaden its allowlist locally.
     void viewHosts
-      .getRemoteComponentEntry('agent', hostId, manifest.key, {
+      .getManifest('agent', hostId, listedManifest.key, {
         signal: controller.signal,
         runtimeScope,
       })
-      .then((entry) => {
-        if (controller.signal.aborted) return;
-        setHtml(entry);
+      .then(async (current) => {
+        if (controller.signal.aborted) return null;
+        if (
+          current.key !== listedManifest.key ||
+          current.hostType !== 'agent' ||
+          current.visible === false ||
+          current.view.type !== 'remote_component' ||
+          current.view.component.isolation !== 'iframe'
+        )
+          throw new Error(t('workbench.entryUnavailable'));
+        const entry = await viewHosts.getRemoteComponentEntry(
+          'agent',
+          hostId,
+          current.key,
+          {
+            signal: controller.signal,
+            runtimeScope,
+          },
+        );
+        return { current, entry };
+      })
+      .then((loaded) => {
+        if (controller.signal.aborted || !loaded) return;
+        setManifest(loaded.current);
+        setHtml(loaded.entry);
         setValidatedRevision(revision);
         workbenchDebug.debug('entry.load.completed', {
-          viewKey: manifest.key,
+          viewKey: listedManifest.key,
         });
       })
       .catch((entryError: unknown) => {
@@ -210,7 +243,7 @@ export function RemoteViewFrame({
         );
         setError(message);
         workbenchDebug.error('entry.load.failed', {
-          viewKey: manifest.key,
+          viewKey: listedManifest.key,
           message,
         });
       })
@@ -224,7 +257,7 @@ export function RemoteViewFrame({
     };
   }, [
     hostId,
-    manifest.key,
+    listedManifest,
     revokeSession,
     runtimeScope,
     contextReady,
@@ -487,7 +520,7 @@ export function RemoteViewFrame({
               actionKey,
               {
                 ...parseActionRequest(message),
-                file: file.buffer,
+                file: new Blob([file.buffer], { type: file.type }),
                 fileName: file.name,
               },
               { signal, runtimeScope },
