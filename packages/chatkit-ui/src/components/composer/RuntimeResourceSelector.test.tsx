@@ -169,6 +169,33 @@ async function openCategory(label: string) {
   }
 }
 describe('hierarchical resource picker', () => {
+  it('does not fetch an unused root catalog and fetches the plugin submenu once', async () => {
+    const { catalog } = setup([]);
+    await act(() => new Promise((resolve) => window.setTimeout(resolve, 10)));
+    expect(catalog).not.toHaveBeenCalled();
+    await openCategory('composer.resources.connectPlugins');
+    await waitFor(() =>
+      expect(screen.getByText('Available plugin')).toBeInTheDocument(),
+    );
+    expect(catalog).toHaveBeenCalledTimes(1);
+    expect(catalog).toHaveBeenCalledWith(
+      'assistant',
+      expect.objectContaining({ kind: 'agent_plugin' }),
+    );
+  });
+
+  it('restores selected resources without also fetching an unused root browse catalog', async () => {
+    const { catalog } = setup([plugin]);
+    await waitFor(() =>
+      expect(screen.getByText('Example plugin')).toBeInTheDocument(),
+    );
+    expect(catalog).toHaveBeenCalledTimes(1);
+    expect(catalog).toHaveBeenCalledWith(
+      'assistant',
+      expect.objectContaining({ purpose: 'selection' }),
+    );
+  });
+
   it('shows every template in plugin details and adds the package as one selection', async () => {
     const templates: RuntimeResourceCatalogItem = {
       ...plugin,

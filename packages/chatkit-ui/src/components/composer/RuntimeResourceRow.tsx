@@ -28,8 +28,8 @@ export function ResourceIcon({
       avatar={item.avatar}
       label={item.title}
       fallback={fallback}
-      className="size-4 rounded-none"
-      fallbackClassName="rounded-none bg-transparent text-sm"
+      className="size-4 rounded-[inherit]"
+      fallbackClassName="bg-transparent text-sm"
       imageClassName="object-contain"
       data-slot="runtime-resource-avatar"
     />
@@ -44,7 +44,12 @@ export function ResourceIcon({
       dataSlot="runtime-resource-icon"
     />
   );
-  if (!small) return icon;
+  const clipped = (
+    <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-chat-item">
+      {icon}
+    </span>
+  );
+  if (!small) return clipped;
   return (
     <span
       className={cn(
@@ -52,7 +57,7 @@ export function ResourceIcon({
         getMenuItemRoundedClass(theme.radius),
       )}
     >
-      {icon}
+      {clipped}
     </span>
   );
 }

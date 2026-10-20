@@ -42,6 +42,7 @@ export function useRuntimeResourceCatalog({
   assistantId,
   projectId,
   enabled,
+  browseEnabled = true,
   query,
   kind,
   selectedResources = noSelection,
@@ -50,6 +51,7 @@ export function useRuntimeResourceCatalog({
   assistantId: string;
   projectId?: string | null;
   enabled: boolean;
+  browseEnabled?: boolean;
   query: string;
   kind?: RuntimeResourceKind;
   selectedResources?: RuntimeResourceReference[];
@@ -160,13 +162,23 @@ export function useRuntimeResourceCatalog({
   );
 
   React.useEffect(() => {
-    if (!enabled || cache.entries.has(key)) return;
+    if (!enabled || !browseEnabled || cache.entries.has(key)) return;
     const timer = window.setTimeout(
       () => void load({ kind, search, allPages }),
       search ? 150 : 0,
     );
     return () => window.clearTimeout(timer);
-  }, [enabled, cache, key, load, search, kind, allPages, revision]);
+  }, [
+    enabled,
+    browseEnabled,
+    cache,
+    key,
+    load,
+    search,
+    kind,
+    allPages,
+    revision,
+  ]);
 
   // Restore labels/status for assistant-role packages without offering them in menus.
   // Selection inventory has its own cache, independent of candidate menu/search.
@@ -291,7 +303,7 @@ export function useRuntimeResourceCatalog({
     known: cache.known,
     selectedItems,
     total: allPages ? items.length : (entry?.total ?? 0),
-    loading: enabled && (!entry || entry.loading),
+    loading: enabled && browseEnabled && (!entry || entry.loading),
     loadError:
       actionError ||
       entry?.error ||

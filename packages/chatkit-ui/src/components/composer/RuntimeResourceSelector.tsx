@@ -149,6 +149,7 @@ export function RuntimeResourceSelector({
     assistantId,
     projectId,
     enabled: open || expanded || selection.resources.length > 0,
+    browseEnabled: expanded || (open && active !== null),
     query: active || expanded ? query : rootQuery,
     kind: expanded ? browseKind : (active ?? undefined),
     selectedResources: selection.resources,
@@ -572,6 +573,7 @@ export function RuntimeResourceSelector({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content
+              style={getSurfaceThemeStyle(theme)}
               side="top"
               align="start"
               sideOffset={8}
@@ -665,6 +667,7 @@ export function RuntimeResourceSelector({
                         </Menu.SubTrigger>
                         <Menu.Portal>
                           <Menu.SubContent
+                            style={getSurfaceThemeStyle(theme)}
                             sideOffset={8}
                             alignOffset={-8}
                             collisionPadding={8}
