@@ -1,5 +1,65 @@
 # @xpert-ai/chatkit-ui
 
+## 0.16.0
+
+### Minor Changes
+
+- 878fe17: Add a floating conversation to fullscreen Workbench views with minimized, compact, and expanded modes. Keep the conversation title synchronized with its full chat tab, preserve drafts and streaming state across layouts, and expand once for new requests that need user input.
+
+  Support dragging the panel and minimized button, resizing the panel width, and opening the current conversation or a new side chat from the title menu. Reveal the compact header upward on focus without moving the input, and restore the compact position after minimizing an expanded panel. Adapt controls to narrow screens, themes, keyboard focus, and Escape navigation.
+
+  Prevent stopping or resuming a run from accidentally submitting the composer again.
+
+### Patch Changes
+
+- 7367a34: Animate newly sent human messages from their composer position into the conversation, blending a subtle elastic shape change into arrival. Keep text and attachments steady while the bubble gently compresses, stretches, and settles without jumping vertically.
+
+  Support regular and group chats, preserve draft recovery on failure, and respect reduced-motion preferences. Cancel animations when leaving a conversation and avoid replaying them for history, queued follow-ups, or hidden floating transcripts.
+
+  Keep human message bubbles sized to their content when replies reveal message actions and timestamps, preventing extra space after short messages.
+
+- 9fd1b4d: Show read acknowledgements for group messages consumed by an Assistant runtime, separately from its thinking or execution status. Clarify delivery and queued follow-up labels without treating non-waking messages or human recipients as read.
+- 8f5b0f6: Display image references as thumbnail previews in the composer and sent messages. Open the existing image viewer from a thumbnail while preserving removal, reference metadata, and readable fallbacks for unavailable images.
+- 0dc389a: Add relative path navigation to workspace file trees and breadcrumb folders, resizable file sidebars, density-aware search fields, and image preview zoom, rotation and reset controls. Support cursor-centered wheel zoom and drag-to-pan for inspecting image details.
+  - @xpert-ai/chatkit-types@0.16.0
+  - @xpert-ai/chatkit-web-shared@0.16.0
+  - @xpert-ai/a2ui-react@0.16.0
+
+## 0.15.0
+
+### Minor Changes
+
+- 933836b: Show selected plugin command/subcommand shortcuts with descriptive labels on the ChatKit start screen, and keep them available through the slash palette after a conversation starts. Insert normal skill chips with editable slash arguments, preserve pinned skill references in messages, and avoid treating skill arguments as global commands. Upgrade the Xpert SDK dependency to ^0.14.0 for getResourceCommands.
+
+### Patch Changes
+
+- f8ca3ec: Show only the input prompt in external assistant human messages while preserving custom parameters in execution data.
+- f8ca3ec: Make message code blocks follow the active light or dark theme, including syntax highlighting, surfaces, and copy controls.
+- Updated dependencies [933836b]
+  - @xpert-ai/chatkit-types@0.15.0
+  - @xpert-ai/chatkit-web-shared@0.15.0
+  - @xpert-ai/a2ui-react@0.15.0
+
+## 0.14.3
+
+### Patch Changes
+
+- db7ebda: Restore existing conversation resources through the selection-purpose catalog while keeping it separate from plugin candidate menus and search caches. Assistant-role packages remain removable in existing conversations without being offered as new additions.
+
+  Requires an Xpert API that accepts purpose=selection on resource catalog requests.
+
+- 116f15e: Show Assistant template components as sub-agents in plugin information and details, with one add/remove action for the whole package. Preserve existing connector authorization and resource selection behavior.
+
+  Upgrade @xpert-ai/xpert-sdk to ^0.13.2 for assistant_template catalog components and their display metadata. Requires the matching Xpert API.
+
+- 97c6324: Let the composer dock inherit the surrounding chat surface instead of drawing an opaque background, preserving the active theme behind the input area.
+- 9d23d0c: Let group owners load additional invitation candidates and retry failed pages without losing previously loaded results. Reset pagination when the search, group, member type, or active membership changes, and ignore stale responses after cancellation.
+
+  Use the matching Xpert SDK candidate-pagination support and backend filtering for latest Agent versions and existing group members. Preserve group-owner controls and localize the load-more and retry actions in English and Chinese.
+  - @xpert-ai/chatkit-types@0.14.3
+  - @xpert-ai/chatkit-web-shared@0.14.3
+  - @xpert-ai/a2ui-react@0.14.3
+
 ## 0.14.2
 
 ### Patch Changes

@@ -71,6 +71,17 @@ When enabled, ChatKit preloads manifests from the
 visible `remote_component` views whose component isolation is `iframe`.
 Remote HTML is fetched only after the user opens the workbench.
 
+Each frame load revalidates the selected View's manifest through the SDK before
+fetching its HTML. This prevents a long-lived slot listing from applying an old
+action or file-access allowlist to newly deployed code. Both requests use the
+same host-owned runtime scope. A denied, hidden, or mismatched manifest stops
+loading; removed actions remain unavailable. Recreating an identical manifest
+object does not restart loading or interrupt an active frame; changed manifest
+content still triggers revalidation. Close the View's tab and reopen it after
+deployment to load its current manifest and content. Reloading the whole page
+also refreshes discovery and content; merely hiding the Workbench preserves its
+visited frames.
+
 View discovery, entry loading, data, actions and file access sessions carry the
 active `projectId` and `conversationId` through the SDK's `runtimeScope` option.
 The scope comes from the host stream, never from iframe messages. The conversation
