@@ -1,5 +1,20 @@
 # @xpert-ai/chatkit-ui
 
+## 0.17.0
+
+### Minor Changes
+
+- 8521546: Open side chats from the latest sealed reply while the source is running across selection, start-page and floating-chat actions. Preserve request identities on retry, deduplicate overlapping actions, ignore stale navigation responses, and display server explanations without discarding the selected quote.
+
+  Include a declaration-only patch for the SDK copy options until the upstream contract is released. Deploy a platform API supporting `latest-sealed-reply` before upgrading ChatKit and its hosts.
+
+### Patch Changes
+
+- 9266d16: Upgrade the Xpert SDK to 0.15.0 and remove the temporary type patch now that sealed-reply side-chat forks are supported by the published SDK.
+  - @xpert-ai/chatkit-types@0.17.0
+  - @xpert-ai/chatkit-web-shared@0.17.0
+  - @xpert-ai/a2ui-react@0.17.0
+
 ## 0.16.2
 
 ### Patch Changes
