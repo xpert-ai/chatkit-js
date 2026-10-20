@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  '@xpert-ai/xpert-sdk@0.14.0':
-    hash: b5e45acdeef424dd70c373f5e97e42e4751d034c4a264adfa89523a5ab021261
-    path: patches/@xpert-ai__xpert-sdk@0.14.0.patch
-
 importers:
 
   .:
@@ -500,8 +495,8 @@ importers:
         specifier: workspace:~
         version: link:../chatkit-web-shared
       '@xpert-ai/xpert-sdk':
-        specifier: ^0.14.0
-        version: 0.14.0(patch_hash=b5e45acdeef424dd70c373f5e97e42e4751d034c4a264adfa89523a5ab021261)
+        specifier: ^0.15.0
+        version: 0.15.0
       '@xterm/addon-fit':
         specifier: 0.11.0
         version: 0.11.0
@@ -4932,8 +4927,8 @@ packages:
     engines: {node: '>=22'}
     hasBin: true
 
-  '@xpert-ai/xpert-sdk@0.14.0':
-    resolution: {integrity: sha512-WnCi9SBTzLwzZU4zx7ZDRBUniHbdNd14nqxcSjtKep2zTZHK0NTm4e6yZXPpVftLfIfOMqA4OYI6m70UXOU1zg==}
+  '@xpert-ai/xpert-sdk@0.15.0':
+    resolution: {integrity: sha512-F27KIjZ5Ng3h36Gj7pFPxCin472+/ZVSxBrYKcLVun0wlWDtQToAmLp3vNy3QvAWt12aZzhCuspVtBSHYGIz/w==}
 
   '@xterm/addon-fit@0.11.0':
     resolution: {integrity: sha512-jYcgT6xtVYhnhgxh3QgYDnnNMYTcf8ElbxxFzX0IZo+vabQqSPAjC3c1wJrKB5E19VwQei89QCiZZP86DCPF7g==}
@@ -14369,7 +14364,7 @@ snapshots:
       - react
       - rxjs
 
-  '@xpert-ai/xpert-sdk@0.14.0(patch_hash=b5e45acdeef424dd70c373f5e97e42e4751d034c4a264adfa89523a5ab021261)':
+  '@xpert-ai/xpert-sdk@0.15.0':
     dependencies:
       p-queue: 6.6.2
       p-retry: 4.6.2
