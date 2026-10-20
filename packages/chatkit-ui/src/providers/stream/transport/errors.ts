@@ -40,3 +40,23 @@ export function shouldIgnoreStreamError(
 ) {
   return signal.aborted || isAbortError(error);
 }
+
+/** No acknowledgement is not proof of rejection: never roll back or resend this submission. */
+export class UnconfirmedRunError extends Error {
+  constructor(cause: unknown) {
+    super(normalizeSubmissionError(cause).message, { cause });
+    this.name = 'UnconfirmedRunError';
+  }
+}
+
+export function isRunAdmissionRejected(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof error.status === 'number' &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408
+  );
+}

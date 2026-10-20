@@ -1,5 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { UnconfirmedRunError } from '../transport/errors';
 import {
   history,
   deferred,
@@ -250,10 +251,11 @@ describe('generic interrupted thread lifecycle', () => {
     expect(mocks.resumeRun).not.toHaveBeenCalled();
   });
 
-  it('keeps the persisted execution error when reconciling a transport failure', async () => {
+  it('keeps an unconfirmed send distinct from a previous conversation error', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
     mocks.runStream.mockImplementation(async function* () {
+      yield* [];
       throw new Error('Stream closed');
     });
     mocks.getThread.mockResolvedValue({ status: 'error' });
@@ -263,9 +265,12 @@ describe('generic interrupted thread lifecycle', () => {
       error: 'Execution failed',
     });
     await act(async () => {
-      await stream.submit({ input: { input: 'Run task' } });
+      await expect(
+        stream.submit({ input: { input: 'Run task' } }),
+      ).rejects.toBeInstanceOf(UnconfirmedRunError);
     });
-    expect(stream.error).toEqual(new Error('Execution failed'));
+    expect(stream.error).toBeInstanceOf(UnconfirmedRunError);
+    expect(stream.error).toHaveProperty('cause', new Error('Stream closed'));
   });
 
   it('clears interruption when switching threads and leaves the new transcript intact', async () => {

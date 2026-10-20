@@ -11,10 +11,109 @@ import {
   renderChat,
   setComposerText,
   setupChatTest,
+  Chat,
+  baseChatOptions,
 } from '../testing/chat-fixture';
 
 describe('Chat hosted and custom models', () => {
   setupChatTest();
+  it.each(['ASSISTANT_MODEL_NOT_ALLOWED', 'ASSISTANT_MODEL_UNAVAILABLE'])(
+    'refreshes the catalog and requires a deliberate new selection after %s',
+    async (code) => {
+      const assistants = mocks.stream.client.assistants;
+      assistants.getModels.mockResolvedValueOnce({
+        models: [
+          { id: 'old', label: 'Old model', default: true },
+          { id: 'new', label: 'New model' },
+        ],
+        selected_model_id: 'old',
+        preference_persistable: true,
+      });
+      const mounted = renderChat();
+      await screen.findByRole('button', {
+        name: 'chat.modelPicker.label: Old model',
+      });
+      assistants.getModels.mockResolvedValue({
+        models: [
+          { id: 'old', label: 'Old model', disabled: true },
+          { id: 'new', label: 'New model', default: true },
+        ],
+        selected_model_id: 'new',
+        preference_persistable: true,
+      });
+      mocks.stream.error = Object.assign(new Error('HTTP 400'), {
+        status: 400,
+        text: JSON.stringify({
+          statusCode: 400,
+          error: 'Bad Request',
+          code,
+          modelId: 'old',
+          message: 'Unavailable',
+        }),
+      });
+      mounted.rerender(
+        <Chat clientSecret="secret" options={baseChatOptions} />,
+      );
+      await waitFor(() =>
+        expect(assistants.getModels).toHaveBeenCalledTimes(2),
+      );
+      expect(
+        await screen.findByText('chat.modelPicker.selectionRejected'),
+      ).toBeVisible();
+      expect(mocks.stream.selectedModelId).toBeNull();
+      setComposerText(screen.getByRole('textbox'), 'Recovered draft');
+      expect(screen.getByRole('button', { name: 'send' })).toBeDisabled();
+      const picker = screen.getByRole('button', {
+        name: /^chat.modelPicker.label/,
+      });
+      fireEvent.keyDown(picker, { key: 'Enter', code: 'Enter' });
+      fireEvent.click(
+        await screen.findByRole('menuitemradio', { name: /^New model/ }),
+      );
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'send' })).not.toBeDisabled(),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'send' }));
+      expect(mocks.stream.submit).toHaveBeenCalledOnce();
+      expect(mocks.stream.submit.mock.calls[0][0].input.model).toBe('new');
+    },
+  );
+
+  it('invalidates a rejected preference change instead of retaining the unusable selection', async () => {
+    const assistants = mocks.stream.client.assistants;
+    assistants.getModels.mockResolvedValue({
+      models: [
+        { id: 'primary', label: 'Primary', default: true },
+        { id: 'fast', label: 'Fast' },
+      ],
+      selected_model_id: 'primary',
+      preference_persistable: true,
+    });
+    assistants.setModelPreference.mockRejectedValueOnce(
+      Object.assign(new Error('HTTP 400'), {
+        status: 400,
+        text: JSON.stringify({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: 'ASSISTANT_MODEL_UNAVAILABLE',
+          modelId: 'fast',
+          message: 'Unavailable',
+        }),
+      }),
+    );
+    renderChat();
+    const picker = await screen.findByRole('button', {
+      name: 'chat.modelPicker.label: Primary',
+    });
+    fireEvent.keyDown(picker, { key: 'Enter', code: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Fast' }));
+    await waitFor(() => expect(assistants.getModels).toHaveBeenCalledTimes(2));
+    expect(mocks.stream.selectedModelId).toBeNull();
+    expect(
+      await screen.findByText('chat.modelPicker.selectionRejected'),
+    ).toBeVisible();
+  });
+
   it('loads hosted models, submits the selection, and saves picker changes', async () => {
     mocks.stream.client.assistants.getModels.mockResolvedValue({
       models: [

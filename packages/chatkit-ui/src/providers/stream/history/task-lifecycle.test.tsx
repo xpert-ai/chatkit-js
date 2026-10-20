@@ -195,9 +195,13 @@ describe('task lifecycle and transport recovery', () => {
   it('does not clear a transport error using another thread’s execution error', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
-    mocks.runStream.mockImplementation(async function* () {
-      throw new Error('Stream closed');
-    });
+    mocks.runStream.mockImplementation(
+      async function* (_thread, _assistant, options) {
+        options.onRunCreated({ run_id: 'new-run', thread_id: 'thread-1' });
+        yield* [];
+        throw new Error('Stream closed');
+      },
+    );
     mocks.getThread.mockResolvedValue({ status: 'error' });
     mocks.getConversation.mockResolvedValue({
       threadId: 'thread-2',

@@ -83,7 +83,10 @@ type AssistantComposerProps = Pick<
     'runtimeCapabilitiesReady' | 'runtimeCapabilities'
   > &
   Pick<ReturnType<typeof useChatModelState>, 'availableModels'> &
-  Pick<ReturnType<typeof useChatModels>, 'handleModelSelect'> &
+  Pick<
+    ReturnType<typeof useChatModels>,
+    'handleModelSelect' | 'requiresModelSelection'
+  > &
   Pick<
     ReturnType<typeof useChatRunControl>,
     | 'isPauseActive'
@@ -173,6 +176,7 @@ export function getAssistantComposerProps({
   setSelectedTool,
   t,
   availableModels,
+  requiresModelSelection,
   handleModelSelect,
   isSendDisabled,
   isPauseActive,
@@ -263,6 +267,7 @@ export function getAssistantComposerProps({
         />
 
         <ModelPicker
+          selectionRequired={requiresModelSelection}
           models={availableModels}
           selectedModelId={stream.selectedModelId}
           onSelect={handleModelSelect}

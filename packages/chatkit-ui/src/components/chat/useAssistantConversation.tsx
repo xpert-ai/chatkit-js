@@ -1,4 +1,6 @@
 import { ResourceCommandShortcuts } from '../composer/ResourceCommandShortcuts';
+import { getAssistantModelSelectionError } from '../../lib/assistant-model-error';
+import { UnconfirmedRunError } from '../../providers/stream/transport/errors';
 import { useResourceCommands } from './useResourceCommands';
 import {
   insertResourceCommand,
@@ -285,8 +287,10 @@ export function useAssistantConversation({
     draft.commitComposerParts,
   ]);
 
+  const models = useChatModels({ ...modelState, ...session, ...host });
   const hasUploadingFiles = files.attachmentState.hasUploadingFiles;
   const isSubmissionBlocked =
+    models.requiresModelSelection ||
     Boolean(conversation.conversationBranch.pendingMessageId) ||
     (resourcesEnabled && (runtimeResources.busy || !runtimeResources.ready)) ||
     branch.isChangingBranch ||
@@ -387,7 +391,6 @@ export function useAssistantConversation({
       (!isProjectSelectionLocked && hasSelectableProjects));
 
   const hasPendingTodos = Boolean(session.stream.todos?.items.length);
-  const models = useChatModels({ ...modelState, ...session, ...host });
   const layoutMaxWidth = options?.layout?.maxWidth;
   const summary = useChatTaskSummary({
     characterPresentation,
@@ -431,9 +434,14 @@ export function useAssistantConversation({
   });
 
   const streamErrorMessage =
-    session.stream.error instanceof Error
-      ? session.stream.error.message
-      : undefined;
+    getAssistantModelSelectionError(session.stream.error) ||
+    models.requiresModelSelection
+      ? session.t('chat.modelPicker.selectionRejected')
+      : session.stream.error instanceof UnconfirmedRunError
+        ? session.t('chat.submissionUnconfirmed')
+        : session.stream.error instanceof Error
+          ? session.stream.error.message
+          : undefined;
 
   const threadErrorMessage = React.useMemo(() => {
     if (streamErrorMessage?.trim()) return streamErrorMessage.trim();
