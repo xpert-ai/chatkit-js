@@ -8,6 +8,7 @@ export * from './message.js';
 export * from './thread-reference.js';
 export * from './options.js';
 export * from './assistant-appearance.js';
+export * from './assistant-model-error.js';
 export * from './assistant-character.js';
 export * from './pet.js';
 export * from './task-summary.js';

@@ -162,10 +162,6 @@ function WorkbenchContent({
     setSideChatCloseConfirmationDisabled,
   ] = React.useState(isSideChatCloseConfirmationDisabled);
 
-  const sideThreadBySourceRef = React.useRef(
-    new Map<string, string | Promise<string>>(),
-  );
-
   const contextsRef = React.useRef(
     new Map<string, WorkbenchAssistantContext>(),
   );
@@ -611,7 +607,6 @@ function WorkbenchContent({
       setActiveViewKey,
       setOpen,
       setSideChatOpening,
-      sideThreadBySourceRef,
       setSideChat,
       sideChat,
       setSideChatCloseDialogOpen,

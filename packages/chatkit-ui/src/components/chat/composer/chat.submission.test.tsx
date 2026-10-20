@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { UnconfirmedRunError } from '../../../providers/stream/transport/errors';
 import {
   mocks,
   renderChat,
@@ -9,6 +10,34 @@ import {
 
 describe('Chat plan mode and submission', () => {
   setupChatTest();
+  it('restores the draft after explicit admission rejection', async () => {
+    mocks.stream.submit.mockRejectedValueOnce(
+      Object.assign(new Error('Model unavailable'), { status: 400 }),
+    );
+    renderChat();
+    setComposerText(screen.getByRole('textbox'), 'Please investigate');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(screen.getByRole('textbox').textContent).toBe(
+        'Please investigate',
+      ),
+    );
+  });
+
+  it('does not restore an unconfirmed send as a fresh draft to resend', async () => {
+    mocks.stream.submit.mockRejectedValueOnce(
+      new UnconfirmedRunError(new Error('Network lost')),
+    );
+    renderChat();
+    setComposerText(screen.getByRole('textbox'), 'Run once');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(screen.getByRole('textbox').textContent).toBe(''),
+    );
+  });
+
   it('omits planMode from regular sends by default', async () => {
     renderChat();
 
@@ -81,14 +110,21 @@ describe('Chat plan mode and submission', () => {
     mocks.stream.threadId = 'thread-1';
     mocks.stream.activeRunId = 'run-1';
     mocks.stream.isLoading = true;
-    mocks.stream.pauseRun.mockRejectedValue(new Error('HTTP 409: workflow changed'));
+    mocks.stream.pauseRun.mockRejectedValue(
+      new Error('HTTP 409: workflow changed'),
+    );
     renderChat();
     fireEvent.click(screen.getByRole('button', { name: 'stop' }));
     await screen.findByText('HTTP 409: workflow changed');
-    setComposerText(screen.getByRole('textbox'), 'continue with current settings');
+    setComposerText(
+      screen.getByRole('textbox'),
+      'continue with current settings',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'send' }));
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText('HTTP 409: workflow changed')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('HTTP 409: workflow changed'),
+    ).not.toBeInTheDocument();
   });
 
   it('adds planMode to input and state.human when enabled', async () => {

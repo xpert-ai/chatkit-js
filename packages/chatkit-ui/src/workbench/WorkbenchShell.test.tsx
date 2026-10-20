@@ -22,6 +22,7 @@ describe('WorkbenchShell', () => {
   it('opens side chat from the guide without requiring a message reference', async () => {
     mocks.listSlotViews.mockResolvedValue([]);
     mocks.copyThread.mockResolvedValue({ thread_id: 'side-thread' });
+    mocks.stream.isLoading = true;
     render(
       <WorkbenchShell
         options={{ ...baseOptions, workbench: { enabled: true } }}
@@ -40,7 +41,11 @@ describe('WorkbenchShell', () => {
     await screen.findByRole('tab', { name: 'New tab' });
     fireEvent.click(screen.getByRole('button', { name: 'Side chat' }));
     await screen.findByTestId('side-chat');
-    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1');
+    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1', {
+      mode: 'latest-sealed-reply',
+      requestId: expect.any(String),
+    });
+    expect(mocks.stream.isLoading).toBe(true);
     expect(mocks.sideChatProps?.referenceRequest).toBeUndefined();
     expect(screen.getByLabelText('Draft')).toHaveValue('Keep my draft');
     expect(

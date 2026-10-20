@@ -152,12 +152,7 @@ export function useChatQuotes({
   }, [clearQuoteSelection, quoteSelection]);
 
   const handleAskInSideChat = React.useCallback(async () => {
-    if (
-      !quoteSelection ||
-      !workbench.sideChatEnabled ||
-      !stream.threadId ||
-      stream.isLoading
-    )
+    if (!quoteSelection || !workbench.sideChatEnabled || !stream.threadId)
       return;
     setIsOpeningSideChat(true);
     setSideChatError(null);
@@ -170,13 +165,7 @@ export function useChatQuotes({
     } finally {
       setIsOpeningSideChat(false);
     }
-  }, [
-    clearQuoteSelection,
-    quoteSelection,
-    stream.isLoading,
-    stream.threadId,
-    workbench,
-  ]);
+  }, [clearQuoteSelection, quoteSelection, stream.threadId, workbench]);
   return {
     clearQuoteSelection,
     quoteSelection,

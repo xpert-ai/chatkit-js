@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@xpert-ai/xpert-sdk@0.14.0':
+    hash: b5e45acdeef424dd70c373f5e97e42e4751d034c4a264adfa89523a5ab021261
+    path: patches/@xpert-ai__xpert-sdk@0.14.0.patch
+
 importers:
 
   .:
@@ -496,7 +501,7 @@ importers:
         version: link:../chatkit-web-shared
       '@xpert-ai/xpert-sdk':
         specifier: ^0.14.0
-        version: 0.14.0
+        version: 0.14.0(patch_hash=b5e45acdeef424dd70c373f5e97e42e4751d034c4a264adfa89523a5ab021261)
       '@xterm/addon-fit':
         specifier: 0.11.0
         version: 0.11.0
@@ -14364,7 +14369,7 @@ snapshots:
       - react
       - rxjs
 
-  '@xpert-ai/xpert-sdk@0.14.0':
+  '@xpert-ai/xpert-sdk@0.14.0(patch_hash=b5e45acdeef424dd70c373f5e97e42e4751d034c4a264adfa89523a5ab021261)':
     dependencies:
       p-queue: 6.6.2
       p-retry: 4.6.2

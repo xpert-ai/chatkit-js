@@ -23,6 +23,7 @@ import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import type { RuntimeCapabilitiesSelection } from '../../../lib/runtime-capabilities';
 import { createMessageId } from '../../../lib/utils';
 import type { useStreamContext } from '../../../providers/Stream';
+import { UnconfirmedRunError } from '../../../providers/stream/transport/errors';
 import type { HumanMessageWithMeta } from '../../thread/MessageList';
 import { mergeSubmittedFiles } from '../files/file-utils';
 import type { useChatFiles } from '../files/useChatFiles';
@@ -349,8 +350,12 @@ export function useChatSubmission({
       );
       void submission.then(
         () => resourceSubmission?.onSettled(true),
-        () => {
+        (error) => {
           cancelSendTransition?.();
+          if (error instanceof UnconfirmedRunError) {
+            resourceSubmission?.onSettled(true);
+            return;
+          }
           resourceSubmission?.onSettled(false);
           restoreSubmittedDraft();
         },

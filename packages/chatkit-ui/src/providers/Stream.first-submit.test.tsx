@@ -16,6 +16,7 @@ const sdkMocks = vi.hoisted(() => ({
   conversationsGet: vi.fn(),
   conversationsSearchMessages: vi.fn(),
   runsStream: vi.fn(),
+  runsGet: vi.fn(),
   getProject: vi.fn(),
   listProjectFiles: vi.fn(),
   listAssistantFiles: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
 
     runs = {
       stream: sdkMocks.runsStream,
+      get: sdkMocks.runsGet,
     };
     projects = {
       listFiles: sdkMocks.listProjectFiles,
@@ -535,9 +537,19 @@ describe('first submission setup', () => {
       ],
       total: 1,
     });
-    sdkMocks.runsStream.mockImplementation(async function* () {
-      throw new Error('transport disconnected');
+    sdkMocks.runsGet.mockResolvedValue({
+      run_id: 'run-1',
+      thread_id: 'thread-1',
+      status: 'success',
+      metadata: {},
     });
+    sdkMocks.runsStream.mockImplementation(
+      async function* (_thread, _assistant, options) {
+        options.onRunCreated({ run_id: 'run-1', thread_id: 'thread-1' });
+        yield* [];
+        throw new Error('transport disconnected');
+      },
+    );
     renderStream();
 
     await act(async () => {
