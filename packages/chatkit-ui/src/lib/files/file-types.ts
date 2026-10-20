@@ -134,6 +134,23 @@ export const editableKinds: FileKind[] = [
 export function previewFileKind(fileName: string, mimeType = ''): FileKind {
   return /\.(csv|tsv)$/i.test(fileName) ? 'text' : fileKind(fileName, mimeType);
 }
+
+/** A filename must not route active content into a native binary preview frame. */
+export function isCompatiblePreviewType(
+  name: string,
+  mimeType: string,
+): boolean {
+  const kind = previewFileKind(name, mimeType);
+  const nativeKind =
+    mimeType === 'application/pdf'
+      ? 'pdf'
+      : ['image', 'audio', 'video'].find((prefix) =>
+          mimeType.startsWith(`${prefix}/`),
+        );
+  return nativeKind
+    ? kind === nativeKind
+    : !['pdf', 'image', 'audio', 'video'].includes(kind);
+}
 export async function sameFileBytes(a: Blob, b: Blob) {
   if (a.size !== b.size) return false;
   const [left, right] = await Promise.all([a.arrayBuffer(), b.arrayBuffer()]);

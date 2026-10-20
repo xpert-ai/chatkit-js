@@ -16,13 +16,13 @@ function fixture() {
   const client = {
     createFileAccessSession: vi.fn(async () => ({
       sessionId: 'session',
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     })),
     createFileAccessGrant: vi.fn(async () => ({
       url: '/authorized',
       fileName: '施工报告.pdf',
       mimeType: 'application/pdf',
-      expiresAt: 'future',
+      expiresAt: '2099-01-01T00:00:00Z',
     })),
     readFileAccess: vi.fn(
       async () => new Blob(['report'], { type: 'application/octet-stream' }),
