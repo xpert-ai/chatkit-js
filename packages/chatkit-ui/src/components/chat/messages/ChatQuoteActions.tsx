@@ -53,9 +53,7 @@ export function ChatQuoteActions({
               size="sm"
               variant="ghost"
               className="rounded-none"
-              disabled={
-                isOpeningSideChat || stream.isLoading || !stream.threadId
-              }
+              disabled={isOpeningSideChat || !stream.threadId}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void handleAskInSideChat()}
               aria-label={t('composer.askInSideChat')}

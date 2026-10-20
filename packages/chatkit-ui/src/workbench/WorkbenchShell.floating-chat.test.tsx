@@ -192,7 +192,8 @@ describe('Workbench floating main conversation', () => {
   it('opens the existing side-chat runtime from the title menu and keeps the main draft', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     mocks.copyThread.mockResolvedValue({ thread_id: 'side-thread' });
-    render(tree({ title: 'Review', running: false }));
+    mocks.stream.isLoading = true;
+    render(tree({ title: 'Review', running: true }));
     await openExpanded();
     const draft = screen.getByLabelText('Draft');
     act(() => draft.focus());
@@ -203,7 +204,11 @@ describe('Workbench floating main conversation', () => {
       await screen.findByRole('menuitem', { name: 'New side chat' }),
     );
     await waitFor(() => expect(mocks.sideChatMounts).toBe(1));
-    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1');
+    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1', {
+      mode: 'latest-sealed-reply',
+      requestId: expect.any(String),
+    });
+    expect(mocks.stream.isLoading).toBe(true);
     expect(
       screen.queryByRole('region', { name: 'Floating conversation' }),
     ).not.toBeInTheDocument();
