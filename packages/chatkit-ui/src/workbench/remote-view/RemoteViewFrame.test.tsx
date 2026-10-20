@@ -713,7 +713,8 @@ describe('RemoteViewFrame', () => {
       }),
       '*',
     );
-    const instanceId = post.mock.calls.at(-1)![0].instanceId;
+    const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+    expect(instanceId).toEqual(expect.any(String));
     for (const next of [
       { projectId: null, conversationId: 'conversation-2' },
       { projectId: 'project-2', conversationId: 'conversation-3' },
@@ -781,7 +782,8 @@ describe('RemoteViewFrame', () => {
     const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
     const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
     fireEvent.load(iframe);
-    const instanceId = post.mock.calls.at(-1)![0].instanceId;
+    const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+    expect(instanceId).toEqual(expect.any(String));
     const request = {
       channel: REMOTE_COMPONENT_CHANNEL,
       protocolVersion: 1,
@@ -809,14 +811,43 @@ describe('RemoteViewFrame', () => {
     ).toBe(false);
     const target = { projectId: 'project-2', conversationId: 'conversation-2' };
     rerender(renderFrameElement(undefined, target));
-    await waitFor(() => expect(iframe).not.toHaveAttribute('inert'));
+    // The DOM is unblocked at commit time; the context event is sent by a
+    // passive effect and may arrive in a later scheduler task on a busy runner.
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'hostEvent',
+          instanceId,
+          event: expect.objectContaining({
+            type: 'view.context.changed',
+            data: { revision: expect.any(Number), runtimeScope: target },
+          }),
+        }),
+        '*',
+      ),
+    );
+    expect(iframe).not.toHaveAttribute('inert');
     act(() =>
       dispatchFrameMessage(iframe, { ...request, requestId: 'stale-command' }),
     );
     expect(mocks.client.viewHosts.getData).toHaveBeenCalledOnce();
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        requestId: 'stale-command',
+        code: 'context_changed',
+      }),
+      '*',
+    );
     const context = post.mock.calls.find(
-      ([message]) => message.type === 'hostEvent',
-    )![0].event.data;
+      ([message]) =>
+        message.type === 'hostEvent' &&
+        message.event.type === 'view.context.changed',
+    )?.[0].event.data;
+    expect(context).toEqual({
+      revision: expect.any(Number),
+      runtimeScope: target,
+    });
     act(() =>
       dispatchFrameMessage(iframe, {
         ...request,
