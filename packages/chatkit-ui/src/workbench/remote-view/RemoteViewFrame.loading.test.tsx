@@ -8,6 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import type { XpertExtensionViewManifest } from '@xpert-ai/xpert-sdk';
 import { ThemeProvider } from '../../providers/Theme';
+import { REMOTE_COMPONENT_CHANNEL } from '../protocol';
 import { RemoteViewFrame, type RemoteViewHostsClient } from './RemoteViewFrame';
 
 const manifest: XpertExtensionViewManifest = {
@@ -151,4 +152,105 @@ describe('RemoteViewFrame loading identity', () => {
       expect(screen.getByTitle('Documents')).toBe(iframe);
     },
   );
+
+  it('uses the current manifest allowlist when the slot listing predates deployment', async () => {
+    const viewHosts = createViewHosts();
+    const current: XpertExtensionViewManifest = {
+      ...manifest,
+      actions: [
+        { key: 'summary', label: { en_US: 'Summary' }, actionType: 'invoke' },
+      ],
+    };
+    viewHosts.getManifest.mockResolvedValue(current);
+    viewHosts.executeAction.mockResolvedValue({ success: true });
+    render(frame(viewHosts));
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    const init = post.mock.calls.find(
+      ([m]) => isObject(m) && Reflect.get(m, 'type') === 'init',
+    )?.[0];
+    expect(init).toEqual(expect.objectContaining({ manifest: current }));
+    expect(viewHosts.getManifest).toHaveBeenCalledWith(
+      'agent',
+      'agent-1',
+      manifest.key,
+      expect.objectContaining({ runtimeScope }),
+    );
+    const instanceId = isObject(init)
+      ? Reflect.get(init, 'instanceId')
+      : undefined;
+    for (const actionKey of ['approve', 'summary']) {
+      act(() =>
+        dispatchFrameMessage(iframe, {
+          channel: REMOTE_COMPONENT_CHANNEL,
+          protocolVersion: 1,
+          instanceId,
+          type: 'executeAction',
+          requestId: actionKey,
+          actionKey,
+          input: {},
+        }),
+      );
+    }
+    await waitFor(() => expect(viewHosts.executeAction).toHaveBeenCalledOnce());
+    expect(viewHosts.executeAction).toHaveBeenCalledWith(
+      'agent',
+      'agent-1',
+      manifest.key,
+      'summary',
+      expect.any(Object),
+      expect.objectContaining({ runtimeScope }),
+    );
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        requestId: 'approve',
+        message: "Action 'approve' is not available.",
+      }),
+      '*',
+    );
+  });
+
+  it.each(['denied', 'wrong-key', 'hidden'])(
+    'does not load new code when its manifest is %s',
+    async (reason) => {
+      const viewHosts = createViewHosts();
+      if (reason === 'denied')
+        viewHosts.getManifest.mockRejectedValue(new Error('Forbidden'));
+      else
+        viewHosts.getManifest.mockResolvedValue({
+          ...manifest,
+          ...(reason === 'wrong-key' ? { key: 'other' } : { visible: false }),
+        });
+      render(frame(viewHosts));
+      await waitFor(() => expect(viewHosts.getManifest).toHaveBeenCalledOnce());
+      await waitFor(() => expect(screen.queryByTitle('Documents')).toBeNull());
+      expect(viewHosts.getRemoteComponentEntry).not.toHaveBeenCalled();
+    },
+  );
 });
+
+function dispatchFrameMessage(
+  iframe: HTMLIFrameElement,
+  data: Record<string, unknown>,
+) {
+  const event = new MessageEvent('message', { data });
+  Object.defineProperty(event, 'source', {
+    configurable: true,
+    value: iframe.contentWindow,
+  });
+  window.dispatchEvent(event);
+}
+
+function isObject(value: unknown): value is object {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getContentWindow(iframe: HTMLIFrameElement): Window {
+  const contentWindow = iframe.contentWindow;
+  if (!contentWindow) {
+    throw new Error('Expected the iframe to expose a contentWindow.');
+  }
+  return contentWindow;
+}
