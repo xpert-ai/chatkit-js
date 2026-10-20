@@ -87,6 +87,7 @@ describe('RemoteViewFrame', () => {
     mocks.client.viewHosts.getRemoteComponentEntry.mockResolvedValue(
       '<!doctype html><html><body><div id="root"></div></body></html>',
     );
+    mocks.client.viewHosts.getManifest.mockResolvedValue(manifest);
     mocks.client.viewHosts.getData.mockResolvedValue({
       items: [{ id: 'doc-1' }],
     });
@@ -139,7 +140,7 @@ describe('RemoteViewFrame', () => {
       mocks.client.viewHosts.executeFileAction.mockImplementation(
         client.viewHosts.executeFileAction.bind(client.viewHosts),
       );
-      renderFrame(undefined, {
+      const uploadManifest: XpertExtensionViewManifest = {
         ...manifest,
         actions: [
           {
@@ -149,13 +150,16 @@ describe('RemoteViewFrame', () => {
             transport: 'file',
           },
         ],
-      });
+      };
+      mocks.client.viewHosts.getManifest.mockResolvedValue(uploadManifest);
+      renderFrame(undefined, uploadManifest);
       const iframe = (await screen.findByTitle(
         'Documents',
       )) as HTMLIFrameElement;
       const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
       fireEvent.load(iframe);
-      const instanceId = post.mock.calls.at(-1)![0].instanceId;
+      const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+      expect(instanceId).toEqual(expect.any(String));
       const bytes =
         type === 'image/png'
           ? Uint8Array.from(
@@ -305,6 +309,11 @@ describe('RemoteViewFrame', () => {
       });
       mocks.client.viewHosts.readFileAccess.mockRejectedValue(
         new Error('Forbidden'),
+      );
+      mocks.client.viewHosts.getManifest.mockResolvedValue(
+        failure === 'undeclared'
+          ? { ...manifest, fileAccess: { purposes: ['preview'] } }
+          : manifest,
       );
       renderFrame(
         undefined,
@@ -537,6 +546,7 @@ describe('RemoteViewFrame', () => {
     const onClientCommand = vi
       .fn()
       .mockResolvedValue({ success: true, status: 'opened' });
+    mocks.client.viewHosts.getManifest.mockResolvedValue(navigationManifest);
     render(
       <ThemeProvider>
         <RemoteViewFrame
@@ -713,7 +723,8 @@ describe('RemoteViewFrame', () => {
       }),
       '*',
     );
-    const instanceId = post.mock.calls.at(-1)![0].instanceId;
+    const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+    expect(instanceId).toEqual(expect.any(String));
     for (const next of [
       { projectId: null, conversationId: 'conversation-2' },
       { projectId: 'project-2', conversationId: 'conversation-3' },
@@ -781,7 +792,8 @@ describe('RemoteViewFrame', () => {
     const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
     const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
     fireEvent.load(iframe);
-    const instanceId = post.mock.calls.at(-1)![0].instanceId;
+    const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+    expect(instanceId).toEqual(expect.any(String));
     const request = {
       channel: REMOTE_COMPONENT_CHANNEL,
       protocolVersion: 1,
@@ -809,14 +821,43 @@ describe('RemoteViewFrame', () => {
     ).toBe(false);
     const target = { projectId: 'project-2', conversationId: 'conversation-2' };
     rerender(renderFrameElement(undefined, target));
-    await waitFor(() => expect(iframe).not.toHaveAttribute('inert'));
+    // The DOM is unblocked at commit time; the context event is sent by a
+    // passive effect and may arrive in a later scheduler task on a busy runner.
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'hostEvent',
+          instanceId,
+          event: expect.objectContaining({
+            type: 'view.context.changed',
+            data: { revision: expect.any(Number), runtimeScope: target },
+          }),
+        }),
+        '*',
+      ),
+    );
+    expect(iframe).not.toHaveAttribute('inert');
     act(() =>
       dispatchFrameMessage(iframe, { ...request, requestId: 'stale-command' }),
     );
     expect(mocks.client.viewHosts.getData).toHaveBeenCalledOnce();
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        requestId: 'stale-command',
+        code: 'context_changed',
+      }),
+      '*',
+    );
     const context = post.mock.calls.find(
-      ([message]) => message.type === 'hostEvent',
-    )![0].event.data;
+      ([message]) =>
+        message.type === 'hostEvent' &&
+        message.event.type === 'view.context.changed',
+    )?.[0].event.data;
+    expect(context).toEqual({
+      revision: expect.any(Number),
+      runtimeScope: target,
+    });
     act(() =>
       dispatchFrameMessage(iframe, {
         ...request,

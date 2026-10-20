@@ -370,7 +370,9 @@
     "loadingThread": "正在加载线程...",
     "stop": "停止",
     "send": "发送消息",
+    "submissionUnconfirmed": "尚未确认本次发送是否成功。请重新打开会话检查状态，再决定是否重试。",
     "modelPicker": {
+      "selectionRejected": "当前模型已不可用，请重新选择可用模型后发送消息。",
       "label": "模型",
       "title": "选择模型",
       "description": "所选模型将在下一条消息中生效。",

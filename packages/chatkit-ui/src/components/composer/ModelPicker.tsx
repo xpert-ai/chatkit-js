@@ -26,6 +26,7 @@ export type ModelPickerCopy = {
 };
 
 export type ModelPickerProps = {
+  selectionRequired?: boolean;
   models: ModelOption[];
   selectedModelId: string | null;
   onSelect: (modelId: string) => void;
@@ -82,10 +83,11 @@ export function ModelPicker({
   selectedModelId,
   onSelect,
   disabled = false,
+  selectionRequired = false,
   copy,
 }: ModelPickerProps) {
   const enabledModels = models.filter((model) => !model.disabled);
-  if (enabledModels.length < 2) return null;
+  if (!selectionRequired && enabledModels.length < 2) return null;
 
   const selectedModel = enabledModels.find(
     (model) => model.id === selectedModelId,

@@ -370,7 +370,9 @@
     "loadingThread": "Loading thread...",
     "stop": "Stop",
     "send": "Send message",
+    "submissionUnconfirmed": "The submission could not be confirmed. Reload this conversation to check its status before retrying.",
     "modelPicker": {
+      "selectionRejected": "This model is no longer available. Select an available model, then resend your message.",
       "label": "Model",
       "title": "Choose a model",
       "description": "The selection applies to your next message.",

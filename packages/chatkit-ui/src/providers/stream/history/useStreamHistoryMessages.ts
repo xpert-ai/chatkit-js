@@ -358,7 +358,7 @@ export function useStreamHistoryMessages({
         attempt += 1
       ) {
         try {
-          const [conversation, response, thread] = await Promise.all([
+          const [conversation, response, thread, run] = await Promise.all([
             client.conversations.get(recordId),
             client.conversations.searchMessages(recordId, {
               where: {
@@ -371,6 +371,9 @@ export function useStreamHistoryMessages({
               offset: 0,
             }),
             client.threads.get(requestedThreadId),
+            executionId
+              ? client.runs.get(requestedThreadId, executionId)
+              : Promise.resolve(null),
           ]);
           if (
             signal.aborted ||
@@ -421,8 +424,19 @@ export function useStreamHistoryMessages({
               getLatestExecutionIdFromMessages(page.messages),
             );
           }
-          if (executionId || (status !== 'busy' && status !== 'running')) {
-            if (status === 'error') {
+          const isRequestedRun =
+            Boolean(executionId) &&
+            run?.run_id === executionId &&
+            run?.thread_id === requestedThreadId;
+          const runIsPending =
+            isRequestedRun &&
+            (run?.status === 'pending' || run?.status === 'running');
+          if (
+            executionId
+              ? !runIsPending
+              : status !== 'busy' && status !== 'running'
+          ) {
+            if (!executionId && status === 'error') {
               if (
                 conversation.threadId === requestedThreadId &&
                 conversation.error
@@ -432,7 +446,9 @@ export function useStreamHistoryMessages({
               return false;
             }
             setHistoryMessageLoadVersion((version) => version + 1);
-            return true;
+            // History hydration and recovery of this submission are separate facts.
+            // A thread can be idle after a rejected request, with only older messages.
+            return isRequestedRun && run?.status === 'success';
           }
         } catch (reconciliationError) {
           consecutiveFailures += 1;
