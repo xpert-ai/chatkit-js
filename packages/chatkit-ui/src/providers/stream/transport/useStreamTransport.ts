@@ -27,7 +27,11 @@ import type {
   StreamRunInput,
   StreamSubmitOptions,
 } from '../types';
-import { shouldIgnoreStreamError } from './errors';
+import {
+  isRunAdmissionRejected,
+  shouldIgnoreStreamError,
+  UnconfirmedRunError,
+} from './errors';
 import {
   mergeStreamRequestContext,
   withConversationScope,
@@ -163,7 +167,8 @@ export function useStreamTransport({
       let streamCompleted = false;
       let streamingRunId = runId;
       let receivedOutput = false;
-      let runAccepted = false;
+      let runAccepted = Boolean(runId);
+      let streamIsCurrent = true;
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
           context: mergeStreamRequestContext(
@@ -200,8 +205,15 @@ export function useStreamTransport({
                 streamResumable: options?.streamResumable,
                 signal: abortController.signal,
                 onDisconnect: 'continue',
-                onRunCreated: () => {
+                onRunCreated: ({ run_id }) => {
                   runAccepted = true;
+                  streamingRunId = run_id;
+                  if (
+                    abortController.signal.aborted ||
+                    abortRef.current !== abortController
+                  )
+                    return;
+                  rememberActiveRunId(run_id);
                   options?.onRunAccepted?.();
                 },
               });
@@ -260,6 +272,7 @@ export function useStreamTransport({
             eventContext,
             (executionId) => {
               if (executionId) {
+                runAccepted = true;
                 streamingRunId = executionId;
                 if (chunk.id)
                   replayState.current.set(`${nextThreadId}:${executionId}`, {
@@ -368,19 +381,29 @@ export function useStreamTransport({
         if (
           activeConversationId &&
           abortRef.current === abortController &&
+          (!transportError || streamingRunId) &&
           (!options?.joinExistingThread || streamCompleted)
         ) {
           const reconciled = await reconcileLatestAssistantMessage(
             activeConversationId,
             nextThreadId,
             abortController.signal,
-            runId,
+            streamingRunId,
           );
-          if (reconciled && transportError && !abortController.signal.aborted) {
+          if (
+            reconciled &&
+            streamingRunId &&
+            transportError &&
+            !abortController.signal.aborted &&
+            abortRef.current === abortController
+          ) {
             setError(null);
           }
         }
         // A previous stream can finish after a thread switch starts another run.
+        streamIsCurrent =
+          abortRef.current === abortController &&
+          !abortController.signal.aborted;
         if (abortRef.current === abortController) {
           abortRef.current = null;
           shouldStartFreshAssistantMessageAfterSteerRef.current = false;
@@ -398,10 +421,17 @@ export function useStreamTransport({
           isLoadingRef.current = false;
         }
       }
-      if (options?.onRunAccepted && !runAccepted) {
-        throw (
-          transportError ?? new Error('The server did not acknowledge the run.')
-        );
+      if (
+        streamIsCurrent &&
+        !runAccepted &&
+        (transportError || options?.onRunAccepted)
+      ) {
+        const error =
+          transportError ??
+          new Error('The server did not acknowledge the run.');
+        // A response rejection is safe to retry; a lost acknowledgement may hide a live run.
+        if (!receivedOutput && isRunAdmissionRejected(error)) throw error;
+        throw new UnconfirmedRunError(error);
       }
     },
     [

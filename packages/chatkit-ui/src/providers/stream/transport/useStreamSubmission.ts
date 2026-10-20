@@ -30,7 +30,11 @@ import type {
   StreamRunInput,
   StreamSubmitOptions,
 } from '../types';
-import { createAbortError, normalizeSubmissionError } from './errors';
+import {
+  createAbortError,
+  normalizeSubmissionError,
+  UnconfirmedRunError,
+} from './errors';
 import { retainResumeStreamOptions } from './request-options';
 import type { useStreamTransport } from './useStreamTransport';
 
@@ -377,6 +381,10 @@ export function useStreamSubmission({
         );
       } catch (submissionError) {
         const normalizedError = normalizeSubmissionError(submissionError);
+        if (submissionError instanceof UnconfirmedRunError) {
+          setError(submissionError);
+          throw submissionError;
+        }
         valuesRef.current = valuesBeforeSubmission;
         setValues(valuesBeforeSubmission);
         updateConversationId(previousConversationId);
