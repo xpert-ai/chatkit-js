@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.16.2
+
+### Patch Changes
+
+- 386c37e: Preserve rejected send errors and restore drafts, refresh invalid model selections, and require an explicit available model before retrying. Clear disconnect errors only after verifying the acknowledged run succeeded; keep unconfirmed sends visible to avoid duplicate retries.
+
 ## 0.16.1
 
 ### Patch Changes
