@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-browser-extension
 
+## 0.17.1
+
+### Patch Changes
+
+- d081f10: Fix blank ChatKit Workbench panels on non-loopback HTTP origins by centralizing browser UUID generation with a cryptographically secure UUID v4 fallback. Reuse the helper for previews, group conversations, messaging and browser automation, and fail closed when no secure random source exists. Add browser regression coverage for HTTP, localhost, HTTPS and embedded panels.
+- Updated dependencies [d081f10]
+  - @xpert-ai/chatkit-web-shared@0.17.1
+  - @xpert-ai/chatkit-host-automation@0.17.1
+
 ## 0.17.0
 
 ### Patch Changes
