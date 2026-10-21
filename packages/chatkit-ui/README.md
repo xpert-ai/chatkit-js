@@ -29,6 +29,10 @@ repository root. The tests build the iframe application and load its static asse
 in Chromium on a non-loopback HTTP origin, localhost and HTTPS, including an HTTP
 iframe. No backend or credentials are required, and Web Crypto is not mocked.
 
+CI uses Ubuntu 26.04, Node.js 24 and the pinned Playwright version in this package.
+When updating Playwright or the runner OS, verify that Playwright supports that OS
+and rerun browser installation with `--with-deps` before the regression suite.
+
 UUID generation supports HTTP through `crypto.getRandomValues`. HTTPS is still
 recommended: other browser features, including the clipboard, can require a
 secure context independently of UUID generation.

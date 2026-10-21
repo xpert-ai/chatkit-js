@@ -23,7 +23,8 @@ on:
 
 jobs:
   browser:
-    runs-on: ubuntu-latest
+    # Keep the OS explicit and supported by the pinned Playwright version.
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
