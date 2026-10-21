@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.17.2
+
+### Patch Changes
+
+- 50fad74: Return remote View request failures to the requesting iframe without also showing a Workbench error banner. Views can recover from expected polling failures and explicitly notify users when needed.
+
 ## 0.17.1
 
 ### Patch Changes
