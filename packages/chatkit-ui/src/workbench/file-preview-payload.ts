@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import type { ChatKitWorkbenchFileResource } from '@xpert-ai/chatkit-types';
 import { downloadBlob } from '../lib/files/download';
 import { isCompatiblePreviewType } from '../lib/files/file-types';
@@ -45,7 +46,7 @@ export function parseInlineFilePreview(
     text(field(payload, 'fileAssetId')) ??
     text(field(payload, 'fileId')) ??
     text(field(payload, 'id')) ??
-    crypto.randomUUID();
+    safeRandomUUID();
   return {
     kind: 'resource-file',
     key: `chatkit.preview.inline-file:${id}`,

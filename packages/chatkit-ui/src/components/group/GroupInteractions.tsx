@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { Client, ChatGroupSnapshot } from '@xpert-ai/xpert-sdk';
@@ -68,7 +69,7 @@ export function GroupInteractions({
         await client.groups.respondInteraction(group.id, id, cached);
         return;
       }
-      const claimId = crypto.randomUUID();
+      const claimId = safeRandomUUID();
       const claim = await client.groups.claimInteraction(group.id, id, claimId);
       const toolMessages: ClientToolMessageInput[] = [];
       const decisions: HITLDecision[] = [];

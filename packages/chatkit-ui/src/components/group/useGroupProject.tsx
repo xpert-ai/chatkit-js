@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChatGroupProject,
@@ -99,7 +100,7 @@ export function useGroupProject({
     createProjectTypes: creationTypes,
     onProjectCreate:
       owner && !project
-        ? (name) => open({ mode: 'create', id: crypto.randomUUID(), name })
+        ? (name) => open({ mode: 'create', id: safeRandomUUID(), name })
         : undefined,
     onProjectChange:
       owner && !project

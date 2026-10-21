@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import * as React from 'react';
 import {
   PREVIEW_CHANNEL,
@@ -12,7 +13,7 @@ export function useHtmlPreviewRuntime(
   revision: number,
 ) {
   const session = React.useMemo(
-    () => crypto.randomUUID(),
+    () => safeRandomUUID(),
     [documentKey, revision],
   );
   const frameRef = React.useRef<HTMLIFrameElement>(null);

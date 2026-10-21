@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import {
   HOST_PAGE_AUTOMATION_TOOL_NAMES,
   type ActionExpectation,
@@ -188,10 +189,7 @@ const PAGE_STATE_ATTRIBUTE_FILTER = [
 ] as const;
 
 function createPageStateId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `page-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-  );
+  return safeRandomUUID();
 }
 
 type PendingActionApproval = {
