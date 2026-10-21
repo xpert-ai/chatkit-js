@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import type { ChatKitWorkbenchFileResource } from '@xpert-ai/chatkit-types';
 import type {
   XpertViewFileAccessPurpose,
@@ -23,7 +24,7 @@ type ViewFileContext = {
 export class ViewFilePreviewAccess {
   private epoch = 0;
   private controllers = new Set<AbortController>();
-  private identity = crypto.randomUUID();
+  private identity = safeRandomUUID();
 
   constructor(private readonly client: ViewFileClient) {}
 

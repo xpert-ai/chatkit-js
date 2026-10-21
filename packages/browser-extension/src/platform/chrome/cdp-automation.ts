@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import type { ClientToolMessageInput } from '@xpert-ai/chatkit-types';
 import {
   addBrowserActionEvidence,
@@ -1314,7 +1315,10 @@ function pageReadableContentScript(rawArgs: unknown) {
     : createReadableContentIndex(readableContent);
 }
 
-function pageSnapshotScript(rawArgs: unknown) {
+function pageSnapshotScript(rawArgs: unknown, pageStateId: unknown) {
+  if (typeof pageStateId !== 'string' || !pageStateId) {
+    throw new Error('A generated page state ID is required for a snapshot.');
+  }
   const args =
     typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
       ? (rawArgs as { maxElements?: number; pageStateId?: string })
@@ -1391,10 +1395,6 @@ function pageSnapshotScript(rawArgs: unknown) {
     );
   }
   previousStore?.observers?.forEach((observer) => observer.disconnect());
-  const pageStateId =
-    typeof globalObject.crypto?.randomUUID === 'function'
-      ? globalObject.crypto.randomUUID()
-      : `ps-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   type HostAutomationStore = NonNullable<
     (typeof globalObject)['__xpertaiChatKitHostAutomation']
   >;
@@ -4950,7 +4950,8 @@ async function executeSnapshot(
     sendCommand,
     tabId,
     pageSnapshotScript,
-    [params],
+    // The serialized page script cannot access the extension's imported helper.
+    [params, safeRandomUUID()],
     [pageReadableContentScript],
   );
   const snapshotRecord =
@@ -5223,7 +5224,7 @@ async function requireCdpActionApproval(
       pendingCdpActionApprovals.delete(token);
     }
   }
-  const actionToken = globalThis.crypto.randomUUID();
+  const actionToken = safeRandomUUID();
   const expiresAt = Date.now() + CDP_ACTION_APPROVAL_TTL_MS;
   pendingCdpActionApprovals.set(actionToken, {
     tabId,

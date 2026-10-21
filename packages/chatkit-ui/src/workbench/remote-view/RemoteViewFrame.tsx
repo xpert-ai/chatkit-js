@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import * as React from 'react';
 import { isEqual } from 'lodash-es';
 import type {
@@ -94,7 +95,7 @@ export function RemoteViewFrame({
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const instanceId = React.useMemo(
-    () => `${manifest.key}:${createNonce()}`,
+    () => `${manifest.key}:${safeRandomUUID()}`,
     [manifest.key, html],
   );
   const sessionRef = React.useRef<XpertViewFileAccessSessionResult | null>(
@@ -734,12 +735,6 @@ function createInitialQuery(manifest: XpertExtensionViewManifest) {
     page: 1,
     ...(pageSize ? { pageSize } : {}),
   };
-}
-
-function createNonce() {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function isProductionHost() {

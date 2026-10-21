@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 // Adapted from Xpert ClawXpert shared file editors; preserve original Office package data.
 import type { CellObject, ColInfo, RowInfo, WorkBook, WorkSheet } from 'xlsx';
 import type {
@@ -551,7 +552,7 @@ function uniqueSheetName(sheetName: string, existingNames: string[]) {
 }
 
 function createWorkbookId() {
-  return `workspace-sheet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return `workspace-sheet-${safeRandomUUID()}`;
 }
 
 async function readBlobArrayBuffer(blob: Blob) {
