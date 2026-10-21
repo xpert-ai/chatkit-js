@@ -392,7 +392,7 @@ export function RemoteViewFrame({
           requestId: message.requestId,
           message: requestMessage,
         });
-        onNotify('error', requestMessage);
+        // The requesting view owns recovery and presentation; notify is explicit in the bridge protocol.
         workbenchDebug.warn('bridge.request.failed', {
           viewKey: manifest.key,
           requestType: message.type,
@@ -403,7 +403,7 @@ export function RemoteViewFrame({
         requestControllersRef.current.delete(controller);
       }
     },
-    [manifest.key, onNotify, sendToFrame, t, revision],
+    [manifest.key, sendToFrame, t, revision],
   );
 
   React.useLayoutEffect(() => {
