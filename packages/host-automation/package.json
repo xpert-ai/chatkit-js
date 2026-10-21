@@ -27,7 +27,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@xpert-ai/chatkit-types": "workspace:~"
+    "@xpert-ai/chatkit-types": "workspace:~",
+    "@xpert-ai/chatkit-web-shared": "workspace:~"
   },
   "devDependencies": {
     "rimraf": "^6.0.0",

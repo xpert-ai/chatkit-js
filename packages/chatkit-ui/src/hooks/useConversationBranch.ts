@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import { useEffect, useRef, useState } from 'react';
 import type { ChatConversation, Client } from '@xpert-ai/xpert-sdk';
 
@@ -67,7 +68,7 @@ export function useConversationBranch({
             conversationId,
             sourceThreadId: threadId,
             messageId,
-            requestId: crypto.randomUUID(),
+            requestId: safeRandomUUID(),
             epoch: selection.current.epoch,
           };
     request.current = current;

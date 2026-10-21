@@ -10,6 +10,8 @@ node_modules/
 *.tsbuildinfo
 pnpm-debug.log*
 pnpm-publish-summary.json
+test-results/
+playwright-report/
 
 # Python
 *.egg-info/

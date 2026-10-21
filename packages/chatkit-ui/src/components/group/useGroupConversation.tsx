@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import {
   editMentions,
   validMentions,
@@ -271,7 +272,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       ...(composer.input ? { composer: composer.input } : {}),
       text,
       mentions: boundMentions,
-      clientMessageId: pending.current?.clientMessageId ?? crypto.randomUUID(),
+      clientMessageId: pending.current?.clientMessageId ?? safeRandomUUID(),
     };
     const input: ChatGroupSendInput = {
       ...base,

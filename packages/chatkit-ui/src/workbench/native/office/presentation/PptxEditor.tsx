@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import * as React from 'react';
 import {
   Plus,
@@ -145,14 +146,14 @@ const PptxEditor = React.forwardRef<BinaryEditorHandle, BinaryEditorProps>(
       (s) => s.id === selected && s.editable && !s.deleted,
     );
     function addShape(item: PptxShape) {
-      item.id = `editor-${crypto.randomUUID()}`;
+      item.id = `editor-${safeRandomUUID()}`;
       edit((next) => next.slides[slideIndex].shapes.push(item));
       select(item.id);
     }
     function addSlide(blank: boolean) {
       if (!deck || !slide) return;
       const copy = createSlideCopy(deck, slide, blank);
-      copy.path = `ppt/slides/editor-${crypto.randomUUID()}.xml`;
+      copy.path = `ppt/slides/editor-${safeRandomUUID()}.xml`;
       edit((next) => next.slides.splice(slideIndex + 1, 0, copy));
       setSlideIndex(slideIndex + 1);
       select(null);
@@ -201,7 +202,7 @@ const PptxEditor = React.forwardRef<BinaryEditorHandle, BinaryEditorProps>(
         image.src = dataUrl;
         await image.decode();
         const item = createTextBoxShape(deck);
-        item.id = `image-${crypto.randomUUID()}`;
+        item.id = `image-${safeRandomUUID()}`;
         item.name = file.name;
         item.kind = 'image';
         item.text = '';
