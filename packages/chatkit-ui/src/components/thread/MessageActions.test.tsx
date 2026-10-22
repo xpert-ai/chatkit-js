@@ -7,6 +7,22 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
 }));
 
 describe('Message actions', () => {
+  it('keeps retry visible, disables unavailable clicks, and enables it when allowed', async () => {
+    const retry = vi.fn();
+    const { rerender } = render(<MessageActions content="Answer" isAssistant onRetry={retry} retryDisabled />);
+    const button = screen.getByRole('button', { name: 'messageActions.regenerate' });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(retry).not.toHaveBeenCalled();
+    fireEvent.focus(button.parentElement!);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/^messageActions.regenerate$/);
+    rerender(<MessageActions content="Answer" isAssistant onRetry={retry} retryDisabled={false} />);
+    const enabled = screen.getByRole('button', { name: 'messageActions.regenerate' });
+    expect(enabled).toBeEnabled();
+    fireEvent.click(enabled);
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
   it('branches directly without opening a menu', () => {
     const branch = vi.fn();
     render(

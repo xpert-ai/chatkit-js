@@ -37,7 +37,7 @@ function MessageActionButton({
       aria-label={label}
       disabled={disabled}
       className={cn(
-        'rounded-chat-item p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+        'rounded-chat-item p-[calc(0.375rem*var(--chat-density-scale,1))] [&>svg]:size-[calc(0.875rem*var(--chat-density-scale,1))] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
     />
@@ -68,7 +68,7 @@ function MessageActionButton({
         side="bottom"
         sideOffset={8}
         hideArrow
-        className="max-w-64 rounded-chat-item bg-zinc-900 px-3 py-2 text-sm text-white shadow-lg"
+        className="max-w-64 rounded-chat-item bg-foreground px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-sm text-background shadow-lg"
       >
         {tooltip}
       </TooltipContent>
@@ -83,6 +83,7 @@ export type MessageActionsProps = {
   isStreaming?: boolean;
   alwaysVisible?: boolean;
   onRetry?: () => void;
+  retryDisabled?: boolean;
   onEdit?: () => void;
   onBranch?: () => void;
   onActionTooltipOpen?: () => void;
@@ -100,6 +101,7 @@ export function MessageActions({
   isStreaming = false,
   alwaysVisible = false,
   onRetry,
+  retryDisabled = false,
   onEdit,
   onBranch,
   onActionTooltipOpen,
@@ -132,10 +134,10 @@ export function MessageActions({
       : branchLabel;
 
   return (
-    <div className={cn('flex items-center gap-1 mt-2', className)}>
+    <div className={cn('flex items-center gap-[calc(0.25rem*var(--chat-density-scale,1))] mt-[calc(0.5rem*var(--chat-density-scale,1))]', className)}>
       <div
         className={cn(
-          'flex items-center gap-1 opacity-100 transition-opacity',
+          'flex items-center gap-[calc(0.25rem*var(--chat-density-scale,1))] opacity-100 transition-opacity',
           !alwaysVisible &&
             'sm:opacity-0 sm:group-hover/message:opacity-100 sm:focus-within:opacity-100',
         )}
@@ -161,6 +163,7 @@ export function MessageActions({
           <MessageActionButton
             label={t('messageActions.regenerate')}
             onClick={onRetry}
+            disabled={retryDisabled}
             onTooltipOpen={onActionTooltipOpen}
           >
             <RefreshCw size={14} />

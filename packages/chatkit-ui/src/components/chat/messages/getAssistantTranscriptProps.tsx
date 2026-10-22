@@ -27,6 +27,7 @@ type AssistantTranscriptProps = Pick<
 > &
   Pick<
     ReturnType<typeof useChatConversationActions>,
+    | 'canRetry'
     | 'conversationBranch'
     | 'loadThreadHistory'
     | 'handlePromptEdit'
@@ -85,6 +86,7 @@ export function getAssistantTranscriptProps({
   chatColumnStyle,
   errorMessage,
   historyError,
+  canRetry,
   conversationBranch,
   t,
   showMissingConfig,
@@ -227,6 +229,7 @@ export function getAssistantTranscriptProps({
           : undefined,
       onMessageActionTooltipOpen: disableAutoFollow,
       branchingMessageId: conversationBranch.pendingMessageId,
+      retryDisabled: !canRetry,
       onRetry:
         branchState.current?.status !== 'paused' &&
         branchState.current?.status !== 'pausing' &&
