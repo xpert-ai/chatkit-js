@@ -11,6 +11,12 @@ import {
 import type { useRuntimeActivities } from '../../runtime-activities';
 import type { useConversationProject } from '../../useConversationProject';
 import type { useStreamCredentials } from '../auth/useStreamCredentials';
+import {
+  compareDisplayCursors,
+  hydrateDisplaySnapshot,
+  parseDisplaySnapshot,
+  restoreDisplayEventState,
+} from '../events/display-snapshot';
 import { applyStreamEvent } from '../events/apply-stream-event';
 import type { StreamChunk } from '../events/envelope';
 import type { useStreamFollowUpState } from '../follow-ups/useStreamFollowUpState';
@@ -156,6 +162,8 @@ export function useStreamTransport({
       const langGraphEventState =
         previous?.state ?? createLangGraphEventState();
       const cursor = previous?.cursor;
+      let appliedCursor = cursor;
+      let awaitingContinuity = false;
       const abortController = new AbortController();
       abortRef.current?.abort();
       abortRef.current = abortController;
@@ -194,6 +202,7 @@ export function useStreamTransport({
             ? client.runs.joinStream(nextThreadId, runId, {
                 signal: abortController.signal,
                 lastEventId: cursor,
+                displaySnapshot: true,
               })
             : client.runs.stream(nextThreadId, assistantId, {
                 input: scopedInput ?? null,
@@ -233,7 +242,47 @@ export function useStreamTransport({
             receivedOutput = true;
             setError(null);
           }
-          if (chunk?.id) {
+          if (chunk.data?.type === 'stream_snapshot') {
+            const snapshot = parseDisplaySnapshot(chunk.data);
+            if (
+              !snapshot ||
+              snapshot.threadId !== nextThreadId ||
+              snapshot.runId !== streamingRunId ||
+              chunk.id !== snapshot.cursor
+            )
+              throw new Error('Could not restore the response.');
+            if (
+              appliedCursor &&
+              compareDisplayCursors(snapshot.cursor, appliedCursor) <= 0
+            ) {
+              awaitingContinuity = !snapshot.continuous;
+              continue;
+            }
+            appliedCursor = snapshot.cursor;
+            setValues((value) => hydrateDisplaySnapshot(value, snapshot));
+            restoreDisplayEventState(langGraphEventState, snapshot);
+            lastEventIdRef.current = snapshot.cursor;
+            replayState.current.set(replayKey, {
+              cursor: snapshot.cursor,
+              state: langGraphEventState,
+            });
+            // Keep the last display, but wait for an explicit resync or a continuous snapshot before applying deltas.
+            awaitingContinuity = !snapshot.continuous;
+            continue;
+          }
+          if (awaitingContinuity && chunk.data?.type !== 'stream_resync')
+            continue;
+          if (
+            chunk?.id &&
+            chunk.data?.type !== 'stream_resync' &&
+            chunk.data?.type !== 'complete'
+          ) {
+            if (
+              appliedCursor &&
+              compareDisplayCursors(String(chunk.id), appliedCursor) <= 0
+            )
+              continue;
+            appliedCursor = String(chunk.id);
             lastEventIdRef.current = String(chunk.id);
             if (streamingRunId)
               replayState.current.set(`${nextThreadId}:${streamingRunId}`, {
@@ -258,7 +307,7 @@ export function useStreamTransport({
             continue;
           }
           if (chunk.data?.type === 'stream_resync') {
-            streamCompleted = true;
+            streamCompleted = chunk.data.retryable !== true;
             replayState.current.delete(replayKey);
             break;
           }
