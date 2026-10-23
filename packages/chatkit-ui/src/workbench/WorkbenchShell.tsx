@@ -39,7 +39,7 @@ import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDi
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
-import { useResourceCardNavigation } from './resource-cards/useResourceCardNavigation';
+import { useWorkbenchViewNavigation } from './useHostedWorkbenchNavigation';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import { isWorkbenchNewTab, useWorkbenchPages } from './useWorkbenchPages';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
@@ -499,37 +499,29 @@ function WorkbenchContent({
   useParentMessenger({ onFocusMessage: openMessage });
 
   const { remember: rememberResourceCard, forget: forgetViewNavigation } =
-    useResourceCardNavigation({
-      scope: JSON.stringify([layoutKey, runtimeScope.projectId]),
-      conversationId: runtimeScope.conversationId,
-      isConversationScoped: (key) => {
-        const workbench = views.find((view) => view.key === key)?.workbench;
-        return Boolean(
-          workbench &&
-          'contextScope' in workbench &&
-          workbench.contextScope === 'conversation',
-        );
-      },
+    useWorkbenchViewNavigation({
       enabled: remoteViewsEnabled && authenticated,
-      ready: !loading && viewsScope === viewScopeKey,
-      restore: (target) => {
-        if (
-          target.target !== 'workbench.view' ||
-          !views.some((view) => view.key === target.viewKey)
-        )
-          return false;
-        setViewQueries((current) => ({
-          ...current,
-          [target.viewKey]: {
-            selectionId: target.selectionId,
-            parameters: target.parameters,
-          },
-        }));
-        selectView(target.viewKey);
-        setOpen(true);
-        return true;
-      },
-      close: () => setOpen(false),
+      options: options?.workbench,
+      historyScope: JSON.stringify([layoutKey, runtimeScope.projectId]),
+      projectId: runtimeScope.projectId ?? null,
+      conversationId: runtimeScope.conversationId,
+      scopeKey: viewScopeKey,
+      ready:
+        !loading &&
+        viewsScope === viewScopeKey &&
+        stream.runtimeScopeReady !== false,
+      open,
+      activeViewKey,
+      views,
+      queries: viewQueries,
+      setQueries: setViewQueries,
+      selectView,
+      setOpen,
+      onError: (error) =>
+        setNotification({
+          level: 'error',
+          message: getErrorMessage(error, t('workbench.executionUnavailable')),
+        }),
     });
 
   const { executeClientCommand } = useWorkbenchClientCommands({

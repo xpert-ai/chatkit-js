@@ -543,7 +543,30 @@ export type ChatKitAssistantComputers = {
   };
 };
 
+/** Public view state owned by a routed embedder. Never carries credentials. */
+export type ChatKitWorkbenchNavigation = {
+  projectId: string | null;
+  view: {
+    viewKey: string;
+    selectionId?: string;
+    parameters?: Record<
+      string,
+      string | number | boolean | null | (string | number | boolean | null)[]
+    >;
+  } | null;
+};
+
 export type ChatKitWorkbenchOptions = {
+  /**
+   * Restore host URL state after the matching runtime scope has been authorized.
+   * Omit to use ChatKit's own navigation history; view:null closes the routed View.
+   * The embedder must update its authorized API Project scope independently.
+   */
+  navigation?: ChatKitWorkbenchNavigation;
+  /** Persist successful view selections in the host URL. Replayed state does not emit this callback. */
+  onNavigationChange?: (
+    navigation: ChatKitWorkbenchNavigation,
+  ) => void | Promise<void>;
   /** Show external Assistant executions in a native workbench tab. Enabled by default. */
   externalAssistants?: { enabled?: boolean };
   /**
