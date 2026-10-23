@@ -101,7 +101,9 @@ export function useChatConversationActions({
     client: stream.client,
     threadId: stream.threadId,
     enabled: stream.isReady && !missingConfig,
-    isLoading: stream.isLoading,
+    isLoading:
+      stream.isLoading ||
+      Boolean(stream.connectionState && stream.connectionState !== 'connected'),
     status: branchState.current?.status,
     error: stream.error,
   });
@@ -371,7 +373,9 @@ export function useChatConversationActions({
     }
   };
   return {
-    canRetry,
+    canRetry:
+      canRetry &&
+      (!stream.connectionState || stream.connectionState === 'connected'),
     conversationBranch,
     handleNewThread,
     handleSelectThread,

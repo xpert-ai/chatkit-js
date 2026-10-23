@@ -1,3 +1,7 @@
+import {
+  ConnectionUnavailableError,
+  type ReadRecovery,
+} from '../connection/read-recovery';
 import { useCallback } from 'react';
 import type { useStreamCredentials } from '../auth/useStreamCredentials';
 import type { useStreamMessages } from '../messages/useStreamMessages';
@@ -12,9 +16,12 @@ type StreamResumeOptions = Pick<
   Pick<ReturnType<typeof useStreamScope>, 'activeThreadIdRef' | 'threadId'> &
   Pick<ReturnType<typeof useStreamCredentials>, 'client'> &
   Pick<ReturnType<typeof useStreamMessages>, 'setValues'> &
-  Pick<ReturnType<typeof useStreamTransport>, 'runStream'>;
+  Pick<ReturnType<typeof useStreamTransport>, 'runStream'> & {
+    recovery: ReadRecovery;
+  };
 
 export function useStreamResume({
+  recovery,
   activeThreadIdRef,
   client,
   pauseRequestedRef,
@@ -27,6 +34,8 @@ export function useStreamResume({
 }: StreamResumeOptions) {
   const resumeRun = useCallback(
     async (runId: string, pauseId: string) => {
+      if (recovery.getSnapshot() !== 'connected')
+        throw new ConnectionUnavailableError();
       const target = activeThreadIdRef.current ?? threadId;
       if (!target) return;
       setError(null);
@@ -60,7 +69,7 @@ export function useStreamResume({
         run.run_id,
       ).catch(setError);
     },
-    [client, rememberActiveRunId, runStream, threadId, setError],
+    [recovery, client, rememberActiveRunId, runStream, threadId, setError],
   );
   return { resumeRun };
 }

@@ -330,7 +330,7 @@ describe('generic interrupted thread lifecycle', () => {
     expect(mocks.resumeRun).not.toHaveBeenCalled();
   });
 
-  it('reports failed reconciliation after bounded retries', async () => {
+  it('keeps read outages separate from execution and recovers without resubmission', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
     vi.useFakeTimers();
@@ -344,11 +344,17 @@ describe('generic interrupted thread lifecycle', () => {
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(stream.connectionState).not.toBe('connected');
+    expect(stream.isThreadInterrupted).toBe(false);
+    expect(stream.error).toBeNull();
+    mocks.getThread.mockResolvedValue({ status: 'idle' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(35_000);
       await run;
     });
-    expect(stream.isLoading).toBe(false);
-    expect(stream.isThreadInterrupted).toBe(false);
-    expect(stream.error).toEqual(new Error('Status temporarily unavailable'));
+    expect(stream.connectionState).toBe('connected');
+    expect(mocks.runStream).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a reconciliation response arriving after a thread switch', async () => {

@@ -527,7 +527,7 @@ describe('Chat message navigation', () => {
     mocks.stream.pauseRun.mockRejectedValueOnce(new Error('Pause failed'));
     render(<Chat options={baseOptions} />);
     fireEvent.click(await screen.findByRole('button', { name: 'threadControl.stop' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Pause failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('connection.actionUnconfirmed');
     const retry = screen.getByRole('button', { name: 'threadControl.stop' });
     expect(retry.closest('form')).not.toBeNull();
     expect(retry).not.toBeDisabled();
@@ -610,7 +610,7 @@ describe('Chat message navigation', () => {
     fireEvent.click(resume);
     expect(mocks.stream.resumeRun).toHaveBeenCalledExactlyOnceWith('source-run', 'pause-1');
     await act(async () => { rejectResume(new Error('Resume failed')); });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Resume failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('connection.actionUnconfirmed');
     expect(resume).not.toBeDisabled();
     fireEvent.click(resume);
     await waitFor(() => expect(mocks.stream.resumeRun).toHaveBeenCalledTimes(2));

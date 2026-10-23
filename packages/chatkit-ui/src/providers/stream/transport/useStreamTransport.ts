@@ -1,3 +1,5 @@
+import { combineRequestSignals } from '../../../lib/request-abort';
+import type { ReadRecovery } from '../connection/read-recovery';
 import type { Config } from '@xpert-ai/xpert-sdk';
 import { useCallback, useEffect, useRef } from 'react';
 import { resolveFollowUpConsumedIds } from '../../../lib/follow-up-consumed';
@@ -62,7 +64,7 @@ type StreamTransportOptions = Pick<
     | 'conversationIdRef'
     | 'threadId'
   > &
-  Pick<ReturnType<typeof useStreamCredentials>, 'client'> &
+  Pick<ReturnType<typeof useStreamCredentials>, 'client' | 'readClient'> &
   Pick<
     ReturnType<typeof useStreamMessages>,
     | 'setValues'
@@ -89,6 +91,7 @@ type StreamTransportOptions = Pick<
     ReturnType<typeof useStreamHistoryMessages>,
     'reconcileLatestAssistantMessage'
   > & {
+    recovery: ReadRecovery;
     additionalContext: Record<string, unknown> | undefined;
     conversationProject: ReturnType<typeof useConversationProject>;
     projectSelection: ProjectSelection | undefined;
@@ -110,6 +113,8 @@ export function useStreamTransport({
   connectorBindingIdsRef,
   projectSelection,
   client,
+  readClient,
+  recovery,
   assistantId,
   lastEventIdRef,
   setValues,
@@ -153,6 +158,9 @@ export function useStreamTransport({
       preservedMessages?: ChatKitAIMessage[],
     ) => {
       // Never let discovery steal a locally submitted or already joined output consumer.
+      if (options?.joinExistingThread && runId && isLoadingRef.current) return;
+      if (options?.joinExistingThread && runId && !(await recovery.wait()))
+        return;
       if (options?.joinExistingThread && runId && isLoadingRef.current) return;
       const replayKey = `${nextThreadId}:${runId ?? ''}`;
       const previous =
@@ -199,8 +207,11 @@ export function useStreamTransport({
         );
         const stream =
           options?.joinExistingThread && runId
-            ? client.runs.joinStream(nextThreadId, runId, {
-                signal: abortController.signal,
+            ? readClient.runs.joinStream(nextThreadId, runId, {
+                signal: combineRequestSignals([
+                  abortController.signal,
+                  recovery.signal,
+                ]),
                 lastEventId: cursor,
                 displaySnapshot: true,
               })
@@ -242,6 +253,7 @@ export function useStreamTransport({
             receivedOutput = true;
             setError(null);
           }
+          if (streamingRunId) recovery.succeeded(`run:${streamingRunId}`);
           if (chunk.data?.type === 'stream_snapshot') {
             const snapshot = parseDisplaySnapshot(chunk.data);
             if (
@@ -423,9 +435,22 @@ export function useStreamTransport({
           !shouldIgnoreStreamError(streamError, abortController.signal)
         ) {
           transportError = streamError;
-          setError(streamError);
+          if (streamingRunId)
+            recovery.failed(`run:${streamingRunId}`, streamError);
+          else setError(streamError);
         }
       } finally {
+        if (
+          options?.joinExistingThread &&
+          streamingRunId &&
+          !streamCompleted &&
+          !transportError &&
+          !abortController.signal.aborted
+        )
+          recovery.failed(
+            `run:${streamingRunId}`,
+            new Error('Run connection ended'),
+          );
         const activeConversationId = conversationIdRef.current?.trim();
         if (
           activeConversationId &&
@@ -487,6 +512,8 @@ export function useStreamTransport({
       assistantId,
       additionalContext,
       client,
+      readClient,
+      recovery,
       streamSendEvent,
       projectId,
       conversationProject.projectId,

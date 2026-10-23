@@ -201,12 +201,18 @@ export function getAssistantTranscriptProps({
       messages: messages,
       assistantTitle: assistantTitle,
       isLoading: isVisibleStreaming,
-      isThreadRunning: currentThreadIsRunning && !stream.isThreadInterrupted,
+      isThreadRunning:
+        stream.connectionState &&
+        stream.connectionState !== 'connected' &&
+        !stream.isThreadInterrupted
+          ? currentThreadIsRunning || undefined
+          : currentThreadIsRunning && !stream.isThreadInterrupted,
       isThreadPaused: isPauseActive || needsUserInput,
       lastStreamOutputAt: lastStreamOutputAtRef.current,
       streamingNow: streamingNow,
       showLoadingDots:
         showLoadingDots &&
+        (!stream.connectionState || stream.connectionState === 'connected') &&
         !stream.isDisplayPaused &&
         !stream.isThreadInterrupted &&
         !needsUserInput,
@@ -222,7 +228,8 @@ export function getAssistantTranscriptProps({
         options?.threadItemActions?.branch !== false &&
         stream.conversationId &&
         typeof stream.client?.conversations?.branch === 'function' &&
-        !isChangingBranch
+        !isChangingBranch &&
+        (!stream.connectionState || stream.connectionState === 'connected')
           ? (messageId) => {
               void conversationBranch.branch(messageId);
             }
@@ -238,7 +245,10 @@ export function getAssistantTranscriptProps({
           : undefined,
       editing: {
         messageId: editingMessageId,
-        enabled: Boolean(branchState.current) && !isChangingBranch,
+        enabled:
+          Boolean(branchState.current) &&
+          !isChangingBranch &&
+          (!stream.connectionState || stream.connectionState === 'connected'),
         onStart: (messageId) => {
           editRequestRef.current = null;
           setEditingMessageId(messageId);

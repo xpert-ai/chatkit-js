@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Client, Thread } from '@xpert-ai/xpert-sdk';
+import { readFailure } from '../providers/stream/connection/read-recovery';
 
 export function useThreadBranches(
   client: Client,
@@ -7,6 +8,7 @@ export function useThreadBranches(
   threadId: string | null,
   enabled: boolean,
   isLoading: boolean,
+  readBranches?: () => Promise<Thread[]>,
 ) {
   const scope = useRef(threadId);
   scope.current = threadId;
@@ -15,17 +17,26 @@ export function useThreadBranches(
     branches: Thread[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryPending, setRetryPending] = useState(false);
   const generation = useRef(0);
   const refresh = useCallback(async () => {
     if (!threadId || !conversationId || !enabled) return;
     const request = ++generation.current;
     try {
-      const branches = await client.conversations.listThreads(conversationId);
+      const branches = await (readBranches
+        ? readBranches()
+        : client.conversations.listThreads(conversationId));
       if (scope.current !== threadId || generation.current !== request) return;
       setSnapshot({ threadId, branches });
       setError(null);
+      setRetryPending(false);
     } catch (error) {
       if (scope.current !== threadId || generation.current !== request) return;
+      setRetryPending(
+        Boolean(readBranches) &&
+          readFailure(error).retryable &&
+          !(error instanceof Error && error.name === 'AbortError'),
+      );
       if (
         error &&
         typeof error === 'object' &&
@@ -38,12 +49,13 @@ export function useThreadBranches(
       }
       setError(error instanceof Error ? error.message : String(error));
     }
-  }, [client, conversationId, enabled, threadId]);
+  }, [client, conversationId, enabled, threadId, readBranches]);
   const branches =
     enabled && snapshot?.threadId === threadId ? snapshot.branches : [];
   const current = branches.find((branch) => branch.thread_id === threadId);
   useEffect(() => {
     setError(null);
+    setRetryPending(false);
     void refresh();
     return () => {
       generation.current += 1;
@@ -53,7 +65,7 @@ export function useThreadBranches(
     if (
       !enabled ||
       !threadId ||
-      !['busy', 'pausing'].includes(current?.status ?? '')
+      (!retryPending && !['busy', 'pausing'].includes(current?.status ?? ''))
     )
       return;
     // HTTP acceptance is not pause completion. Poll independently of the SSE connection.
@@ -68,6 +80,6 @@ export function useThreadBranches(
       disposed = true;
       clearTimeout(timer);
     };
-  }, [enabled, threadId, current?.status, refresh]);
+  }, [enabled, threadId, current?.status, refresh, retryPending]);
   return { branches, current, error, refresh };
 }

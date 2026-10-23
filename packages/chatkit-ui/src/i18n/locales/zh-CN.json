@@ -1294,5 +1294,10 @@
       "memberHint": "已参与的数字专家保留关联，以保护现有会话和任务记录；可以添加其他群成员。",
       "confirmDescription": "确认参与此项目的数字专家。保存后，所选成员将在同一项目中协作，主数字专家必须参与。"
     }
+  },
+  "connection": {
+    "reconnecting": "连接暂不可用，正在重连",
+    "unavailable": "暂时无法获取更新，已有进度已保留",
+    "actionUnconfirmed": "未能确认操作结果，请稍后重试"
   }
 }

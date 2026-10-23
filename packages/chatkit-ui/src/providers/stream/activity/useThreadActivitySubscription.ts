@@ -1,3 +1,5 @@
+import { combineRequestSignals } from '../../../lib/request-abort';
+import type { ReadRecovery } from '../connection/read-recovery';
 import { useEffect, useRef } from 'react';
 import type { Client, ThreadActivitySnapshot } from '@xpert-ai/xpert-sdk';
 import { parseResourceCardContent } from '@xpert-ai/chatkit-types';
@@ -19,6 +21,7 @@ type Options = Pick<
     'isLoadingRef' | 'pauseRequestedRef'
   > &
   Pick<ReturnType<typeof useStreamTransport>, 'runStream'> & {
+    recovery: ReadRecovery;
     client: Client<StateType>;
     threadId: string | null;
     conversationId: string | null;
@@ -30,11 +33,12 @@ type Options = Pick<
 export function useThreadActivitySubscription(options: Options) {
   const current = useRef(options);
   current.current = options;
-  const { client, threadId, conversationId, enabled, scopeKey } = options;
+  const { client, threadId, conversationId, enabled, scopeKey, recovery } =
+    options;
   useEffect(() => {
     if (!enabled || !threadId || !conversationId) return;
     const controller = new AbortController();
-    const { signal } = controller;
+    const signal = combineRequestSignals([controller.signal, recovery.signal])!;
     const observed = new Map<string, string>();
     let snapshot: ThreadActivitySnapshot | null = null;
     let initialized = false;
@@ -49,8 +53,7 @@ export function useThreadActivitySubscription(options: Options) {
       status === 'pending' || status === 'running';
 
     const receive = async () => {
-      let failures = 0;
-      while (isCurrent()) {
+      while (isCurrent() && (await recovery.wait(signal))) {
         try {
           for await (const next of client.threads.watchActivity(threadId, {
             signal,
@@ -73,21 +76,21 @@ export function useThreadActivitySubscription(options: Options) {
               initialized = true;
             }
             snapshot = next;
-            failures = 0;
+            recovery.succeeded('activity');
+            for (const run of next.runs)
+              if (!live(run.status)) recovery.succeeded(`run:${run.id}`);
           }
-        } catch {
+          if (isCurrent())
+            recovery.failed('activity', new Error('Activity connection ended'));
+        } catch (error) {
           if (!isCurrent()) return;
-          failures += 1;
+          recovery.failed('activity', error);
         }
-        await waitForAbortableDelay(
-          signal,
-          Math.min(30_000, 1000 * 2 ** Math.min(failures, 5)),
-        );
       }
     };
     // A live answer may stream for minutes; card state must not wait for it.
     const projectCards = async () => {
-      while (isCurrent()) {
+      while (isCurrent() && !recovery.stopped) {
         const value = snapshot;
         if (value) {
           // Card projections only replace existing cards by their bound message/resource identity.
@@ -107,9 +110,9 @@ export function useThreadActivitySubscription(options: Options) {
       }
     };
     const reconcile = async () => {
-      while (isCurrent()) {
+      while (isCurrent() && !recovery.stopped) {
         const value = snapshot;
-        if (value) {
+        if (value && (await recovery.wait(signal))) {
           for (const run of value.runs) {
             if (!isCurrent()) return;
             if (
@@ -131,14 +134,20 @@ export function useThreadActivitySubscription(options: Options) {
                 let offset = 0;
                 const messages: StateType['messages'] = [];
                 while (isCurrent()) {
-                  const page = await client.conversations.searchMessages(
-                    conversationId,
-                    {
-                      where: { threadId, role: 'ai', executionId: run.id },
-                      order: { createdAt: 'ASC' },
-                      limit: 100,
-                      offset,
-                    },
+                  const page = await recovery.read(
+                    `messages:${run.id}:${offset}`,
+                    (readSignal) =>
+                      client.conversations.searchMessages(
+                        conversationId,
+                        {
+                          where: { threadId, role: 'ai', executionId: run.id },
+                          order: { createdAt: 'ASC' },
+                          limit: 100,
+                          offset,
+                        },
+                        { signal: readSignal },
+                      ),
+                    signal,
                   );
                   messages.push(
                     ...normalizeConversationMessagesPage(page).messages,
@@ -171,5 +180,5 @@ export function useThreadActivitySubscription(options: Options) {
     void projectCards();
     void reconcile();
     return () => controller.abort();
-  }, [client, threadId, conversationId, enabled, scopeKey]);
+  }, [client, threadId, conversationId, enabled, scopeKey, recovery]);
 }

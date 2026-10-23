@@ -192,7 +192,7 @@ describe('task lifecycle and transport recovery', () => {
     expect(stream.pendingHITLRequest).toBeNull();
   });
 
-  it('does not clear a transport error using another thread’s execution error', async () => {
+  it('does not turn a connection failure into another thread’s execution error', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
     mocks.runStream.mockImplementation(
@@ -211,7 +211,8 @@ describe('task lifecycle and transport recovery', () => {
     await act(async () => {
       await stream.submit({ input: { input: 'Run task' } });
     });
-    expect(stream.error).toEqual(new Error('Stream closed'));
+    expect(stream.error).toBeNull();
+    expect(stream.connectionState).toBe('reconnecting');
   });
 
   it('keeps fallback reconciliation bounded when the server stays busy', async () => {

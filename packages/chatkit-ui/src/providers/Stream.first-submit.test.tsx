@@ -36,6 +36,16 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
       create: sdkMocks.threadsCreate,
       get: sdkMocks.threadsGet,
       delete: sdkMocks.threadsDelete,
+      async *watchActivity(
+        threadId: string,
+        { signal }: { signal: AbortSignal },
+      ) {
+        yield { version: 1, threadId, cards: [], runs: [] };
+        if (!signal.aborted)
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true }),
+          );
+      },
     };
 
     conversations = {
@@ -502,6 +512,7 @@ describe('first submission setup', () => {
         where: { role: 'ai', threadId: 'thread-1' },
         limit: 1,
       }),
+      { signal: expect.any(AbortSignal) },
     );
     expect(getStream().messages).toContainEqual(
       expect.objectContaining({

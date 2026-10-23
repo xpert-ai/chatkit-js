@@ -255,8 +255,12 @@ describe('thread history restoration', () => {
     expect(stream.messages[0]).toMatchObject({
       rootExecutionIds: ['resumed-root', 'original-root'],
     });
-    expect(mocks.getRun).toHaveBeenCalledWith('thread-1', 'resumed-root');
-    expect(mocks.getRun).toHaveBeenCalledWith('thread-1', 'original-root');
+    expect(mocks.getRun).toHaveBeenCalledWith('thread-1', 'resumed-root', {
+      signal: expect.any(AbortSignal),
+    });
+    expect(mocks.getRun).toHaveBeenCalledWith('thread-1', 'original-root', {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it('restores a thread opened directly from the URL', async () => {

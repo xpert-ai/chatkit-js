@@ -1,3 +1,4 @@
+import { ReadRecovery } from '../connection/read-recovery';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Client, ThreadActivitySnapshot } from '@xpert-ai/xpert-sdk';
@@ -51,6 +52,7 @@ function fixture() {
     },
   );
   const options = {
+    recovery: new ReadRecovery(),
     client: {
       threads: { watchActivity },
       conversations: { searchMessages },
@@ -70,6 +72,7 @@ function fixture() {
     cards: ThreadActivitySnapshot['cards'] = [],
   ) => {
     await act(async () => {
+      await Promise.resolve();
       receive?.({ version: 1, threadId: 'thread', runs, cards });
       await Promise.resolve();
     });
@@ -191,7 +194,10 @@ describe('background answer discovery', () => {
     const f = fixture();
     let finishStream: () => void = () => undefined;
     f.options.runStream.mockImplementation(
-      () => new Promise<void>((resolve) => { finishStream = resolve; }),
+      () =>
+        new Promise<void>((resolve) => {
+          finishStream = resolve;
+        }),
     );
     const card = {
       type: 'resource_card' as const,
