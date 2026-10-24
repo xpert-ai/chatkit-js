@@ -115,7 +115,7 @@ describe('Chat plan mode and submission', () => {
     );
     renderChat();
     fireEvent.click(screen.getByRole('button', { name: 'stop' }));
-    await screen.findByText('HTTP 409: workflow changed');
+    await screen.findByText('connection.actionUnconfirmed');
     setComposerText(
       screen.getByRole('textbox'),
       'continue with current settings',
@@ -123,7 +123,7 @@ describe('Chat plan mode and submission', () => {
     fireEvent.click(screen.getByRole('button', { name: 'send' }));
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
     expect(
-      screen.queryByText('HTTP 409: workflow changed'),
+      screen.queryByText('connection.actionUnconfirmed'),
     ).not.toBeInTheDocument();
   });
 

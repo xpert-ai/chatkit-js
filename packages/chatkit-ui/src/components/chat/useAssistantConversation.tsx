@@ -1,3 +1,4 @@
+import { ConnectionStatus } from '../thread/ConnectionStatus';
 import { ResourceCommandShortcuts } from '../composer/ResourceCommandShortcuts';
 import { getAssistantModelSelectionError } from '../../lib/assistant-model-error';
 import { UnconfirmedRunError } from '../../providers/stream/transport/errors';
@@ -289,7 +290,12 @@ export function useAssistantConversation({
 
   const models = useChatModels({ ...modelState, ...session, ...host });
   const hasUploadingFiles = files.attachmentState.hasUploadingFiles;
+  const connectionUnavailable = Boolean(
+    session.stream.connectionState &&
+    session.stream.connectionState !== 'connected',
+  );
   const isSubmissionBlocked =
+    connectionUnavailable ||
     models.requiresModelSelection ||
     Boolean(conversation.conversationBranch.pendingMessageId) ||
     (resourcesEnabled && (runtimeResources.busy || !runtimeResources.ready)) ||
@@ -433,9 +439,10 @@ export function useAssistantConversation({
     canUploadAttachments,
   });
 
-  const streamErrorMessage =
-    getAssistantModelSelectionError(session.stream.error) ||
-    models.requiresModelSelection
+  const streamErrorMessage = connectionUnavailable
+    ? undefined
+    : getAssistantModelSelectionError(session.stream.error) ||
+        models.requiresModelSelection
       ? session.t('chat.modelPicker.selectionRejected')
       : session.stream.error instanceof UnconfirmedRunError
         ? session.t('chat.submissionUnconfirmed')
@@ -686,6 +693,7 @@ export function useAssistantConversation({
     }),
     composerBefore: (
       <>
+        <ConnectionStatus state={session.stream.connectionState} />
         {runControl.runControlError?.threadId === session.stream.threadId && (
           <p role="alert" className="text-xs text-destructive">
             {runControl.runControlError.message}

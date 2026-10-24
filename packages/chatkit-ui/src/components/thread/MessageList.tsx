@@ -156,6 +156,7 @@ export type MessageListProps = {
   isLoadingMoreMessages?: boolean;
   onLoadMore?: () => void;
   onRetry?: (index: number) => void;
+  retryDisabled?: boolean;
   onBranch?: (messageId: string) => void;
   onMessageActionTooltipOpen?: () => void;
   branchingMessageId?: string | null;
@@ -201,6 +202,7 @@ export function MessageList({
   isLoadingMoreMessages,
   onLoadMore,
   onRetry,
+  retryDisabled,
   onBranch,
   onMessageActionTooltipOpen,
   branchingMessageId,
@@ -698,6 +700,7 @@ export function MessageList({
                             ? () => editing.onStart(messageId)
                             : undefined
                         }
+                        retryDisabled={retryDisabled}
                         onRetry={
                           onRetry &&
                           isAssistantMessage &&

@@ -1294,5 +1294,10 @@
       "memberHint": "Existing participants remain linked to preserve conversations and task history. You can add other group members.",
       "confirmDescription": "Confirm which Assistants will collaborate in this Project. The primary Assistant must participate."
     }
+  },
+  "connection": {
+    "reconnecting": "Connection interrupted. Reconnecting…",
+    "unavailable": "Updates are temporarily unavailable. Your progress is preserved.",
+    "actionUnconfirmed": "Could not confirm the action. Please try again shortly."
   }
 }

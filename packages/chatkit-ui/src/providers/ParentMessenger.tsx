@@ -1,4 +1,5 @@
 import type {
+  ChatKitWorkbenchNavigation,
   ChatKitMessageFocusRequest,
   ChatKitMessageFocusResult,
 } from '@xpert-ai/chatkit-types';
@@ -53,6 +54,7 @@ type CommandMessageMap = {
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
   onToolOutputAttachmentPreview: ToolOutputAttachmentPreviewRequest;
+  onWorkbenchNavigationChange: ChatKitWorkbenchNavigation;
   onWorkbenchClientCommand: {
     commandKey: string;
     payload?: unknown;

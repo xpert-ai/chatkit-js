@@ -9,8 +9,13 @@ import { afterEach, beforeEach, expect, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   return {
+    assistantMessage: vi.fn(),
     theme: { radius: 'soft', density: 'normal' } as ChatKitTheme,
     stream: {
+      connectionState: 'connected' as
+        | 'connected'
+        | 'reconnecting'
+        | 'unavailable',
       client: {
         contexts: {
           uploadFile: vi.fn(),
@@ -365,7 +370,15 @@ vi.mock('../../composer/request-user-input-panel', () => ({
 }));
 
 vi.mock('../../thread/messages/ai', () => ({
-  AssistantMessage: () => null,
+  AssistantMessage: (props: {
+    message: { content?: unknown };
+    isThreadRunning?: boolean;
+  }) => {
+    mocks.assistantMessage(props);
+    return typeof props.message.content === 'string' ? (
+      <p>{props.message.content}</p>
+    ) : null;
+  },
   AssistantStreamingIndicator: () => null,
 }));
 
@@ -636,6 +649,7 @@ export function setupChatTest() {
     mocks.stream.pendingFollowUps = [];
     mocks.stream.pendingRequestUserInput = null;
     mocks.stream.pendingHITLRequest = null;
+    mocks.stream.connectionState = 'connected';
     mocks.stream.isLoading = false;
     mocks.stream.isThreadInterrupted = false;
     mocks.stream.error = null;

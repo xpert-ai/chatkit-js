@@ -132,12 +132,12 @@ describe('run admission and recovery', () => {
   );
 
   it.each([
-    { runId: 'new-run', status: 'success', recovered: true },
-    { runId: 'old-run', status: 'success', recovered: false },
-    { runId: 'new-run', status: 'error', recovered: false },
+    { runId: 'new-run', status: 'success' },
+    { runId: 'old-run', status: 'success' },
+    { runId: 'new-run', status: 'error' },
   ])(
     'recovers only the acknowledged run: $runId / $status',
-    async ({ runId, status, recovered }) => {
+    async ({ runId, status }) => {
       render(provider('thread-1'));
       await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
       const failure = new Error('Stream disconnected');
@@ -161,14 +161,20 @@ describe('run admission and recovery', () => {
           optimistic,
         );
       });
-      expect(mocks.getRun).toHaveBeenCalledWith('thread-1', 'new-run');
+      expect(mocks.getRun).toHaveBeenCalledWith('thread-1', 'new-run', {
+        signal: expect.any(AbortSignal),
+      });
       expect(mocks.searchMessages).toHaveBeenLastCalledWith(
         'conversation-thread-1',
         expect.objectContaining({
           where: { role: 'ai', threadId: 'thread-1', executionId: 'new-run' },
         }),
+        { signal: expect.any(AbortSignal) },
       );
-      expect(stream.error).toBe(recovered ? null : failure);
+      expect(stream.error).toBeNull();
+      expect(stream.connectionState).toBe(
+        runId === 'new-run' ? 'connected' : 'reconnecting',
+      );
       expect(stream.messages.some((message) => message.id === 'new-user')).toBe(
         true,
       );
@@ -179,7 +185,7 @@ describe('run admission and recovery', () => {
   it('keeps a disconnected acknowledged run busy until its completion is confirmed', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     try {
       const failure = new Error('Stream disconnected');
       const run = { run_id: 'new-run', thread_id: 'thread-1', metadata: {} };
@@ -199,7 +205,8 @@ describe('run admission and recovery', () => {
         );
       });
       expect(stream.isLoading).toBe(true);
-      expect(stream.error).toBe(failure);
+      expect(stream.error).toBeNull();
+      expect(stream.connectionState).toBe('reconnecting');
       mocks.getRun.mockResolvedValue({ ...run, status: 'success' });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2_000);

@@ -1,3 +1,4 @@
+import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import * as React from 'react';
 import type { useChatBranchState } from './useChatBranchState';
 import type { useChatEnvironment } from './useChatEnvironment';
@@ -6,9 +7,21 @@ type ChatRunControlOptions = Pick<
   ReturnType<typeof useChatBranchState>,
   'isChangingBranch' | 'activeBranchRef'
 > & {
-  branchState: Pick<ReturnType<typeof useChatBranchState>['branchState'], 'current' | 'refresh'>;
-  stream: Pick<ReturnType<typeof useChatEnvironment>['stream'],
-    'threadId' | 'isLoading' | 'activeRunId' | 'isThreadInterrupted' | 'stop' | 'pauseRun' | 'resumeRun'>;
+  branchState: Pick<
+    ReturnType<typeof useChatBranchState>['branchState'],
+    'current' | 'refresh'
+  >;
+  stream: Pick<
+    ReturnType<typeof useChatEnvironment>['stream'],
+    | 'connectionState'
+    | 'threadId'
+    | 'isLoading'
+    | 'activeRunId'
+    | 'isThreadInterrupted'
+    | 'stop'
+    | 'pauseRun'
+    | 'resumeRun'
+  >;
 };
 
 export function useChatRunControl({
@@ -17,6 +30,9 @@ export function useChatRunControl({
   isChangingBranch,
   activeBranchRef,
 }: ChatRunControlOptions) {
+  const { t } = useChatkitTranslation();
+  const connected =
+    !stream.connectionState || stream.connectionState === 'connected';
   const [runControlRequest, setRunControlRequest] = React.useState<{
     action: 'pause' | 'resume' | 'stop';
     threadId: string;
@@ -34,12 +50,15 @@ export function useChatRunControl({
     errorGenerationRef.current += 1;
     setRunControlError(null);
   }, []);
-  React.useEffect(clearRunControlError, [stream.threadId, clearRunControlError]);
+  React.useEffect(clearRunControlError, [
+    stream.threadId,
+    clearRunControlError,
+  ]);
 
   const currentRunControl = branchState.current?.runControl;
   const pauseRunId = stream.isLoading
-    ? stream.activeRunId ?? currentRunControl?.executionId ?? null
-    : currentRunControl?.executionId ?? stream.activeRunId ?? null;
+    ? (stream.activeRunId ?? currentRunControl?.executionId ?? null)
+    : (currentRunControl?.executionId ?? stream.activeRunId ?? null);
 
   const canPauseRun = Boolean(
     stream.threadId &&
@@ -70,7 +89,8 @@ export function useChatRunControl({
     runControlRequest?.threadId === stream.threadId &&
     runControlRequest.action === 'resume';
 
-  const isVisibleStreaming = stream.isLoading && !stream.isThreadInterrupted;
+  const isVisibleStreaming =
+    connected && stream.isLoading && !stream.isThreadInterrupted;
   const handleComposerRunControl = async (
     action: 'pause' | 'resume' | 'stop',
   ) => {
@@ -83,7 +103,10 @@ export function useChatRunControl({
       isResumingRun
     )
       return;
-    if (action === 'resume' && (!isRunPaused || !currentRunControl?.pauseId))
+    if (
+      action === 'resume' &&
+      (!connected || !isRunPaused || !currentRunControl?.pauseId)
+    )
       return;
     if (action === 'pause' && (isRunPaused || isRunPausing)) return;
     if (action === 'stop' && !canStopRun) return;
@@ -119,7 +142,7 @@ export function useChatRunControl({
       ) {
         setRunControlError({
           threadId: sourceThreadId,
-          message: error instanceof Error ? error.message : String(error),
+          message: t('connection.actionUnconfirmed'),
         });
       }
     } finally {

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Client, Thread } from '@xpert-ai/xpert-sdk';
 import { expect, it, vi } from 'vitest';
 import { useThreadBranches } from './useThreadBranches';
+import { ReadRecovery } from '../providers/stream/connection/read-recovery';
 
 it('uses conversation branches and ignores a late response after selecting another branch', async () => {
   let resolveOld!: (threads: Thread[]) => void;
@@ -47,15 +48,20 @@ it('hides unavailable branch controls on older platforms while surfacing real er
 
 it('refreshes when loading changes and does not poll on an interval', async () => {
   const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
-  const listThreads = vi.fn().mockResolvedValue([{ thread_id: 'thread', status: 'busy' }]);
+  const listThreads = vi
+    .fn()
+    .mockResolvedValue([{ thread_id: 'thread', status: 'busy' }]);
   const client = { conversations: { listThreads } } as unknown as Client;
   try {
     const { rerender } = renderHook(
-      ({ isLoading }) => useThreadBranches(client, 'conversation', 'thread', true, isLoading),
+      ({ isLoading }) =>
+        useThreadBranches(client, 'conversation', 'thread', true, isLoading),
       { initialProps: { isLoading: true } },
     );
     await waitFor(() => expect(listThreads).toHaveBeenCalledTimes(1));
-    expect(setIntervalSpy.mock.calls.some((call) => call[1] === 2000)).toBe(false);
+    expect(setIntervalSpy.mock.calls.some((call) => call[1] === 2000)).toBe(
+      false,
+    );
     rerender({ isLoading: false });
     await waitFor(() => expect(listThreads).toHaveBeenCalledTimes(2));
   } finally {
@@ -65,7 +71,8 @@ it('refreshes when loading changes and does not poll on an interval', async () =
 
 it('observes pausing until checkpoint confirmation even without a stream, then stops polling', async () => {
   vi.useFakeTimers();
-  const listThreads = vi.fn()
+  const listThreads = vi
+    .fn()
     .mockResolvedValueOnce([{ thread_id: 'thread', status: 'pausing' }])
     .mockResolvedValue([{ thread_id: 'thread', status: 'paused' }]);
   const client = { conversations: { listThreads } } as unknown as Client;
@@ -75,13 +82,63 @@ it('observes pausing until checkpoint confirmation even without a stream, then s
   try {
     await act(async () => {});
     expect(result.current.current?.status).toBe('pausing');
-    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
     expect(result.current.current?.status).toBe('paused');
     const reads = listThreads.mock.calls.length;
-    await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
     expect(listThreads).toHaveBeenCalledTimes(reads);
   } finally {
     unmount();
+    vi.useRealTimers();
+  }
+});
+
+it('retries the initial unavailable branch read on the shared schedule even without a loaded branch', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const recovery = new ReadRecovery();
+  let available = false;
+  const listThreads = vi.fn(async () => {
+    if (!available)
+      throw Object.assign(new Error('Unavailable'), {
+        status: 503,
+        retryAfterMs: 30_000,
+      });
+    return [{ thread_id: 'thread', status: 'idle' }] as Thread[];
+  });
+  const client = { conversations: { listThreads } } as unknown as Client;
+  const read = () =>
+    recovery.read('branches:conversation', () => listThreads());
+  const { result, unmount } = renderHook(() =>
+    useThreadBranches(client, 'conversation', 'thread', true, false, read),
+  );
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.current).toBeUndefined();
+    expect(recovery.getSnapshot()).toBe('reconnecting');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(29_999);
+    });
+    expect(listThreads).toHaveBeenCalledTimes(1);
+    available = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(listThreads).toHaveBeenCalledTimes(2);
+    expect(result.current.current?.status).toBe('idle');
+    expect(recovery.getSnapshot()).toBe('connected');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(listThreads).toHaveBeenCalledTimes(2);
+  } finally {
+    unmount();
+    recovery.dispose();
     vi.useRealTimers();
   }
 });

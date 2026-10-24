@@ -1,3 +1,7 @@
+import {
+  ConnectionUnavailableError,
+  type ReadRecovery,
+} from '../connection/read-recovery';
 import { useCallback } from 'react';
 import {
   createPendingFollowUp,
@@ -85,11 +89,13 @@ type StreamSubmissionOptions = Pick<
   > &
   Pick<ReturnType<typeof useStreamHost>, 'markHistoryLoaded'> &
   Pick<ReturnType<typeof useStreamTransport>, 'runStream'> & {
+    recovery: ReadRecovery;
     assistantId: string;
     projectId: string | undefined;
   };
 
 export function useStreamSubmission({
+  recovery,
   setError,
   pauseRequestedRef,
   activeThreadIdRef,
@@ -127,6 +133,8 @@ export function useStreamSubmission({
 }: StreamSubmissionOptions) {
   const submit = useCallback(
     async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
+      if (!options?.newThread && recovery.getSnapshot() !== 'connected')
+        throw new ConnectionUnavailableError();
       setError(null);
       const humanInput = input && 'input' in input ? input : null;
       if (humanInput && pauseRequestedRef.current && !options?.newThread) {
@@ -410,6 +418,7 @@ export function useStreamSubmission({
     [
       assistantId,
       client,
+      recovery,
       addAutoQueuedFollowUpIds,
       addSteerPriorityFollowUpIds,
       markPendingFollowUpsAsQueued,

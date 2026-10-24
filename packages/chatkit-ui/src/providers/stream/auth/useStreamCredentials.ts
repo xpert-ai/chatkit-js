@@ -178,9 +178,33 @@ export function useStreamCredentials({
     [apiUrl, fetchWithClientSecretRefresh, locale],
   );
 
+  const readClient = useMemo(
+    () =>
+      new Client<StateType>({
+        apiUrl,
+        timeoutMs: 10_000,
+        defaultHeaders: createLanguageHeaders(locale),
+        callerOptions: {
+          fetch: fetchWithClientSecretRefresh,
+          maxRetries: 0,
+        },
+        onRequest: createSdkRequestHook(
+          () => ({
+            secret: runtimeClientSecretRef.current.trim(),
+            organizationId:
+              runtimeOrganizationIdRef.current?.trim() || undefined,
+          }),
+          // Run cursors belong to each transport, never to unrelated thread subscriptions.
+          () => null,
+        ),
+      }),
+    [apiUrl, fetchWithClientSecretRefresh, locale],
+  );
+
   clientRef.current = client;
   return {
     client,
+    readClient,
     runtimeClientSecret,
     runtimeOrganizationId,
     getRuntimeOrganizationId,

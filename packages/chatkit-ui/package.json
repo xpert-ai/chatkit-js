@@ -116,7 +116,7 @@
     "build:lib": "tsup src/index.ts --format esm,cjs --dts --clean",
     "build:app": "vite build",
     "test": "vitest run --passWithNoTests",
-    "test:browser": "pnpm build:app && playwright test",
+    "test:browser": "pnpm --filter @xpert-ai/chatkit-web-component build && pnpm build:app && playwright test",
     "types": "tsc",
     "lint": "eslint .",
     "clean": "rimraf dist"

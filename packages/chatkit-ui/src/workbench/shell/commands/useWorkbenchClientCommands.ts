@@ -85,6 +85,11 @@ export function useWorkbenchClientCommands({
     stream.projectId,
     stream.conversationId,
   ]);
+  const assistantScope = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    stream.assistantId,
+  ]);
   const navigationScope = JSON.stringify([
     stream.apiUrl,
     stream.organizationId,
@@ -104,12 +109,16 @@ export function useWorkbenchClientCommands({
   const currentContext = React.useRef({
     key: contextKey,
     navigationScope,
+    assistantScope,
+    projectId: stream.projectId,
     conversationId: stream.conversationId,
   });
   if (currentContext.current.key !== contextKey)
     currentContext.current = {
       key: contextKey,
       navigationScope,
+      assistantScope,
+      projectId: stream.projectId,
       conversationId: stream.conversationId,
     };
   const publishContexts = React.useCallback(() => {
@@ -284,11 +293,18 @@ export function useWorkbenchClientCommands({
         isCurrent: (navigation) =>
           currentContext.current === context ||
           Boolean(
+            navigation?.target === 'assistant.project' &&
+            navigation.projectId &&
+            currentContext.current.assistantScope === context.assistantScope &&
+            currentContext.current.projectId === navigation.projectId,
+          ) ||
+          Boolean(
             navigation?.preserveView &&
             currentContext.current.navigationScope ===
               context.navigationScope &&
             currentContext.current.conversationId === navigation.conversationId,
           ),
+        forwardUnavailableView: Boolean(options?.workbench?.navigation),
         openView: (key, query) => {
           if (!views.some((view) => view.key === key)) return false;
           setViewQueries((current) => ({ ...current, [key]: query }));
@@ -346,6 +362,7 @@ export function useWorkbenchClientCommands({
       openExecution,
       openMessage,
       options?.workbench?.onClientCommand,
+      options?.workbench?.navigation,
       parentMessenger,
       publishContexts,
       stream,

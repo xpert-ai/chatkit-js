@@ -312,6 +312,9 @@ export function getAssistantComposerProps({
       stopLabel: t('threadControl.stop'),
       showResume: isPauseActive && !hasComposerInput,
       resumeDisabled:
+        Boolean(
+          stream.connectionState && stream.connectionState !== 'connected',
+        ) ||
         !isRunPaused ||
         isStoppingRun ||
         isRunPausing ||

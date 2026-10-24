@@ -31,6 +31,8 @@ export type WorkbenchCommandHost = {
   projectId?: string;
   isCurrent?: (navigation?: NavigationPayload) => boolean;
   openView: (key: string, query: XpertViewQuery) => boolean;
+  /** Let a routed host render legacy View types this shell cannot display yet. */
+  forwardUnavailableView?: boolean;
   openPreview: (preview: WorkbenchPreview) => void;
   resolveFile?: (
     resource: ChatKitWorkbenchFileResource,
@@ -174,20 +176,22 @@ export async function executeWorkbenchCommand(
       !navigation.messageId;
     if (navigation.target === 'workbench.view' || currentProjectView) {
       if (!navigation.viewKey) return invalid();
-      return host.openView(navigation.viewKey, navigation.query)
-        ? {
-            success: true,
-            status: 'opened',
-            target: navigation.target,
-            viewKey: navigation.viewKey,
-            ...navigation.query,
-          }
-        : {
-            success: false,
-            code: 'view_unavailable',
-            viewKey: navigation.viewKey,
-          };
+      if (host.openView(navigation.viewKey, navigation.query))
+        return {
+          success: true,
+          status: 'opened',
+          target: navigation.target,
+          viewKey: navigation.viewKey,
+          ...navigation.query,
+        };
+      if (!host.forwardUnavailableView)
+        return {
+          success: false,
+          code: 'view_unavailable',
+          viewKey: navigation.viewKey,
+        };
     }
+
     if (
       navigation.target === 'assistant.conversation' ||
       navigation.target === 'assistant.project'
