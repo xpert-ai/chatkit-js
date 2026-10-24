@@ -124,6 +124,7 @@ export function writePetLocalSettings(settings: PetLocalSettings): void {
 
 export function buildPetOptionsFromLocalSettings(
   settings: PetLocalSettings,
+  assetsBaseUrl?: string,
 ): ChatKitOptions['pet'] | null {
   if (!settings.enabled) {
     return null;
@@ -146,13 +147,14 @@ export function buildPetOptionsFromLocalSettings(
   }
 
   return {
-    character: getIncludedPetCharacter(settings.builtinId),
+    character: getIncludedPetCharacter(settings.builtinId, assetsBaseUrl),
     position,
   };
 }
 
 export function derivePetLocalSettings(
   pet: ChatKitOptions['pet'] | null | undefined,
+  assetsBaseUrl?: string,
 ): PetLocalSettings {
   if (!pet) {
     return { ...DEFAULT_PET_LOCAL_SETTINGS };
@@ -172,7 +174,7 @@ export function derivePetLocalSettings(
   };
 
   const character = normalized.character;
-  const includedPetId = getIncludedPetIdByCharacter(character);
+  const includedPetId = getIncludedPetIdByCharacter(character, assetsBaseUrl);
   if (includedPetId) {
     return {
       ...base,

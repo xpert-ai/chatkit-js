@@ -289,6 +289,12 @@ export type ChatKitPetPositionOptions = {
 };
 
 export type ChatKitPetOptions = {
+  /** Base URL of the built-in pet directory (containing catalog.json and pet IDs).
+   * Defaults to /pets. Accepts HTTPS URLs or root-relative paths; custom character
+   * URLs are unaffected. Also applies to Assistant appearance sprites when
+   * enabled is false. Host offline assets separately from the UI npm package.
+   */
+  assetsBaseUrl?: string;
   enabled?: boolean;
   character?: ChatKitPetCharacter;
   position?: ChatKitPetPositionOptions;

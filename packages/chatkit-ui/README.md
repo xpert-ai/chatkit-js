@@ -38,3 +38,20 @@ and rerun browser installation with `--with-deps` before the regression suite.
 UUID generation supports HTTP through `crypto.getRandomValues`. HTTPS is still
 recommended: other browser features, including the clipboard, can require a
 secure context independently of UUID generation.
+
+## External pet assets (migration)
+
+The UI npm package no longer includes `dist/app/pets`. Deployments that copied
+that directory must provision the optional `@xpert-ai/chatkit-assets` package and
+copy its `pets` directory to `/pets`, or host it on a CDN. `dist/app`, the JS/CSS
+assets, and font handling are unchanged.
+
+Set `ChatKitPetOptions.assetsBaseUrl` to a versioned URL or root-relative resource path.
+Set it inside `pet: { assetsBaseUrl: ... }`. It is scoped per instance and applies to built-in settings choices, Assistant
+appearance sprites, and host overlays. The default is `/pets`; custom sprite URLs
+remain unchanged. The resource address is still available to Assistant appearance
+sprites when `pet.enabled` is false. Saved built-in selections keep their IDs when the base changes.
+See [the offline resource package](../chatkit-assets/README.md) for deployment and
+cache instructions. Local `vite` development serves that package at `/pets`
+without copying images into the production build. `vite preview` needs separately
+hosted assets, just like a production deployment.

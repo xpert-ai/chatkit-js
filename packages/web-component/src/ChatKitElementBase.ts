@@ -18,7 +18,7 @@ import type {
   ToolOutputAttachmentPreviewRequest,
   WorkspaceConnectorConnectRequest,
 } from '@xpert-ai/chatkit-types';
-import { normalizePetOptions } from '@xpert-ai/chatkit-types';
+import { getPetAssetsBaseUrl, normalizePetOptions } from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import type { RuntimeCapabilitiesSelection } from '@xpert-ai/chatkit-types';
 import type { SendUserMessageParams } from '@xpert-ai/chatkit-types';
@@ -375,7 +375,9 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       this.#getDisplayMode(options) === 'pet' &&
       !normalizePetOptions(options.pet ?? null)
     ) {
-      return true;
+      return typeof options.pet === 'object'
+        ? { ...options.pet, enabled: true }
+        : true;
     }
 
     return options.pet ?? null;
@@ -454,7 +456,12 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #resolveOverlayPetOptions(
     pet: ChatKitOptions['pet'] | null,
   ): ChatKitOptions['pet'] | null {
-    const normalized = normalizePetOptions(pet ?? null);
+    const assetsBaseUrl =
+      getPetAssetsBaseUrl(pet ?? undefined) ??
+      getPetAssetsBaseUrl(this.#opts?.pet);
+    const normalized = normalizePetOptions(
+      pet ? { ...(pet === true ? {} : pet), assetsBaseUrl } : null,
+    );
     if (!normalized) {
       return null;
     }

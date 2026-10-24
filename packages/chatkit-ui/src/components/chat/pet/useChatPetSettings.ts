@@ -1,3 +1,7 @@
+import {
+  getPetAssetsBaseUrl,
+  normalizePetOptions,
+} from '@xpert-ai/chatkit-types';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import {
@@ -19,11 +23,12 @@ export function useChatPetSettings({ options }: ChatPetSettingsOptions) {
   const [petLocalSettings, setPetLocalSettings] =
     React.useState<PetLocalSettings | null>(() => readPetLocalSettings());
 
+  const assetsBaseUrl = getPetAssetsBaseUrl(options?.pet);
   const petRequired = options?.displayMode === 'pet';
   const petDisabled = options?.pet === false && !petRequired;
   const basePetSettings = React.useMemo(
-    () => derivePetLocalSettings(options?.pet),
-    [options?.pet],
+    () => derivePetLocalSettings(options?.pet, assetsBaseUrl),
+    [options?.pet, assetsBaseUrl],
   );
 
   const displayedPetSettings = React.useMemo(
@@ -37,13 +42,17 @@ export function useChatPetSettings({ options }: ChatPetSettingsOptions) {
   const effectivePet = React.useMemo(() => {
     if (petDisabled) return false;
     if (petRequired || petLocalSettings) {
-      return buildPetOptionsFromLocalSettings(displayedPetSettings);
+      return buildPetOptionsFromLocalSettings(
+        displayedPetSettings,
+        assetsBaseUrl,
+      );
     }
 
-    return options?.pet ?? null;
+    return normalizePetOptions(options?.pet ?? null);
   }, [
     displayedPetSettings,
     options?.pet,
+    assetsBaseUrl,
     petDisabled,
     petLocalSettings,
     petRequired,

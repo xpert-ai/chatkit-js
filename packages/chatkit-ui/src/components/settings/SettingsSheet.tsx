@@ -1,3 +1,4 @@
+import { usePetAssetsBaseUrl } from '../pet/PetAssets';
 import * as React from 'react';
 import { PawPrint, Settings } from 'lucide-react';
 
@@ -27,7 +28,7 @@ import {
 } from '../pet/pet-local-settings';
 import {
   getIncludedPetOption,
-  INCLUDED_PET_OPTIONS,
+  getIncludedPetOptions,
 } from '../pet/builtinPets';
 import { PetPreview } from '../pet/PetPreview';
 
@@ -58,6 +59,8 @@ export function SettingsSheet({
   onSave,
 }: SettingsSheetProps) {
   const { t } = useChatkitTranslation();
+  const assetsBaseUrl = usePetAssetsBaseUrl();
+  const includedPets = getIncludedPetOptions(assetsBaseUrl);
   const [draft, setDraft] = React.useState(settings);
 
   React.useEffect(() => {
@@ -80,7 +83,7 @@ export function SettingsSheet({
   };
 
   const selectedBuiltinPet =
-    getIncludedPetOption(draft.builtinId) ?? INCLUDED_PET_OPTIONS[0]!;
+    getIncludedPetOption(draft.builtinId, assetsBaseUrl) ?? includedPets[0]!;
   const selectedBuiltinPetLabel = t(
     `pet.settings.builtins.${selectedBuiltinPet.id}`,
     {
@@ -187,7 +190,7 @@ export function SettingsSheet({
               <Select
                 value={selectedBuiltinPet.id}
                 onValueChange={(value) => {
-                  const pet = getIncludedPetOption(value);
+                  const pet = getIncludedPetOption(value, assetsBaseUrl);
                   if (pet) {
                     updateDraft({ builtinId: pet.id });
                   }
@@ -201,7 +204,7 @@ export function SettingsSheet({
                 </SelectTrigger>
                 <SelectContent className="w-[var(--radix-select-trigger-width)]">
                   <SelectGroup>
-                    {INCLUDED_PET_OPTIONS.map((pet) => {
+                    {includedPets.map((pet) => {
                       const label = t(`pet.settings.builtins.${pet.id}`, {
                         defaultValue: pet.label,
                       });

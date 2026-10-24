@@ -1,6 +1,8 @@
+import { usePetAssetsBaseUrl } from '../../pet/PetAssets';
 import { useReducedMotion } from 'framer-motion';
 import {
   customCharacterSvg,
+  getPetAssetUrl,
   type ChatKitPetAnimationName,
 } from '@xpert-ai/chatkit-types';
 import { InlinePetStatus } from '../../pet/InlinePetStatus';
@@ -20,6 +22,7 @@ export function AssistantCharacter({
   size?: number | string;
   reducedMotion?: boolean;
 }) {
+  const assetsBaseUrl = usePetAssetsBaseUrl();
   const systemReducedMotion = useReducedMotion();
   const still = reducedMotion || !!systemReducedMotion;
   const appearance = avatar?.appearance;
@@ -65,7 +68,7 @@ export function AssistantCharacter({
                 : undefined),
             src:
               appearance.asset?.url ??
-              `/pets/${appearance.id}/spritesheet.webp`,
+              getPetAssetUrl(appearance.id, assetsBaseUrl),
           },
         }}
       />
