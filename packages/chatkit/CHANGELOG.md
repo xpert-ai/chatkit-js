@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-types
 
+## 0.18.0
+
+### Minor Changes
+
+- 39d89af: Add host-controlled Workbench View navigation and an onNavigationChange bridge. Routed embedders can restore the selected Project, View and query after refresh or browser history navigation while keeping same-scope Remote Views mounted. Disable iframe-owned history when the embedder controls navigation, and accept completed host Project navigation only within the original Assistant and organization.
+
+  Forward unsupported legacy View navigation to the authorized host when the host owns navigation. Remote iframe Views use ChatKit by default without adding plugin presentation settings.
+
 ## 0.17.0
 
 ## 0.16.2
