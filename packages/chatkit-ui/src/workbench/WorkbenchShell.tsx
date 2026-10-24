@@ -1,3 +1,5 @@
+import { EditorLifecycleContext, useEditorLifecycle } from './editors/context';
+import { useEditorTabClose } from './editors/useEditorTabClose';
 import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
 import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
@@ -39,7 +41,7 @@ import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDi
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
-import { useResourceCardNavigation } from './resource-cards/useResourceCardNavigation';
+import { useResourceNavigation } from './content/useResourceNavigation';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import { isWorkbenchNewTab, useWorkbenchPages } from './useWorkbenchPages';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
@@ -88,6 +90,8 @@ function WorkbenchContent({
   stream,
 }: WorkbenchShellProps & { stream: WorkbenchRuntime }) {
   const { t } = useChatkitTranslation();
+  const editors = useEditorLifecycle();
+  useParentMessenger({ onPrepareLeave: () => editors.prepare() });
   const groupRecord = useGroupExecutionRecord(stream.client, stream.group?.id);
   const parentMessenger = useParentMessenger();
   const remoteViewsEnabled = options?.workbench?.enabled === true;
@@ -198,6 +202,7 @@ function WorkbenchContent({
       startPageScope,
       runtimeScope.projectId ? runtimeScope.conversationId : null,
     ]),
+    editors,
   );
   const {
     previews,
@@ -502,40 +507,44 @@ function WorkbenchContent({
   useParentMessenger({ onFocusMessage: openMessage });
 
   const { remember: rememberResourceCard, forget: forgetViewNavigation } =
-    useResourceCardNavigation({
+    useResourceNavigation({
       scope: JSON.stringify([layoutKey, runtimeScope.projectId]),
       conversationId: runtimeScope.conversationId,
-      isConversationScoped: (key) => {
-        const workbench = views.find((view) => view.key === key)?.workbench;
-        return Boolean(
-          workbench &&
-          'contextScope' in workbench &&
-          workbench.contextScope === 'conversation',
-        );
-      },
+      views,
+      editors,
       enabled: remoteViewsEnabled && authenticated,
       ready: !loading && viewsScope === viewScopeKey,
-      restore: (target) => {
-        if (
-          target.target !== 'workbench.view' ||
-          !views.some((view) => view.key === target.viewKey)
-        )
-          return false;
-        setViewQueries((current) => ({
-          ...current,
-          [target.viewKey]: {
-            selectionId: target.selectionId,
-            parameters: target.parameters,
-          },
-        }));
-        selectView(target.viewKey);
-        setOpen(true);
-        return true;
-      },
-      close: () => setOpen(false),
+      setQueries: setViewQueries,
+      select: selectView,
+      setOpen,
+      onBlocked: () =>
+        setNotification({
+          level: 'error',
+          message: t('contentReview.Unsaved'),
+        }),
     });
 
-  const { executeClientCommand } = useWorkbenchClientCommands({
+  const closeWorkbench = React.useCallback(() => {
+    forgetViewNavigation();
+    setOpen(false);
+    setExpanded(false);
+  }, [setOpen, setExpanded, forgetViewNavigation]);
+  const closeEditorView = useEditorTabClose({
+    editors,
+    closeView,
+    forget: forgetViewNavigation,
+    adjacent: adjacentTab,
+    activeKey: activeViewKey,
+    select: setActiveViewKey,
+    closeWorkbench,
+    onError: () =>
+      setNotification({ level: 'error', message: t('contentReview.Unsaved') }),
+  });
+
+  const { executeClientCommand, reviewPanel } = useWorkbenchClientCommands({
+    editors,
+    viewQueries,
+    closeView: closeEditorView,
     rememberViewNavigation: rememberResourceCard,
     onRequestContextChange,
     contextsRef,
@@ -557,6 +566,7 @@ function WorkbenchContent({
   });
 
   useWorkbenchEntryNavigation({
+    editors,
     initialNavigation,
     projectCreation,
     ready: !loading && viewsScope === viewScopeKey,
@@ -595,12 +605,6 @@ function WorkbenchContent({
             : views.length === 0 && !sideChatEnabled
               ? t('workbench.empty')
               : undefined;
-
-  const closeWorkbench = React.useCallback(() => {
-    forgetViewNavigation();
-    setOpen(false);
-    setExpanded(false);
-  }, [setOpen, setExpanded, forgetViewNavigation]);
 
   const { askInSideChat, requestCloseSideChat, confirmCloseSideChat } =
     useWorkbenchSideChat({
@@ -880,15 +884,7 @@ function WorkbenchContent({
       }}
       views={scopedViews}
       availableViews={menuViews}
-      onCloseView={(key) => {
-        forgetViewNavigation(key);
-        closeView(key);
-        if (activeViewKey === key) {
-          const next = adjacentTab(key);
-          setActiveViewKey(next);
-          if (!next) closeWorkbench();
-        }
-      }}
+      onCloseView={closeEditorView}
       activeView={activeView}
       activeViewKey={activeViewKey}
       sideChat={sideChat}
@@ -929,7 +925,17 @@ function WorkbenchContent({
       onClose={closeWorkbench}
       onRequestCloseSideChat={requestCloseSideChat}
       onToggleExpanded={() => setExpanded((current) => !current)}
-      onReload={() => setReloadVersion((version) => version + 1)}
+      onReload={() => {
+        if (!editors.dirty) return setReloadVersion((version) => version + 1);
+        void editors.prepare().then((ready) => {
+          if (ready) setReloadVersion((version) => version + 1);
+          else
+            setNotification({
+              level: 'error',
+              message: t('contentReview.Unsaved'),
+            });
+        });
+      }}
       onSelect={selectTab}
       onNotify={(level, message) => {
         setNotification({ level, message });
@@ -944,42 +950,45 @@ function WorkbenchContent({
   );
 
   return (
-    <ResourceCardContext.Provider value={resourceCardActions}>
-      <WorkbenchShellLayout
-        contextValue={contextValue}
-        rootRef={rootRef}
-        isNarrow={isNarrow}
-        workbenchSide={workbenchSide}
-        initialLoading={initialLoading}
-        t={t}
-        notification={notification}
-        open={open}
-        setNotification={setNotification}
-        resizing={resizing}
-        mainChatInWorkbench={mainChatInWorkbench}
-        chatHost={chatHost}
-        chat={chat}
-        sideChat={sideChat}
-        externalViewOpen={externalViewOpen}
-        expanded={expanded}
-        containerWidth={containerWidth}
-        resolvedPanelWidth={resolvedPanelWidth}
-        startResize={startResize}
-        setPanelWidth={setPanelWidth}
-        setExpanded={setExpanded}
-        swapSides={swapSides}
-        panelHost={panelHost}
-        setOpen={setOpen}
-        closeWorkbench={closeWorkbench}
-        panel={panel}
-        native={native}
-        activeViewKey={activeViewKey}
-        adjacentTab={adjacentTab}
-        setActiveViewKey={setActiveViewKey}
-        sideChatCloseDialogOpen={sideChatCloseDialogOpen}
-        setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
-        confirmCloseSideChat={confirmCloseSideChat}
-      />
-    </ResourceCardContext.Provider>
+    <EditorLifecycleContext.Provider value={editors}>
+      <ResourceCardContext.Provider value={resourceCardActions}>
+        {reviewPanel}
+        <WorkbenchShellLayout
+          contextValue={contextValue}
+          rootRef={rootRef}
+          isNarrow={isNarrow}
+          workbenchSide={workbenchSide}
+          initialLoading={initialLoading}
+          t={t}
+          notification={notification}
+          open={open}
+          setNotification={setNotification}
+          resizing={resizing}
+          mainChatInWorkbench={mainChatInWorkbench}
+          chatHost={chatHost}
+          chat={chat}
+          sideChat={sideChat}
+          externalViewOpen={externalViewOpen}
+          expanded={expanded}
+          containerWidth={containerWidth}
+          resolvedPanelWidth={resolvedPanelWidth}
+          startResize={startResize}
+          setPanelWidth={setPanelWidth}
+          setExpanded={setExpanded}
+          swapSides={swapSides}
+          panelHost={panelHost}
+          setOpen={setOpen}
+          closeWorkbench={closeWorkbench}
+          panel={panel}
+          native={native}
+          activeViewKey={activeViewKey}
+          adjacentTab={adjacentTab}
+          setActiveViewKey={setActiveViewKey}
+          sideChatCloseDialogOpen={sideChatCloseDialogOpen}
+          setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
+          confirmCloseSideChat={confirmCloseSideChat}
+        />
+      </ResourceCardContext.Provider>
+    </EditorLifecycleContext.Provider>
   );
 }

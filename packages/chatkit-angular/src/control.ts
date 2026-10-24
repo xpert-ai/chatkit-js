@@ -12,6 +12,7 @@ const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
   'setThreadId',
   'focusMessage',
+  'prepareLeave',
   'sendUserMessage',
   'setComposerValue',
   'setRuntimeCapabilities',
@@ -136,6 +137,10 @@ class ChatKitController {
 
   setThreadId(...args: Parameters<XpertAIChatKit['setThreadId']>) {
     return this.callMethod('setThreadId', ...args);
+  }
+
+  prepareLeave() {
+    return this.callMethod('prepareLeave');
   }
 
   focusMessage(...args: Parameters<XpertAIChatKit['focusMessage']>) {

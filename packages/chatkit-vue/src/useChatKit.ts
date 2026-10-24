@@ -8,6 +8,7 @@ type DotToCamelCase<S extends string> = S extends `${infer Head}.${infer Tail}`
 
 const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
+  'prepareLeave',
   'setThreadId',
   'sendUserMessage',
   'setComposerValue',

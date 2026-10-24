@@ -1000,6 +1000,13 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   @requireCommandCapability
+  async prepareLeave(): Promise<boolean> {
+    await this.#loaded;
+    if (!this.#messenger) return false;
+    return this.#messenger.commands.prepareLeave();
+  }
+
+  @requireCommandCapability
   async focusMessage(request: ChatKitMessageFocusRequest) {
     await this.#loaded;
     if (!this.#messenger) return { success: false as const, code: 'not_ready' };

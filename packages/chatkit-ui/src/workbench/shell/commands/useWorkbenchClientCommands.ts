@@ -1,4 +1,11 @@
 import {
+  executeContentCommand,
+  isContentCommand,
+  type ReviewSession,
+} from '../../content/commands';
+import { ContentReview } from '../../content/ContentReview';
+import type { EditorLifecycle } from '../../editors/editor-lifecycle';
+import {
   ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
   ASSISTANT_CONTEXT_SET_COMMAND,
   type XpertExtensionViewManifest,
@@ -33,6 +40,9 @@ import {
 } from './request-context';
 
 type WorkbenchClientCommandsOptions = {
+  editors: EditorLifecycle;
+  viewQueries: Record<string, XpertViewQuery>;
+  closeView: (key: string) => void;
   rememberViewNavigation: (target: ResourceCardOpenTarget) => void;
   onRequestContextChange: WorkbenchShellProps['onRequestContextChange'];
   contextsRef: React.RefObject<Map<string, WorkbenchAssistantContext>>;
@@ -58,6 +68,9 @@ type WorkbenchClientCommandsOptions = {
 };
 
 export function useWorkbenchClientCommands({
+  editors,
+  viewQueries,
+  closeView,
   rememberViewNavigation,
   onRequestContextChange,
   contextsRef,
@@ -77,6 +90,13 @@ export function useWorkbenchClientCommands({
   openMessage,
   openExecution,
 }: WorkbenchClientCommandsOptions) {
+  const [review, setReview] = React.useState<{
+    id: string;
+    scope: string;
+    session: ReviewSession;
+  } | null>(null);
+  const queriesRef = React.useRef(viewQueries);
+  queriesRef.current = viewQueries;
   const contextKey = JSON.stringify([
     stream.apiUrl,
     stream.organizationId,
@@ -114,6 +134,36 @@ export function useWorkbenchClientCommands({
     ): Promise<unknown> => {
       const context = currentContext.current;
       const userActivated = navigator.userActivation?.isActive === true;
+      if (isContentCommand(commandKey)) {
+        if (
+          stream.runtimeScopeReady === false ||
+          !stream.projectId ||
+          !stream.client.content
+        )
+          return { success: false, code: 'content_unavailable' };
+        return executeContentCommand(commandKey, payload, {
+          api: stream.client.content,
+          scope: {
+            assistantId: stream.assistantId,
+            projectId: stream.projectId,
+          },
+          viewKey: manifest.key,
+          editors,
+          isCurrent: () => currentContext.current === context,
+          close: closeView,
+          review: (session) =>
+            setReview({ id: crypto.randomUUID(), scope: context.key, session }),
+          linkBaseUrl: options?.workbench?.linkBaseUrl,
+          copy: async (url) => {
+            try {
+              await navigator.clipboard.writeText(url);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+        });
+      }
       if (commandKey === ASSISTANT_CONTEXT_SET_COMMAND) {
         if (stream.group) return unsupportedCommand(commandKey);
         const parsed = parseContextSetPayload(payload);
@@ -166,7 +216,13 @@ export function useWorkbenchClientCommands({
           humanInput: input,
         });
         const messageId = message.clientMessageId ?? createMessageId();
-        if (message.newThread) stream.reset?.(null);
+        if (message.newThread) {
+          if (!(await editors.prepare()))
+            return { success: false, code: 'unsaved_changes' };
+          if (currentContext.current !== context)
+            return { success: false, code: 'stale_context' };
+          stream.reset?.(null);
+        }
         const followUpMode =
           stream.isLoading && !message.newThread
             ? (message.followUpMode ?? 'queue')
@@ -256,6 +312,7 @@ export function useWorkbenchClientCommands({
         viewKey: manifest.key,
       };
       return executeWorkbenchCommand(request, {
+        prepareLeave: () => editors.prepare(),
         apiUrl: stream.apiUrl,
         projectId:
           stream.runtimeScopeReady === false ? undefined : stream.projectId,
@@ -267,7 +324,16 @@ export function useWorkbenchClientCommands({
               context.navigationScope &&
             currentContext.current.conversationId === navigation.conversationId,
           ),
-        openView: (key, query) => {
+        openView: async (key, query) => {
+          if (
+            queriesRef.current[key]?.selectionId &&
+            (queriesRef.current[key]?.selectionId !== query.selectionId ||
+              query.parameters?.reload)
+          ) {
+            if (!(await editors.prepare(key)))
+              throw new Error(t('contentReview.Unsaved'));
+          }
+          if (currentContext.current !== context) return false;
           if (!views.some((view) => view.key === key)) return false;
           setViewQueries((current) => ({ ...current, [key]: query }));
           selectView(key);
@@ -312,6 +378,9 @@ export function useWorkbenchClientCommands({
       });
     },
     [
+      editors,
+      closeView,
+      options?.workbench?.linkBaseUrl,
       rememberViewNavigation,
       options?.request,
       openPreview,
@@ -330,5 +399,51 @@ export function useWorkbenchClientCommands({
       t,
     ],
   );
-  return { executeClientCommand };
+  const activeReview = review?.scope === contextKey ? review.session : null;
+  const reviewPanel =
+    activeReview && stream.projectId
+      ? React.createElement(ContentReview, {
+          key: `${contextKey}:${review?.id}`,
+          session: activeReview,
+          api: stream.client.content,
+          scope: {
+            assistantId: stream.assistantId,
+            projectId: stream.projectId,
+          },
+          editors,
+          close: () => setReview(null),
+          reopen: async () => {
+            if (!(await editors.prepare(activeReview.viewKey)))
+              throw new Error(t('contentReview.Unsaved'));
+            setViewQueries((current) => ({
+              ...current,
+              [activeReview.viewKey]: {
+                ...current[activeReview.viewKey],
+                selectionId: activeReview.resourceId,
+                parameters: {
+                  ...current[activeReview.viewKey]?.parameters,
+                  reload: Date.now(),
+                },
+              },
+            }));
+            selectView(activeReview.viewKey);
+          },
+          ask: async (text) => {
+            const result = await executeClientCommand(
+              ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
+              { text },
+              { key: activeReview.viewKey },
+            );
+            if (
+              result &&
+              typeof result === 'object' &&
+              'success' in result &&
+              result.success === false
+            )
+              throw new Error(t('workbench.errors.sendFailed'));
+            return result;
+          },
+        })
+      : null;
+  return { executeClientCommand, reviewPanel };
 }

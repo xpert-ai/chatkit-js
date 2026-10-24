@@ -1,3 +1,5 @@
+import { EditorLifecycle } from '../editors/editor-lifecycle';
+import { EditorLifecycleContext } from '../editors/context';
 import * as React from 'react';
 import {
   act,
@@ -90,6 +92,123 @@ describe('RemoteViewFrame', () => {
       items: [{ id: 'doc-1' }],
     });
     mocks.client.viewHosts.revokeFileAccessSession.mockResolvedValue(undefined);
+  });
+
+  it('consumes editor status locally and rejects stale or foreign save acknowledgements', async () => {
+    const editors = new EditorLifecycle();
+    const onClientCommand = vi.fn();
+    render(
+      <ThemeProvider>
+        <EditorLifecycleContext.Provider value={editors}>
+          <RemoteViewFrame
+            manifest={{
+              ...manifest,
+              clientCommands: [
+                { key: 'workbench.content.status', label: { en_US: 'Status' } },
+              ],
+            }}
+            initialQuery={{ selectionId: 'doc' }}
+            hostId="agent-1"
+            locale="en-US"
+            title="Documents"
+            hostEvent={null}
+            viewHosts={mocks.client.viewHosts}
+            onNotify={vi.fn()}
+            onClientCommand={onClientCommand}
+          />
+        </EditorLifecycleContext.Provider>
+      </ThemeProvider>,
+    );
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    const init = post.mock.calls.find(
+      ([message]) => message.type === 'init',
+    )![0];
+    const envelope = {
+      channel: REMOTE_COMPONENT_CHANNEL,
+      protocolVersion: 1,
+      instanceId: init.instanceId,
+      scopeRevision: init.scopeRevision,
+    };
+    dispatchFrameMessage(iframe, {
+      ...envelope,
+      type: 'invokeClientCommand',
+      requestId: 'dirty',
+      commandKey: 'workbench.content.status',
+      payload: { resourceId: 'doc', dirty: true, title: 'Project notes' },
+    });
+    await waitFor(() => expect(editors.dirty).toBe(true));
+    expect(editors.getTabState(manifest.key)?.title).toBe('Project notes');
+    for (const [requestId, payload] of [
+      ['wrong-resource', { resourceId: 'other', dirty: false, title: 'Wrong' }],
+      ['invalid-title', { resourceId: 'doc', dirty: false, title: 42 }],
+    ] as const) {
+      dispatchFrameMessage(iframe, {
+        ...envelope,
+        type: 'invokeClientCommand',
+        requestId,
+        commandKey: 'workbench.content.status',
+        payload,
+      });
+      await waitFor(() =>
+        expect(
+          post.mock.calls.some(
+            ([message]) =>
+              message.type ===
+                (requestId === 'invalid-title'
+                  ? 'error'
+                  : 'clientCommandResult') && message.requestId === requestId,
+          ),
+        ).toBe(true),
+      );
+      expect(editors.getTabState(manifest.key)).toMatchObject({
+        title: 'Project notes',
+        dirty: true,
+      });
+    }
+    expect(onClientCommand).not.toHaveBeenCalled();
+    const pending = editors.prepare();
+    const flush = post.mock.calls.find(
+      ([message]) => message.type === 'editorEvent',
+    )![0];
+    dispatchFrameMessage(iframe, {
+      ...envelope,
+      type: 'invokeClientCommand',
+      requestId: 'clean',
+      commandKey: 'workbench.content.status',
+      payload: { resourceId: 'doc', dirty: false },
+    });
+    let finished = false;
+    void pending.then(() => {
+      finished = true;
+    });
+    dispatchFrameMessage(iframe, {
+      ...envelope,
+      scopeRevision: init.scopeRevision + 1,
+      type: 'closePrepared',
+      requestId: flush.requestId,
+      ready: true,
+    });
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          ...envelope,
+          type: 'closePrepared',
+          requestId: flush.requestId,
+          ready: true,
+        },
+      }),
+    );
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    dispatchFrameMessage(iframe, {
+      ...envelope,
+      type: 'closePrepared',
+      requestId: flush.requestId,
+      ready: true,
+    });
+    expect(await pending).toBe(true);
   });
 
   it('loads HTML with a credential-isolated iframe sandbox and sends init', async () => {

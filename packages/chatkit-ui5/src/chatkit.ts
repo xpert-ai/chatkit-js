@@ -35,6 +35,7 @@ const EXCLUDED_HANDLER_KEYS = new Set(['onClientTool']);
 
 const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
+  'prepareLeave',
   'setThreadId',
   'sendUserMessage',
   'setComposerValue',
@@ -291,6 +292,10 @@ export const ChatKit = ControlBase.extend('xpertai.chatkit.ui5.ChatKit', {
 
     return (methodRef as (...args: unknown[]) => unknown).apply(el, args);
   },
+  async prepareLeave(this: ChatKitInstance): Promise<boolean> {
+    return (await this._callMethod('prepareLeave')) === true;
+  },
+
   focusComposer(
     this: ChatKitInstance,
     ...args: ChatKitMethodParams<'focusComposer'>

@@ -105,6 +105,68 @@ describe('ParentMessengerProvider', () => {
     window.dispatchEvent(event);
   }
 
+  it('blocks an embedding host thread change when the Workbench cannot save', async () => {
+    const prepare = vi.fn(async () => false);
+    function Probe() {
+      useParentMessenger({ onPrepareLeave: prepare });
+      return null;
+    }
+    render(
+      <ParentMessengerProvider>
+        <Probe />
+      </ParentMessengerProvider>,
+    );
+    selectThread('blocked', 'other-thread');
+    await waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ nonce: 'blocked', error: expect.any(Error) }),
+        expect.any(String),
+      ),
+    );
+    prepare.mockResolvedValue(true);
+    selectThread('ready', 'other-thread');
+    await waitFor(() =>
+      expect(mocks.stream.reset).toHaveBeenCalledWith(
+        'other-thread',
+        undefined,
+        { suppressThreadChange: true },
+      ),
+    );
+  });
+
+  it('answers the generic prepareLeave handshake using only the mounted Workbench', async () => {
+    const prepare = vi.fn(async () => false);
+    function Probe() {
+      useParentMessenger({ onPrepareLeave: prepare });
+      return null;
+    }
+    render(
+      <ParentMessengerProvider>
+        <Probe />
+      </ParentMessengerProvider>,
+    );
+    const event = new MessageEvent('message', {
+      origin: 'https://example.com',
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onPrepareLeave',
+        nonce: 'leave',
+        data: null,
+      },
+    });
+    Object.defineProperty(event, 'source', { value: parentWindow });
+    window.dispatchEvent(event);
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ nonce: 'leave', response: false }),
+        expect.any(String),
+      ),
+    );
+  });
+
   it('acknowledges precise message focus only after completion without resetting the thread', async () => {
     let finish!: (result: { success: true; status: 'opened' }) => void;
     const onFocusMessage = vi.fn(

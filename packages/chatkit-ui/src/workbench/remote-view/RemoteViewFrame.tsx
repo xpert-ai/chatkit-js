@@ -1,3 +1,5 @@
+import { EditorLifecycleContext } from '../editors/context';
+import { RemoteEditor } from '../editors/remote-editor';
 import * as React from 'react';
 import type {
   Client,
@@ -164,6 +166,37 @@ export function RemoteViewFrame({
     },
     [instanceId],
   );
+
+  const editors = React.useContext(EditorLifecycleContext);
+  const editorRef = React.useRef<RemoteEditor | null>(null);
+  const resourceId = initialQuery?.selectionId;
+  const isEditor = manifest.clientCommands?.some(
+    (command) => command.key === 'workbench.content.status',
+  );
+  React.useLayoutEffect(() => {
+    if (!editors || !resourceId || !isEditor) return;
+    const editor = new RemoteEditor(
+      editors,
+      instanceId,
+      manifest.key,
+      resourceId,
+      (payload) =>
+        sendToFrame('editorEvent', { ...payload, scopeRevision: revision }),
+    );
+    editorRef.current = editor;
+    return () => {
+      editor.dispose();
+      if (editorRef.current === editor) editorRef.current = null;
+    };
+  }, [
+    editors,
+    instanceId,
+    manifest.key,
+    resourceId,
+    isEditor,
+    revision,
+    sendToFrame,
+  ]);
 
   const revokeSession = React.useCallback(() => {
     fileUrls.clear();
@@ -395,6 +428,16 @@ export function RemoteViewFrame({
         return;
       }
 
+      // Editor acknowledgements require an exact revision, including revision zero.
+      if (message.type === 'closePrepared') {
+        if (
+          message.scopeRevision === revision &&
+          message.requestId &&
+          typeof message.ready === 'boolean'
+        )
+          editorRef.current?.acknowledge(message.requestId, message.ready);
+        return;
+      }
       switch (message.type) {
         case 'resize':
           return;
@@ -539,6 +582,32 @@ export function RemoteViewFrame({
               throw new Error(
                 `Client command '${commandKey ?? ''}' is not available.`,
               );
+            }
+            if (commandKey === 'workbench.content.status') {
+              const value = message.payload;
+              if (
+                message.scopeRevision !== revision ||
+                !value ||
+                typeof value !== 'object' ||
+                !('resourceId' in value) ||
+                typeof value.resourceId !== 'string' ||
+                !('dirty' in value) ||
+                typeof value.dirty !== 'boolean' ||
+                ('title' in value &&
+                  value.title !== undefined &&
+                  typeof value.title !== 'string')
+              )
+                throw new Error('Invalid editor status.');
+              return {
+                success:
+                  editorRef.current?.status(
+                    value.resourceId,
+                    value.dirty,
+                    'title' in value && typeof value.title === 'string'
+                      ? value.title
+                      : undefined,
+                  ) ?? false,
+              };
             }
             return onClientCommand(commandKey, message.payload, manifest);
           });

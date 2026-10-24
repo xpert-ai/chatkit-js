@@ -42,14 +42,12 @@ import {
 } from './external-assistant/external-assistant-runs';
 import {
   Loader2,
-  PanelRight,
   RotateCcw,
   MessageSquarePlus,
   MessageSquare,
   Bot,
   Globe,
 } from 'lucide-react';
-import { IconDefinitionRenderer } from '../components/ui/icon-definition';
 import {
   RemoteViewFrame,
   type RemoteViewHostsClient,
@@ -57,6 +55,7 @@ import {
 import { WorkbenchTabs } from './WorkbenchTabs';
 import { WorkbenchPanelHeader } from './WorkbenchPanelHeader';
 import { WorkbenchTab } from './WorkbenchTab';
+import { RemoteViewTab } from './remote-view/RemoteViewTab';
 import { resolveManifestText } from './manifest-text';
 import { WorkbenchBrowserPreview } from './browser-preview/WorkbenchBrowserPreview';
 import { SideChatView } from './side-chat/SideChatView';
@@ -353,31 +352,17 @@ export function WorkbenchPanel({
             ))}
             {views.map((view) => {
               const selected = view.key === activeViewKey;
-              const label = resolveManifestText(
-                view.workbench?.menu?.label ?? view.title,
-                view.key,
-                locale,
-              );
               return (
-                <WorkbenchTab
+                <RemoteViewTab
                   key={view.key}
-                  label={label}
+                  view={view}
+                  resourceId={viewQueries[view.key]?.selectionId}
+                  locale={locale}
                   selected={selected}
                   onSelect={() => onSelect(view.key)}
-                  icon={
-                    <IconDefinitionRenderer
-                      icon={view.workbench?.menu?.icon ?? view.icon}
-                      size={16}
-                      fallback={<PanelRight size={16} />}
-                    />
-                  }
-                  close={
+                  onClose={
                     selected
-                      ? {
-                          label: `${t('workbench.close')}: ${label}`,
-                          onClick: () =>
-                            onCloseView ? onCloseView(view.key) : onClose(),
-                        }
+                      ? () => (onCloseView ? onCloseView(view.key) : onClose())
                       : undefined
                   }
                 />

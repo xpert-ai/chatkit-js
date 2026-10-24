@@ -544,6 +544,8 @@ export type ChatKitAssistantComputers = {
 };
 
 export type ChatKitWorkbenchOptions = {
+  /** Public entry URL for resource links. May contain {projectId}; never include secrets or a private thread. */
+  linkBaseUrl?: string;
   /** Show external Assistant executions in a native workbench tab. Enabled by default. */
   externalAssistants?: { enabled?: boolean };
   /**
