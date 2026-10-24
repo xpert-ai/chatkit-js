@@ -94,6 +94,34 @@ describe('RemoteViewFrame', () => {
     mocks.client.viewHosts.revokeFileAccessSession.mockResolvedValue(undefined);
   });
 
+  it('notifies a retained iframe when its Workbench tab is hidden or shown without reloading it', async () => {
+    const view = renderFrame();
+    const iframe = (await screen.findByTitle('Documents')) as HTMLIFrameElement;
+    const post = vi.spyOn(getContentWindow(iframe), 'postMessage');
+    fireEvent.load(iframe);
+    view.rerender(
+      renderFrameElement(undefined, runtimeScope, true, manifest, false),
+    );
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'visibility', visible: false }),
+      '*',
+    );
+    post.mockClear();
+    view.rerender(
+      renderFrameElement(undefined, runtimeScope, true, manifest, true),
+    );
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'visibility', visible: true }),
+      '*',
+    );
+    expect(
+      mocks.client.viewHosts.getRemoteComponentEntry,
+    ).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls.some(([message]) => message.type === 'init')).toBe(
+      false,
+    );
+  });
+
   it('loads HTML with a credential-isolated iframe sandbox and sends init', async () => {
     renderFrame();
     const iframe = await screen.findByTitle('Documents');
@@ -902,10 +930,12 @@ function renderFrameElement(
   } = runtimeScope,
   contextReady = true,
   viewManifest = manifest,
+  visible = true,
 ) {
   return (
     <ThemeProvider theme={theme}>
       <RemoteViewFrame
+        visible={visible}
         manifest={viewManifest}
         hostId="agent-1"
         runtimeScope={scope}

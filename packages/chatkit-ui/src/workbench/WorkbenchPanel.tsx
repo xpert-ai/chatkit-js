@@ -624,6 +624,7 @@ export function WorkbenchPanel({
               className="h-full min-h-0"
             >
               <RemoteViewFrame
+                visible={view.key === activeViewKey && visible}
                 manifest={view}
                 hostId={hostId}
                 runtimeScope={runtimeScope}

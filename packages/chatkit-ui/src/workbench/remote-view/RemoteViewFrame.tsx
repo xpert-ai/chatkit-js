@@ -44,6 +44,7 @@ export type RemoteViewHostsClient = Pick<
 >;
 
 type RemoteViewFrameProps = {
+  visible?: boolean;
   initialQuery?: XpertViewQuery;
   manifest: XpertExtensionViewManifest;
   hostId: string;
@@ -69,6 +70,7 @@ type RemoteTheme = {
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function RemoteViewFrame({
+  visible = true,
   manifest: incomingManifest,
   initialQuery,
   hostId,
@@ -111,6 +113,8 @@ export function RemoteViewFrame({
   const debounceRef = React.useRef(new Map<string, number>());
   const requestControllersRef = React.useRef(new Set<AbortController>());
   const activeRef = React.useRef(true);
+  const visibleRef = React.useRef(visible);
+  visibleRef.current = visible;
   const scopeKey = JSON.stringify([
     runtimeScope?.projectId ?? null,
     runtimeScope?.conversationId ?? null,
@@ -277,6 +281,7 @@ export function RemoteViewFrame({
       return;
     const production = isProductionHost();
     sendToFrame('init', {
+      visible: visibleRef.current && !document.hidden,
       manifest,
       payload: {},
       runtimeScope: {
@@ -309,6 +314,15 @@ export function RemoteViewFrame({
     blocked,
     configurationKey,
   ]);
+
+  React.useEffect(() => {
+    const notifyVisibility = () =>
+      sendToFrame('visibility', { visible: visible && !document.hidden });
+    notifyVisibility();
+    document.addEventListener('visibilitychange', notifyVisibility);
+    return () =>
+      document.removeEventListener('visibilitychange', notifyVisibility);
+  }, [visible, sendToFrame]);
 
   const ensureFileAccessSession = React.useCallback(
     async (signal: AbortSignal) => {
