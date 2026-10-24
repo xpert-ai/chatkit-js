@@ -1,5 +1,31 @@
 # @xpert-ai/chatkit-ui
 
+## 0.19.0
+
+### Minor Changes
+
+- fabff21: Move built-in pet images out of the UI distribution into the independently versioned optional @xpert-ai/chatkit-assets package. Add per-instance pet.assetsBaseUrl configuration for built-in pets, appearance sprites and host overlays. Deployments must copy the offline package's pets directory to /pets (the compatible default), or host it separately and configure pet.assetsBaseUrl. Existing custom sprite URLs remain unchanged.
+- 663952a: Handle content editor discovery, document navigation, resource links, and content review inside ChatKit Workbench. Review supports proposals, comments, revision restoration, and external-file reconciliation through the Xpert SDK.
+
+  Expose `prepareLeave()` through the web component and framework integrations so embedding applications can wait for pending editor saves before navigating or unmounting. Native and remote editors share leave protection, and remote editor tabs display the current document name and an unsaved-changes indicator.
+
+  Remote views must declare their content commands. `workbench.content.*` and `assistant.content.review` are handled locally without falling through to embedder callbacks; use `workbench.content.resolve` followed by `workbench.navigation.open` instead of the removed `workbench.content.open` command. Configure `workbench.linkBaseUrl` for public resource links.
+
+  Release prerequisite: publish and adopt an Xpert SDK version providing `Client.content` and required view-command declarations before releasing this change. The currently declared SDK 0.14.0 does not provide these APIs; local integration uses the unpublished SDK until the formal dependency is updated.
+
+### Patch Changes
+
+- 2da5c67: Save pending editor changes before host group or session replacements, and block replacement when saving fails. Adapt content review spacing to the active theme density.
+- a2198c4: Upgrade Xpert SDK to 0.17.0 to support content APIs and run status polling.
+- 2f29eff: Notify retained Workbench views of their visibility so hidden views can pause polling without losing local state. Pause external Assistant status polling in hidden browser tabs and refresh when visible again.
+
+  Use the SDK's compact run-status endpoint when available, retain compatibility with older SDKs and servers, and preserve existing Assistant presentation and timing fields when merging partial status updates.
+
+- Updated dependencies [fabff21]
+- Updated dependencies [663952a]
+  - @xpert-ai/chatkit-types@0.19.0
+  - @xpert-ai/chatkit-web-shared@0.18.0
+
 ## 0.18.1
 
 ### Patch Changes
