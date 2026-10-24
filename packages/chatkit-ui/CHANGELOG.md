@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.18.1
+
+### Patch Changes
+
+- 1386c33: Keep text editing active when a PPTX canvas receives input immediately after loading. Scope transient canvas state to each slide so switching slides resets editing and drag state without a delayed mount effect clearing the first edit.
+
 ## 0.18.0
 
 ### Minor Changes
