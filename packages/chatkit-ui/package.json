@@ -64,7 +64,7 @@
     "@xpert-ai/artifact-tool": "0.1.0",
     "@xpert-ai/chatkit-types": "workspace:~",
     "@xpert-ai/chatkit-web-shared": "workspace:~",
-    "@xpert-ai/xpert-sdk": "^0.16.0",
+    "@xpert-ai/xpert-sdk": "^0.17.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "class-variance-authority": "^0.7.1",
@@ -102,14 +102,14 @@
     "@types/react-dom": "^19.0.0",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.7.0",
+    "@xpert-ai/chatkit-assets": "workspace:~",
     "jsdom": "^25.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "rimraf": "^5.0.0",
     "tsup": "^8.0.0",
     "vite": "^7.3.0",
-    "vitest": "^3.2.4",
-    "@xpert-ai/chatkit-assets": "workspace:~"
+    "vitest": "^3.2.4"
   },
   "scripts": {
     "dev": "vite",
