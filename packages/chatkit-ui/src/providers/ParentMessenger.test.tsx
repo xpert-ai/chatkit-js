@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isTrustedChatKitMessageEvent } from '@xpert-ai/chatkit-web-shared';
+import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 
 const mocks = vi.hoisted(() => ({
   stream: {
@@ -104,6 +105,135 @@ describe('ParentMessengerProvider', () => {
     Object.defineProperty(event, 'source', { value: parentWindow });
     window.dispatchEvent(event);
   }
+
+  it('blocks an embedding host thread change when the Workbench cannot save', async () => {
+    const prepare = vi.fn(async () => false);
+    function Probe() {
+      useParentMessenger({ onPrepareLeave: prepare });
+      return null;
+    }
+    render(
+      <ParentMessengerProvider>
+        <Probe />
+      </ParentMessengerProvider>,
+    );
+    selectThread('blocked', 'other-thread');
+    await waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ nonce: 'blocked', error: expect.any(Error) }),
+        expect.any(String),
+      ),
+    );
+    prepare.mockResolvedValue(true);
+    selectThread('ready', 'other-thread');
+    await waitFor(() =>
+      expect(mocks.stream.reset).toHaveBeenCalledWith(
+        'other-thread',
+        undefined,
+        { suppressThreadChange: true },
+      ),
+    );
+  });
+
+  it.each([
+    ['session', { sessionKey: 'new-session' }],
+    ['group', { group: { id: 'new-group' } }],
+  ] satisfies [string, Partial<ChatKitOptions>][])(
+    'saves before replacing the host %s identity',
+    async (_name, change) => {
+      const prepare = vi.fn(async () => true);
+      const onSetOptions = vi.fn();
+      function Probe() {
+        useParentMessenger({ onPrepareLeave: prepare, onSetOptions });
+        return null;
+      }
+      render(
+        <ParentMessengerProvider>
+          <Probe />
+        </ParentMessengerProvider>,
+      );
+      const options: ChatKitOptions = {
+        api: {
+          apiUrl: 'https://api.example.com',
+          getClientSecret: async () => 'secret',
+        },
+        sessionKey: 'session',
+        group: { id: 'group' },
+      };
+      const send = (nonce: string, data: ChatKitOptions) => {
+        const event = new MessageEvent('message', {
+          origin: 'https://example.com',
+          data: {
+            __xpaiChatKit: true,
+            type: 'command',
+            command: 'onSetOptions',
+            nonce,
+            data,
+          },
+        });
+        Object.defineProperty(event, 'source', { value: parentWindow });
+        act(() => window.dispatchEvent(event));
+      };
+      send('initial', options);
+      await waitFor(() => expect(onSetOptions).toHaveBeenCalledWith(options));
+      prepare.mockClear().mockResolvedValue(false);
+      onSetOptions.mockClear();
+      const next = { ...options, ...change };
+      send('blocked-identity', next);
+      await waitFor(() =>
+        expect(parentWindow.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            nonce: 'blocked-identity',
+            error: expect.any(Error),
+          }),
+          expect.any(String),
+        ),
+      );
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(onSetOptions).not.toHaveBeenCalled();
+      prepare.mockResolvedValue(true);
+      send('saved-identity', next);
+      await waitFor(() => expect(onSetOptions).toHaveBeenCalledWith(next));
+      expect(prepare).toHaveBeenCalledTimes(2);
+      prepare.mockClear();
+      send('theme-only', { ...next, theme: { density: 'compact' } });
+      await waitFor(() => expect(onSetOptions).toHaveBeenCalledTimes(2));
+      expect(prepare).not.toHaveBeenCalled();
+    },
+  );
+
+  it('answers the generic prepareLeave handshake using only the mounted Workbench', async () => {
+    const prepare = vi.fn(async () => false);
+    function Probe() {
+      useParentMessenger({ onPrepareLeave: prepare });
+      return null;
+    }
+    render(
+      <ParentMessengerProvider>
+        <Probe />
+      </ParentMessengerProvider>,
+    );
+    const event = new MessageEvent('message', {
+      origin: 'https://example.com',
+      data: {
+        __xpaiChatKit: true,
+        type: 'command',
+        command: 'onPrepareLeave',
+        nonce: 'leave',
+        data: null,
+      },
+    });
+    Object.defineProperty(event, 'source', { value: parentWindow });
+    window.dispatchEvent(event);
+    await waitFor(() =>
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ nonce: 'leave', response: false }),
+        expect.any(String),
+      ),
+    );
+  });
 
   it('acknowledges precise message focus only after completion without resetting the thread', async () => {
     let finish!: (result: { success: true; status: 'opened' }) => void;

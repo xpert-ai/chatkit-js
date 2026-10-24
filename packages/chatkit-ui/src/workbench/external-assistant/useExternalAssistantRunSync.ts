@@ -33,6 +33,10 @@ export function useExternalAssistantRunSync({
   current.current = { scope, runs, onRunUpdate };
   const mounted = React.useRef(true);
   const pending = React.useRef(new Map<string, Promise<void>>());
+  const legacyStatus = React.useRef(false);
+  React.useEffect(() => {
+    legacyStatus.current = false;
+  }, [client]);
   const keyFor = (id: string) => `${threadId}:${id}`;
   const reconciled = runs.map((run) => {
     const snapshot = confirmed[keyFor(run.id)];
@@ -63,8 +67,22 @@ export function useExternalAssistantRunSync({
         const key = `${threadId}:${id}`;
         const existing = pending.current.get(key);
         if (existing) return existing;
-        const request = client.runs
-          .get(threadId, id)
+        const request = (
+          legacyStatus.current || typeof client.runs.getStatus !== 'function'
+            ? client.runs.get(threadId, id)
+            : client.runs.getStatus(threadId, id).catch((error: unknown) => {
+                if (
+                  error &&
+                  typeof error === 'object' &&
+                  'status' in error &&
+                  (error.status === 404 || error.status === 405)
+                ) {
+                  legacyStatus.current = true;
+                  return client.runs.get(threadId, id);
+                }
+                throw error;
+              })
+        )
           .then((snapshot) => {
             if (
               !mounted.current ||
@@ -92,11 +110,18 @@ export function useExternalAssistantRunSync({
 
   React.useEffect(() => {
     if (!active || !client || !threadId || runningIds === '[]') return;
-    void refresh();
+    const refreshVisible = () => {
+      if (!document.hidden) void refresh();
+    };
+    refreshVisible();
     const timer = window.setInterval(() => {
-      void refresh();
+      refreshVisible();
     }, 5000);
-    return () => window.clearInterval(timer);
+    document.addEventListener('visibilitychange', refreshVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshVisible);
+    };
   }, [active, client, threadId, runningIds, refresh]);
 
   React.useEffect(() => {

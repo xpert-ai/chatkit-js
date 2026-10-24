@@ -1,3 +1,4 @@
+import type { EditorLifecycle } from '../editors/editor-lifecycle';
 import * as React from 'react';
 import type { XpertWorkspaceFile } from '@xpert-ai/xpert-sdk';
 
@@ -16,19 +17,32 @@ export const NATIVE_PREFIX = 'chatkit.native.resource:';
 export const nativeFileKey = (path: string) => `${NATIVE_PREFIX}file:${path}`;
 const empty = { tabs: [] as NativeTab[], recent: [] as RecentWorkspaceFile[] };
 
-export function useNativeWorkbench(scope: string) {
+export function useNativeWorkbench(scope: string, editors: EditorLifecycle) {
   const [state, setState] = React.useState({ scope, ...empty });
   const [pending, setPending] = React.useState<string | null>(null);
-  const [dirty, setDirty] = React.useState<string[]>([]);
-  const handles = React.useRef(new Map<string, FileEditorHandle>());
+  // Keep native save callbacks here; dirty state belongs exclusively to the shared coordinator.
+  const handles = React.useMemo(
+    () => ({ scope, saves: new Map<string, FileEditorHandle['save']>() }),
+    [scope],
+  );
+  const dirtyTabs = React.useSyncExternalStore(
+    editors.subscribe,
+    editors.getDirtyTabs,
+    editors.getDirtyTabs,
+  );
+  const dirty = dirtyTabs.filter((key) => handles.saves.has(key));
   const generation = React.useRef(scope);
   generation.current = scope;
   React.useEffect(() => {
     setState({ scope, ...empty });
-    handles.current.clear();
     setPending(null);
-    setDirty([]);
-  }, [scope]);
+    return () => {
+      // Scope-qualified registration prevents a late old editor cleanup from clearing its replacement.
+      for (const key of handles.saves.keys())
+        editors.register(nativeEditorId(scope, key), null);
+      handles.saves.clear();
+    };
+  }, [scope, handles, editors]);
   const update = React.useCallback(
     (change: (data: typeof empty) => typeof empty) => {
       setState((current) => ({
@@ -40,29 +54,25 @@ export function useNativeWorkbench(scope: string) {
   );
   const register = React.useCallback(
     (key: string, handle: FileEditorHandle | null) => {
-      if (handle) handles.current.set(key, handle);
-      else handles.current.delete(key);
-      setDirty((keys) =>
-        handle?.dirty
-          ? keys.includes(key)
-            ? keys
-            : [...keys, key]
-          : keys.includes(key)
-            ? keys.filter((item) => item !== key)
-            : keys,
+      if (handle && generation.current !== scope) return;
+      if (handle) handles.saves.set(key, handle.save);
+      else handles.saves.delete(key);
+      editors.register(
+        nativeEditorId(scope, key),
+        handle
+          ? {
+              tabKey: key,
+              dirty: handle.dirty,
+              prepare: async () => {
+                await handle.save();
+                return true;
+              },
+            }
+          : null,
       );
     },
-    [],
+    [editors, handles, scope],
   );
-  React.useEffect(() => {
-    if (!dirty.length) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [dirty.length]);
   const open = React.useCallback(
     (tab: NativeTab) => {
       update((data) => ({
@@ -119,7 +129,7 @@ export function useNativeWorkbench(scope: string) {
           : data.recent,
       })),
     requestClose: (key: string) => {
-      if (handles.current.get(key)?.dirty) {
+      if (editors.isDirty(key)) {
         setPending(key);
         return false;
       }
@@ -129,10 +139,14 @@ export function useNativeWorkbench(scope: string) {
     discard: remove,
     saveAndClose: async (key: string) => {
       const startScope = scope;
-      await handles.current.get(key)?.save();
+      await handles.saves.get(key)?.();
       if (generation.current !== startScope) return false;
       remove(key);
       return true;
     },
   };
+}
+
+function nativeEditorId(scope: string, key: string) {
+  return JSON.stringify(['native', scope, key]);
 }

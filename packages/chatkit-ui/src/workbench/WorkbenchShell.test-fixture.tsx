@@ -119,6 +119,7 @@ vi.mock('./native/terminal/WorkbenchTerminal', () => ({
 
 vi.mock('./remote-view/RemoteViewFrame', () => ({
   RemoteViewFrame: (props: {
+    initialQuery?: XpertViewQuery;
     title: string;
     onClientCommand: (
       commandKey: string,
@@ -133,7 +134,14 @@ vi.mock('./remote-view/RemoteViewFrame', () => ({
       [],
     );
     mocks.remoteViewProps = props;
-    return <div data-testid="remote-view">{props.title}</div>;
+    return (
+      <div
+        data-testid="remote-view"
+        data-query={JSON.stringify(props.initialQuery)}
+      >
+        {props.title}
+      </div>
+    );
   },
 }));
 

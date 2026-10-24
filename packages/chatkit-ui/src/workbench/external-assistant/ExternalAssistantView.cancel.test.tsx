@@ -23,7 +23,7 @@ function fixture(selectedId: string | null = null) {
   const client = new Client({ apiUrl: 'https://example.test' });
   const cancel = vi.spyOn(client.runs, 'cancel').mockResolvedValue(undefined);
   const get = vi
-    .spyOn(client.runs, 'get')
+    .spyOn(client.runs, 'getStatus')
     .mockImplementation(async (_thread, id) => snapshot(id, 'running'));
   const onSelect = vi.fn();
   const onRunUpdate = vi.fn();

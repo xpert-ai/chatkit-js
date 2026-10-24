@@ -86,6 +86,13 @@ export interface XpertAIChatKit extends HTMLElement {
    * **IMPORTANT**: New options are not merged with the existing options. You must provide a full set of options every time you call this method.
    */
   setOptions(options: ChatKitOptions): void;
+  /**
+   * Flush pending Workbench edits before replacing the runtime or removing ChatKit.
+   * Await true before navigating; false or rejection requires keeping the client mounted.
+   * Dirty state is internal and is not a substitute for this asynchronous leave check.
+   * This checks editor persistence, not completion or cancellation of running AI tasks.
+   */
+  prepareLeave(): Promise<boolean>;
 
   /** Focuses the composer input field. */
   focusComposer(): Promise<void>;

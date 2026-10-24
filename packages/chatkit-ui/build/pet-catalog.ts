@@ -1,68 +1,30 @@
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 
-// Adding a public/pets/<id>/pet.json + spritesheet publishes a new preset.
+/** Serve the optional offline pack in development; never copy it into UI dist. */
 export function petCatalog(): Plugin {
-  const directory = fileURLToPath(new URL('../public/pets/', import.meta.url));
-  const catalog = () =>
-    readdirSync(directory, { withFileTypes: true })
-      .filter(
-        (entry) =>
-          entry.isDirectory() &&
-          /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/.test(entry.name),
-      )
-      .flatMap((entry) => {
-        const path = `${directory}/${entry.name}`;
-        if (
-          !existsSync(`${path}/pet.json`) ||
-          !existsSync(`${path}/spritesheet.webp`)
-        )
-          return [];
-        const metadata: unknown = JSON.parse(
-          readFileSync(`${path}/pet.json`, 'utf8'),
-        );
-        if (
-          !metadata ||
-          typeof metadata !== 'object' ||
-          !('displayName' in metadata) ||
-          typeof metadata.displayName !== 'string'
-        )
-          return [];
-        const spriteVersionNumber =
-          'spriteVersionNumber' in metadata
-            ? metadata.spriteVersionNumber
-            : undefined;
-        if (
-          spriteVersionNumber !== undefined &&
-          spriteVersionNumber !== 1 &&
-          spriteVersionNumber !== 2
-        )
-          return [];
-        return [
-          {
-            id: entry.name,
-            label: metadata.displayName.slice(0, 100),
-            ...(spriteVersionNumber === undefined
-              ? {}
-              : { spriteVersionNumber }),
-          },
-        ];
-      });
+  const directory = fileURLToPath(
+    new URL('../../chatkit-assets/pets/', import.meta.url),
+  );
   return {
-    name: 'assistant-pet-catalog',
+    name: 'assistant-pet-assets-dev',
     configureServer(server) {
-      server.middlewares.use('/pets/catalog.json', (_request, response) => {
-        response.setHeader('Content-Type', 'application/json');
-        response.setHeader('Cache-Control', 'no-cache');
-        response.end(JSON.stringify(catalog()));
-      });
-    },
-    generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 'pets/catalog.json',
-        source: JSON.stringify(catalog()),
+      server.middlewares.use('/pets', (request, response, next) => {
+        const pathname = (request.url ?? '').split('?')[0];
+        if (
+          !/^\/(?:catalog\.json|[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}\/(?:pet\.json|spritesheet\.webp))$/.test(
+            pathname,
+          )
+        )
+          return next();
+        const file = `${directory}${pathname.slice(1)}`;
+        if (!existsSync(file)) return next();
+        response.setHeader(
+          'Content-Type',
+          pathname.endsWith('.webp') ? 'image/webp' : 'application/json',
+        );
+        createReadStream(file).pipe(response);
       });
     },
   };

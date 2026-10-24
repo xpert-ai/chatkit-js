@@ -289,6 +289,12 @@ export type ChatKitPetPositionOptions = {
 };
 
 export type ChatKitPetOptions = {
+  /** Base URL of the built-in pet directory (containing catalog.json and pet IDs).
+   * Defaults to /pets. Accepts HTTPS URLs or root-relative paths; custom character
+   * URLs are unaffected. Also applies to Assistant appearance sprites when
+   * enabled is false. Host offline assets separately from the UI npm package.
+   */
+  assetsBaseUrl?: string;
   enabled?: boolean;
   character?: ChatKitPetCharacter;
   position?: ChatKitPetPositionOptions;
@@ -557,6 +563,8 @@ export type ChatKitWorkbenchNavigation = {
 };
 
 export type ChatKitWorkbenchOptions = {
+  /** Public entry URL for resource links. May contain {projectId}; never include secrets or a private thread. */
+  linkBaseUrl?: string;
   /**
    * Restore host URL state after the matching runtime scope has been authorized.
    * Omit to use ChatKit's own navigation history; view:null closes the routed View.
