@@ -131,6 +131,8 @@ vi.mock('../providers/Theme', () => ({
       radius: 'soft',
     },
     isDarkMode: false,
+    themeRootRef: { current: null },
+    themeRevision: 0,
   }),
 }));
 
@@ -339,7 +341,7 @@ describe('Chat composer paste and drop behavior', () => {
     expect(screen.queryByText('Pasted text')).not.toBeInTheDocument();
   });
 
-  it('uploads a pasted image and adds it as an image reference chip', async () => {
+  it('uploads a pasted image and adds it as an image reference thumbnail', async () => {
     mocks.uploadFile.mockResolvedValueOnce({
       id: 'file-1',
       originalName: 'diagram.png',
@@ -383,12 +385,12 @@ describe('Chat composer paste and drop behavior', () => {
     expect(pasteEvent.defaultPrevented).toBe(true);
     await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledTimes(1));
     expect(mocks.uploadFile).toHaveBeenCalledWith(file);
-    await waitFor(() =>
-      expect(screen.getByText('diagram.png')).toBeInTheDocument(),
+    const thumbnail = await screen.findByRole('img', { name: 'diagram.png' });
+    expect(thumbnail).toHaveAttribute('src', 'https://example.com/image.png');
+    expect(thumbnail.closest('[data-slot="image-reference"]')).toHaveAttribute(
+      'title',
+      expect.stringContaining('image/png • 640x480 • 2.0 KB'),
     );
-    expect(
-      screen.getByText('image/png • 640x480 • 2.0 KB'),
-    ).toBeInTheDocument();
     expect(textarea).toHaveTextContent('');
   });
 
@@ -454,9 +456,22 @@ describe('Chat composer paste and drop behavior', () => {
     await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledTimes(3));
     for (const file of files) {
       expect(mocks.uploadFile).toHaveBeenCalledWith(file);
-      expect(await screen.findByText(file.name)).toBeInTheDocument();
+      if (file.type.startsWith('image/')) {
+        const thumbnail = await screen.findByRole('img', { name: file.name });
+        expect(thumbnail).toHaveAttribute(
+          'src',
+          `https://example.com/${file.name}`,
+        );
+        expect(
+          thumbnail.closest('[data-slot="image-reference"]'),
+        ).toHaveAttribute(
+          'title',
+          expect.stringContaining('image/png • 640x480'),
+        );
+      } else {
+        expect(await screen.findByText(file.name)).toBeInTheDocument();
+      }
     }
-    expect(screen.getByText(/image\/png.*640x480/)).toBeInTheDocument();
     expect(screen.getAllByText('Ready')).toHaveLength(2);
   });
 
@@ -493,7 +508,9 @@ describe('Chat composer paste and drop behavior', () => {
 
   it('does not upload pasted documents when attachments are disabled', async () => {
     renderAttachmentChat({ enabled: false });
-    const file = new File(['document'], 'report.pdf', { type: 'application/pdf' });
+    const file = new File(['document'], 'report.pdf', {
+      type: 'application/pdf',
+    });
     await act(async () => {
       fireEvent.paste(screen.getByRole('textbox'), {
         clipboardData: {
@@ -518,7 +535,9 @@ describe('Chat composer paste and drop behavior', () => {
         status: 'ready',
       });
     renderAttachmentChat();
-    const file = new File(['document'], 'report.pdf', { type: 'application/pdf' });
+    const file = new File(['document'], 'report.pdf', {
+      type: 'application/pdf',
+    });
     fireEvent.paste(screen.getByRole('textbox'), {
       clipboardData: {
         items: [createClipboardFileItem(file)],
@@ -684,9 +703,18 @@ describe('Chat composer paste and drop behavior', () => {
     expect(mocks.uploadFile).toHaveBeenNthCalledWith(1, first);
     expect(mocks.uploadFile).toHaveBeenNthCalledWith(2, second);
     await waitFor(() => {
-      expect(screen.getByText('first.png')).toBeInTheDocument();
-      expect(screen.getByText('second.png')).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'first.png' })).toHaveAttribute(
+        'src',
+        'https://example.com/first.png',
+      );
+      expect(screen.getByRole('img', { name: 'second.png' })).toHaveAttribute(
+        'src',
+        'https://example.com/second.png',
+      );
     });
+    expect(
+      screen.getAllByRole('img').map((image) => image.getAttribute('alt')),
+    ).toEqual(['first.png', 'second.png']);
   });
 
   it('uploads files dropped anywhere on the chat root when attachments are enabled', async () => {

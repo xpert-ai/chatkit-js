@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 export const BROWSER_RUNNER_NATIVE_HOST = 'ai.xpert.chatkit.browser_runner';
 
 export type BrowserRunnerStatus = {
@@ -76,7 +77,7 @@ export function createNativeRunnerBridge(
 
   return {
     request(request: NativeRunnerRequest): Promise<NativeRunnerResponse> {
-      const requestId = crypto.randomUUID();
+      const requestId = safeRandomUUID();
       return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(
           () => {

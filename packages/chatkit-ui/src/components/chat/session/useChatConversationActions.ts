@@ -1,3 +1,4 @@
+import { useThreadCapabilities } from '../../../hooks/useThreadCapabilities';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import { useConversationBranch } from '../../../hooks/useConversationBranch';
@@ -45,6 +46,7 @@ type ChatConversationActionsOptions = Pick<
   > &
   Pick<
     ReturnType<typeof useChatBranchState>,
+    | 'branchState'
     | 'activeBranchRef'
     | 'setEditingMessageId'
     | 'editRequestRef'
@@ -73,6 +75,7 @@ export function useChatConversationActions({
   stream,
   onConnectorsChange,
   onProjectChange,
+  branchState,
   activeBranchRef,
   setEditingMessageId,
   composerInputRef,
@@ -94,6 +97,16 @@ export function useChatConversationActions({
   setIsChangingBranch,
   options,
 }: ChatConversationActionsOptions) {
+  const canRetry = useThreadCapabilities({
+    client: stream.client,
+    threadId: stream.threadId,
+    enabled: stream.isReady && !missingConfig,
+    isLoading:
+      stream.isLoading ||
+      Boolean(stream.connectionState && stream.connectionState !== 'connected'),
+    status: branchState.current?.status,
+    error: stream.error,
+  });
   const previousProjectRef = React.useRef(activeProjectId);
   React.useLayoutEffect(() => {
     if (previousProjectRef.current === activeProjectId) return;
@@ -360,6 +373,9 @@ export function useChatConversationActions({
     }
   };
   return {
+    canRetry:
+      canRetry &&
+      (!stream.connectionState || stream.connectionState === 'connected'),
     conversationBranch,
     handleNewThread,
     handleSelectThread,

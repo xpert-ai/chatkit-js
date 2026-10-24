@@ -187,7 +187,10 @@ describe('WorkbenchShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'First' }));
     expect(await screen.findByTestId('side-chat')).toBeInTheDocument();
     expect(mocks.copyThread).toHaveBeenCalledTimes(1);
-    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1');
+    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1', {
+      mode: 'latest-sealed-reply',
+      requestId: expect.any(String),
+    });
     expect(mocks.sideChatProps?.referenceRequest?.reference?.text).toBe(
       'first selection',
     );

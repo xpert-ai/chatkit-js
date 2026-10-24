@@ -23,6 +23,7 @@ import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import type { RuntimeCapabilitiesSelection } from '../../../lib/runtime-capabilities';
 import { createMessageId } from '../../../lib/utils';
 import type { useStreamContext } from '../../../providers/Stream';
+import { UnconfirmedRunError } from '../../../providers/stream/transport/errors';
 import type { HumanMessageWithMeta } from '../../thread/MessageList';
 import { mergeSubmittedFiles } from '../files/file-utils';
 import type { useChatFiles } from '../files/useChatFiles';
@@ -34,6 +35,7 @@ import type { useRuntimeResources } from '../useRuntimeResources';
 import type { SubmitDraftOptions } from './submission-types';
 import type { useChatCapabilities } from './useChatCapabilities';
 import type { useChatDraft } from './useChatDraft';
+import { useSendTransition } from '../messages/SendTransition';
 
 type ChatSubmissionOptions = Pick<
   ReturnType<typeof useChatDraft>,
@@ -109,6 +111,13 @@ export function useChatSubmission({
   scrollToBottom,
   messages,
 }: ChatSubmissionOptions) {
+  const sendTransition = useSendTransition();
+  const previousThread = React.useRef(stream.threadId);
+  React.useLayoutEffect(() => {
+    if (previousThread.current && previousThread.current !== stream.threadId)
+      sendTransition?.clear();
+    previousThread.current = stream.threadId;
+  }, [sendTransition, stream.threadId]);
   const submitDraft = React.useCallback(
     (submitOptions: SubmitDraftOptions = {}) => {
       if (isSubmissionBlocked) return;
@@ -245,6 +254,10 @@ export function useChatSubmission({
       const submittedTool =
         selectedTool && !selectedTool.pinned ? selectedTool : null;
 
+      const cancelSendTransition =
+        !nextFollowUpMode && submitOptions.inputText === undefined
+          ? sendTransition?.prepare(newMessage.id)
+          : undefined;
       commitComposerParts([], {
         caretOffset: 0,
         resetDom: true,
@@ -337,15 +350,21 @@ export function useChatSubmission({
       );
       void submission.then(
         () => resourceSubmission?.onSettled(true),
-        () => {
+        (error) => {
+          cancelSendTransition?.();
+          if (error instanceof UnconfirmedRunError) {
+            resourceSubmission?.onSettled(true);
+            return;
+          }
           resourceSubmission?.onSettled(false);
           restoreSubmittedDraft();
         },
       );
 
-      scrollToBottom(true, true);
+      scrollToBottom(!cancelSendTransition, true);
     },
     [
+      sendTransition,
       addRunRuntimeCapabilities,
       effectiveSessionRuntimeCapabilities,
       getRuntimeCapabilitiesForSubmit,

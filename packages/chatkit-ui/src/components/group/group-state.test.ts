@@ -101,4 +101,36 @@ describe('group stream reconciliation', () => {
     });
     expect(applyGroupEvent(live, { type: 'resync' }).live).toEqual({});
   });
+  it('accepts read acknowledgements at the same revision before a reply arrives', () => {
+    const pending: ChatGroupSnapshot = {
+      ...snapshot,
+      messages: [
+        {
+          ...message('m1', 1),
+          deliveries: [{ participantId: 'c', status: 'starting' }],
+        },
+      ],
+    };
+    const state = applyGroupEvent(initialGroupState, {
+      type: 'snapshot',
+      snapshot: pending,
+    });
+    const acknowledged = applyGroupEvent(state, {
+      type: 'snapshot',
+      snapshot: {
+        ...pending,
+        messages: [
+          {
+            ...pending.messages[0],
+            deliveries: [{ participantId: 'c', status: 'consumed' }],
+          },
+        ],
+      },
+    });
+    expect(acknowledged.snapshot?.messages).toHaveLength(1);
+    expect(acknowledged.snapshot?.messages[0].deliveries).toEqual([
+      { participantId: 'c', status: 'consumed' },
+    ]);
+    expect(acknowledged.snapshot?.runs).toEqual(pending.runs);
+  });
 });

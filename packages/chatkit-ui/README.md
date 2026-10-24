@@ -20,3 +20,21 @@ Chat width is stored in CSS pixels and clamped to fit the current window. Tempor
 window constraints do not overwrite the preferred width. Narrow screens use a
 temporary drawer layout without changing the saved desktop layout. Corrupt or
 unavailable browser storage falls back to the default layout.
+
+## Browser regression tests
+
+Run `corepack pnpm --filter @xpert-ai/chatkit-ui exec playwright install chromium`
+once, then `corepack pnpm --filter @xpert-ai/chatkit-ui test:browser` from the
+repository root. The command builds the Web Component and iframe application
+before testing, so a clean checkout needs no pre-existing `dist` files. Tests
+cover initialization on HTTP and HTTPS origins, plus hosted Workbench navigation
+through the Web Component and sandboxed Remote View. No backend or credentials
+are required, and Web Crypto is not mocked.
+
+CI uses Ubuntu 26.04, Node.js 24 and the pinned Playwright version in this package.
+When updating Playwright or the runner OS, verify that Playwright supports that OS
+and rerun browser installation with `--with-deps` before the regression suite.
+
+UUID generation supports HTTP through `crypto.getRandomValues`. HTTPS is still
+recommended: other browser features, including the clipboard, can require a
+secure context independently of UUID generation.

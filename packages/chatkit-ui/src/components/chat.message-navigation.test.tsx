@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   }>,
   stream: {
     client: {
-      threads: { copy: vi.fn(), get: vi.fn() },
+      threads: { copy: vi.fn(), get: vi.fn(), getCapabilities: vi.fn() },
       contexts: {
         fetch: vi.fn(),
         deleteFile: vi.fn(),
@@ -264,6 +264,23 @@ function setMessages(count = 3) {
 }
 
 describe('Chat message navigation', () => {
+  it('reflects retry availability without a recovery panel or automatic navigation', async () => {
+    mocks.stream.client.threads.getCapabilities.mockResolvedValue({ canRetry: false });
+    const { rerender } = render(<Chat options={baseOptions} />);
+    const retry = screen.getByRole('button', { name: 'messageActions.regenerate' });
+    await waitFor(() => expect(mocks.stream.client.threads.getCapabilities).toHaveBeenCalledWith('thread-1'));
+    expect(retry).toBeDisabled();
+    fireEvent.click(retry);
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(mocks.stream.loadThread).not.toHaveBeenCalled();
+    expect(screen.queryByText(/threadRecovery|checkpoint|sourceThreadId/i)).not.toBeInTheDocument();
+    mocks.stream.client.threads.getCapabilities.mockResolvedValue({ canRetry: true });
+    mocks.stream.threadId = 'thread-2';
+    rerender(<Chat options={baseOptions} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'messageActions.regenerate' })).toBeEnabled());
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+  });
+
   it('passes the opt-in process presentation option to assistant messages', () => {
     const { rerender } = render(<Chat options={baseOptions} />);
     expect(screen.getAllByTestId('assistant-presentation')[0]).toHaveAttribute(
@@ -310,6 +327,8 @@ describe('Chat message navigation', () => {
     mocks.threads.splice(0);
     mocks.stream.threadId = 'thread-1';
     mocks.stream.isLoading = false;
+    mocks.stream.error = null;
+    mocks.stream.client.threads.getCapabilities.mockReset().mockResolvedValue({ canRetry: true });
     mocks.stream.isDisplayPaused = false;
     mocks.stream.displayPause = null;
     mocks.stream.activeRunId = null;
@@ -508,7 +527,7 @@ describe('Chat message navigation', () => {
     mocks.stream.pauseRun.mockRejectedValueOnce(new Error('Pause failed'));
     render(<Chat options={baseOptions} />);
     fireEvent.click(await screen.findByRole('button', { name: 'threadControl.stop' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Pause failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('connection.actionUnconfirmed');
     const retry = screen.getByRole('button', { name: 'threadControl.stop' });
     expect(retry.closest('form')).not.toBeNull();
     expect(retry).not.toBeDisabled();
@@ -591,7 +610,7 @@ describe('Chat message navigation', () => {
     fireEvent.click(resume);
     expect(mocks.stream.resumeRun).toHaveBeenCalledExactlyOnceWith('source-run', 'pause-1');
     await act(async () => { rejectResume(new Error('Resume failed')); });
-    expect(await screen.findByRole('alert')).toHaveTextContent('Resume failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('connection.actionUnconfirmed');
     expect(resume).not.toBeDisabled();
     fireEvent.click(resume);
     await waitFor(() => expect(mocks.stream.resumeRun).toHaveBeenCalledTimes(2));

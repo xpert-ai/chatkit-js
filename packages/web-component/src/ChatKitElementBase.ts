@@ -12,6 +12,7 @@ import type {
   Card,
   ChatKitOptions,
   ChatKitWorkbenchClientCommandRequest,
+  ChatKitWorkbenchNavigation,
   Entity,
   ListView,
   ToolOutputAttachmentPreviewRequest,
@@ -230,6 +231,11 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
           );
         }
         return connect(request);
+      },
+      onWorkbenchNavigationChange: async (
+        navigation: ChatKitWorkbenchNavigation,
+      ) => {
+        await this.#opts?.workbench?.onNavigationChange?.(navigation);
       },
       onWorkbenchClientCommand: async ({
         commandKey,

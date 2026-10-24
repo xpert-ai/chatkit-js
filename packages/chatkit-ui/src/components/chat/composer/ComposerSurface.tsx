@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode, ComponentProps } from 'react';
+import type { CSSProperties, ReactNode, ComponentProps, Ref } from 'react';
 import { cn } from '../../../lib/utils';
 
 export function ComposerSurface({
@@ -43,13 +43,15 @@ export function ComposerSurface({
 
 export function ChatComposerFormFrame({
   onSubmit,
+  formRef,
   children,
   ...surface
 }: ComponentProps<typeof ComposerSurface> & {
   onSubmit: ComponentProps<'form'>['onSubmit'];
+  formRef?: Ref<HTMLFormElement>;
 }) {
   return (
-    <form className="flex items-end" onSubmit={onSubmit}>
+    <form ref={formRef} className="flex items-end" onSubmit={onSubmit}>
       <ComposerSurface {...surface}>{children}</ComposerSurface>
     </form>
   );

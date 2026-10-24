@@ -20,6 +20,7 @@ import { buildInjectedRequestOptions } from '../../../lib/request-options';
 import { createMessageId } from '../../../lib/utils';
 import type { WorkbenchRuntime } from '../../WorkbenchRuntime';
 import type { WorkbenchPreview } from '../../preview/types';
+import { ViewFilePreviewAccess } from '../../remote-view/view-file-preview-access';
 import {
   executeWorkbenchCommand,
   unsupportedCommand,
@@ -104,26 +105,45 @@ export function useWorkbenchClientCommands({
     stream.projectId,
     stream.conversationId,
   ]);
+  const assistantScope = JSON.stringify([
+    stream.apiUrl,
+    stream.organizationId,
+    stream.assistantId,
+  ]);
   const navigationScope = JSON.stringify([
     stream.apiUrl,
     stream.organizationId,
     stream.assistantId,
     stream.projectId,
   ]);
+  const filePreviews = React.useMemo(
+    () => new ViewFilePreviewAccess(stream.client.viewHosts),
+    [stream.client],
+  );
+  React.useEffect(
+    () => () => filePreviews.clear(),
+    [filePreviews, contextKey, stream.runtimeScopeReady],
+  );
+  const fileScopeReady = React.useRef(true);
+  fileScopeReady.current = stream.runtimeScopeReady !== false;
   const currentContext = React.useRef({
     key: contextKey,
     navigationScope,
+    assistantScope,
+    projectId: stream.projectId,
     conversationId: stream.conversationId,
   });
   if (currentContext.current.key !== contextKey)
     currentContext.current = {
       key: contextKey,
       navigationScope,
+      assistantScope,
+      projectId: stream.projectId,
       conversationId: stream.conversationId,
     };
   const publishContexts = React.useCallback(() => {
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
-  }, [onRequestContextChange]);
+  }, [onRequestContextChange, contextsRef]);
 
   const executeClientCommand = React.useCallback(
     async (
@@ -314,16 +334,34 @@ export function useWorkbenchClientCommands({
       return executeWorkbenchCommand(request, {
         prepareLeave: () => editors.prepare(),
         apiUrl: stream.apiUrl,
+        resolveFile: (resource) =>
+          filePreviews.open(resource, {
+            hostId: stream.assistantId,
+            viewKey: manifest.key,
+            runtimeScope: {
+              projectId: stream.projectId,
+              conversationId: stream.conversationId,
+            },
+            isCurrent: () =>
+              currentContext.current === context && fileScopeReady.current,
+          }),
         projectId:
           stream.runtimeScopeReady === false ? undefined : stream.projectId,
         isCurrent: (navigation) =>
           currentContext.current === context ||
+          Boolean(
+            navigation?.target === 'assistant.project' &&
+            navigation.projectId &&
+            currentContext.current.assistantScope === context.assistantScope &&
+            currentContext.current.projectId === navigation.projectId,
+          ) ||
           Boolean(
             navigation?.preserveView &&
             currentContext.current.navigationScope ===
               context.navigationScope &&
             currentContext.current.conversationId === navigation.conversationId,
           ),
+        forwardUnavailableView: Boolean(options?.workbench?.navigation),
         openView: async (key, query) => {
           if (
             queriesRef.current[key]?.selectionId &&
@@ -393,9 +431,14 @@ export function useWorkbenchClientCommands({
       openExecution,
       openMessage,
       options?.workbench?.onClientCommand,
+      options?.workbench?.navigation,
       parentMessenger,
       publishContexts,
       stream,
+      filePreviews,
+      contextsRef,
+      setNotification,
+      setViewQueries,
       t,
     ],
   );

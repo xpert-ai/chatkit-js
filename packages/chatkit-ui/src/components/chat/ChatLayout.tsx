@@ -1,12 +1,14 @@
 import type { ComponentProps, CSSProperties, ReactNode, Ref } from 'react';
 import { cn } from '../../lib/utils';
 import { UploadDroppedFiles } from './upload-dropped-files';
+import type { FloatingChatMode } from '../../workbench/floating-chat/context';
 
 type ChatLayoutProps = ComponentProps<typeof UploadDroppedFiles> & {
   viewportRef?: Ref<HTMLDivElement>;
   taskSummaryDocked?: boolean;
   overlay?: ReactNode;
   conversationKind?: 'group';
+  presentation?: FloatingChatMode;
 };
 
 /** One chat viewport for both conversation transports; credentials stay in their adapters. */
@@ -15,6 +17,7 @@ export function ChatLayout({
   taskSummaryDocked,
   overlay,
   conversationKind,
+  presentation,
   className,
   children,
   ...dropProps
@@ -24,6 +27,7 @@ export function ChatLayout({
       className="relative flex h-full w-full min-w-0 bg-background"
       data-task-summary-layout={taskSummaryDocked ? 'docked' : 'popover'}
       data-conversation-kind={conversationKind}
+      data-chat-presentation={presentation}
     >
       <UploadDroppedFiles
         {...dropProps}

@@ -1,4 +1,5 @@
 import type {
+  ChatKitWorkbenchNavigation,
   ChatKitMessageFocusRequest,
   ChatKitMessageFocusResult,
 } from '@xpert-ai/chatkit-types';
@@ -22,6 +23,7 @@ import {
 } from '@xpert-ai/chatkit-types';
 import {
   isTrustedChatKitMessageEvent,
+  safeRandomUUID,
   type Capability,
   type WindowDragRegions,
 } from '@xpert-ai/chatkit-web-shared';
@@ -53,6 +55,7 @@ type CommandMessageMap = {
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
   onToolOutputAttachmentPreview: ToolOutputAttachmentPreviewRequest;
+  onWorkbenchNavigationChange: ChatKitWorkbenchNavigation;
   onWorkbenchClientCommand: {
     commandKey: string;
     payload?: unknown;
@@ -132,13 +135,6 @@ const getParentOrigin = () => {
   } catch {
     return '*';
   }
-};
-
-const createNonce = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `ck_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
 
 export type ParentMessenger = {
@@ -703,7 +699,7 @@ export function ParentMessengerProvider({
         return Promise.reject(new Error('Parent window not available'));
       }
 
-      const nonce = createNonce();
+      const nonce = safeRandomUUID();
       const message: ParentEnvelope = {
         __xpaiChatKit: true,
         ...(channelId ? { channelId } : {}),

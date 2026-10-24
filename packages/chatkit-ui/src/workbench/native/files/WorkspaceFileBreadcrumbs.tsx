@@ -1,7 +1,6 @@
 import * as React from 'react';
 import type { XpertWorkspaceFile } from '@xpert-ai/xpert-sdk';
-import { ChevronRight, Search } from 'lucide-react';
-import { Input } from '../../../components/ui/input';
+import { ChevronRight } from 'lucide-react';
 import {
   Popover,
   PopoverContent,
@@ -12,6 +11,7 @@ import { getSurfaceThemeStyle } from '../../../lib/theme-surfaces';
 import { useTheme } from '../../../providers/Theme';
 import { WorkspaceFileTree } from './WorkspaceFileTree';
 import type { useWorkspaceFileTree } from './useWorkspaceFileTree';
+import { WorkspaceFileSearch } from './WorkspaceFileSearch';
 
 export function WorkspaceFileBreadcrumbs({
   path,
@@ -82,6 +82,7 @@ export function WorkspaceFileBreadcrumbs({
               >
                 <PopoverTrigger asChild>{button}</PopoverTrigger>
                 <PopoverContent
+                  data-file-browser
                   align="start"
                   sideOffset={6}
                   collisionPadding={12}
@@ -91,34 +92,16 @@ export function WorkspaceFileBreadcrumbs({
                   style={getSurfaceThemeStyle(theme)}
                   className="flex max-h-[min(24rem,var(--radix-popover-content-available-height))] w-96 max-w-[calc(100vw-1.5rem)] flex-col gap-2 overflow-hidden rounded-[var(--chat-panel-radius,var(--radius))] p-2 shadow-lg"
                 >
-                  <div className="relative shrink-0">
-                    <Search
-                      size={15}
-                      className="pointer-events-none absolute top-2.5 left-3 text-muted-foreground"
-                    />
-                    <Input
-                      type="search"
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder={t('workbench.files.search')}
-                      aria-label={t('workbench.files.search')}
-                      className="h-9 rounded-[var(--chat-item-radius,var(--radius))] pl-9 shadow-none"
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === 'ArrowDown' &&
-                          !event.nativeEvent.isComposing
-                        ) {
-                          event.preventDefault();
-                          event.currentTarget
-                            .closest('[data-slot="popover-content"]')
-                            ?.querySelector<HTMLButtonElement>(
-                              '[role="treeitem"]',
-                            )
-                            ?.focus();
-                        }
-                      }}
-                    />
-                  </div>
+                  <WorkspaceFileSearch
+                    query={query}
+                    onQueryChange={setQuery}
+                    basePath={crumb.path}
+                    tree={tree}
+                    onLocate={(file) => {
+                      setOpenPath(null);
+                      onSelect(file);
+                    }}
+                  />
                   <WorkspaceFileTree
                     rootPath={crumb.path}
                     directories={tree.directories}

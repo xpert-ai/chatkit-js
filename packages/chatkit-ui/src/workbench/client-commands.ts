@@ -1,4 +1,7 @@
-import type { ChatKitWorkbenchClientCommandRequest } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitWorkbenchClientCommandRequest,
+  ChatKitWorkbenchFileResource,
+} from '@xpert-ai/chatkit-types';
 import type { XpertViewQuery } from '@xpert-ai/xpert-sdk';
 import {
   field,
@@ -11,9 +14,16 @@ import {
   type ExecutionNavigationRequest,
   type ExecutionNavigationResult,
 } from './client-command-payload';
-import type { WorkbenchPreview } from './preview/types';
+import type {
+  ResourceFileWorkbenchPreview,
+  WorkbenchPreview,
+} from './preview/types';
 import type { MessageFocusRequest } from './useMessageFocus';
 import type { ComposerValuePayload } from '../lib/references';
+import {
+  parseFileResource,
+  parseInlineFilePreview,
+} from './file-preview-payload';
 
 export type WorkbenchCommandHost = {
   apiUrl: string;
@@ -22,7 +32,12 @@ export type WorkbenchCommandHost = {
   isCurrent?: (navigation?: NavigationPayload) => boolean;
   prepareLeave?: () => Promise<boolean>;
   openView: (key: string, query: XpertViewQuery) => boolean | Promise<boolean>;
+  /** Let a routed host render legacy View types this shell cannot display yet. */
+  forwardUnavailableView?: boolean;
   openPreview: (preview: WorkbenchPreview) => void;
+  resolveFile?: (
+    resource: ChatKitWorkbenchFileResource,
+  ) => Promise<ResourceFileWorkbenchPreview>;
   revealChat: () => void;
   updateComposer: (value: ComposerValuePayload) => Promise<void>;
   focusComposer: () => Promise<void>;
@@ -71,6 +86,33 @@ export async function executeWorkbenchCommand(
     commandKey === 'workbench.file.open' ||
     commandKey === 'workbench.browser.open'
   ) {
+    if (
+      commandKey === 'workbench.file.open' &&
+      field(payload, 'resource') !== undefined
+    ) {
+      const resource = parseFileResource(payload);
+      if (!resource) return invalid();
+      if (!host.resolveFile) return unsupportedCommand(commandKey);
+      try {
+        const preview = await host.resolveFile(resource);
+        if (host.isCurrent?.() === false) return stale();
+        host.openPreview(preview);
+        return { success: true, status: 'opened', tabId: preview.key };
+      } catch {
+        return host.isCurrent?.() === false
+          ? stale()
+          : { success: false, code: 'file_unavailable' };
+      }
+    }
+    const file =
+      commandKey === 'workbench.file.open'
+        ? parseInlineFilePreview(payload)
+        : null;
+    if (file) {
+      file.key = `chatkit.preview.inline-file:${JSON.stringify([request.hostId, request.viewKey, file.key])}`;
+      host.openPreview(file);
+      return { success: true, status: 'opened', tabId: file.key };
+    }
     const preview = parsePreview(
       commandKey === 'workbench.file.open' ? 'file' : 'browser',
       payload,
@@ -147,20 +189,22 @@ export async function executeWorkbenchCommand(
     }
     if (navigation.target === 'workbench.view' || currentProjectView) {
       if (!navigation.viewKey) return invalid();
-      return (await host.openView(navigation.viewKey, navigation.query))
-        ? {
-            success: true,
-            status: 'opened',
-            target: navigation.target,
-            viewKey: navigation.viewKey,
-            ...navigation.query,
-          }
-        : {
-            success: false,
-            code: 'view_unavailable',
-            viewKey: navigation.viewKey,
-          };
+      if (await host.openView(navigation.viewKey, navigation.query))
+        return {
+          success: true,
+          status: 'opened',
+          target: navigation.target,
+          viewKey: navigation.viewKey,
+          ...navigation.query,
+        };
+      if (!host.forwardUnavailableView)
+        return {
+          success: false,
+          code: 'view_unavailable',
+          viewKey: navigation.viewKey,
+        };
     }
+
     if (
       navigation.target === 'assistant.conversation' ||
       navigation.target === 'assistant.project'

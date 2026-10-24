@@ -6,6 +6,7 @@ import { isTrustedChatKitMessageEvent } from "./messageChannel.js"
 import type { AnyFunction } from "./types"
 import { FrameSafeHttpError, HttpError } from "./errors/HttpError"
 import { FrameSafeIntegrationError, IntegrationError } from "./errors/IntegrationError"
+import { serializeFrameError } from "./errors/serializeFrameError"
 
 type ChatKitMessage =
   | {
@@ -117,6 +118,9 @@ export abstract class BaseMessenger<
       __xpaiChatKit: true,
       ...(this.channelId ? { channelId: this.channelId } : {}),
       ...data,
+      ...(data.type === "response" && data.error !== undefined
+        ? { error: serializeFrameError(data.error) }
+        : {}),
     }
     this.target()?.postMessage(message, this.targetOrigin, transfer)
   }

@@ -3,6 +3,7 @@ import * as React from 'react';
 import { Check, Copy } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { FilePreviewContent } from './types';
+import { ImagePreview } from './ImagePreview';
 const MarkdownEditor = React.lazy(
   () => import('../markdown-editor/MarkdownEditor'),
 );
@@ -105,14 +106,7 @@ export function FilePreviewBody({
     );
   if (kind === 'image')
     return (
-      <div className="flex h-full items-center justify-center overflow-auto p-6">
-        <img
-          src={content.url}
-          alt={title}
-          onError={onError}
-          className="max-h-full max-w-full object-contain"
-        />
-      </div>
+      <ImagePreview src={content.url} title={title} onError={onError} />
     );
   if (kind === 'pdf')
     return (

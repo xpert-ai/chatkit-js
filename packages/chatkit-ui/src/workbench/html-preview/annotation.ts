@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import type { ChatKitQuoteReference } from '@xpert-ai/chatkit-types';
 import type { PreviewElement } from './protocol';
 
@@ -15,7 +16,7 @@ export function htmlAnnotationReference(
 ): ChatKitQuoteReference {
   return {
     type: 'quote',
-    id: `html-annotation:${crypto.randomUUID()}`,
+    id: `html-annotation:${safeRandomUUID()}`,
     label: `${title} · ${comment.trim().slice(0, 80)}`,
     source: title,
     text: [

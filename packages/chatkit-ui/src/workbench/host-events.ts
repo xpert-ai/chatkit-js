@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import {
   ASSISTANT_CITATION_OPEN_EVENT,
   KNOWLEDGEBASE_OPEN_CITATION_EFFECT,
@@ -163,9 +164,6 @@ function includesIfPresent(
 }
 
 function createEventId(type: string, suffix?: string): string {
-  const nonce =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const nonce = safeRandomUUID();
   return [type, suffix, nonce].filter(Boolean).join(':');
 }

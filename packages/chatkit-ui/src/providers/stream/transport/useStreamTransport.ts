@@ -1,3 +1,5 @@
+import { combineRequestSignals } from '../../../lib/request-abort';
+import type { ReadRecovery } from '../connection/read-recovery';
 import type { Config } from '@xpert-ai/xpert-sdk';
 import { useCallback, useEffect, useRef } from 'react';
 import { resolveFollowUpConsumedIds } from '../../../lib/follow-up-consumed';
@@ -11,6 +13,12 @@ import {
 import type { useRuntimeActivities } from '../../runtime-activities';
 import type { useConversationProject } from '../../useConversationProject';
 import type { useStreamCredentials } from '../auth/useStreamCredentials';
+import {
+  compareDisplayCursors,
+  hydrateDisplaySnapshot,
+  parseDisplaySnapshot,
+  restoreDisplayEventState,
+} from '../events/display-snapshot';
 import { applyStreamEvent } from '../events/apply-stream-event';
 import type { StreamChunk } from '../events/envelope';
 import type { useStreamFollowUpState } from '../follow-ups/useStreamFollowUpState';
@@ -27,7 +35,11 @@ import type {
   StreamRunInput,
   StreamSubmitOptions,
 } from '../types';
-import { shouldIgnoreStreamError } from './errors';
+import {
+  isRunAdmissionRejected,
+  shouldIgnoreStreamError,
+  UnconfirmedRunError,
+} from './errors';
 import {
   mergeStreamRequestContext,
   withConversationScope,
@@ -52,7 +64,7 @@ type StreamTransportOptions = Pick<
     | 'conversationIdRef'
     | 'threadId'
   > &
-  Pick<ReturnType<typeof useStreamCredentials>, 'client'> &
+  Pick<ReturnType<typeof useStreamCredentials>, 'client' | 'readClient'> &
   Pick<
     ReturnType<typeof useStreamMessages>,
     | 'setValues'
@@ -79,6 +91,7 @@ type StreamTransportOptions = Pick<
     ReturnType<typeof useStreamHistoryMessages>,
     'reconcileLatestAssistantMessage'
   > & {
+    recovery: ReadRecovery;
     additionalContext: Record<string, unknown> | undefined;
     conversationProject: ReturnType<typeof useConversationProject>;
     projectSelection: ProjectSelection | undefined;
@@ -100,6 +113,8 @@ export function useStreamTransport({
   connectorBindingIdsRef,
   projectSelection,
   client,
+  readClient,
+  recovery,
   assistantId,
   lastEventIdRef,
   setValues,
@@ -144,6 +159,9 @@ export function useStreamTransport({
     ) => {
       // Never let discovery steal a locally submitted or already joined output consumer.
       if (options?.joinExistingThread && runId && isLoadingRef.current) return;
+      if (options?.joinExistingThread && runId && !(await recovery.wait()))
+        return;
+      if (options?.joinExistingThread && runId && isLoadingRef.current) return;
       const replayKey = `${nextThreadId}:${runId ?? ''}`;
       const previous =
         options?.joinExistingThread && lastEventIdRef.current
@@ -152,6 +170,8 @@ export function useStreamTransport({
       const langGraphEventState =
         previous?.state ?? createLangGraphEventState();
       const cursor = previous?.cursor;
+      let appliedCursor = cursor;
+      let awaitingContinuity = false;
       const abortController = new AbortController();
       abortRef.current?.abort();
       abortRef.current = abortController;
@@ -163,7 +183,8 @@ export function useStreamTransport({
       let streamCompleted = false;
       let streamingRunId = runId;
       let receivedOutput = false;
-      let runAccepted = false;
+      let runAccepted = Boolean(runId);
+      let streamIsCurrent = true;
       try {
         const normalizedRequest = normalizeRequestContextAndConfig({
           context: mergeStreamRequestContext(
@@ -186,9 +207,13 @@ export function useStreamTransport({
         );
         const stream =
           options?.joinExistingThread && runId
-            ? client.runs.joinStream(nextThreadId, runId, {
-                signal: abortController.signal,
+            ? readClient.runs.joinStream(nextThreadId, runId, {
+                signal: combineRequestSignals([
+                  abortController.signal,
+                  recovery.signal,
+                ]),
                 lastEventId: cursor,
+                displaySnapshot: true,
               })
             : client.runs.stream(nextThreadId, assistantId, {
                 input: scopedInput ?? null,
@@ -200,8 +225,15 @@ export function useStreamTransport({
                 streamResumable: options?.streamResumable,
                 signal: abortController.signal,
                 onDisconnect: 'continue',
-                onRunCreated: () => {
+                onRunCreated: ({ run_id }) => {
                   runAccepted = true;
+                  streamingRunId = run_id;
+                  if (
+                    abortController.signal.aborted ||
+                    abortRef.current !== abortController
+                  )
+                    return;
+                  rememberActiveRunId(run_id);
                   options?.onRunAccepted?.();
                 },
               });
@@ -221,7 +253,48 @@ export function useStreamTransport({
             receivedOutput = true;
             setError(null);
           }
-          if (chunk?.id) {
+          if (streamingRunId) recovery.succeeded(`run:${streamingRunId}`);
+          if (chunk.data?.type === 'stream_snapshot') {
+            const snapshot = parseDisplaySnapshot(chunk.data);
+            if (
+              !snapshot ||
+              snapshot.threadId !== nextThreadId ||
+              snapshot.runId !== streamingRunId ||
+              chunk.id !== snapshot.cursor
+            )
+              throw new Error('Could not restore the response.');
+            if (
+              appliedCursor &&
+              compareDisplayCursors(snapshot.cursor, appliedCursor) <= 0
+            ) {
+              awaitingContinuity = !snapshot.continuous;
+              continue;
+            }
+            appliedCursor = snapshot.cursor;
+            setValues((value) => hydrateDisplaySnapshot(value, snapshot));
+            restoreDisplayEventState(langGraphEventState, snapshot);
+            lastEventIdRef.current = snapshot.cursor;
+            replayState.current.set(replayKey, {
+              cursor: snapshot.cursor,
+              state: langGraphEventState,
+            });
+            // Keep the last display, but wait for an explicit resync or a continuous snapshot before applying deltas.
+            awaitingContinuity = !snapshot.continuous;
+            continue;
+          }
+          if (awaitingContinuity && chunk.data?.type !== 'stream_resync')
+            continue;
+          if (
+            chunk?.id &&
+            chunk.data?.type !== 'stream_resync' &&
+            chunk.data?.type !== 'complete'
+          ) {
+            if (
+              appliedCursor &&
+              compareDisplayCursors(String(chunk.id), appliedCursor) <= 0
+            )
+              continue;
+            appliedCursor = String(chunk.id);
             lastEventIdRef.current = String(chunk.id);
             if (streamingRunId)
               replayState.current.set(`${nextThreadId}:${streamingRunId}`, {
@@ -246,7 +319,7 @@ export function useStreamTransport({
             continue;
           }
           if (chunk.data?.type === 'stream_resync') {
-            streamCompleted = true;
+            streamCompleted = chunk.data.retryable !== true;
             replayState.current.delete(replayKey);
             break;
           }
@@ -260,6 +333,7 @@ export function useStreamTransport({
             eventContext,
             (executionId) => {
               if (executionId) {
+                runAccepted = true;
                 streamingRunId = executionId;
                 if (chunk.id)
                   replayState.current.set(`${nextThreadId}:${executionId}`, {
@@ -361,26 +435,49 @@ export function useStreamTransport({
           !shouldIgnoreStreamError(streamError, abortController.signal)
         ) {
           transportError = streamError;
-          setError(streamError);
+          if (streamingRunId)
+            recovery.failed(`run:${streamingRunId}`, streamError);
+          else setError(streamError);
         }
       } finally {
+        if (
+          options?.joinExistingThread &&
+          streamingRunId &&
+          !streamCompleted &&
+          !transportError &&
+          !abortController.signal.aborted
+        )
+          recovery.failed(
+            `run:${streamingRunId}`,
+            new Error('Run connection ended'),
+          );
         const activeConversationId = conversationIdRef.current?.trim();
         if (
           activeConversationId &&
           abortRef.current === abortController &&
+          (!transportError || streamingRunId) &&
           (!options?.joinExistingThread || streamCompleted)
         ) {
           const reconciled = await reconcileLatestAssistantMessage(
             activeConversationId,
             nextThreadId,
             abortController.signal,
-            runId,
+            streamingRunId,
           );
-          if (reconciled && transportError && !abortController.signal.aborted) {
+          if (
+            reconciled &&
+            streamingRunId &&
+            transportError &&
+            !abortController.signal.aborted &&
+            abortRef.current === abortController
+          ) {
             setError(null);
           }
         }
         // A previous stream can finish after a thread switch starts another run.
+        streamIsCurrent =
+          abortRef.current === abortController &&
+          !abortController.signal.aborted;
         if (abortRef.current === abortController) {
           abortRef.current = null;
           shouldStartFreshAssistantMessageAfterSteerRef.current = false;
@@ -398,16 +495,25 @@ export function useStreamTransport({
           isLoadingRef.current = false;
         }
       }
-      if (options?.onRunAccepted && !runAccepted) {
-        throw (
-          transportError ?? new Error('The server did not acknowledge the run.')
-        );
+      if (
+        streamIsCurrent &&
+        !runAccepted &&
+        (transportError || options?.onRunAccepted)
+      ) {
+        const error =
+          transportError ??
+          new Error('The server did not acknowledge the run.');
+        // A response rejection is safe to retry; a lost acknowledgement may hide a live run.
+        if (!receivedOutput && isRunAdmissionRejected(error)) throw error;
+        throw new UnconfirmedRunError(error);
       }
     },
     [
       assistantId,
       additionalContext,
       client,
+      readClient,
+      recovery,
       streamSendEvent,
       projectId,
       conversationProject.projectId,

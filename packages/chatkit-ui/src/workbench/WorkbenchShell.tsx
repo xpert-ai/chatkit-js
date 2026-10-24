@@ -41,7 +41,7 @@ import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDi
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
-import { useResourceNavigation } from './content/useResourceNavigation';
+import { useWorkbenchViewNavigation } from './useHostedWorkbenchNavigation';
 import { useWorkbenchLayout } from './useWorkbenchLayout';
 import { isWorkbenchNewTab, useWorkbenchPages } from './useWorkbenchPages';
 import { useWorkbenchPanelHost } from './useWorkbenchPanelHost';
@@ -50,6 +50,7 @@ import { useWorkbenchViews } from './useWorkbenchViews';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY, WorkbenchPanel } from './WorkbenchPanel';
 import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
+import { WorkbenchChatProvider } from './floating-chat/context';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
@@ -164,10 +165,6 @@ function WorkbenchContent({
     sideChatCloseConfirmationDisabled,
     setSideChatCloseConfirmationDisabled,
   ] = React.useState(isSideChatCloseConfirmationDisabled);
-
-  const sideThreadBySourceRef = React.useRef(
-    new Map<string, string | Promise<string>>(),
-  );
 
   const contextsRef = React.useRef(
     new Map<string, WorkbenchAssistantContext>(),
@@ -507,20 +504,30 @@ function WorkbenchContent({
   useParentMessenger({ onFocusMessage: openMessage });
 
   const { remember: rememberResourceCard, forget: forgetViewNavigation } =
-    useResourceNavigation({
-      scope: JSON.stringify([layoutKey, runtimeScope.projectId]),
-      conversationId: runtimeScope.conversationId,
-      views,
+    useWorkbenchViewNavigation({
       editors,
+      unsavedMessage: t('contentReview.Unsaved'),
       enabled: remoteViewsEnabled && authenticated,
-      ready: !loading && viewsScope === viewScopeKey,
+      options: options?.workbench,
+      historyScope: JSON.stringify([layoutKey, runtimeScope.projectId]),
+      projectId: runtimeScope.projectId ?? null,
+      conversationId: runtimeScope.conversationId,
+      scopeKey: viewScopeKey,
+      ready:
+        !loading &&
+        viewsScope === viewScopeKey &&
+        stream.runtimeScopeReady !== false,
+      open,
+      activeViewKey,
+      views,
+      queries: viewQueries,
       setQueries: setViewQueries,
-      select: selectView,
+      selectView,
       setOpen,
-      onBlocked: () =>
+      onError: (error) =>
         setNotification({
           level: 'error',
-          message: t('contentReview.Unsaved'),
+          message: getErrorMessage(error, t('workbench.executionUnavailable')),
         }),
     });
 
@@ -614,7 +621,6 @@ function WorkbenchContent({
       setActiveViewKey,
       setOpen,
       setSideChatOpening,
-      sideThreadBySourceRef,
       setSideChat,
       sideChat,
       setSideChatCloseDialogOpen,
@@ -953,6 +959,10 @@ function WorkbenchContent({
     <EditorLifecycleContext.Provider value={editors}>
       <ResourceCardContext.Provider value={resourceCardActions}>
         {reviewPanel}
+        <WorkbenchChatProvider
+          scope={viewScopeKey}
+          floating={mainChatInWorkbench && activeViewKey !== MAIN_CHAT_VIEW_KEY}
+        >
         <WorkbenchShellLayout
           contextValue={contextValue}
           rootRef={rootRef}
@@ -988,6 +998,7 @@ function WorkbenchContent({
           setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
           confirmCloseSideChat={confirmCloseSideChat}
         />
+        </WorkbenchChatProvider>
       </ResourceCardContext.Provider>
     </EditorLifecycleContext.Provider>
   );

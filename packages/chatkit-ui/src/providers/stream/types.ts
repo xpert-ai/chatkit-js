@@ -1,3 +1,4 @@
+import type { ConnectionState } from './connection/read-recovery';
 import type { Message } from '@langchain/core/messages';
 import type { ToolCall } from '@langchain/core/messages/tool';
 import type {
@@ -149,6 +150,8 @@ export type StreamContextType = {
   pendingFollowUps: PendingFollowUp[];
   pendingRequestUserInput: PendingRequestUserInput | null;
   pendingHITLRequest: PendingHITLRequest | null;
+  readThreadBranches?: () => Promise<import('@xpert-ai/xpert-sdk').Thread[]>;
+  connectionState?: ConnectionState;
   isLoading: boolean;
   /** Raw thread interruption, including cancellation; does not imply work is running or will resume. */
   isThreadInterrupted?: boolean;

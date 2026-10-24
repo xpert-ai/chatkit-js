@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ChatKitWorkbenchClientCommandRequest } from '@xpert-ai/chatkit-types';
+import type {
+  ChatKitWorkbenchClientCommandRequest,
+  ChatKitWorkbenchNavigation,
+} from '@xpert-ai/chatkit-types';
 const bridge = vi.hoisted(() => ({
   handlers: {} as {
+    onWorkbenchNavigationChange: (
+      navigation: ChatKitWorkbenchNavigation,
+    ) => Promise<void>;
     onWorkbenchClientCommand: (
       request: ChatKitWorkbenchClientCommandRequest,
     ) => Promise<unknown>;
@@ -26,6 +32,27 @@ const request: ChatKitWorkbenchClientCommandRequest = {
 };
 
 describe('Workbench host bridge', () => {
+  it('forwards the complete routed View state to the embedder', async () => {
+    const element = document.createElement('xpertai-chatkit') as ChatKitElement;
+    const onNavigationChange = vi.fn();
+    const navigation = {
+      projectId: 'project-a',
+      view: {
+        viewKey: 'bid.studio',
+        selectionId: 'bid-a',
+        parameters: { section: 'authoring' },
+      },
+    };
+    element.setOptions({
+      api: {
+        apiUrl: 'https://example.org/api/ai',
+        getClientSecret: async () => 'secret',
+      },
+      workbench: { navigation, onNavigationChange },
+    });
+    await bridge.handlers.onWorkbenchNavigationChange(navigation);
+    expect(onNavigationChange).toHaveBeenCalledWith(navigation);
+  });
   it('returns unsupported without emitting a global ChatKit error when no handler is registered', async () => {
     const element = document.createElement('xpertai-chatkit');
     const onError = vi.fn();

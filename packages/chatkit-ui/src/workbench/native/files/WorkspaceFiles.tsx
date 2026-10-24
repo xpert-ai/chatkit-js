@@ -13,7 +13,6 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
-  Search,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -41,6 +40,11 @@ import {
 } from './WorkspaceFilePreview';
 import { WorkspaceFileTree } from './WorkspaceFileTree';
 import { WorkspaceFileBreadcrumbs } from './WorkspaceFileBreadcrumbs';
+import { WorkspaceFileSearch } from './WorkspaceFileSearch';
+import {
+  ResizableFileSidebar,
+  clampFileSidebarWidth,
+} from '../../ResizableFileSidebar';
 import { useWorkspaceFileTree } from './useWorkspaceFileTree';
 import {
   fileName,
@@ -91,6 +95,8 @@ function WorkspaceFilesSession({
   const [source, setSource] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [sidebar, setSidebar] = React.useState(true);
+  const [containerWidth, setContainerWidth] = React.useState(0);
+  const [sidebarWidth, setSidebarWidth] = React.useState(260);
   const [previewText, setPreviewText] =
     React.useState<WorkspaceFileTextContent | null>(null);
   const [copied, setCopied] = React.useState<'path' | 'content' | null>(null);
@@ -105,6 +111,17 @@ function WorkspaceFilesSession({
   );
   const input = React.useRef<HTMLInputElement>(null);
   const container = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    const update = () =>
+      setContainerWidth(element.getBoundingClientRect().width);
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const alive = React.useRef(true);
   React.useEffect(() => {
     alive.current = true;
@@ -150,6 +167,14 @@ function WorkspaceFilesSession({
   }
   const copyPath = () => void copy(currentPath || '/', 'path');
   function select(file: XpertWorkspaceFile) {
+    if (isFolder(file)) {
+      setSelected(null);
+      setPath(file.filePath);
+      setSource(false);
+      setSidebar(true);
+      onPreview?.(null);
+      return;
+    }
     if (isOfficeFile(file)) {
       onOpen(file);
       return;
@@ -374,37 +399,39 @@ function WorkspaceFilesSession({
               aria-label={t('workbench.files.hideTree')}
               onClick={() => setSidebar(false)}
             />
-            <aside
-              className="workspace-files-sidebar flex min-h-0 shrink-0 flex-col border-l bg-background"
-              aria-label={t('workbench.files.tree')}
+            <ResizableFileSidebar
+              label={t('workbench.files.resizeTree')}
+              className="workspace-files-sidebar"
+              contentClassName="flex flex-col"
+              containerWidth={containerWidth}
+              width={clampFileSidebarWidth(sidebarWidth, containerWidth)}
+              onWidthChange={setSidebarWidth}
             >
-              <div className="relative mx-3 mt-3 mb-2">
-                <Search
-                  size={15}
-                  className="pointer-events-none absolute top-2.5 left-3 text-muted-foreground"
+              <aside
+                data-file-browser
+                className="flex min-h-0 flex-1 flex-col bg-background"
+                aria-label={t('workbench.files.tree')}
+              >
+                <WorkspaceFileSearch
+                  query={query}
+                  onQueryChange={setQuery}
+                  tree={tree}
+                  onLocate={select}
                 />
-                <Input
-                  type="search"
-                  className="h-9 rounded-[var(--chat-item-radius,var(--radius))] pl-9 shadow-none"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t('workbench.files.search')}
-                  aria-label={t('workbench.files.search')}
+                <WorkspaceFileTree
+                  directories={tree.directories}
+                  expanded={tree.expanded}
+                  query={query}
+                  selectedPath={selected?.filePath ?? path}
+                  onRetry={tree.load}
+                  onToggle={(folder) => {
+                    tree.toggle(folder);
+                    if (!selected) setPath(folder);
+                  }}
+                  onSelect={select}
                 />
-              </div>
-              <WorkspaceFileTree
-                directories={tree.directories}
-                expanded={tree.expanded}
-                query={query}
-                selectedPath={selected?.filePath ?? path}
-                onRetry={tree.load}
-                onToggle={(folder) => {
-                  tree.toggle(folder);
-                  if (!selected) setPath(folder);
-                }}
-                onSelect={select}
-              />
-            </aside>
+              </aside>
+            </ResizableFileSidebar>
           </>
         )}
       </div>

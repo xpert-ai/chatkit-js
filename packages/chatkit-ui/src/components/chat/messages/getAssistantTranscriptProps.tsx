@@ -27,6 +27,7 @@ type AssistantTranscriptProps = Pick<
 > &
   Pick<
     ReturnType<typeof useChatConversationActions>,
+    | 'canRetry'
     | 'conversationBranch'
     | 'loadThreadHistory'
     | 'handlePromptEdit'
@@ -85,6 +86,7 @@ export function getAssistantTranscriptProps({
   chatColumnStyle,
   errorMessage,
   historyError,
+  canRetry,
   conversationBranch,
   t,
   showMissingConfig,
@@ -199,12 +201,18 @@ export function getAssistantTranscriptProps({
       messages: messages,
       assistantTitle: assistantTitle,
       isLoading: isVisibleStreaming,
-      isThreadRunning: currentThreadIsRunning && !stream.isThreadInterrupted,
+      isThreadRunning:
+        stream.connectionState &&
+        stream.connectionState !== 'connected' &&
+        !stream.isThreadInterrupted
+          ? currentThreadIsRunning || undefined
+          : currentThreadIsRunning && !stream.isThreadInterrupted,
       isThreadPaused: isPauseActive || needsUserInput,
       lastStreamOutputAt: lastStreamOutputAtRef.current,
       streamingNow: streamingNow,
       showLoadingDots:
         showLoadingDots &&
+        (!stream.connectionState || stream.connectionState === 'connected') &&
         !stream.isDisplayPaused &&
         !stream.isThreadInterrupted &&
         !needsUserInput,
@@ -220,13 +228,15 @@ export function getAssistantTranscriptProps({
         options?.threadItemActions?.branch !== false &&
         stream.conversationId &&
         typeof stream.client?.conversations?.branch === 'function' &&
-        !isChangingBranch
+        !isChangingBranch &&
+        (!stream.connectionState || stream.connectionState === 'connected')
           ? (messageId) => {
               void conversationBranch.branch(messageId);
             }
           : undefined,
       onMessageActionTooltipOpen: disableAutoFollow,
       branchingMessageId: conversationBranch.pendingMessageId,
+      retryDisabled: !canRetry,
       onRetry:
         branchState.current?.status !== 'paused' &&
         branchState.current?.status !== 'pausing' &&
@@ -235,7 +245,10 @@ export function getAssistantTranscriptProps({
           : undefined,
       editing: {
         messageId: editingMessageId,
-        enabled: Boolean(branchState.current) && !isChangingBranch,
+        enabled:
+          Boolean(branchState.current) &&
+          !isChangingBranch &&
+          (!stream.connectionState || stream.connectionState === 'connected'),
         onStart: (messageId) => {
           editRequestRef.current = null;
           setEditingMessageId(messageId);

@@ -162,7 +162,16 @@ export function setupHistoryTests() {
     mocks.getThread.mockImplementation(async (id: string) => ({
       metadata: { id: `conversation-${id}` },
     }));
-    mocks.watchActivity.mockReset().mockImplementation(async function* () {});
+    mocks.watchActivity
+      .mockReset()
+      .mockImplementation(async function* (threadId, options) {
+        yield { version: 1, threadId, runs: [], cards: [] };
+        await new Promise<void>((resolve) =>
+          options?.signal?.addEventListener('abort', () => resolve(), {
+            once: true,
+          }),
+        );
+      });
     mocks.getConversation.mockImplementation(async (id: string) => ({
       id,
       status: 'idle',
@@ -176,13 +185,11 @@ export function setupHistoryTests() {
     mocks.refreshServices.mockResolvedValue(undefined);
     mocks.cancelRun.mockResolvedValue(undefined);
     mocks.releaseDisplayPause.mockReset().mockResolvedValue(undefined);
-    mocks.pauseRun
-      .mockReset()
-      .mockImplementation(async (_thread, run) => ({
-        state: 'pausing',
-        executionId: run,
-        pauseId: 'pause-token',
-      }));
+    mocks.pauseRun.mockReset().mockImplementation(async (_thread, run) => ({
+      state: 'pausing',
+      executionId: run,
+      pauseId: 'pause-token',
+    }));
     mocks.runStream.mockReset().mockImplementation(async function* () {});
   });
   afterEach(cleanup);

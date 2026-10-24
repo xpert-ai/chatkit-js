@@ -30,44 +30,50 @@ export function ChatPendingActions({
 }: ChatPendingActionsProps) {
   return (
     <>
-      <PendingRuntimeServices
-        state={stream.runtimeActivities.sandboxServices}
-        onStopService={(serviceId) =>
-          stream.stopRuntimeActivityItem('sandbox-services', serviceId)
-        }
-        attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
-        className={hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined}
-      />
-      <PendingTodos
-        snapshot={stream.todos}
-        attachToComposer={!hasPendingFollowUps}
-        className={hasPendingFollowUps ? 'mb-2' : undefined}
-      />
-      <PendingFollowUps
-        items={pendingFollowUps}
-        isLoading={stream.isLoading}
-        onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
-        canSendNow={stream.canSendPendingFollowUpNow}
-        onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
-        onEdit={handleEditPendingFollowUp}
-        onRemove={stream.removePendingFollowUp}
-        attachToComposer
-      />
-      <RequestUserInputPanel
-        request={stream.pendingRequestUserInput}
-        onSubmit={stream.submitRequestUserInput}
-        onDismiss={stream.stop}
-        attachToComposer
-      />
-      <ToolAfterPanel />
-      {!inlineApproval.enabled && (
-        <HITLApprovalPanel
-          request={stream.pendingHITLRequest}
-          onSubmit={stream.submitHITLDecision}
+      <div className="contents" data-chat-auxiliary="">
+        <PendingRuntimeServices
+          state={stream.runtimeActivities.sandboxServices}
+          onStopService={(serviceId) =>
+            stream.stopRuntimeActivityItem('sandbox-services', serviceId)
+          }
+          attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
+          className={
+            hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined
+          }
+        />
+        <PendingTodos
+          snapshot={stream.todos}
+          attachToComposer={!hasPendingFollowUps}
+          className={hasPendingFollowUps ? 'mb-2' : undefined}
+        />
+        <PendingFollowUps
+          items={pendingFollowUps}
+          isLoading={stream.isLoading}
+          onPromoteToSteer={(id) => stream.promotePendingFollowUpToSteer(id)}
+          canSendNow={stream.canSendPendingFollowUpNow}
+          onSendNow={(id) => stream.sendPendingFollowUpNow(id)}
+          onEdit={handleEditPendingFollowUp}
+          onRemove={stream.removePendingFollowUp}
+          attachToComposer
+        />
+      </div>
+      <div className="contents" data-chat-auxiliary="">
+        <RequestUserInputPanel
+          request={stream.pendingRequestUserInput}
+          onSubmit={stream.submitRequestUserInput}
           onDismiss={stream.stop}
           attachToComposer
         />
-      )}
+        <ToolAfterPanel />
+        {!inlineApproval.enabled && (
+          <HITLApprovalPanel
+            request={stream.pendingHITLRequest}
+            onSubmit={stream.submitHITLDecision}
+            onDismiss={stream.stop}
+            attachToComposer
+          />
+        )}
+      </div>
     </>
   );
 }

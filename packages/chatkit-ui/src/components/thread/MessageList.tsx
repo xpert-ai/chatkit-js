@@ -57,6 +57,10 @@ import { MessageActions } from './MessageActions';
 import { MessageTimestamp } from './MessageTimestamp';
 import { MessageEditor } from './MessageEditor';
 import { Button } from '../ui/button';
+import {
+  SendTransitionContent,
+  SendTransitionMessage,
+} from '../chat/messages/SendTransition';
 
 type UploadedMessageFile = ChatAttachmentFile;
 
@@ -119,6 +123,7 @@ export type MessageListProps = {
       actor: MessageActor;
       actorAction?: { onClick: () => void; title?: string };
       isSelf: boolean;
+      sendTransitionId?: string;
       streaming?: boolean;
       before?: ReactNode;
       after?: ReactNode;
@@ -151,6 +156,7 @@ export type MessageListProps = {
   isLoadingMoreMessages?: boolean;
   onLoadMore?: () => void;
   onRetry?: (index: number) => void;
+  retryDisabled?: boolean;
   onBranch?: (messageId: string) => void;
   onMessageActionTooltipOpen?: () => void;
   branchingMessageId?: string | null;
@@ -196,6 +202,7 @@ export function MessageList({
   isLoadingMoreMessages,
   onLoadMore,
   onRetry,
+  retryDisabled,
   onBranch,
   onMessageActionTooltipOpen,
   branchingMessageId,
@@ -383,6 +390,7 @@ export function MessageList({
             message as MessageNavigationSourceMessage,
             index,
           );
+          const messageId = message.id;
 
           if (
             !isAssistantMessage &&
@@ -395,8 +403,13 @@ export function MessageList({
           }
 
           return (
-            <div
+            <SendTransitionMessage
               key={message.id ?? `${message.type}-${index}`}
+              transitionId={
+                isHumanMessage && isSelf
+                  ? (context?.sendTransitionId ?? message.id)
+                  : undefined
+              }
               ref={(node) => {
                 onMessageAnchor?.(messageNavigationId, node);
                 processIndexes?.forEach((processIndex) =>
@@ -526,6 +539,9 @@ export function MessageList({
                         : {})}
                       className={cn(
                         'max-w-full rounded-2xl',
+                        // Actions and timestamps must not stretch short human bubbles.
+                        isHumanMessage &&
+                          (isSelf ? 'w-fit self-end' : 'w-fit self-start'),
                         context && isHumanMessage && 'whitespace-pre-wrap',
                         isHumanMessage
                           ? isSelf
@@ -587,7 +603,7 @@ export function MessageList({
                           mcpApps={mcpApps}
                         />
                       ) : (
-                        <>
+                        <SendTransitionContent human={isHumanMessage}>
                           {isHumanMessage &&
                             humanRuntimeCapabilityOptions.length > 0 && (
                               <HumanRuntimeCapabilityChips
@@ -635,7 +651,7 @@ export function MessageList({
                               {formatMessageContent(message.content)}
                             </span>
                           )}
-                        </>
+                        </SendTransitionContent>
                       )}
                     </div>
                     {/* Message actions - hidden during streaming, retry only for last AI message */}
@@ -675,15 +691,16 @@ export function MessageList({
                         isBranching={branchingMessageId === message.id}
                         branchDisabled={Boolean(branchingMessageId)}
                         onBranch={
-                          onBranch && message.id
-                            ? () => onBranch(message.id!)
+                          onBranch && messageId
+                            ? () => onBranch(messageId)
                             : undefined
                         }
                         onEdit={
-                          canEditMessage && editing
-                            ? () => editing.onStart(message.id!)
+                          canEditMessage && editing && messageId
+                            ? () => editing.onStart(messageId)
                             : undefined
                         }
+                        retryDisabled={retryDisabled}
                         onRetry={
                           onRetry &&
                           isAssistantMessage &&
@@ -711,7 +728,7 @@ export function MessageList({
                   {context.after}
                 </div>
               )}
-            </div>
+            </SendTransitionMessage>
           );
         })}
         {approvalIndex < 0 && approval && (

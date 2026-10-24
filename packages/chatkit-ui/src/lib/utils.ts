@@ -1,3 +1,4 @@
+import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import { clsx, type ClassValue } from 'clsx';
 import { extendTailwindMerge } from 'tailwind-merge';
@@ -86,8 +87,5 @@ export function getMenuItemRoundedClass(
 }
 
 export function createMessageId() {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
-  );
+  return safeRandomUUID();
 }

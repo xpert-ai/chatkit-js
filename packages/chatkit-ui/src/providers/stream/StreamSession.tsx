@@ -1,3 +1,4 @@
+import { useReadRecovery } from './connection/useReadRecovery';
 import { useThreadActivitySubscription } from './activity/useThreadActivitySubscription';
 import {
   useCallback,
@@ -108,6 +109,16 @@ export const StreamSession = ({
     locale,
   });
 
+  const connection = useReadRecovery(
+    JSON.stringify([
+      assistantId,
+      runtimeKey,
+      credentials.runtimeOrganizationId,
+      apiUrl,
+    ]),
+    scope.threadId ?? null,
+  );
+
   const interrupts = useStreamInterrupts({
     ...scope,
     ...messages,
@@ -197,9 +208,11 @@ export const StreamSession = ({
   const hydrateResumedRootExecutions = useMemo(
     () =>
       createResumedRootExecutionHydrator((thread, run) =>
-        credentials.client.runs.get(thread, run),
+        connection.recovery.read(`status:${run}`, (signal) =>
+          credentials.readClient.runs.get(thread, run, { signal }),
+        ),
       ),
-    [credentials.client],
+    [credentials.readClient, connection.recovery],
   );
 
   useEffect(() => {
@@ -228,6 +241,7 @@ export const StreamSession = ({
   });
 
   const history = useStreamHistoryMessages({
+    ...connection,
     ...credentials,
     ...controls,
     ...messages,
@@ -252,6 +266,7 @@ export const StreamSession = ({
   });
 
   const transport = useStreamTransport({
+    ...connection,
     ...runState,
     ...scope,
     ...credentials,
@@ -289,10 +304,11 @@ export const StreamSession = ({
   });
 
   useThreadActivitySubscription({
+    ...connection,
     ...messages,
     ...runState,
     ...transport,
-    client: credentials.client,
+    client: credentials.readClient,
     threadId: scope.threadId ?? null,
     conversationId: scope.conversationId,
     enabled:
@@ -309,6 +325,7 @@ export const StreamSession = ({
   });
 
   const submission = useStreamSubmission({
+    ...connection,
     ...runState,
     ...scope,
     ...credentials,
@@ -324,6 +341,7 @@ export const StreamSession = ({
   });
 
   const resume = useStreamResume({
+    ...connection,
     ...runState,
     ...scope,
     ...history,
@@ -358,7 +376,16 @@ export const StreamSession = ({
     initialThread ?? scope.initialSelectedThreadRef.current,
   );
 
+  const readThreadBranches = useCallback(() => {
+    if (!scope.conversationId) return Promise.resolve([]);
+    return connection.recovery.read(`branches:${scope.conversationId}`, () =>
+      credentials.readClient.conversations.listThreads(scope.conversationId!),
+    );
+  }, [connection.recovery, credentials.readClient, scope.conversationId]);
+
   const value: StreamContextType = {
+    readThreadBranches,
+    connectionState: connection.connectionState,
     client: credentials.client,
     authenticatedFetch: credentials.fetchWithClientSecretRefresh,
     refreshClientSecret: credentials.refreshClientSecret,

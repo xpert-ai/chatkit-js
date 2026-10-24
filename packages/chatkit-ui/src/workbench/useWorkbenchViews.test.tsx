@@ -48,6 +48,27 @@ function deferred() {
 }
 
 describe('Workbench view loading', () => {
+  it('loads supported Remote Views from every plugin without placement configuration', async () => {
+    const { props, listSlotViews } = setup();
+    const anotherPlugin: XpertExtensionViewManifest = {
+      ...manifest,
+      key: 'another-plugin',
+      source: { provider: 'another' },
+    };
+    const legacy: XpertExtensionViewManifest = {
+      ...manifest,
+      key: 'legacy',
+      view: { type: 'raw_json' },
+    };
+    listSlotViews.mockResolvedValue([manifest, anotherPlugin, legacy]);
+    const { result } = renderHook(useWorkbenchViews, { initialProps: props });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.views.map((view) => view.key)).toEqual([
+      'another-plugin',
+      'documents',
+    ]);
+  });
+
   it('loads once after the restored conversation and Project scope are ready', async () => {
     const { props, listSlotViews } = setup();
     const { result, rerender } = renderHook(useWorkbenchViews, {

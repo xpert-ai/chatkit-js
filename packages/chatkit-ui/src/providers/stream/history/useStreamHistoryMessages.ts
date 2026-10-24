@@ -1,3 +1,4 @@
+import type { ReadRecovery } from '../connection/read-recovery';
 import type { Thread } from '@xpert-ai/xpert-sdk';
 import { useCallback } from 'react';
 import {
@@ -35,13 +36,12 @@ import {
 import {
   STREAM_RECONCILIATION_INTERVAL_MS,
   STREAM_RECONCILIATION_MAX_ATTEMPTS,
-  STREAM_RECONCILIATION_MAX_CONSECUTIVE_FAILURES,
   waitForAbortableDelay,
 } from './reconciliation';
 
 type StreamHistoryMessagesOptions = Pick<
   ReturnType<typeof useStreamCredentials>,
-  'ensureHistoryCredentials' | 'client'
+  'ensureHistoryCredentials' | 'client' | 'readClient'
 > &
   Pick<ReturnType<typeof useStreamRunControl>, 'disconnect'> &
   Pick<
@@ -88,6 +88,7 @@ type StreamHistoryMessagesOptions = Pick<
     ReturnType<typeof useStreamHost>,
     'loadHistory' | 'captureHistoryRequest'
   > & {
+    recovery: ReadRecovery;
     hydrateResumedRootExecutions: ReturnType<
       typeof createResumedRootExecutionHydrator
     >;
@@ -102,6 +103,8 @@ export function useStreamHistoryMessages({
   updateConversationId,
   updateHistoryMessagePagination,
   client,
+  readClient,
+  recovery,
   conversationIdRef,
   hydrateResumedRootExecutions,
   steerPriorityFollowUpIdsRef,
@@ -351,26 +354,54 @@ export function useStreamHistoryMessages({
       signal: AbortSignal,
       executionId?: string,
     ) => {
-      let consecutiveFailures = 0;
       for (
         let attempt = 0;
-        attempt < STREAM_RECONCILIATION_MAX_ATTEMPTS && !signal.aborted;
+        attempt < STREAM_RECONCILIATION_MAX_ATTEMPTS &&
+        !signal.aborted &&
+        !recovery.stopped;
         attempt += 1
       ) {
         try {
-          const [conversation, response, thread] = await Promise.all([
-            client.conversations.get(recordId),
-            client.conversations.searchMessages(recordId, {
-              where: {
-                role: 'ai',
-                threadId: requestedThreadId,
-                ...(executionId ? { executionId } : {}),
-              },
-              order: { createdAt: 'DESC' },
-              limit: executionId ? 100 : 1,
-              offset: 0,
-            }),
-            client.threads.get(requestedThreadId),
+          const results = await Promise.allSettled([
+            recovery.read(
+              `conversation:${recordId}`,
+              (signal) => readClient.conversations.get(recordId, { signal }),
+              signal,
+            ),
+            recovery.read(
+              `latest:${executionId ?? requestedThreadId}`,
+              (signal) =>
+                readClient.conversations.searchMessages(
+                  recordId,
+                  {
+                    where: {
+                      role: 'ai',
+                      threadId: requestedThreadId,
+                      ...(executionId ? { executionId } : {}),
+                    },
+                    order: { createdAt: 'DESC' },
+                    limit: executionId ? 100 : 1,
+                    offset: 0,
+                  },
+                  { signal },
+                ),
+              signal,
+            ),
+            recovery.read(
+              `thread:${requestedThreadId}`,
+              (signal) => readClient.threads.get(requestedThreadId, { signal }),
+              signal,
+            ),
+            executionId
+              ? recovery.read(
+                  `status:${executionId}`,
+                  (signal) =>
+                    readClient.runs.get(requestedThreadId, executionId, {
+                      signal,
+                    }),
+                  signal,
+                )
+              : Promise.resolve(null),
           ]);
           if (
             signal.aborted ||
@@ -380,7 +411,33 @@ export function useStreamHistoryMessages({
             return false;
           }
 
-          consecutiveFailures = 0;
+          const [conversationResult, responseResult, threadResult, runResult] =
+            results;
+          // A confirmed terminal run can publish its final message even if another metadata read failed.
+          if (
+            responseResult.status === 'fulfilled' &&
+            runResult.status === 'fulfilled' &&
+            runResult.value?.run_id === executionId &&
+            runResult.value?.thread_id === requestedThreadId &&
+            !['pending', 'running'].includes(runResult.value.status)
+          ) {
+            const finalPage = normalizeConversationMessagesPage(
+              responseResult.value,
+            );
+            setValues((previous) => ({
+              ...previous,
+              messages: upsertMessages(previous.messages, finalPage.messages),
+            }));
+          }
+          if (conversationResult.status === 'rejected')
+            throw conversationResult.reason;
+          if (threadResult.status === 'rejected') throw threadResult.reason;
+          if (runResult.status === 'rejected') throw runResult.reason;
+          if (responseResult.status === 'rejected') throw responseResult.reason;
+          const conversation = conversationResult.value,
+            response = responseResult.value,
+            thread = threadResult.value,
+            run = runResult.value;
           const page = normalizeConversationMessagesPage(response);
           page.messages = await hydrateResumedRootExecutions(
             page.messages,
@@ -392,7 +449,12 @@ export function useStreamHistoryMessages({
             activeThreadIdRef.current !== requestedThreadId
           )
             return false;
-          if (page.messages.length > 0) {
+          const stillRunning = executionId
+            ? ['pending', 'running'].includes(run?.status ?? '')
+            : ['busy', 'running'].includes(
+                thread.status ?? conversation.status ?? '',
+              );
+          if (page.messages.length > 0 && !stillRunning) {
             setValues((previous) => ({
               ...previous,
               messages: upsertMessages(
@@ -421,8 +483,23 @@ export function useStreamHistoryMessages({
               getLatestExecutionIdFromMessages(page.messages),
             );
           }
-          if (executionId || (status !== 'busy' && status !== 'running')) {
-            if (status === 'error') {
+          const isRequestedRun =
+            Boolean(executionId) &&
+            run?.run_id === executionId &&
+            run?.thread_id === requestedThreadId;
+          const runIsPending =
+            isRequestedRun &&
+            (run?.status === 'pending' || run?.status === 'running');
+          if (runIsPending && recovery.getSnapshot() !== 'connected')
+            return false;
+          if (isRequestedRun && !runIsPending)
+            recovery.succeeded(`run:${executionId}`);
+          if (
+            executionId
+              ? !runIsPending
+              : status !== 'busy' && status !== 'running'
+          ) {
+            if (!executionId && status === 'error') {
               if (
                 conversation.threadId === requestedThreadId &&
                 conversation.error
@@ -432,28 +509,13 @@ export function useStreamHistoryMessages({
               return false;
             }
             setHistoryMessageLoadVersion((version) => version + 1);
-            return true;
+            // History hydration and recovery of this submission are separate facts.
+            // A thread can be idle after a rejected request, with only older messages.
+            return isRequestedRun && run?.status === 'success';
           }
-        } catch (reconciliationError) {
-          consecutiveFailures += 1;
-          if (
-            (consecutiveFailures >=
-              STREAM_RECONCILIATION_MAX_CONSECUTIVE_FAILURES ||
-              attempt === STREAM_RECONCILIATION_MAX_ATTEMPTS - 1) &&
-            !signal.aborted
-          ) {
-            console.warn(
-              '[chatkit-ui] Failed to reconcile the completed assistant message',
-              reconciliationError,
-            );
-            if (
-              conversationIdRef.current === recordId &&
-              activeThreadIdRef.current === requestedThreadId
-            ) {
-              setError(reconciliationError);
-            }
-            return false;
-          }
+        } catch {
+          // ReadRecovery records availability and owns the next attempt time. Do not change run status.
+          if (signal.aborted || recovery.stopped) return false;
         }
 
         await waitForAbortableDelay(signal, STREAM_RECONCILIATION_INTERVAL_MS);
@@ -462,6 +524,8 @@ export function useStreamHistoryMessages({
     },
     [
       client,
+      readClient,
+      recovery,
       hydrateResumedRootExecutions,
       hydratePendingHITLRequestFromOperation,
       setInterruptedThreadId,

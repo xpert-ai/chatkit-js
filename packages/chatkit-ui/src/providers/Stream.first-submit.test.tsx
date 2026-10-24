@@ -16,6 +16,7 @@ const sdkMocks = vi.hoisted(() => ({
   conversationsGet: vi.fn(),
   conversationsSearchMessages: vi.fn(),
   runsStream: vi.fn(),
+  runsGet: vi.fn(),
   getProject: vi.fn(),
   listProjectFiles: vi.fn(),
   listAssistantFiles: vi.fn(),
@@ -35,6 +36,16 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
       create: sdkMocks.threadsCreate,
       get: sdkMocks.threadsGet,
       delete: sdkMocks.threadsDelete,
+      async *watchActivity(
+        threadId: string,
+        { signal }: { signal: AbortSignal },
+      ) {
+        yield { version: 1, threadId, cards: [], runs: [] };
+        if (!signal.aborted)
+          await new Promise<void>((resolve) =>
+            signal.addEventListener('abort', () => resolve(), { once: true }),
+          );
+      },
     };
 
     conversations = {
@@ -45,6 +56,7 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
 
     runs = {
       stream: sdkMocks.runsStream,
+      get: sdkMocks.runsGet,
     };
     projects = {
       listFiles: sdkMocks.listProjectFiles,
@@ -500,6 +512,7 @@ describe('first submission setup', () => {
         where: { role: 'ai', threadId: 'thread-1' },
         limit: 1,
       }),
+      { signal: expect.any(AbortSignal) },
     );
     expect(getStream().messages).toContainEqual(
       expect.objectContaining({
@@ -535,9 +548,19 @@ describe('first submission setup', () => {
       ],
       total: 1,
     });
-    sdkMocks.runsStream.mockImplementation(async function* () {
-      throw new Error('transport disconnected');
+    sdkMocks.runsGet.mockResolvedValue({
+      run_id: 'run-1',
+      thread_id: 'thread-1',
+      status: 'success',
+      metadata: {},
     });
+    sdkMocks.runsStream.mockImplementation(
+      async function* (_thread, _assistant, options) {
+        options.onRunCreated({ run_id: 'run-1', thread_id: 'thread-1' });
+        yield* [];
+        throw new Error('transport disconnected');
+      },
+    );
     renderStream();
 
     await act(async () => {

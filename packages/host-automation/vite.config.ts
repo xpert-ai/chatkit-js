@@ -11,7 +11,7 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
-      external: ['@xpert-ai/chatkit-types'],
+      external: ['@xpert-ai/chatkit-types', '@xpert-ai/chatkit-web-shared'],
     },
   },
 });

@@ -1,3 +1,7 @@
+import {
+  ConnectionUnavailableError,
+  type ReadRecovery,
+} from '../connection/read-recovery';
 import { useCallback } from 'react';
 import {
   createPendingFollowUp,
@@ -30,7 +34,11 @@ import type {
   StreamRunInput,
   StreamSubmitOptions,
 } from '../types';
-import { createAbortError, normalizeSubmissionError } from './errors';
+import {
+  createAbortError,
+  normalizeSubmissionError,
+  UnconfirmedRunError,
+} from './errors';
 import { retainResumeStreamOptions } from './request-options';
 import type { useStreamTransport } from './useStreamTransport';
 
@@ -81,11 +89,13 @@ type StreamSubmissionOptions = Pick<
   > &
   Pick<ReturnType<typeof useStreamHost>, 'markHistoryLoaded'> &
   Pick<ReturnType<typeof useStreamTransport>, 'runStream'> & {
+    recovery: ReadRecovery;
     assistantId: string;
     projectId: string | undefined;
   };
 
 export function useStreamSubmission({
+  recovery,
   setError,
   pauseRequestedRef,
   activeThreadIdRef,
@@ -123,6 +133,8 @@ export function useStreamSubmission({
 }: StreamSubmissionOptions) {
   const submit = useCallback(
     async (input?: StreamRunInput | null, options?: StreamSubmitOptions) => {
+      if (!options?.newThread && recovery.getSnapshot() !== 'connected')
+        throw new ConnectionUnavailableError();
       setError(null);
       const humanInput = input && 'input' in input ? input : null;
       if (humanInput && pauseRequestedRef.current && !options?.newThread) {
@@ -377,6 +389,10 @@ export function useStreamSubmission({
         );
       } catch (submissionError) {
         const normalizedError = normalizeSubmissionError(submissionError);
+        if (submissionError instanceof UnconfirmedRunError) {
+          setError(submissionError);
+          throw submissionError;
+        }
         valuesRef.current = valuesBeforeSubmission;
         setValues(valuesBeforeSubmission);
         updateConversationId(previousConversationId);
@@ -402,6 +418,7 @@ export function useStreamSubmission({
     [
       assistantId,
       client,
+      recovery,
       addAutoQueuedFollowUpIds,
       addSteerPriorityFollowUpIds,
       markPendingFollowUpsAsQueued,

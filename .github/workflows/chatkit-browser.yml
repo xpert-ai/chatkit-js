@@ -1,0 +1,46 @@
+name: ChatKit Browser Regression
+
+on:
+  pull_request:
+    paths:
+      - 'packages/chatkit-ui/**'
+      - 'packages/chatkit-web-shared/**'
+      - 'packages/web-component/**'
+      - 'packages/chatkit/**'
+      - 'packages/chatkit-widgets/**'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig.base.json'
+      - '.github/workflows/chatkit-browser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/chatkit-ui/**'
+      - 'packages/chatkit-web-shared/**'
+      - 'packages/web-component/**'
+      - 'packages/chatkit/**'
+      - 'packages/chatkit-widgets/**'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig.base.json'
+      - '.github/workflows/chatkit-browser.yml'
+
+jobs:
+  browser:
+    # Keep the OS explicit and supported by the pinned Playwright version.
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @xpert-ai/chatkit-ui exec playwright install --with-deps chromium
+      - run: pnpm --filter @xpert-ai/chatkit-ui test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: chatkit-browser-results
+          path: packages/chatkit-ui/test-results
