@@ -121,12 +121,12 @@ export function ContentReview({
           </p>
         )}
         {state.external && (
-          <section className="space-y-3 border-b border-border pb-3">
+          <section className="space-y-[calc(0.75rem*var(--chat-density-scale,1))] border-b border-border pb-[calc(0.75rem*var(--chat-density-scale,1))]">
             <h3 className="font-semibold">{label('ExternalTitle')}</h3>
             <p className="text-sm text-muted-foreground">
               {label('ExternalHelp')}
             </p>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-[calc(0.75rem*var(--chat-density-scale,1))] sm:grid-cols-2">
               <div>
                 <h4>{label('CollaborativeContent')}</h4>
                 <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-sm">
@@ -141,7 +141,7 @@ export function ContentReview({
               </div>
             </div>
             {state.canWrite && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-[calc(0.5rem*var(--chat-density-scale,1))]">
                 {(['file', 'document'] as const).map((choice) => (
                   <Button
                     key={choice}
@@ -168,7 +168,7 @@ export function ContentReview({
             )}
           </section>
         )}
-        <section className="space-y-3">
+        <section className="space-y-[calc(0.75rem*var(--chat-density-scale,1))]">
           <h3 className="font-semibold">{label('Proposals')}</h3>
           {!state.proposals.length && (
             <p className="text-sm text-muted-foreground">
@@ -178,9 +178,9 @@ export function ContentReview({
           {state.proposals.map((proposal) => (
             <article
               key={proposal.id}
-              className="space-y-2 border-b border-border pb-3"
+              className="space-y-[calc(0.5rem*var(--chat-density-scale,1))] border-b border-border pb-[calc(0.75rem*var(--chat-density-scale,1))]"
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-[calc(0.5rem*var(--chat-density-scale,1))]">
                 <span className="text-sm text-muted-foreground">
                   {label('BasedOn')} {proposal.sequence} ·{' '}
                   {label(proposal.status)}
@@ -192,7 +192,7 @@ export function ContentReview({
                   {label('Locate')}
                 </Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-[calc(0.75rem*var(--chat-density-scale,1))] sm:grid-cols-2">
                 <div>
                   <h4>{label('Before')}</h4>
                   <pre className="whitespace-pre-wrap text-sm">
@@ -207,7 +207,7 @@ export function ContentReview({
                 </div>
               </div>
               {proposal.status === 'pending' && state.canWrite && (
-                <div className="flex gap-2">
+                <div className="flex gap-[calc(0.5rem*var(--chat-density-scale,1))]">
                   <Button
                     disabled={busy || state.externalChange}
                     onClick={() =>
@@ -247,7 +247,7 @@ export function ContentReview({
             </article>
           ))}
         </section>
-        <section className="space-y-3">
+        <section className="space-y-[calc(0.75rem*var(--chat-density-scale,1))]">
           <h3 className="font-semibold">{label('Comments')}</h3>
           {!state.comments.length && (
             <p className="text-sm text-muted-foreground">
@@ -255,13 +255,16 @@ export function ContentReview({
             </p>
           )}
           {state.comments.map((item) => (
-            <article key={item.id} className="border-b border-border pb-3">
+            <article
+              key={item.id}
+              className="border-b border-border pb-[calc(0.75rem*var(--chat-density-scale,1))]"
+            >
               <p
                 className={`whitespace-pre-wrap ${item.resolved ? 'line-through' : ''}`}
               >
                 {item.body}
               </p>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] text-sm text-muted-foreground">
                 <span>
                   {item.createdAt} ·{' '}
                   {label(item.blockId ? 'BlockComment' : 'DocumentComment')}
@@ -293,7 +296,7 @@ export function ContentReview({
           ))}
           {state.canWrite && (
             <>
-              <label className="block space-y-2">
+              <label className="block space-y-[calc(0.5rem*var(--chat-density-scale,1))]">
                 {label('NewComment')}
                 <Textarea
                   value={comment}
@@ -320,7 +323,7 @@ export function ContentReview({
             </>
           )}
         </section>
-        <section className="space-y-3">
+        <section className="space-y-[calc(0.75rem*var(--chat-density-scale,1))]">
           <h3 className="font-semibold">{label('Versions')}</h3>
           <Select
             value={revisionId}
@@ -376,8 +379,8 @@ export function ContentReview({
           )}
         </section>
         {state.canWrite && (
-          <section className="space-y-3 border-t border-border pt-3">
-            <label className="block space-y-2">
+          <section className="space-y-[calc(0.75rem*var(--chat-density-scale,1))] border-t border-border pt-[calc(0.75rem*var(--chat-density-scale,1))]">
+            <label className="block space-y-[calc(0.5rem*var(--chat-density-scale,1))]">
               {label('Ask')}
               <Textarea
                 value={instruction}
