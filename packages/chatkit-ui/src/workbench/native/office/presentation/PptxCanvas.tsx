@@ -21,15 +21,7 @@ type Gesture = {
   scaleX: number;
   scaleY: number;
 };
-export function PptxCanvas({
-  deck,
-  slide,
-  selected,
-  onSelect,
-  onTransform,
-  onText,
-  onTextEnd,
-}: {
+type PptxCanvasProps = {
   deck: PptxDeck;
   slide: PptxSlide;
   selected?: string | null;
@@ -37,7 +29,22 @@ export function PptxCanvas({
   onTransform?: (id: string, bounds: ShapeBounds) => void;
   onText?: (id: string, text: string) => void;
   onTextEnd?: () => void;
-}) {
+};
+
+export function PptxCanvas(props: PptxCanvasProps) {
+  // Reset slide-local interaction state before input, never in a mount effect.
+  return <SlideCanvas key={props.slide.path} {...props} />;
+}
+
+function SlideCanvas({
+  deck,
+  slide,
+  selected,
+  onSelect,
+  onTransform,
+  onText,
+  onTextEnd,
+}: PptxCanvasProps) {
   const { t } = useChatkitTranslation();
   const canvas = React.useRef<HTMLDivElement>(null);
   const drag = React.useRef<Gesture | null>(null);
@@ -49,14 +56,10 @@ export function PptxCanvas({
     text: string;
   } | null>(null);
   const textArea = React.useRef<HTMLTextAreaElement>(null);
+  const editingId = editing?.id;
   React.useEffect(() => {
-    if (editing) textArea.current?.focus();
-  }, [editing?.id]);
-  React.useEffect(() => {
-    setEditing(null);
-    setPreview(null);
-    drag.current = null;
-  }, [slide.path]);
+    if (editingId !== undefined) textArea.current?.focus();
+  }, [editingId]);
   function finishText() {
     setEditing(null);
     onTextEnd?.();
@@ -187,7 +190,7 @@ export function PptxCanvas({
             );
           })}
       </div>
-      {frame && onTransform && !editing && (
+      {active && frame && onTransform && !editing && (
         <div
           className="pointer-events-none absolute border-2 border-ring"
           style={pptxSelectionFrameStyle(frame, deck)}
@@ -205,7 +208,7 @@ export function PptxCanvas({
                 cursor: `${corner}-resize`,
                 touchAction: 'none',
               }}
-              onPointerDown={(event) => start(event, active!, corner)}
+              onPointerDown={(event) => start(event, active, corner)}
             />
           ))}
         </div>
