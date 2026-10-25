@@ -39,7 +39,8 @@ it('hides unavailable branch controls on older platforms while surfacing real er
   const { result } = renderHook(() =>
     useThreadBranches(client, 'conversation', 'thread', true, false),
   );
-  await waitFor(() => expect(listThreads).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.resolved).toBe(true));
+  expect(listThreads).toHaveBeenCalledTimes(1);
   expect(result.current.branches).toEqual([]);
   expect(result.current.error).toBeNull();
   expect(result.current.resolved).toBe(true);
