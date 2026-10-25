@@ -1,5 +1,22 @@
 # @xpert-ai/chatkit-ui
 
+## 0.19.1
+
+### Patch Changes
+
+- fb81896: Limit visible image and remote View file reads to four concurrent operations, coalesce identical pending reads, cancel abandoned work, and keep session cleanup off the rendering path. Use single-request thumbnails and explicit original image reads when the host supplies the new Xpert SDK image-preview API; preserve authenticated legacy fallback for older SDKs or servers.
+
+  The direct-preview path requires the companion SDK release from xpert-sdk-js (.changeset/authorized-image-previews.md) and the server image-preview endpoint. Update the SDK dependency and lockfile after that release; this change does not publish packages or deploy the server.
+
+- e7a75b6: Show an End run action when the backend permits termination. Keep pause/resume separate and retain the stopping state until execution has actually settled.
+- 191db55: Wait for historical project scope and branch status before reading capabilities, and share identical pending reads across concurrent consumers. Preserve validation after runs, scope isolation, stale-response protection, and compatibility with older servers without caching completed authorization results.
+- e7a75b6: Check the installed SDK's public control-view and abortable read contract before building ChatKit. Reject older runtime packages even when local source tests or dependency patches appear to work. Pair the eventual SDK release and refresh release locks before publishing ChatKit.
+- e7a75b6: Keep recovery reads retryable when an expired session cannot renew during a temporary network or service outage. Preserve HTTP status and Retry-After across the host frame boundary, share renewal attempts, and retain terminal handling for denied credentials.
+- e7a75b6: Use the backend control view for concise stopping/settling hints and available actions. Retain accepted stop through refresh and unavailable reads, ignore stale responses, and preserve necessary input during pause. Requires the paired SDK control-view release and backend migration.
+- e7a75b6: Upgrade Xpert SDK to 0.18.0 and use its published thread control and abortable read APIs without the legacy 0.15.0 patch.
+- Updated dependencies [e7a75b6]
+  - @xpert-ai/chatkit-web-shared@0.18.1
+
 ## 0.19.0
 
 ### Minor Changes

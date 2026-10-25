@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-web-shared
 
+## 0.18.1
+
+### Patch Changes
+
+- e7a75b6: Keep recovery reads retryable when an expired session cannot renew during a temporary network or service outage. Preserve HTTP status and Retry-After across the host frame boundary, share renewal attempts, and retain terminal handling for denied credentials.
+
 ## 0.18.0
 
 ### Minor Changes
