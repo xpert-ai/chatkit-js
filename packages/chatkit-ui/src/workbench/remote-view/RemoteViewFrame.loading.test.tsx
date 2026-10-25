@@ -79,6 +79,8 @@ describe('RemoteViewFrame loading identity', () => {
     if (!contentWindow) throw new Error('Expected an iframe window.');
     const post = vi.spyOn(contentWindow, 'postMessage');
     fireEvent.load(iframe);
+    // Finish the initial visibility notification before measuring listing-only updates.
+    await act(async () => {});
     post.mockClear();
 
     for (let index = 0; index < 3; index += 1) {

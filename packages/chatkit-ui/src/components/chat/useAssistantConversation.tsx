@@ -124,6 +124,10 @@ export function useAssistantConversation({
     assistantId: session.stream.assistantId,
     projectId: session.activeProjectId,
     threadId: session.stream.threadId,
+    scopeReady:
+      !session.stream.threadId ||
+      (!session.isHistoryUnavailable &&
+        session.stream.projectScopeResolved !== false),
     disabled:
       session.missingConfig ||
       !session.stream.client ||

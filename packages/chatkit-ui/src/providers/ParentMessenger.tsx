@@ -51,6 +51,7 @@ type CommandMessageMap = {
   onSetPetEnabled: { enabled: boolean };
   onFocusMessage: ChatKitMessageFocusRequest;
   onFocusComposer: null;
+  onPrepareLeave: null;
   onSetThreadId: { threadId: string | null };
   onClientToolCall: unknown;
   onToolOutputAttachmentPreview: ToolOutputAttachmentPreviewRequest;
@@ -115,9 +116,7 @@ type ParentEventMessage<K extends ParentEventName = ParentEventName> = {
 };
 
 type ParentMessage =
-  | ParentCommandMessage
-  | ParentResponseMessage
-  | ParentEventMessage;
+  ParentCommandMessage | ParentResponseMessage | ParentEventMessage;
 
 type ParentEnvelope = Partial<ParentMessage> & {
   __xpaiChatKit: true;
@@ -174,6 +173,7 @@ type ParentMessengerContextValue = ParentMessenger & {
   registerOnSetRuntimeCapabilities: (
     handler: OnSetRuntimeCapabilitiesHandler,
   ) => () => void;
+  registerOnPrepareLeave?: (handler: () => Promise<boolean>) => () => void;
   registerOnFocusMessage?: (handler: OnFocusMessageHandler) => () => void;
   registerOnFocusComposer: (handler: OnFocusComposerHandler) => () => void;
 };
@@ -206,6 +206,8 @@ export function ParentMessengerProvider({
   const onSetRuntimeCapabilitiesHandlersRef = useRef(
     new Set<OnSetRuntimeCapabilitiesHandler>(),
   );
+  const runtimeTransitionRef = useRef(0);
+  const onPrepareLeaveRef = useRef<(() => Promise<boolean>) | null>(null);
   const onFocusMessageRef = useRef<OnFocusMessageHandler | null>(null);
   const onFocusComposerHandlersRef = useRef(new Set<OnFocusComposerHandler>());
   const latestOptionsRef = useRef<ChatKitOptions | null>(null);
@@ -250,6 +252,17 @@ export function ParentMessengerProvider({
       onSetRuntimeCapabilitiesHandlersRef.current.add(handler);
       return () => {
         onSetRuntimeCapabilitiesHandlersRef.current.delete(handler);
+      };
+    },
+    [],
+  );
+
+  const registerOnPrepareLeave = useCallback(
+    (handler: () => Promise<boolean>) => {
+      onPrepareLeaveRef.current = handler;
+      return () => {
+        if (onPrepareLeaveRef.current === handler)
+          onPrepareLeaveRef.current = null;
       };
     },
     [],
@@ -349,8 +362,7 @@ export function ParentMessengerProvider({
         const referenceComposition =
           params.referenceComposition ??
           (params.state?.[STATE_VARIABLE_HUMAN]?.referenceComposition as
-            | ChatKitReferenceCompositionMode
-            | undefined);
+            ChatKitReferenceCompositionMode | undefined);
         const humanInput = buildHumanMessageInputPayload({
           content: prompt,
           references,
@@ -511,16 +523,23 @@ export function ParentMessengerProvider({
       }
 
       if (payload.type === 'command' && payload.command === 'onSetOptions') {
-        latestOptionsRef.current =
-          (payload.data as ChatKitOptions | null) ?? null;
-        if (onSetOptionsHandlersRef.current.size > 0) {
-          onSetOptionsHandlersRef.current.forEach((handler) => {
-            handler(payload.data as ChatKitOptions | null);
-          });
-        }
-        if (payload.nonce) {
-          sendResponse(payload.nonce, { ok: true });
-        }
+        const next = (payload.data as ChatKitOptions | null) ?? null;
+        const transition = ++runtimeTransitionRef.current;
+        void (async () => {
+          if (
+            runtimeBinding(latestOptionsRef.current) !== runtimeBinding(next) &&
+            onPrepareLeaveRef.current &&
+            !(await onPrepareLeaveRef.current())
+          )
+            throw new Error('Workbench has unsaved changes.');
+          if (transition !== runtimeTransitionRef.current)
+            throw new Error('Runtime transition superseded.');
+          latestOptionsRef.current = next;
+          onSetOptionsHandlersRef.current.forEach((handler) => handler(next));
+          if (payload.nonce) sendResponse(payload.nonce, { ok: true });
+        })().catch((error: unknown) => {
+          if (payload.nonce) sendResponse(payload.nonce, undefined, error);
+        });
         return;
       }
 
@@ -536,6 +555,16 @@ export function ParentMessengerProvider({
         return;
       }
 
+      if (payload.type === 'command' && payload.command === 'onPrepareLeave') {
+        void (onPrepareLeaveRef.current?.() ?? Promise.resolve(true))
+          .then((ready) => {
+            if (payload.nonce) sendResponse(payload.nonce, ready);
+          })
+          .catch((error) => {
+            if (payload.nonce) sendResponse(payload.nonce, undefined, error);
+          });
+        return;
+      }
       if (payload.type === 'command' && payload.command === 'onFocusMessage') {
         const data = payload.data;
         if (
@@ -604,15 +633,21 @@ export function ParentMessengerProvider({
 
       if (payload.type === 'command' && payload.command === 'onSetThreadId') {
         const data = payload.data as
-          | { threadId: string | null }
-          | null
-          | undefined;
+          { threadId: string | null } | null | undefined;
         const nextThreadId = data?.threadId ?? null;
+        const transition = ++runtimeTransitionRef.current;
         const stream = streamRef.current;
         void (async () => {
           if (!stream)
             throw new Error('ChatKit is not ready to load a thread.');
           if (stream.threadId !== nextThreadId) {
+            if (
+              onPrepareLeaveRef.current &&
+              !(await onPrepareLeaveRef.current())
+            )
+              throw new Error('Workbench has unsaved changes.');
+            if (transition !== runtimeTransitionRef.current)
+              throw new Error('Runtime transition superseded.');
             stream.reset(nextThreadId, undefined, {
               suppressThreadChange: true,
             });
@@ -718,6 +753,7 @@ export function ParentMessengerProvider({
       registerOnSetComposerValue,
       registerOnSetRuntimeCapabilities,
       registerOnFocusComposer,
+      registerOnPrepareLeave,
       registerOnFocusMessage,
     }),
     [
@@ -731,6 +767,7 @@ export function ParentMessengerProvider({
       registerOnSetComposerValue,
       registerOnSetRuntimeCapabilities,
       registerOnFocusComposer,
+      registerOnPrepareLeave,
       registerOnFocusMessage,
     ],
   );
@@ -740,4 +777,17 @@ export function ParentMessengerProvider({
       {children}
     </ParentMessengerContext.Provider>
   );
+}
+
+/** Theme/composer updates do not flush editors; a replacement runtime must pass the leave gate. */
+function runtimeBinding(options: ChatKitOptions | null) {
+  const api = options?.api;
+  return JSON.stringify([
+    api?.apiUrl,
+    api?.xpertId,
+    api && 'projectId' in api ? api.projectId : undefined,
+    options?.group?.id,
+    options?.sessionKey,
+    options?.initialThread,
+  ]);
 }

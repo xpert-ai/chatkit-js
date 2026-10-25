@@ -1,3 +1,5 @@
+import { getPetAssetsBaseUrl } from '@xpert-ai/chatkit-types';
+import { PetAssetsContext } from './pet/PetAssets';
 import { ChatView } from './chat/ChatView';
 import { SendTransitionProvider } from './chat/messages/SendTransition';
 import type { ReactNode } from 'react';
@@ -38,10 +40,12 @@ function GroupChatRuntime({ children, ...props }: RuntimeProps) {
 export function Chat(props: ChatProps) {
   const Runtime = props.options?.group ? GroupRuntime : AssistantRuntime;
   return (
-    <SendTransitionProvider key={props.options?.group?.id ?? 'assistant'}>
-      <Runtime key={props.options?.group?.id ?? 'assistant'} {...props}>
-        {(view) => <ChatView view={view} surface={props.surface} />}
-      </Runtime>
-    </SendTransitionProvider>
+    <PetAssetsContext.Provider value={getPetAssetsBaseUrl(props.options?.pet)}>
+      <SendTransitionProvider key={props.options?.group?.id ?? 'assistant'}>
+        <Runtime key={props.options?.group?.id ?? 'assistant'} {...props}>
+          {(view) => <ChatView view={view} surface={props.surface} />}
+        </Runtime>
+      </SendTransitionProvider>
+    </PetAssetsContext.Provider>
   );
 }

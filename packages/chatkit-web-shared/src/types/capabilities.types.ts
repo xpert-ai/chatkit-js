@@ -118,6 +118,8 @@ export type OuterCommands = {
   focusMessage: (
     params: ChatKitMessageFocusRequest,
   ) => Promise<ChatKitMessageFocusResult>;
+  /** Flush mounted editors before the embedding application replaces its runtime or unmounts. */
+  prepareLeave: () => Promise<boolean>;
   focusComposer: () => void;
   fetchUpdates: () => void;
   sendCustomAction: (params: CustomActionCommandPayload) => void;
@@ -218,6 +220,7 @@ export const BASE_CAPABILITY_ALLOWLIST = [
   'command.setThreadId',
   'command.focusComposer',
   'command.focusMessage',
+  'command.prepareLeave',
   'command.fetchUpdates',
   'command.sendCustomAction',
   'command.showHistory',

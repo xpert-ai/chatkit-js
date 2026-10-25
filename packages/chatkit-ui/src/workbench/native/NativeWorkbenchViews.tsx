@@ -56,6 +56,7 @@ export function NativeWorkbenchTabs({
             label={title}
             icon={<Icon size={16} />}
             selected={activeKey === tab.key}
+            dirty={dirty.includes(tab.key)}
             id={tab.key}
             panelId={`${tab.key}-panel`}
             onSelect={() => onSelect(tab.key)}
@@ -63,11 +64,7 @@ export function NativeWorkbenchTabs({
               label: t('workbench.files.close', { name: title }),
               onClick: () => onClose(tab.key),
             }}
-          >
-            {dirty.includes(tab.key) && (
-              <span aria-label={t('workbench.files.unsavedLabel')}>•</span>
-            )}
-          </WorkbenchTab>
+          />
         );
       })}
     </>

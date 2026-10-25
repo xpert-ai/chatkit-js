@@ -1,5 +1,78 @@
 # @xpert-ai/chatkit-ui
 
+## 0.18.1
+
+### Patch Changes
+
+- 1386c33: Keep text editing active when a PPTX canvas receives input immediately after loading. Scope transient canvas state to each slide so switching slides resets editing and drag state without a delayed mount effect clearing the first edit.
+
+## 0.18.0
+
+### Minor Changes
+
+- 39d89af: Add host-controlled Workbench View navigation and an onNavigationChange bridge. Routed embedders can restore the selected Project, View and query after refresh or browser history navigation while keeping same-scope Remote Views mounted. Disable iframe-owned history when the embedder controls navigation, and accept completed host Project navigation only within the original Assistant and organization.
+
+  Forward unsupported legacy View navigation to the authorized host when the host owns navigation. Remote iframe Views use ChatKit by default without adding plugin presentation settings.
+
+### Patch Changes
+
+- Updated dependencies [39d89af]
+  - @xpert-ai/chatkit-types@0.18.0
+  - @xpert-ai/chatkit-web-shared@0.17.2
+
+## 0.17.2
+
+### Patch Changes
+
+- 50fad74: Return remote View request failures to the requesting iframe without also showing a Workbench error banner. Views can recover from expected polling failures and explicitly notify users when needed.
+
+## 0.17.1
+
+### Patch Changes
+
+- d081f10: Fix blank ChatKit Workbench panels on non-loopback HTTP origins by centralizing browser UUID generation with a cryptographically secure UUID v4 fallback. Reuse the helper for previews, group conversations, messaging and browser automation, and fail closed when no secure random source exists. Add browser regression coverage for HTTP, localhost, HTTPS and embedded panels.
+- Updated dependencies [d081f10]
+  - @xpert-ai/chatkit-web-shared@0.17.1
+
+## 0.17.0
+
+### Minor Changes
+
+- 8521546: Open side chats from the latest sealed reply while the source is running across selection, start-page and floating-chat actions. Preserve request identities on retry, deduplicate overlapping actions, ignore stale navigation responses, and display server explanations without discarding the selected quote.
+
+  Include a declaration-only patch for the SDK copy options until the upstream contract is released. Deploy a platform API supporting `latest-sealed-reply` before upgrading ChatKit and its hosts.
+
+### Patch Changes
+
+- 9266d16: Upgrade the Xpert SDK to 0.15.0 and remove the temporary type patch now that sealed-reply side-chat forks are supported by the published SDK.
+  - @xpert-ai/chatkit-types@0.17.0
+  - @xpert-ai/chatkit-web-shared@0.17.0
+  - @xpert-ai/a2ui-react@0.17.0
+
+## 0.16.2
+
+### Patch Changes
+
+- 386c37e: Preserve rejected send errors and restore drafts, refresh invalid model selections, and require an explicit available model before retrying. Clear disconnect errors only after verifying the acknowledged run succeeded; keep unconfirmed sends visible to avoid duplicate retries.
+- Updated dependencies [386c37e]
+  - @xpert-ai/chatkit-types@0.16.2
+  - @xpert-ai/chatkit-web-shared@0.16.2
+  - @xpert-ai/a2ui-react@0.16.2
+
+## 0.16.1
+
+### Patch Changes
+
+- 144b33f: Revalidate remote Workbench View manifests before loading HTML so newly deployed views use current action and file-access permissions. Stop loading unavailable views and avoid restarting active or pending loads when discovery returns an identical manifest.
+- 80df500: Add resource-based Workbench file commands with scoped SDK authorization and
+  independent download grants. Reuse the shared file viewer for legacy inline file
+  content and the resource-card file transport, preserving cancellation, grant
+  expiry and browser navigation restrictions.
+- Updated dependencies [80df500]
+  - @xpert-ai/chatkit-types@0.16.1
+  - @xpert-ai/chatkit-web-shared@0.16.1
+  - @xpert-ai/a2ui-react@0.16.1
+
 ## 0.16.0
 
 ### Minor Changes

@@ -31,6 +31,7 @@ export interface RemoteComponentMessage {
   payload?: unknown;
   height?: unknown;
   viewportBound?: unknown;
+  ready?: unknown;
   level?: unknown;
   message?: unknown;
 }
@@ -79,6 +80,7 @@ export function parseRemoteComponentMessage(
     payload: Reflect.get(value, 'payload'),
     height: Reflect.get(value, 'height'),
     viewportBound: Reflect.get(value, 'viewportBound'),
+    ready: Reflect.get(value, 'ready'),
     level: Reflect.get(value, 'level'),
     message: Reflect.get(value, 'message'),
   };

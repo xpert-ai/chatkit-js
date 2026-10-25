@@ -14,6 +14,7 @@ const CHATKIT_METHOD_NAMES = Object.freeze([
   'focusComposer',
   'setThreadId',
   'focusMessage',
+  'prepareLeave',
   'sendUserMessage',
   'setComposerValue',
   'setRuntimeCapabilities',

@@ -104,7 +104,11 @@ export function useChatConversationActions({
       stream.isReady &&
       !missingConfig &&
       !branchState.current?.controlView &&
-      !branchState.controlUnavailable,
+      !branchState.controlUnavailable &&
+      !isHistoryLoading &&
+      (!stream.conversationId ||
+        !stream.client.conversations?.listThreads ||
+        branchState.resolved),
     isLoading:
       stream.isLoading ||
       Boolean(stream.connectionState && stream.connectionState !== 'connected'),

@@ -1,10 +1,14 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useNativeWorkbench } from './useNativeWorkbench';
+import { EditorLifecycle } from '../editors/editor-lifecycle';
 
 describe('native Workbench sessions', () => {
   it('reuses the browser tab for previews while recording recent files separately from editor tabs', () => {
-    const { result } = renderHook(() => useNativeWorkbench('preview-scope'));
+    const editors = new EditorLifecycle();
+    const { result } = renderHook(() =>
+      useNativeWorkbench('preview-scope', editors),
+    );
     act(() => {
       result.current.openTool('files');
       result.current.previewFile({ filePath: 'docs/a.md' });
@@ -36,8 +40,9 @@ describe('native Workbench sessions', () => {
     expect(result.current.recent).toHaveLength(3);
   });
   it('reuses tools and file tabs, remembers files, and isolates runtime scopes', () => {
+    const editors = new EditorLifecycle();
     const { result, rerender } = renderHook(
-      ({ scope }) => useNativeWorkbench(scope),
+      ({ scope }) => useNativeWorkbench(scope, editors),
       { initialProps: { scope: 'assistant/project-a' } },
     );
     act(() => {
@@ -59,7 +64,8 @@ describe('native Workbench sessions', () => {
     expect(result.current.recent).toHaveLength(0);
   });
   it('retains dirty tabs when save fails and supports explicit discard', async () => {
-    const { result } = renderHook(() => useNativeWorkbench('scope'));
+    const editors = new EditorLifecycle();
+    const { result } = renderHook(() => useNativeWorkbench('scope', editors));
     let key = '';
     act(() => {
       key = result.current.openFile({ filePath: 'notes.md' });
@@ -83,8 +89,9 @@ describe('native Workbench sessions', () => {
     expect(result.current.dirty).toHaveLength(0);
   });
   it('does not close a new scope when a previous save completes late', async () => {
+    const editors = new EditorLifecycle();
     const { result, rerender } = renderHook(
-      ({ scope }) => useNativeWorkbench(scope),
+      ({ scope }) => useNativeWorkbench(scope, editors),
       { initialProps: { scope: 'old' } },
     );
     let resolve!: () => void;
@@ -106,5 +113,62 @@ describe('native Workbench sessions', () => {
       expect(await saving).toBe(false);
     });
     expect(result.current.tabs).toHaveLength(1);
+  });
+  it('derives tab indicators and leave permission from the same native and remote registry', async () => {
+    const editors = new EditorLifecycle();
+    const { result, unmount } = renderHook(() =>
+      useNativeWorkbench('scope', editors),
+    );
+    let key = '';
+    const save = vi.fn(async () => {
+      result.current.register(key, { dirty: false, save });
+    });
+    act(() => {
+      key = result.current.openFile({ filePath: 'notes.md' });
+      result.current.register(key, { dirty: true, save });
+      editors.register('remote', {
+        tabKey: 'markdown',
+        dirty: true,
+        prepare: async () => false,
+      });
+    });
+    expect(result.current.dirty).toEqual([key]);
+    expect(editors.getDirtyTabs()).toContain('markdown');
+    await act(async () => {
+      expect(await editors.prepare(key)).toBe(true);
+    });
+    expect(save).toHaveBeenCalledOnce();
+    expect(result.current.dirty).toEqual([]);
+    expect(editors.dirty).toBe(true);
+    expect(await editors.prepare()).toBe(false);
+    unmount();
+    expect(editors.getDirtyTabs()).toEqual(['markdown']);
+  });
+
+  it('removes old native dirty state without late cleanup or status erasing the replacement', () => {
+    const editors = new EditorLifecycle();
+    const { result, rerender, unmount } = renderHook(
+      ({ scope }) => useNativeWorkbench(scope, editors),
+      { initialProps: { scope: 'old' } },
+    );
+    const save = async () => {};
+    let key = '';
+    act(() => {
+      key = result.current.openFile({ filePath: 'notes.md' });
+      result.current.register(key, { dirty: true, save });
+    });
+    const oldRegister = result.current.register;
+    rerender({ scope: 'new' });
+    expect(editors.dirty).toBe(false);
+    act(() => {
+      result.current.openFile({ filePath: 'notes.md' });
+      result.current.register(key, { dirty: true, save });
+      oldRegister(key, null);
+      oldRegister('stale-file', { dirty: true, save });
+    });
+    expect(editors.getDirtyTabs()).toEqual([key]);
+    expect(result.current.dirty).toEqual([key]);
+    unmount();
+    expect(editors.dirty).toBe(false);
   });
 });

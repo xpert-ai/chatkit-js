@@ -45,7 +45,7 @@ describe('resource image file authorization', () => {
       'bid',
       {
         runtimeScope: { projectId: 'project', conversationId: 'conversation' },
-        signal: f.controller.signal,
+        signal: expect.any(AbortSignal),
       },
     );
     expect(f.client.createFileAccessGrant).toHaveBeenCalledWith(
@@ -54,9 +54,22 @@ describe('resource image file authorization', () => {
       expect.anything(),
     );
     expect(f.client.readFileAccess).toHaveBeenCalledWith('/authorized', {
-      signal: f.controller.signal,
+      signal: expect.any(AbortSignal),
     });
     expect(f.client.revokeFileAccessSession).toHaveBeenCalledWith('session');
+  });
+  it('displays already authorized bytes without waiting for slow session cleanup', async () => {
+    const f = fixture();
+    let release!: () => void;
+    f.client.revokeFileAccessSession.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          release = () => resolve(undefined);
+        }),
+    );
+    expect((await f.load()).type).toBe('image/png');
+    expect(f.client.revokeFileAccessSession).toHaveBeenCalledOnce();
+    release();
   });
   it('does not fall back to arbitrary URLs after a permission failure', async () => {
     const f = fixture();

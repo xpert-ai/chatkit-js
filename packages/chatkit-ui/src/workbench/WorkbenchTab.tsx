@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 
 export function WorkbenchTab({
   label,
@@ -10,6 +11,7 @@ export function WorkbenchTab({
   panelId,
   onSelect,
   close,
+  dirty = false,
   children,
 }: {
   label: string;
@@ -19,8 +21,10 @@ export function WorkbenchTab({
   panelId?: string;
   onSelect: () => void;
   close?: { label: string; onClick: () => void };
+  dirty?: boolean;
   children?: ReactNode;
 }) {
+  const { t } = useChatkitTranslation();
   return (
     <div
       data-slot="workbench-tab"
@@ -48,6 +52,14 @@ export function WorkbenchTab({
           {icon}
         </span>
         <span className="truncate">{label}</span>
+        {dirty && (
+          <span
+            role="img"
+            aria-label={t('workbench.files.unsavedLabel')}
+            title={t('workbench.files.unsavedLabel')}
+            className="size-1.5 shrink-0 rounded-full bg-current"
+          />
+        )}
         {children}
       </button>
       {close && (

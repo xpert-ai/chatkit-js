@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   mergeThreadControlView,
   type Client,
@@ -16,6 +16,29 @@ export function useThreadBranches(
   readBranches?: () => Promise<Thread[]>,
   readControl?: (threadId: string) => Promise<ThreadControlView>,
 ) {
+  const requestScope = useMemo(
+    () => ({
+      client,
+      conversationId,
+      threadId,
+      enabled,
+      readBranches,
+      readControl,
+      isLoading,
+    }),
+    [
+      client,
+      conversationId,
+      threadId,
+      enabled,
+      readBranches,
+      readControl,
+      isLoading,
+    ],
+  );
+  const [resolvedScope, setResolvedScope] = useState<
+    typeof requestScope | null
+  >(null);
   const scope = useRef(threadId);
   scope.current = threadId;
   const [snapshot, setSnapshot] = useState<{
@@ -104,6 +127,10 @@ export function useThreadBranches(
           return;
         }
         setError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (scope.current === threadId && generation.current === request) {
+          setResolvedScope(requestScope);
+        }
       }
     };
     const promise = work();
@@ -113,7 +140,15 @@ export function useThreadBranches(
     } finally {
       if (flight.current?.promise === promise) flight.current = null;
     }
-  }, [client, conversationId, enabled, threadId, readBranches, readControl]);
+  }, [
+    client,
+    conversationId,
+    enabled,
+    threadId,
+    readBranches,
+    readControl,
+    requestScope,
+  ]);
 
   // A refresh following a control command must read after the command, not reuse a preceding request.
   const refresh = useCallback(async () => {
@@ -177,6 +212,7 @@ export function useThreadBranches(
     current,
     error,
     refresh,
+    resolved: resolvedScope === requestScope,
     controlUnavailable:
       controlUnavailable ||
       Boolean(

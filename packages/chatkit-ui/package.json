@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-ui",
-  "version": "0.16.0",
+  "version": "0.18.1",
   "description": "ChatKit UI.",
   "type": "module",
   "sideEffects": false,
@@ -102,6 +102,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.7.0",
+    "@xpert-ai/chatkit-assets": "workspace:~",
     "jsdom": "^25.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -116,7 +117,7 @@
     "build:lib": "tsup src/index.ts --format esm,cjs --dts --clean",
     "build:app": "vite build",
     "test": "vitest run --passWithNoTests",
-    "test:browser": "pnpm build:app && playwright test",
+    "test:browser": "pnpm --filter @xpert-ai/chatkit-web-component build && pnpm build:app && playwright test",
     "types": "tsc",
     "lint": "eslint .",
     "clean": "rimraf dist"

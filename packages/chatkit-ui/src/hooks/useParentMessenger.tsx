@@ -17,6 +17,7 @@ export type ParentMessengerOptions = {
   onSetRuntimeCapabilities?: (
     selection: RuntimeCapabilitiesSelection | null,
   ) => void;
+  onPrepareLeave?: () => Promise<boolean>;
   onFocusMessage?: (
     request: ChatKitMessageFocusRequest,
   ) => Promise<ChatKitMessageFocusResult>;
@@ -28,6 +29,7 @@ export function useParentMessenger({
   onSetPetEnabled,
   onSetComposerValue,
   onSetRuntimeCapabilities,
+  onPrepareLeave,
   onFocusMessage,
   onFocusComposer,
 }: ParentMessengerOptions = {}) {
@@ -44,6 +46,7 @@ export function useParentMessenger({
     registerOnSetComposerValue,
     registerOnSetRuntimeCapabilities,
     registerOnFocusComposer,
+    registerOnPrepareLeave,
     registerOnFocusMessage,
     ...messenger
   } = context;
@@ -117,5 +120,8 @@ export function useParentMessenger({
     if (onFocusMessage) return registerOnFocusMessage?.(onFocusMessage);
   }, [onFocusMessage, registerOnFocusMessage]);
 
+  useEffect(() => {
+    if (onPrepareLeave) return registerOnPrepareLeave?.(onPrepareLeave);
+  }, [onPrepareLeave, registerOnPrepareLeave]);
   return messenger;
 }

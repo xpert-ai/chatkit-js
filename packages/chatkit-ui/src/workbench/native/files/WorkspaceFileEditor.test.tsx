@@ -96,7 +96,10 @@ describe('workspace file saving', () => {
       'edited',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    await waitFor(() => expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false));
+    // The save receipt precedes React's effect publishing the clean editor handle.
+    await waitFor(() =>
+      expect(register.mock.calls.at(-1)?.[1]?.dirty).toBe(false),
+    );
   });
   it('keeps edits and rejects an overwrite when server bytes changed', async () => {
     const { download, save } = setup();

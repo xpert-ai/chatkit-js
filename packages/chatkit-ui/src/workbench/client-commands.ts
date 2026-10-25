@@ -30,7 +30,8 @@ export type WorkbenchCommandHost = {
   /** Project bound to the current, resolved runtime, never supplied by the command payload. */
   projectId?: string;
   isCurrent?: (navigation?: NavigationPayload) => boolean;
-  openView: (key: string, query: XpertViewQuery) => boolean;
+  prepareLeave?: () => Promise<boolean>;
+  openView: (key: string, query: XpertViewQuery) => boolean | Promise<boolean>;
   /** Let a routed host render legacy View types this shell cannot display yet. */
   forwardUnavailableView?: boolean;
   openPreview: (preview: WorkbenchPreview) => void;
@@ -129,6 +130,30 @@ export async function executeWorkbenchCommand(
   if (commandKey === 'workbench.navigation.open') {
     const navigation = parseNavigation(payload);
     if (!navigation.target) return invalid();
+    // Opening a view of the current Project must not replace the active conversation.
+    const currentProjectView =
+      navigation.target === 'assistant.project' &&
+      Boolean(
+        navigation.projectId && navigation.projectId === host.projectId,
+      ) &&
+      Boolean(navigation.viewKey) &&
+      (!navigation.xpertId || navigation.xpertId === request.hostId) &&
+      !navigation.conversationId &&
+      !navigation.threadId &&
+      !navigation.executionId &&
+      !navigation.messageId;
+    if (
+      [
+        'assistant.project',
+        'assistant.conversation',
+        'assistant.execution',
+      ].includes(navigation.target) &&
+      !currentProjectView &&
+      host.prepareLeave &&
+      !(await host.prepareLeave())
+    )
+      return { success: false, code: 'unsaved_changes' };
+    if (host.isCurrent?.() === false) return stale();
     const executionTarget = navigation.target === 'assistant.execution';
     if (
       executionTarget &&
@@ -162,21 +187,9 @@ export async function executeWorkbenchCommand(
         );
       }
     }
-    // Opening a view of the current Project must not replace the active conversation.
-    const currentProjectView =
-      navigation.target === 'assistant.project' &&
-      Boolean(
-        navigation.projectId && navigation.projectId === host.projectId,
-      ) &&
-      Boolean(navigation.viewKey) &&
-      (!navigation.xpertId || navigation.xpertId === request.hostId) &&
-      !navigation.conversationId &&
-      !navigation.threadId &&
-      !navigation.executionId &&
-      !navigation.messageId;
     if (navigation.target === 'workbench.view' || currentProjectView) {
       if (!navigation.viewKey) return invalid();
-      if (host.openView(navigation.viewKey, navigation.query))
+      if (await host.openView(navigation.viewKey, navigation.query))
         return {
           success: true,
           status: 'opened',

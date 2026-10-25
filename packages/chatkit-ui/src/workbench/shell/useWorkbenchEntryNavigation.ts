@@ -1,3 +1,4 @@
+import type { EditorLifecycle } from '../editors/editor-lifecycle';
 import * as React from 'react';
 import type {
   XpertExtensionViewManifest,
@@ -13,6 +14,7 @@ type EntryNavigationOptions = Pick<
   WorkbenchShellProps,
   'initialNavigation' | 'projectCreation'
 > & {
+  editors?: EditorLifecycle;
   ready: boolean;
   runtimeScopeReady: boolean;
   runtimeScope: XpertViewRuntimeScopeInput;
@@ -31,6 +33,7 @@ type EntryNavigationOptions = Pick<
 
 /** Apply explicit navigation only after the destination scope's views have loaded. */
 export function useWorkbenchEntryNavigation({
+  editors,
   initialNavigation,
   projectCreation,
   ready,
@@ -57,16 +60,35 @@ export function useWorkbenchEntryNavigation({
     }
     const viewKey = navigation.viewKey;
     if (viewKey && views.some((view) => view.key === viewKey)) {
-      // Apply an explicitly requested resource after validating the destination.
-      if (!navigation.preserveView || Object.keys(navigation.query).length > 0)
-        setViewQueries((current) => ({
-          ...current,
-          [viewKey]: navigation.query,
-        }));
-      selectView(viewKey);
-      setOpen(true);
+      let cancelled = false;
+      void (async () => {
+        if (editors?.isDirty(viewKey) && !(await editors.prepare(viewKey))) {
+          if (!cancelled)
+            setNotification({
+              level: 'error',
+              message: t('contentReview.Unsaved'),
+            });
+          return;
+        }
+        if (cancelled) return;
+        // Apply an explicitly requested resource after validating the destination.
+        if (
+          !navigation.preserveView ||
+          Object.keys(navigation.query).length > 0
+        )
+          setViewQueries((current) => ({
+            ...current,
+            [viewKey]: navigation.query,
+          }));
+        selectView(viewKey);
+        setOpen(true);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [
+    editors,
     initialNavigation,
     ready,
     views,

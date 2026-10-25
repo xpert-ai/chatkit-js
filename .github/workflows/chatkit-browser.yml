@@ -5,6 +5,7 @@ on:
     paths:
       - 'packages/chatkit-ui/**'
       - 'packages/chatkit-web-shared/**'
+      - 'packages/web-component/**'
       - 'packages/chatkit/**'
       - 'packages/chatkit-widgets/**'
       - 'pnpm-lock.yaml'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'packages/chatkit-ui/**'
       - 'packages/chatkit-web-shared/**'
+      - 'packages/web-component/**'
       - 'packages/chatkit/**'
       - 'packages/chatkit-widgets/**'
       - 'pnpm-lock.yaml'

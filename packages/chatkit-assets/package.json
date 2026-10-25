@@ -1,0 +1,25 @@
+{
+  "name": "@xpert-ai/chatkit-assets",
+  "version": "0.1.0",
+  "description": "Optional offline pet assets for ChatKit.",
+  "type": "module",
+  "files": [
+    "pets",
+    "README.md"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./pets/catalog.json": "./pets/catalog.json"
+  },
+  "scripts": {
+    "build": "node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js"
+  }
+}

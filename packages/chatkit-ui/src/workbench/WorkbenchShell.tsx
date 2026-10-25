@@ -1,3 +1,6 @@
+import { EditorLifecycleContext, useEditorLifecycle } from './editors/context';
+import { useEditorTabClose } from './editors/useEditorTabClose';
+import { useWorkbenchFeedback } from './shell/useWorkbenchFeedback';
 import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
 import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
@@ -89,6 +92,8 @@ function WorkbenchContent({
   stream,
 }: WorkbenchShellProps & { stream: WorkbenchRuntime }) {
   const { t } = useChatkitTranslation();
+  const editors = useEditorLifecycle();
+  useParentMessenger({ onPrepareLeave: () => editors.prepare() });
   const groupRecord = useGroupExecutionRecord(stream.client, stream.group?.id);
   const parentMessenger = useParentMessenger();
   const remoteViewsEnabled = options?.workbench?.enabled === true;
@@ -144,10 +149,8 @@ function WorkbenchContent({
     Record<string, number>
   >({});
   const [reloadVersion, setReloadVersion] = React.useState(0);
-  const [notification, setNotification] = React.useState<{
-    level: 'success' | 'error';
-    message: string;
-  } | null>(null);
+  const { notification, setNotification, reload, notify } =
+    useWorkbenchFeedback(editors, setReloadVersion, t('contentReview.Unsaved'));
 
   const [hostEvent, setHostEvent] =
     React.useState<XpertRemoteViewHostEventMessage | null>(null);
@@ -195,6 +198,7 @@ function WorkbenchContent({
       startPageScope,
       runtimeScope.projectId ? runtimeScope.conversationId : null,
     ]),
+    editors,
   );
   const {
     previews,
@@ -500,6 +504,8 @@ function WorkbenchContent({
 
   const { remember: rememberResourceCard, forget: forgetViewNavigation } =
     useWorkbenchViewNavigation({
+      editors,
+      unsavedMessage: t('contentReview.Unsaved'),
       enabled: remoteViewsEnabled && authenticated,
       options: options?.workbench,
       historyScope: JSON.stringify([layoutKey, runtimeScope.projectId]),
@@ -524,7 +530,27 @@ function WorkbenchContent({
         }),
     });
 
-  const { executeClientCommand } = useWorkbenchClientCommands({
+  const closeWorkbench = React.useCallback(() => {
+    forgetViewNavigation();
+    setOpen(false);
+    setExpanded(false);
+  }, [setOpen, setExpanded, forgetViewNavigation]);
+  const closeEditorView = useEditorTabClose({
+    editors,
+    closeView,
+    forget: forgetViewNavigation,
+    adjacent: adjacentTab,
+    activeKey: activeViewKey,
+    select: setActiveViewKey,
+    closeWorkbench,
+    onError: () =>
+      setNotification({ level: 'error', message: t('contentReview.Unsaved') }),
+  });
+
+  const { executeClientCommand, reviewPanel } = useWorkbenchClientCommands({
+    editors,
+    viewQueries,
+    closeView: closeEditorView,
     rememberViewNavigation: rememberResourceCard,
     onRequestContextChange,
     contextsRef,
@@ -546,6 +572,7 @@ function WorkbenchContent({
   });
 
   useWorkbenchEntryNavigation({
+    editors,
     initialNavigation,
     projectCreation,
     ready: !loading && viewsScope === viewScopeKey,
@@ -584,12 +611,6 @@ function WorkbenchContent({
             : views.length === 0 && !sideChatEnabled
               ? t('workbench.empty')
               : undefined;
-
-  const closeWorkbench = React.useCallback(() => {
-    forgetViewNavigation();
-    setOpen(false);
-    setExpanded(false);
-  }, [setOpen, setExpanded, forgetViewNavigation]);
 
   const { askInSideChat, requestCloseSideChat, confirmCloseSideChat } =
     useWorkbenchSideChat({
@@ -868,15 +889,7 @@ function WorkbenchContent({
       }}
       views={scopedViews}
       availableViews={menuViews}
-      onCloseView={(key) => {
-        forgetViewNavigation(key);
-        closeView(key);
-        if (activeViewKey === key) {
-          const next = adjacentTab(key);
-          setActiveViewKey(next);
-          if (!next) closeWorkbench();
-        }
-      }}
+      onCloseView={closeEditorView}
       activeView={activeView}
       activeViewKey={activeViewKey}
       sideChat={sideChat}
@@ -917,62 +930,58 @@ function WorkbenchContent({
       onClose={closeWorkbench}
       onRequestCloseSideChat={requestCloseSideChat}
       onToggleExpanded={() => setExpanded((current) => !current)}
-      onReload={() => setReloadVersion((version) => version + 1)}
+      onReload={reload}
       onSelect={selectTab}
-      onNotify={(level, message) => {
-        setNotification({ level, message });
-        window.setTimeout(() => {
-          setNotification((current) =>
-            current?.message === message ? null : current,
-          );
-        }, 4000);
-      }}
+      onNotify={notify}
       onClientCommand={executeClientCommand}
     />
   );
 
   return (
-    <ResourceCardContext.Provider value={resourceCardActions}>
-      <WorkbenchChatProvider
-        scope={viewScopeKey}
-        floating={mainChatInWorkbench && activeViewKey !== MAIN_CHAT_VIEW_KEY}
-      >
-        <WorkbenchShellLayout
-          contextValue={contextValue}
-          rootRef={rootRef}
-          isNarrow={isNarrow}
-          workbenchSide={workbenchSide}
-          initialLoading={initialLoading}
-          t={t}
-          notification={notification}
-          open={open}
-          setNotification={setNotification}
-          resizing={resizing}
-          mainChatInWorkbench={mainChatInWorkbench}
-          chatHost={chatHost}
-          chat={chat}
-          sideChat={sideChat}
-          externalViewOpen={externalViewOpen}
-          expanded={expanded}
-          containerWidth={containerWidth}
-          resolvedPanelWidth={resolvedPanelWidth}
-          startResize={startResize}
-          setPanelWidth={setPanelWidth}
-          setExpanded={setExpanded}
-          swapSides={swapSides}
-          panelHost={panelHost}
-          setOpen={setOpen}
-          closeWorkbench={closeWorkbench}
-          panel={panel}
-          native={native}
-          activeViewKey={activeViewKey}
-          adjacentTab={adjacentTab}
-          setActiveViewKey={setActiveViewKey}
-          sideChatCloseDialogOpen={sideChatCloseDialogOpen}
-          setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
-          confirmCloseSideChat={confirmCloseSideChat}
-        />
-      </WorkbenchChatProvider>
-    </ResourceCardContext.Provider>
+    <EditorLifecycleContext.Provider value={editors}>
+      <ResourceCardContext.Provider value={resourceCardActions}>
+        {reviewPanel}
+        <WorkbenchChatProvider
+          scope={viewScopeKey}
+          floating={mainChatInWorkbench && activeViewKey !== MAIN_CHAT_VIEW_KEY}
+        >
+          <WorkbenchShellLayout
+            contextValue={contextValue}
+            rootRef={rootRef}
+            isNarrow={isNarrow}
+            workbenchSide={workbenchSide}
+            initialLoading={initialLoading}
+            t={t}
+            notification={notification}
+            open={open}
+            setNotification={setNotification}
+            resizing={resizing}
+            mainChatInWorkbench={mainChatInWorkbench}
+            chatHost={chatHost}
+            chat={chat}
+            sideChat={sideChat}
+            externalViewOpen={externalViewOpen}
+            expanded={expanded}
+            containerWidth={containerWidth}
+            resolvedPanelWidth={resolvedPanelWidth}
+            startResize={startResize}
+            setPanelWidth={setPanelWidth}
+            setExpanded={setExpanded}
+            swapSides={swapSides}
+            panelHost={panelHost}
+            setOpen={setOpen}
+            closeWorkbench={closeWorkbench}
+            panel={panel}
+            native={native}
+            activeViewKey={activeViewKey}
+            adjacentTab={adjacentTab}
+            setActiveViewKey={setActiveViewKey}
+            sideChatCloseDialogOpen={sideChatCloseDialogOpen}
+            setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
+            confirmCloseSideChat={confirmCloseSideChat}
+          />
+        </WorkbenchChatProvider>
+      </ResourceCardContext.Provider>
+    </EditorLifecycleContext.Provider>
   );
 }

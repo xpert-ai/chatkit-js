@@ -144,6 +144,18 @@ bridged internally when ChatKit is hosted through the Web Component. Missing
 handlers return `{ success: false, code: 'unsupported' }`, without emitting a
 global `chatkit.error`.
 
+### Opening a platform content document
+
+Declare `workbench.content.resolve` and `workbench.navigation.open` in the source
+View's manifest. ChatKit uses the SDK to authorize the resource and discover its
+registered editor, then returns navigation without opening UI. Send that navigation
+through the same Remote View bridge to open the editor within ChatKit Workbench.
+
+ChatKit handles `workbench.content.*` and `assistant.content.review` internally;
+these commands never fall through to the embedder's `workbench.onClientCommand`.
+See [Content editors in ChatKit Workbench](./content-editors.md) for command
+payloads, the embedder contract and the editor save lifecycle.
+
 ### Authorized conversation and project navigation
 
 Execution inspection is handled inside ChatKit first. Send `workbench.navigation.open`

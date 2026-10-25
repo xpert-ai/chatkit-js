@@ -6,7 +6,17 @@ import { useExternalAssistantRunSync } from './useExternalAssistantRunSync';
 import type { ExternalAssistantRun } from './external-assistant-runs';
 
 const runs: ExternalAssistantRun[] = [
-  { id: 'writer', info: { id: 'writer', status: 'running' }, segments: [] },
+  {
+    id: 'writer',
+    info: {
+      id: 'writer',
+      status: 'running',
+      title: 'Writer',
+      inputs: { input: 'Keep me' },
+      avatar: { url: '/writer.png' },
+    },
+    segments: [],
+  },
 ];
 function response(status: Run['status'], threadId = 'thread'): Run {
   return {
@@ -31,7 +41,7 @@ describe('persisted external assistant status reconciliation', () => {
   function fixture(active = true) {
     const client = new Client({ apiUrl: 'https://example.test' });
     const get = vi
-      .spyOn(client.runs, 'get')
+      .spyOn(client.runs, 'getStatus')
       .mockResolvedValue(response('running'));
     const onRunUpdate = vi.fn();
     const props = { client, threadId: 'thread', runs, active, onRunUpdate };
@@ -53,6 +63,9 @@ describe('persisted external assistant status reconciliation', () => {
     expect(f.result.current.runs[0].info).toMatchObject({
       status: 'interrupted',
       elapsedTime: 2700000,
+      title: 'Writer',
+      inputs: { input: 'Keep me' },
+      avatar: { url: '/writer.png' },
     });
     expect(f.onRunUpdate).toHaveBeenCalledExactlyOnceWith(
       'thread',
@@ -112,5 +125,35 @@ describe('persisted external assistant status reconciliation', () => {
       complete(response('interrupted'));
     });
     expect(f.onRunUpdate).not.toHaveBeenCalled();
+  });
+  it('falls back only for older servers and preserves presentation in compact terminal updates', async () => {
+    const f = fixture(false);
+    const legacy = vi
+      .spyOn(f.props.client.runs, 'get')
+      .mockResolvedValue(response('running'));
+    f.get.mockRejectedValueOnce({ status: 404 });
+    f.rerender({ ...f.props, active: true });
+    await act(async () => {});
+    expect(legacy).toHaveBeenCalledTimes(1);
+    legacy.mockResolvedValue(response('error'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(f.result.current.runs[0].info.status).toBe('error');
+    expect(f.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('suspends hidden views and reconciles immediately on returning', async () => {
+    const f = fixture();
+    await act(async () => {});
+    f.rerender({ ...f.props, active: false });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(f.get).toHaveBeenCalledTimes(1);
+    f.get.mockResolvedValue(response('success'));
+    f.rerender({ ...f.props, active: true });
+    await act(async () => {});
+    expect(f.result.current.runs[0].info.status).toBe('success');
   });
 });
