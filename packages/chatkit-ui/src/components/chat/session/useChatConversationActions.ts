@@ -100,7 +100,13 @@ export function useChatConversationActions({
   const canRetry = useThreadCapabilities({
     client: stream.client,
     threadId: stream.threadId,
-    enabled: stream.isReady && !missingConfig,
+    enabled:
+      stream.isReady &&
+      !missingConfig &&
+      !isHistoryLoading &&
+      (!stream.conversationId ||
+        !stream.client.conversations?.listThreads ||
+        branchState.resolved),
     isLoading:
       stream.isLoading ||
       Boolean(stream.connectionState && stream.connectionState !== 'connected'),

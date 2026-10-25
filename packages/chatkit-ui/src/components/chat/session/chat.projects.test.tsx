@@ -16,6 +16,46 @@ import {
 
 describe('Chat project scope', () => {
   setupChatTest();
+  it('waits for historical project scope before requesting runtime capabilities', async () => {
+    mocks.stream.threadId = 'history-thread';
+    mocks.stream.projectScopeResolved = false;
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValue({
+      skills: [],
+      plugins: [],
+    });
+    const view = render(
+      <Chat clientSecret="secret" options={baseChatOptions} />,
+    );
+    await act(async () => {});
+    expect(
+      mocks.stream.client.assistants.getRuntimeCapabilities,
+    ).not.toHaveBeenCalled();
+    // The provider suppresses the mounted project while history is still loading.
+    mocks.stream.projectScopeResolved = true;
+    mocks.stream.historyLoad = {
+      threadId: 'history-thread',
+      status: 'loading',
+    };
+    view.rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+    await act(async () => {});
+    expect(
+      mocks.stream.client.assistants.getRuntimeCapabilities,
+    ).not.toHaveBeenCalled();
+    mocks.stream.historyLoad = { threadId: 'history-thread', status: 'loaded' };
+    mocks.stream.projectId = 'history-project';
+    view.rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
+    await waitFor(() =>
+      expect(
+        mocks.stream.client.assistants.getRuntimeCapabilities,
+      ).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      mocks.stream.client.assistants.getRuntimeCapabilities,
+    ).toHaveBeenCalledWith(
+      'assistant-1',
+      expect.objectContaining({ projectId: 'history-project' }),
+    );
+  });
   it('switches from an existing conversation without changing its stored scope or Connectors', async () => {
     mocks.stream.threadId = 'thread-1';
     mocks.stream.connectorBindingIds = ['binding-1'];

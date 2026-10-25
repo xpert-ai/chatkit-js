@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Client, Thread } from '@xpert-ai/xpert-sdk';
 import { readFailure } from '../providers/stream/connection/read-recovery';
 
@@ -10,6 +10,20 @@ export function useThreadBranches(
   isLoading: boolean,
   readBranches?: () => Promise<Thread[]>,
 ) {
+  const requestScope = useMemo(
+    () => ({
+      client,
+      conversationId,
+      threadId,
+      enabled,
+      readBranches,
+      isLoading,
+    }),
+    [client, conversationId, threadId, enabled, readBranches, isLoading],
+  );
+  const [resolvedScope, setResolvedScope] = useState<
+    typeof requestScope | null
+  >(null);
   const scope = useRef(threadId);
   scope.current = threadId;
   const [snapshot, setSnapshot] = useState<{
@@ -48,8 +62,12 @@ export function useThreadBranches(
         return;
       }
       setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (scope.current === threadId && generation.current === request) {
+        setResolvedScope(requestScope);
+      }
     }
-  }, [client, conversationId, enabled, threadId, readBranches]);
+  }, [client, conversationId, enabled, threadId, readBranches, requestScope]);
   const branches =
     enabled && snapshot?.threadId === threadId ? snapshot.branches : [];
   const current = branches.find((branch) => branch.thread_id === threadId);
@@ -81,5 +99,11 @@ export function useThreadBranches(
       clearTimeout(timer);
     };
   }, [enabled, threadId, current?.status, refresh, retryPending]);
-  return { branches, current, error, refresh };
+  return {
+    branches,
+    current,
+    error,
+    refresh,
+    resolved: resolvedScope === requestScope,
+  };
 }

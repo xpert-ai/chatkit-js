@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Client, ThreadCapabilities } from '@xpert-ai/xpert-sdk';
+import { createSharedCapabilityRead } from '../lib/shared-capability-read';
+
+const readCapabilities = createSharedCapabilityRead<ThreadCapabilities>();
 
 /** Availability is server-owned; pending or failed reads keep retry disabled. */
 export function useThreadCapabilities({
@@ -35,7 +38,10 @@ export function useThreadCapabilities({
       typeof client.threads.getCapabilities !== 'function'
     )
       return;
-    void client.threads.getCapabilities(threadId).then(
+    const pending = readCapabilities(client, [threadId, status, error], () =>
+      client.threads.getCapabilities(threadId),
+    );
+    void pending.promise.then(
       (capabilities) => {
         if (active) setResult({ request, capabilities });
       },
@@ -45,8 +51,9 @@ export function useThreadCapabilities({
     );
     return () => {
       active = false;
+      pending.release();
     };
-  }, [request, client, threadId, enabled, isLoading]);
+  }, [request, client, threadId, enabled, isLoading, status, error]);
 
   return result?.request === request && result.capabilities.canRetry === true;
 }
