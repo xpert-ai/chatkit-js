@@ -1,3 +1,5 @@
+import { Button } from '../../ui/button';
+import { ThreadControlStatus } from '../../thread/ThreadControlStatus';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import { X } from 'lucide-react';
@@ -89,14 +91,17 @@ type AssistantComposerProps = Pick<
   > &
   Pick<
     ReturnType<typeof useChatRunControl>,
+    | 'controlStatus'
+    | 'canResumeRun'
     | 'isPauseActive'
     | 'canPauseRun'
+    | 'canStopRun'
     | 'handleComposerRunControl'
     | 'isRunPaused'
     | 'isStoppingRun'
     | 'isRunPausing'
     | 'isResumingRun'
-    | 'currentRunControl'
+    | 'resumePauseId'
     | 'isVisibleStreaming'
   > &
   Pick<ReturnType<typeof useChatBranchState>, 'isChangingBranch'> &
@@ -179,8 +184,11 @@ export function getAssistantComposerProps({
   requiresModelSelection,
   handleModelSelect,
   isSendDisabled,
+  controlStatus,
+  canResumeRun,
   isPauseActive,
   canPauseRun,
+  canStopRun,
   hasComposerInput,
   isChangingBranch,
   handleComposerRunControl,
@@ -188,7 +196,7 @@ export function getAssistantComposerProps({
   isStoppingRun,
   isRunPausing,
   isResumingRun,
-  currentRunControl,
+  resumePauseId,
   isVisibleStreaming,
   trimmedDraft,
   projectsEnabled,
@@ -289,15 +297,24 @@ export function getAssistantComposerProps({
           }}
         />
 
-        {isRunPausing && (
-          <span
-            role="status"
-            className="text-xs text-muted-foreground"
-            title={t('threadControl.pausingDescription')}
+        {canStopRun && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-[calc(2rem*var(--chat-density-scale,1))] px-[calc(.5rem*var(--chat-density-scale,1))] text-xs"
+            disabled={isChangingBranch || isResumingRun || isStoppingRun}
+            onClick={(event) => {
+              event.preventDefault();
+              void handleComposerRunControl('stop');
+            }}
           >
-            {t('threadControl.pausing')}
-          </span>
+            {t('threadControl.terminate')}
+          </Button>
         )}
+
+        <ThreadControlStatus
+          state={controlStatus ?? (isRunPausing ? 'pausing' : undefined)}
+        />
       </>
     ),
     send: {
@@ -315,12 +332,13 @@ export function getAssistantComposerProps({
         Boolean(
           stream.connectionState && stream.connectionState !== 'connected',
         ) ||
+        !canResumeRun ||
         !isRunPaused ||
         isStoppingRun ||
         isRunPausing ||
         isResumingRun ||
         isChangingBranch ||
-        !currentRunControl?.pauseId,
+        !resumePauseId,
       onResume: () => void handleComposerRunControl('resume'),
       resumeLabel: t('threadControl.resume'),
       sendLabel: t('chat.send'),

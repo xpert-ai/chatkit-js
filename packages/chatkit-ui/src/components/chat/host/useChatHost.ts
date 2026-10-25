@@ -40,11 +40,13 @@ type ChatHostOptions = Pick<
     ReturnType<typeof useChatPetSettings>,
     'handleSetPetEnabled' | 'effectivePet'
   > & {
+    canRespond: boolean;
     surface: 'main' | 'side';
     options: ChatKitOptions | null | undefined;
   };
 
 export function useChatHost({
+  canRespond,
   setComposerText,
   setReferences,
   composer,
@@ -132,6 +134,7 @@ export function useChatHost({
 
   const sendParentEvent = parentMessenger?.sendEvent;
   const inlineApproval = useInlineApproval({
+    disabled: !canRespond,
     request: stream.pendingHITLRequest,
     options: options?.approvals,
     messenger: parentMessenger,

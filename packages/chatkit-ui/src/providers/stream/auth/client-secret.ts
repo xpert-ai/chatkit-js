@@ -4,6 +4,7 @@ import {
   waitForCredentials,
 } from '../../../lib/request-abort';
 import { normalizeRequestLanguage } from '@xpert-ai/chatkit-types';
+import { HTTPError } from '@xpert-ai/xpert-sdk';
 import {
   withClientSecretHeaders,
   type ResolvedClientSecret,
@@ -91,10 +92,45 @@ export function createFetchWithClientSecretRefresh({
         if (refreshError instanceof Error && refreshError.name === 'AbortError')
           throw refreshError;
         onRefreshError?.(refreshError);
+        // The expired request did not execute. A temporary minting outage must
+        // reach the read coordinator, rather than permanently blocking it as 401.
+        const temporaryFailure = temporaryCredentialFailure(refreshError);
+        if (temporaryFailure) throw temporaryFailure;
         return response;
       }
     }
     // Transport failures and cancellation are not credential-refresh failures.
     return requestWithSecret(nextCredential);
   };
+}
+
+class CredentialRefreshUnavailable extends HTTPError {
+  override readonly retryAfterMs?: number;
+
+  constructor(status: number, retryAfterMs?: number) {
+    super(status, 'Session refresh temporarily unavailable.');
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function temporaryCredentialFailure(error: unknown) {
+  if (!error || typeof error !== 'object' || !('status' in error)) return;
+  const status = error.status;
+  if (
+    typeof status !== 'number' ||
+    !(
+      status === 0 ||
+      status === 408 ||
+      status === 429 ||
+      (status >= 500 && status <= 599)
+    )
+  )
+    return;
+  const retryAfterMs =
+    'retryAfterMs' in error &&
+    typeof error.retryAfterMs === 'number' &&
+    Number.isFinite(error.retryAfterMs)
+      ? Math.max(0, error.retryAfterMs)
+      : undefined;
+  return new CredentialRefreshUnavailable(status, retryAfterMs);
 }

@@ -97,10 +97,14 @@ export function useChatConversationActions({
   setIsChangingBranch,
   options,
 }: ChatConversationActionsOptions) {
-  const canRetry = useThreadCapabilities({
+  const legacyCanRetry = useThreadCapabilities({
     client: stream.client,
     threadId: stream.threadId,
-    enabled: stream.isReady && !missingConfig,
+    enabled:
+      stream.isReady &&
+      !missingConfig &&
+      !branchState.current?.controlView &&
+      !branchState.controlUnavailable,
     isLoading:
       stream.isLoading ||
       Boolean(stream.connectionState && stream.connectionState !== 'connected'),
@@ -374,7 +378,10 @@ export function useChatConversationActions({
   };
   return {
     canRetry:
-      canRetry &&
+      !branchState.controlUnavailable &&
+      (branchState.current?.controlView
+        ? branchState.current.controlView.actions.canRetry
+        : legacyCanRetry) &&
       (!stream.connectionState || stream.connectionState === 'connected'),
     conversationBranch,
     handleNewThread,

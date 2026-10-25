@@ -203,6 +203,7 @@ export function useAssistantConversation({
   });
 
   const host = useChatHost({
+    canRespond: runControl.canRespond,
     ...draft,
     ...files,
     ...session,
@@ -295,6 +296,7 @@ export function useAssistantConversation({
     session.stream.connectionState !== 'connected',
   );
   const isSubmissionBlocked =
+    !runControl.canSubmit ||
     connectionUnavailable ||
     models.requiresModelSelection ||
     Boolean(conversation.conversationBranch.pendingMessageId) ||
@@ -729,6 +731,7 @@ export function useAssistantConversation({
           <ChatGoalStatus {...goal} {...session} {...draft} />
         </div>
         <ChatPendingActions
+          canRespond={runControl.canRespond}
           {...session}
           {...commands}
           {...host}

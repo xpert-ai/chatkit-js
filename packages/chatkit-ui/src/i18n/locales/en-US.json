@@ -1101,6 +1101,7 @@
     }
   },
   "threadControl": {
+    "terminate": "End run",
     "branch": "Conversation branch",
     "branchNumber": "Branch {{number}}",
     "pause": "Pause workflow",
@@ -1124,7 +1125,12 @@
     "stop": "Stop",
     "stopping": "Stopping",
     "stopDescription": "End this run without undoing completed actions",
-    "pausingDescription": "Waiting for the current step and checkpoint; you can still stop the run"
+    "completed": "Completed",
+    "stopped": "Stopped",
+    "pausingDescription": "Waiting for the current step; you can still stop",
+    "settling": "Finishing up",
+    "confirming": "Confirming status",
+    "input_required": "Waiting for input"
   },
   "fileActivity": {
     "textLineChanges": "Text line changes",

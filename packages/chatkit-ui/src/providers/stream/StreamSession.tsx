@@ -378,12 +378,26 @@ export const StreamSession = ({
 
   const readThreadBranches = useCallback(() => {
     if (!scope.conversationId) return Promise.resolve([]);
-    return connection.recovery.read(`branches:${scope.conversationId}`, () =>
-      credentials.readClient.conversations.listThreads(scope.conversationId!),
+    return connection.recovery.read(
+      `branches:${scope.conversationId}`,
+      (signal) =>
+        credentials.readClient.conversations.listThreads(
+          scope.conversationId!,
+          { signal },
+        ),
     );
   }, [connection.recovery, credentials.readClient, scope.conversationId]);
 
+  const readThreadControl = useCallback(
+    (threadId: string) =>
+      connection.recovery.read(`control:${threadId}`, (signal) =>
+        credentials.readClient.threads.getControlView(threadId, { signal }),
+      ),
+    [connection.recovery, credentials.readClient],
+  );
+
   const value: StreamContextType = {
+    readThreadControl,
     readThreadBranches,
     connectionState: connection.connectionState,
     client: credentials.client,
