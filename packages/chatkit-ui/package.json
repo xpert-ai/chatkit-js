@@ -64,7 +64,7 @@
     "@xpert-ai/artifact-tool": "0.1.0",
     "@xpert-ai/chatkit-types": "workspace:~",
     "@xpert-ai/chatkit-web-shared": "workspace:~",
-    "@xpert-ai/xpert-sdk": "^0.17.0",
+    "@xpert-ai/xpert-sdk": "^0.18.0",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "class-variance-authority": "^0.7.1",
@@ -113,7 +113,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "pnpm run build:lib && pnpm run build:app",
+    "build": "node ../../scripts/check-session-sdk.mjs && pnpm run build:lib && pnpm run build:app",
     "build:lib": "tsup src/index.ts --format esm,cjs --dts --clean",
     "build:app": "vite build",
     "test": "vitest run --passWithNoTests",

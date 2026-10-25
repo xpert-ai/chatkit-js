@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { Client } from '@xpert-ai/xpert-sdk';
+import { createSharedCapabilityRead } from '../../lib/shared-capability-read';
 import { createMessageId } from '../../lib/utils';
 import { isRuntimeCapabilitiesSelection } from '../../lib/message-metadata';
 import {
@@ -64,7 +65,11 @@ type RuntimeCapabilitiesStateParams = {
   projectId?: string;
   threadId: string | null | undefined;
   disabled: boolean;
+  scopeReady?: boolean;
 };
+
+const readRuntimeCapabilities =
+  createSharedCapabilityRead<RuntimeCapabilitiesWithCommands>();
 
 type RuntimeCapabilitiesComposerActionsParams = {
   runtimeCapabilities: RuntimeCapabilitiesWithCommands | null;
@@ -196,6 +201,7 @@ export function useRuntimeCapabilitiesState({
   projectId,
   threadId,
   disabled,
+  scopeReady = true,
 }: RuntimeCapabilitiesStateParams) {
   const [runtimeCapabilities, setRuntimeCapabilities] =
     React.useState<RuntimeCapabilitiesWithCommands | null>(null);
@@ -392,7 +398,7 @@ export function useRuntimeCapabilitiesState({
   );
 
   React.useEffect(() => {
-    if (disabled || !client || !assistantId) {
+    if (disabled || !scopeReady || !client || !assistantId) {
       pendingExternalRuntimeCapabilitiesRef.current = null;
       setRuntimeCapabilities(null);
       setRuntimeCapabilitiesReady(false);
@@ -402,18 +408,24 @@ export function useRuntimeCapabilitiesState({
       return;
     }
 
-    const controller = new AbortController();
+    let active = true;
 
     setRuntimeCapabilitiesReady(false);
     setRuntimeCapabilities(null);
     setRuntimeCapabilityPalette(null);
 
-    void client.assistants
-      .getRuntimeCapabilities(assistantId, {
-        ...(projectId ? { projectId } : {}),
-        signal: controller.signal,
-      })
+    const pending = readRuntimeCapabilities(
+      client,
+      [assistantId, projectId],
+      (signal) =>
+        client.assistants.getRuntimeCapabilities(assistantId, {
+          ...(projectId ? { projectId } : {}),
+          signal,
+        }),
+    );
+    void pending.promise
       .then((payload) => {
+        if (!active) return;
         setRuntimeCapabilities(payload);
         setRuntimeCapabilitiesReady(true);
         setSessionRuntimeCapabilities(
@@ -424,7 +436,7 @@ export function useRuntimeCapabilitiesState({
         );
       })
       .catch((error: unknown) => {
-        if (controller.signal.aborted) {
+        if (!active) {
           return;
         }
         if (getHttpStatus(error) === 404) {
@@ -445,8 +457,11 @@ export function useRuntimeCapabilitiesState({
         setRunRuntimeCapabilities(createEmptyRuntimeCapabilitiesSelection());
       });
 
-    return () => controller.abort();
-  }, [assistantId, client, disabled, projectId]);
+    return () => {
+      active = false;
+      pending.release();
+    };
+  }, [assistantId, client, disabled, projectId, scopeReady]);
 
   React.useEffect(() => {
     const emptyRunSelection =

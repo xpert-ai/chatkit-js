@@ -23,7 +23,11 @@ export function readFailure(error: unknown) {
   return {
     retryAfterMs,
     retryable:
-      status === undefined || status === 408 || status === 429 || status >= 500,
+      status === undefined ||
+      status === 0 ||
+      status === 408 ||
+      status === 429 ||
+      status >= 500,
   };
 }
 

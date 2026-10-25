@@ -10,7 +10,7 @@ type ChatRunControlOptions = Pick<
   branchState: Pick<
     ReturnType<typeof useChatBranchState>['branchState'],
     'current' | 'refresh'
-  >;
+  > & { controlUnavailable?: boolean };
   stream: Pick<
     ReturnType<typeof useChatEnvironment>['stream'],
     | 'connectionState'
@@ -45,6 +45,13 @@ export function useChatRunControl({
     message: string;
   } | null>(null);
 
+  const [acceptedStop, setAcceptedStop] = React.useState<{
+    threadId: string;
+    runId: string;
+  } | null>(null);
+  React.useEffect(() => {
+    setAcceptedStop(null);
+  }, [stream.threadId]);
   const errorGenerationRef = React.useRef(0);
   const clearRunControlError = React.useCallback(() => {
     errorGenerationRef.current += 1;
@@ -55,36 +62,70 @@ export function useChatRunControl({
     clearRunControlError,
   ]);
 
+  const controlView = branchState.current?.controlView;
+  const targetMatches =
+    !controlView ||
+    !stream.isLoading ||
+    !stream.activeRunId ||
+    controlView.runId === stream.activeRunId;
+  const controlsFresh =
+    connected && !branchState.controlUnavailable && targetMatches;
+  React.useEffect(() => {
+    if (
+      acceptedStop?.threadId === stream.threadId &&
+      controlView &&
+      (controlView.runId !== acceptedStop.runId ||
+        ['stopped', 'completed', 'failed', 'idle'].includes(controlView.state))
+    )
+      setAcceptedStop(null);
+  }, [acceptedStop, controlView, stream.threadId]);
   const currentRunControl = branchState.current?.runControl;
-  const pauseRunId = stream.isLoading
-    ? (stream.activeRunId ?? currentRunControl?.executionId ?? null)
-    : (currentRunControl?.executionId ?? stream.activeRunId ?? null);
+  const pauseRunId = controlView
+    ? controlView.runId
+    : stream.isLoading
+      ? (stream.activeRunId ?? currentRunControl?.executionId ?? null)
+      : (currentRunControl?.executionId ?? stream.activeRunId ?? null);
 
-  const canPauseRun = Boolean(
-    stream.threadId &&
-    pauseRunId &&
-    !stream.isThreadInterrupted &&
-    (stream.isLoading || currentRunControl?.state === 'running'),
-  );
+  const canPauseRun = controlView
+    ? controlsFresh && controlView.actions.canPause
+    : Boolean(
+        stream.threadId &&
+        pauseRunId &&
+        !stream.isThreadInterrupted &&
+        (stream.isLoading || currentRunControl?.state === 'running'),
+      );
 
   const isRunPausing =
     (runControlRequest?.threadId === stream.threadId &&
       runControlRequest.action === 'pause') ||
-    branchState.current?.status === 'pausing';
+    (controlView
+      ? controlView.state === 'pausing'
+      : branchState.current?.status === 'pausing');
 
-  const isRunPaused = branchState.current?.status === 'paused';
+  const isRunPaused = controlView
+    ? controlView.state === 'paused'
+    : branchState.current?.status === 'paused';
   const isPauseActive = isRunPausing || isRunPaused;
   const isStoppingRun =
-    runControlRequest?.threadId === stream.threadId &&
-    runControlRequest.action === 'stop';
-  const canStopRun = Boolean(
-    stream.threadId &&
-    pauseRunId &&
-    (stream.isLoading ||
-      ['busy', 'pausing', 'paused'].includes(
-        branchState.current?.status ?? '',
-      )),
-  );
+    (runControlRequest?.threadId === stream.threadId &&
+      runControlRequest.action === 'stop') ||
+    acceptedStop?.threadId === stream.threadId ||
+    (controlView
+      ? controlView.state === 'stopping'
+      : currentRunControl?.state === 'terminating');
+  const canStopRun =
+    !isStoppingRun &&
+    targetMatches &&
+    (controlView
+      ? controlView.actions.canTerminate
+      : Boolean(
+          stream.threadId &&
+          pauseRunId &&
+          (stream.isLoading ||
+            ['busy', 'pausing', 'paused'].includes(
+              branchState.current?.status ?? '',
+            )),
+        ));
   const isResumingRun =
     runControlRequest?.threadId === stream.threadId &&
     runControlRequest.action === 'resume';
@@ -105,10 +146,14 @@ export function useChatRunControl({
       return;
     if (
       action === 'resume' &&
-      (!connected || !isRunPaused || !currentRunControl?.pauseId)
+      (!controlsFresh ||
+        !isRunPaused ||
+        !(controlView?.pauseId ?? currentRunControl?.pauseId) ||
+        (controlView && !controlView.actions.canResume))
     )
       return;
-    if (action === 'pause' && (isRunPaused || isRunPausing)) return;
+    if (action === 'pause' && (!canPauseRun || isRunPaused || isRunPausing))
+      return;
     if (action === 'stop' && !canStopRun) return;
     // Stopping remains available even while a pause HTTP request is pending.
     if (
@@ -129,8 +174,20 @@ export function useChatRunControl({
     try {
       if (action === 'stop') {
         await stream.stop(request.runId);
-      } else if (action === 'resume' && currentRunControl?.pauseId) {
-        await stream.resumeRun(request.runId, currentRunControl.pauseId);
+        if (
+          activeBranchRef.current === sourceThreadId &&
+          runControlRequestRef.current === request &&
+          errorGenerationRef.current === errorGeneration
+        )
+          setAcceptedStop({ threadId: sourceThreadId, runId });
+      } else if (
+        action === 'resume' &&
+        (controlView?.pauseId ?? currentRunControl?.pauseId)
+      ) {
+        await stream.resumeRun(
+          request.runId,
+          (controlView?.pauseId ?? currentRunControl?.pauseId)!,
+        );
       } else {
         await stream.pauseRun(request.runId);
       }
@@ -155,6 +212,26 @@ export function useChatRunControl({
     }
   };
   return {
+    controlView,
+    resumePauseId: controlView
+      ? controlView.pauseId
+      : currentRunControl?.pauseId,
+    canRespond:
+      controlsFresh &&
+      !isStoppingRun &&
+      (!controlView || controlView.actions.canRespond),
+    canResumeRun:
+      controlsFresh &&
+      (controlView ? controlView.actions.canResume : isRunPaused),
+    canSubmit:
+      !isStoppingRun &&
+      !branchState.controlUnavailable &&
+      (controlView
+        ? controlsFresh &&
+          (controlView.actions.canSend ||
+            (controlView.actions.canQueue && stream.isLoading))
+        : !isStoppingRun),
+    controlStatus: isStoppingRun ? 'stopping' : controlView?.state,
     isResumingRun,
     isRunPausing,
     isRunPaused,

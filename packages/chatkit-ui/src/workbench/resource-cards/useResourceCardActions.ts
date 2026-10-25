@@ -4,6 +4,7 @@ import type {
   ResourceCardOpenTarget,
 } from '@xpert-ai/chatkit-types';
 import { loadResourceCardFile } from '../../resource-cards/files/access';
+import { loadImagePreview } from '../../lib/files/image-preview';
 import { useResourceFiles } from '../../resource-cards/files/useResourceFiles';
 import type { ResourceFileAccessOptions } from '../../resource-cards/files/types';
 import type {
@@ -47,6 +48,7 @@ export function useWorkbenchResourceCardActions(
       file: ResourceCardFileReference,
       title: string,
       previewFile = file,
+      image = false,
     ) =>
       openPreview({
         key: `chatkit.preview.resource-file:${JSON.stringify(file)}`,
@@ -54,14 +56,23 @@ export function useWorkbenchResourceCardActions(
         title,
         source: {
           load: (signal) =>
-            loadResourceCardFile(
-              client,
-              assistantId,
-              runtimeScope,
-              previewFile,
-              signal,
-              'preview',
-            ),
+            image
+              ? loadImagePreview(
+                  client,
+                  assistantId,
+                  runtimeScope,
+                  previewFile,
+                  signal,
+                  'original',
+                )
+              : loadResourceCardFile(
+                  client,
+                  assistantId,
+                  runtimeScope,
+                  previewFile,
+                  signal,
+                  'preview',
+                ),
           download: () =>
             files.downloadResourceCardFile!({
               id: JSON.stringify(file),
@@ -72,7 +83,8 @@ export function useWorkbenchResourceCardActions(
       });
     return {
       ...files,
-      openResourceCardImage: (image) => openFile(image.file, image.title),
+      openResourceCardImage: (image) =>
+        openFile(image.file, image.title, image.file, true),
       openResourceCard: async (
         card,
         messageId,

@@ -15,6 +15,7 @@ type ChatPendingActionsProps = Pick<
 > &
   Pick<ReturnType<typeof useChatCommands>, 'handleEditPendingFollowUp'> &
   Pick<ReturnType<typeof useChatHost>, 'inlineApproval'> & {
+    canRespond: boolean;
     hasPendingTodos: boolean;
     hasPendingFollowUps: boolean;
     pendingFollowUps: ReturnType<typeof useStreamContext>['pendingFollowUps'];
@@ -22,6 +23,7 @@ type ChatPendingActionsProps = Pick<
 
 export function ChatPendingActions({
   stream,
+  canRespond,
   hasPendingTodos,
   hasPendingFollowUps,
   pendingFollowUps,
@@ -57,23 +59,31 @@ export function ChatPendingActions({
           attachToComposer
         />
       </div>
-      <div className="contents" data-chat-auxiliary="">
+      <fieldset
+        disabled={!canRespond}
+        className="contents"
+        data-chat-auxiliary=""
+      >
         <RequestUserInputPanel
           request={stream.pendingRequestUserInput}
-          onSubmit={stream.submitRequestUserInput}
+          onSubmit={(answers) => {
+            if (canRespond) stream.submitRequestUserInput(answers);
+          }}
           onDismiss={stream.stop}
           attachToComposer
         />
-        <ToolAfterPanel />
+        <ToolAfterPanel disabled={!canRespond} />
         {!inlineApproval.enabled && (
           <HITLApprovalPanel
             request={stream.pendingHITLRequest}
-            onSubmit={stream.submitHITLDecision}
+            onSubmit={(decisions) => {
+              if (canRespond) stream.submitHITLDecision(decisions);
+            }}
             onDismiss={stream.stop}
             attachToComposer
           />
         )}
-      </div>
+      </fieldset>
     </>
   );
 }

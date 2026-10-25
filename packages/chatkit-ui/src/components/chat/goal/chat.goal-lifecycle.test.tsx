@@ -23,6 +23,7 @@ describe('Chat Goal lifecycle', () => {
   it('does not show a goal card when /goal returns no existing goal', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const adapter = createGoalAdapter();
 
     renderChat({ goal: adapter });
@@ -308,6 +309,7 @@ describe('Chat Goal lifecycle', () => {
   it('expands and collapses the active goal objective', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     mocks.stream.isLoading = true;
     const activeGoal: ThreadGoal = {
       id: 'goal-1',
@@ -378,6 +380,7 @@ describe('Chat Goal lifecycle', () => {
   it('clears stale goal UI when the goal adapter becomes unavailable', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     mocks.stream.isLoading = true;
     const activeGoal: ThreadGoal = {
       id: 'goal-1',

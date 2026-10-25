@@ -19,9 +19,11 @@ import { HITLApprovalPanel } from '../composer/hitl-approval-panel';
 
 export function ActionApprovalCard({
   request,
+  disabled = false,
   onSubmit,
   onAction,
 }: {
+  disabled?: boolean;
   request: PendingHITLRequest;
   onSubmit: (decisions: HITLDecision[]) => Promise<void>;
   onAction?: () => Promise<void>;
@@ -43,6 +45,7 @@ export function ActionApprovalCard({
   }, [request.request.host?.expiresAt]);
   const submit = async (decisions: HITLDecision[]) => {
     if (
+      disabled ||
       lock.current ||
       submitted ||
       (expired && decisions.some((decision) => decision.type !== 'reject'))
@@ -73,7 +76,7 @@ export function ActionApprovalCard({
   if (!simple)
     return (
       <div className="my-3">
-        <fieldset disabled={pending || submitted || expired}>
+        <fieldset disabled={disabled || pending || submitted || expired}>
           <HITLApprovalPanel
             attachToComposer={false}
             request={request}
@@ -148,7 +151,7 @@ export function ActionApprovalCard({
             type="button"
             variant="ghost"
             className="mr-auto text-muted-foreground"
-            disabled={pending || submitted}
+            disabled={disabled || pending || submitted}
             onClick={() => {
               void onAction().catch((cause: unknown) =>
                 setError(
@@ -167,7 +170,7 @@ export function ActionApprovalCard({
           <Button
             type="button"
             variant="outline"
-            disabled={pending || submitted}
+            disabled={disabled || pending || submitted}
             onClick={() => {
               void submit([{ type: 'reject' }]);
             }}
@@ -179,7 +182,7 @@ export function ActionApprovalCard({
         {config?.allowedDecisions.includes('approve') && (
           <Button
             type="button"
-            disabled={pending || submitted || expired}
+            disabled={disabled || pending || submitted || expired}
             onClick={() => {
               void submit([{ type: 'approve' }]);
             }}

@@ -7,11 +7,13 @@ import { ActionApprovalCard } from './action-approval-card';
 
 export function useInlineApproval({
   request,
+  disabled = false,
   options,
   messenger,
   submit,
   threadId,
 }: {
+  disabled?: boolean;
   request: PendingHITLRequest | null;
   options: ChatKitOptions['approvals'];
   messenger: ParentMessenger | null;
@@ -27,9 +29,11 @@ export function useInlineApproval({
       active.current = { id: undefined, threadId: undefined };
     };
   }, [request?.id, threadId]);
+  const disabledRef = React.useRef(disabled);
+  disabledRef.current = disabled;
   const enabled = options?.placement === 'inline' || !!request?.request.host;
   const decide = async (decisions: HITLDecision[]) => {
-    if (!request) return;
+    if (!request || disabledRef.current) return;
     if (request.request.host) {
       const input = { request: request.request, decisions };
       const response =
@@ -45,6 +49,7 @@ export function useInlineApproval({
         throw new Error(t('approvals.hostRejected'));
     }
     if (
+      disabledRef.current ||
       active.current.id !== request.id ||
       active.current.threadId !== threadId
     )
@@ -68,6 +73,7 @@ export function useInlineApproval({
     card:
       enabled && request ? (
         <ActionApprovalCard
+          disabled={disabled}
           key={request.id}
           request={request}
           onSubmit={decide}

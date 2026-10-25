@@ -82,6 +82,7 @@ describe('Chat Goal input mode', () => {
   it('submits goal mode input as a goal instead of a regular prompt', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const adapter = createGoalAdapter();
 
     renderChat({ goal: adapter });
@@ -180,6 +181,7 @@ describe('Chat Goal input mode', () => {
   it('submits goal mode input as a goal when pressing Enter', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const adapter = createGoalAdapter();
 
     renderChat({ goal: adapter });
@@ -226,6 +228,7 @@ describe('Chat Goal input mode', () => {
   it('keeps the goal switch as input mode without showing an existing goal summary', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const activeGoal: ThreadGoal = {
       id: 'goal-1',
       threadId: 'thread-1',
@@ -258,6 +261,7 @@ describe('Chat Goal input mode', () => {
   it('hides the goal status when the stream marks the goal complete', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const adapter = createGoalAdapter();
     const options = { goal: adapter };
     const view = renderChat(options);
@@ -308,6 +312,7 @@ describe('Chat Goal input mode', () => {
   it('keeps the active goal card while the goal run is loading and hides it when loading ends', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const activeGoal: ThreadGoal = {
       id: 'goal-1',
       threadId: 'thread-1',
@@ -379,6 +384,7 @@ describe('Chat Goal input mode', () => {
   it('allows goal mode to be enabled again after a previous goal completes', async () => {
     enableGoalRuntimeCommand();
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     const completedGoal: ThreadGoal = {
       id: 'goal-1',
       threadId: 'thread-1',

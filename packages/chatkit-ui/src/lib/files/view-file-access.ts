@@ -3,6 +3,7 @@ import type {
   XpertViewFileAccessRequest,
   XpertViewRuntimeScopeInput,
 } from '@xpert-ai/xpert-sdk';
+import type { ImagePreviewClient } from './image-preview';
 
 export type ViewFileClient = Pick<
   Client['viewHosts'],
@@ -10,7 +11,8 @@ export type ViewFileClient = Pick<
   | 'createFileAccessGrant'
   | 'readFileAccess'
   | 'revokeFileAccessSession'
->;
+> &
+  ImagePreviewClient;
 type ViewFileReference = Pick<
   XpertViewFileAccessRequest,
   'fileKey' | 'targetId'
@@ -66,7 +68,7 @@ export async function loadViewFile(
     };
   } finally {
     // Cleanup must still run after cancellation, without the aborted read signal.
-    await client
+    void client
       .revokeFileAccessSession(session.sessionId)
       .catch(() => undefined);
   }
