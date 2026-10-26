@@ -13,6 +13,8 @@
         "Continue": "继续"
     },
     "workbench": {
+        "notifications": "工作台通知",
+        "dismissNotification": "关闭通知",
         "mainChat": "聊天",
         "newTab": "新标签页",
         "closeNewTab": "关闭新标签页",

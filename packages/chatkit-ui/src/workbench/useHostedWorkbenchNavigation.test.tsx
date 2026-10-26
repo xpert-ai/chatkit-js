@@ -25,7 +25,7 @@ vi.mock('../hooks/useParentMessenger', () => ({
 const views = [{ key: 'markdown' }] as XpertExtensionViewManifest[];
 
 function fixture(
-  view: { viewKey: string; selectionId: string } | null = {
+  view: { viewKey: string; selectionId: string; parameters?: XpertViewQuery['parameters'] } | null = {
     viewKey: 'markdown',
     selectionId: 'next',
   },
@@ -39,7 +39,7 @@ function fixture(
     tabKey: 'markdown',
     resourceId: 'old',
     dirty: true,
-    prepare: () => save,
+    prepare: vi.fn(() => save),
   };
   editors.register('editor', handle);
   const onError = vi.fn(),
@@ -81,6 +81,7 @@ function fixture(
     ...hook,
     onError,
     onNavigationChange,
+    prepare: handle.prepare,
     complete(ready: boolean) {
       if (ready) editors.register('editor', { ...handle, dirty: false });
       finish(ready);
@@ -89,6 +90,21 @@ function fixture(
 }
 
 describe('hosted navigation with collaborative editors', () => {
+  it('selects an already mounted dirty resource without requesting a save on URL echo', async () => {
+    const f = fixture({ viewKey: 'markdown', selectionId: 'old' });
+    await act(async () => {});
+    expect(f.prepare).not.toHaveBeenCalled();
+    expect(f.onError).not.toHaveBeenCalled();
+    expect(f.result.current.queries.markdown.selectionId).toBe('old');
+  });
+
+  it('still gates an explicit reload of the same dirty resource', async () => {
+    const f = fixture({ viewKey: 'markdown', selectionId: 'old', parameters: { reload: 1 } });
+    expect(f.prepare).toHaveBeenCalledTimes(1);
+    await act(async () => f.complete(false));
+    await waitFor(() => expect(f.onError).toHaveBeenCalledTimes(1));
+    expect(f.result.current.queries.markdown.parameters).toBeUndefined();
+  });
   it('awaits save before replaying a document address and disables competing local history', async () => {
     const f = fixture();
     expect(f.result.current.queries.markdown.selectionId).toBe('old');

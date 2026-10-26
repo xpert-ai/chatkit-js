@@ -89,4 +89,33 @@ describe('ChatKit-owned document navigation', () => {
       parameters: { contentProvider: 'files' },
     });
   });
+  it('keeps two resources in one editor independently mounted and reuses the same resource tab', async () => {
+    const editor = { ...manifest, key: 'slides.editor', title: { en_US: 'Slides' },
+      workbench: { ...manifest.workbench, openMode: 'on-demand' as const } };
+    mocks.listSlotViews.mockResolvedValue([manifest, editor]);
+    render(<WorkbenchShell options={{ ...baseOptions, workbench: { enabled: true } }} locale="en-US"
+      onRequestContextChange={vi.fn()}><WorkbenchToggleButton /></WorkbenchShell>);
+    setObservedWidth(1200);
+    await waitFor(() => expect(screen.getByLabelText('Open views')).toBeEnabled());
+    fireEvent.click(screen.getByLabelText('Open views'));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Documents' }));
+    const open = async (id: string, title: string) => act(async () => {
+      await mocks.remoteViewProps!.onClientCommand('workbench.navigation.open', {
+        target: 'workbench.view', viewKey: editor.key, selectionId: id,
+        parameters: { contentId: id, contentProvider: 'slides', contentTitle: title },
+      }, manifest);
+    });
+    const first = 'cef1b690-fde3-4cc0-982a-e930e6206d8d';
+    const second = 'afd6bf14-028b-41e8-b0e0-9a3b5eaa0476';
+    await open(first, 'Deck A');
+    await open(second, 'Deck B');
+    expect(await screen.findByRole('tab', { name: 'Deck B' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Deck A' })).toHaveAttribute('aria-selected', 'false');
+    const frames = screen.getAllByTestId('remote-view').filter((node) => node.textContent === 'Slides');
+    expect(frames.map((node) => JSON.parse(node.getAttribute('data-query')!).selectionId).sort()).toEqual([first, second].sort());
+    await open(first, 'Deck A');
+    expect(screen.getAllByRole('tab', { name: 'Deck A' })).toHaveLength(1);
+    expect(screen.getByRole('tab', { name: 'Deck A' })).toHaveAttribute('aria-selected', 'true');
+  });
+
 });

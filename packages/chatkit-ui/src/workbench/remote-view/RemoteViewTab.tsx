@@ -11,6 +11,7 @@ import { WorkbenchTab } from '../WorkbenchTab';
 export function RemoteViewTab({
   view,
   resourceId,
+  resourceTitle,
   locale = 'en-US',
   selected,
   onSelect,
@@ -18,6 +19,7 @@ export function RemoteViewTab({
 }: {
   view: XpertExtensionViewManifest;
   resourceId?: string;
+  resourceTitle?: string;
   locale?: string;
   selected: boolean;
   onSelect: () => void;
@@ -36,7 +38,7 @@ export function RemoteViewTab({
     snapshot,
   );
   const label =
-    state?.title ||
+    state?.title || resourceTitle ||
     resolveManifestText(
       view.workbench?.menu?.label ?? view.title,
       view.key,
