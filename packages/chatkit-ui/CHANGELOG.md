@@ -1,5 +1,21 @@
 # @xpert-ai/chatkit-ui
 
+## 0.19.2
+
+### Patch Changes
+
+- 149e56d: Display Workbench and Remote View notifications as themed, dismissible toasts so editor canvases keep their height. Scope notifications to their Workbench and avoid clearing newer feedback when an older toast expires.
+- 9d0162d: Allow routed Workbench Views to request a maximized or split layout. Apply it only after the destination is authorized and pending editor saves succeed, and report manual layout changes through the existing navigation callback without remounting the View.
+- 9854bcb: Keep new Workbench feedback visible when an earlier notification is dismissed on the next animation frame. Give each notification its own toast identity and scope cleanup to that notification.
+- 149e56d: Keep a mounted content editor's unsaved draft when the embedding host echoes its
+  current resource URL. Only replacement or explicit reload invokes the save gate;
+  switching resource tabs does not require discarding or saving another tab.
+- 2e225d6: Upgrade Xpert SDK to 0.19.0 so content navigation uses the published editor selection and provider-native selection ID contracts.
+- 149e56d: Resolve stable Project catalog links on Workbench entry and use the provider's resolved selection ID. Keep multiple resources of the same editor in independent tabs, preserve per-instance unsaved state, and restore bounded Project-scoped tab selections after refresh with fresh authorization. Preserve editor choice and reject stale or unauthorized link targets.
+- 66f09cc: Keep active-run controls stable while output streams reconnect, and preserve retry backoff when replay is temporarily unavailable. Restore the selected conversation after credential initialization without navigating the host to an empty chat.
+- Updated dependencies [9d0162d]
+  - @xpert-ai/chatkit-types@0.19.1
+
 ## 0.19.1
 
 ### Patch Changes
