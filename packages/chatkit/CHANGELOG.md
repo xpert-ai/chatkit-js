@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.19.1
+
+### Patch Changes
+
+- 9d0162d: Allow routed Workbench Views to request a maximized or split layout. Apply it only after the destination is authorized and pending editor saves succeed, and report manual layout changes through the existing navigation callback without remounting the View.
+
 ## 0.19.0
 
 ### Minor Changes
