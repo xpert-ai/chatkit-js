@@ -517,12 +517,14 @@ function WorkbenchContent({
         viewsScope === viewScopeKey &&
         stream.runtimeScopeReady !== false,
       open,
+      expanded,
       activeViewKey,
       views,
       queries: viewQueries,
       setQueries: setViewQueries,
       selectView,
       setOpen,
+      setExpanded,
       onError: (error) =>
         setNotification({
           level: 'error',

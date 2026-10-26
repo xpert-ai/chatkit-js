@@ -25,7 +25,11 @@ vi.mock('../hooks/useParentMessenger', () => ({
 const views = [{ key: 'markdown' }] as XpertExtensionViewManifest[];
 
 function fixture(
-  view: { viewKey: string; selectionId: string } | null = {
+  view:
+    | (NonNullable<ChatKitWorkbenchOptions['navigation']>['view'] & {
+        selectionId: string;
+      })
+    | null = {
     viewKey: 'markdown',
     selectionId: 'next',
   },
@@ -54,6 +58,7 @@ function fixture(
         Record<string, XpertViewQuery>
       >({ markdown: { selectionId: 'old' } });
       const [open, setOpen] = React.useState(true);
+      const [expanded, setExpanded] = React.useState(false);
       const [activeViewKey, selectView] = React.useState('markdown');
       useWorkbenchViewNavigation({
         editors,
@@ -65,15 +70,17 @@ function fixture(
         scopeKey,
         ready: true,
         open,
+        expanded,
         activeViewKey,
         views,
         queries,
         setQueries,
         selectView,
         setOpen,
+        setExpanded,
         onError,
       });
-      return { queries, open };
+      return { queries, open, expanded, setExpanded };
     },
     { initialProps: { scopeKey: 'scope-1' } },
   );
@@ -89,6 +96,37 @@ function fixture(
 }
 
 describe('hosted navigation with collaborative editors', () => {
+  it('maximizes only after the editor saves and reports a manual layout change', async () => {
+    const f = fixture({
+      viewKey: 'markdown',
+      selectionId: 'next',
+      layout: 'maximized',
+    });
+    expect(f.result.current.expanded).toBe(false);
+    await act(async () => f.complete(true));
+    await waitFor(() => expect(f.result.current.expanded).toBe(true));
+    expect(f.onNavigationChange).not.toHaveBeenCalled();
+    act(() => f.result.current.setExpanded(false));
+    await waitFor(() =>
+      expect(f.onNavigationChange).toHaveBeenCalledWith({
+        projectId: 'project',
+        view: { viewKey: 'markdown', selectionId: 'next', layout: 'split' },
+      }),
+    );
+  });
+
+  it('does not maximize or replace a document when saving is blocked', async () => {
+    const f = fixture({
+      viewKey: 'markdown',
+      selectionId: 'next',
+      layout: 'maximized',
+    });
+    await act(async () => f.complete(false));
+    await waitFor(() => expect(f.onError).toHaveBeenCalled());
+    expect(f.result.current.expanded).toBe(false);
+    expect(f.result.current.queries.markdown.selectionId).toBe('old');
+  });
+
   it('awaits save before replaying a document address and disables competing local history', async () => {
     const f = fixture();
     expect(f.result.current.queries.markdown.selectionId).toBe('old');

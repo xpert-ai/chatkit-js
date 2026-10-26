@@ -51,6 +51,36 @@ function shell(
 describe('host-routed ChatKit Workbench', () => {
   setupWorkbenchTests();
 
+  it('opens the requested view maximized and reopens the same view after a manual restore', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const onChange = vi.fn();
+    const navigation: ChatKitWorkbenchNavigation = {
+      projectId: 'project-1',
+      view: { ...view('bid-a'), layout: 'maximized' },
+    };
+    const { rerender } = render(shell(navigation, onChange));
+    await screen.findByLabelText('Restore panel');
+    await waitFor(() =>
+      expect(mocks.remoteViewProps?.initialQuery?.selectionId).toBe('bid-a'),
+    );
+    const frame = screen.getByTestId('remote-view');
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => screen.getByLabelText('Restore panel').click());
+    const split = {
+      ...navigation,
+      view: { ...view('bid-a'), layout: 'split' as const },
+    };
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(split));
+    rerender(shell(split, onChange));
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Restore panel')).toBeNull(),
+    );
+    rerender(shell(navigation, onChange));
+    await screen.findByLabelText('Restore panel');
+    expect(screen.getByTestId('remote-view')).toBe(frame);
+    expect(mocks.remoteUnmounts).toBe(0);
+  });
+
   it('keeps legacy Views out of embedded tabs and delegates their navigation to the authorized outer host', async () => {
     const embedded = manifest;
     const outer: XpertExtensionViewManifest = {

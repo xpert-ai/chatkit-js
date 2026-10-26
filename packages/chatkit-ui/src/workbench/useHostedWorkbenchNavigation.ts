@@ -145,6 +145,7 @@ export function useWorkbenchViewNavigation(input: {
   scopeKey: string;
   ready: boolean;
   open: boolean;
+  expanded: boolean;
   activeViewKey: string | null;
   views: XpertExtensionViewManifest[];
   queries: Record<string, XpertViewQuery>;
@@ -153,6 +154,7 @@ export function useWorkbenchViewNavigation(input: {
   >;
   selectView: (key: string) => void;
   setOpen: (open: boolean) => void;
+  setExpanded: (expanded: boolean) => void;
   onError: (error: unknown) => void;
 }) {
   const latest = React.useRef(input);
@@ -198,6 +200,7 @@ export function useWorkbenchViewNavigation(input: {
       }));
       input.selectView(view.viewKey);
       input.setOpen(true);
+      if (view.layout) input.setExpanded(view.layout === 'maximized');
     });
     return result ? result.then(() => true) : true;
   };
@@ -240,16 +243,20 @@ export function useWorkbenchViewNavigation(input: {
     requested && resolved && navigation
       ? { ...navigation, view: { ...requested, viewKey: resolved.key } }
       : navigation;
+  const currentView = hostedWorkbenchView(
+    input.open && input.views.some((view) => view.key === input.activeViewKey)
+      ? input.activeViewKey
+      : null,
+    input.activeViewKey ? input.queries[input.activeViewKey] : undefined,
+  );
   useHostedWorkbenchNavigation({
     ...input,
     options: { ...input.options, navigation: normalized },
     ready: input.enabled && input.ready,
-    currentView: hostedWorkbenchView(
-      input.open && input.views.some((view) => view.key === input.activeViewKey)
-        ? input.activeViewKey
-        : null,
-      input.activeViewKey ? input.queries[input.activeViewKey] : undefined,
-    ),
+    currentView:
+      currentView && requested?.layout
+        ? { ...currentView, layout: input.expanded ? 'maximized' : 'split' }
+        : currentView,
     restore,
     canPublish:
       !input.open ||
