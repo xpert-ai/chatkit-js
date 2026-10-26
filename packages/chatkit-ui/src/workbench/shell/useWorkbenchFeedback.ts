@@ -19,12 +19,8 @@ export function useWorkbenchFeedback(
     });
   };
   const notify = (level: 'success' | 'error', message: string) => {
+    // The scoped toast owns dismissal; an older timer must not clear newer feedback.
     setNotification({ level, message });
-    window.setTimeout(() => {
-      setNotification((current) =>
-        current?.message === message ? null : current,
-      );
-    }, 4000);
   };
   return { notification, setNotification, reload, notify };
 }

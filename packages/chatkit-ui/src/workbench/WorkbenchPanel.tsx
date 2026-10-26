@@ -1,3 +1,4 @@
+import { contentViewKey } from './content/tab-identity';
 import { workspaceFileScope } from './native/files/workspace-file-access';
 import type { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import {
@@ -115,7 +116,6 @@ type WorkbenchPanelProps = {
   locale: string;
   hostEvent: XpertRemoteViewHostEventMessage | null;
   viewHosts: WorkbenchViewHostsClient;
-  notification: { level: 'success' | 'error'; message: string } | null;
   error: string | null;
   loading: boolean;
   startPageLoading?: boolean;
@@ -178,7 +178,6 @@ export function WorkbenchPanel({
   locale,
   hostEvent,
   viewHosts,
-  notification,
   error,
   loading,
   startPageLoading = loading,
@@ -362,6 +361,7 @@ export function WorkbenchPanel({
                   key={view.key}
                   view={view}
                   resourceId={viewQueries[view.key]?.selectionId}
+                  resourceTitle={typeof viewQueries[view.key]?.parameters?.contentTitle === 'string' ? String(viewQueries[view.key]?.parameters?.contentTitle) : undefined}
                   locale={locale}
                   selected={selected}
                   onSelect={() => onSelect(view.key)}
@@ -393,20 +393,6 @@ export function WorkbenchPanel({
           <div className="min-w-0 flex-1" />
         )}
       </WorkbenchPanelHeader>
-
-      {notification && (
-        <div
-          className={cn(
-            'mx-3 mt-3 rounded-lg border px-3 py-2 text-sm',
-            notification.level === 'error'
-              ? 'border-destructive/30 bg-destructive/10 text-destructive'
-              : 'border-primary/20 bg-primary/10 text-foreground',
-          )}
-          role="status"
-        >
-          {notification.message}
-        </div>
-      )}
 
       {error &&
         activeView &&
@@ -610,7 +596,8 @@ export function WorkbenchPanel({
             >
               <RemoteViewFrame
                 visible={view.key === activeViewKey && visible}
-                manifest={view}
+                instanceKey={view.key}
+                manifest={contentViewKey(view.key) === view.key ? view : { ...view, key: contentViewKey(view.key) }}
                 hostId={hostId}
                 runtimeScope={runtimeScope}
                 contextReady={contextReady}
@@ -619,7 +606,7 @@ export function WorkbenchPanel({
                 hostEvent={hostEvent}
                 viewHosts={viewHosts}
                 onNotify={onNotify}
-                onClientCommand={onClientCommand}
+                onClientCommand={(command, payload, manifest) => onClientCommand(command, payload, { ...manifest, key: view.key })}
                 initialQuery={viewQueries[view.key]}
               />
             </div>

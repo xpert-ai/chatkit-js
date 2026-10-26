@@ -1,3 +1,4 @@
+import { contentTabKey, contentViewKey } from '../../content/tab-identity';
 import {
   executeContentCommand,
   isContentCommand,
@@ -337,7 +338,7 @@ export function useWorkbenchClientCommands({
         resolveFile: (resource) =>
           filePreviews.open(resource, {
             hostId: stream.assistantId,
-            viewKey: manifest.key,
+            viewKey: contentViewKey(manifest.key),
             runtimeScope: {
               projectId: stream.projectId,
               conversationId: stream.conversationId,
@@ -362,7 +363,8 @@ export function useWorkbenchClientCommands({
             currentContext.current.conversationId === navigation.conversationId,
           ),
         forwardUnavailableView: Boolean(options?.workbench?.navigation),
-        openView: async (key, query) => {
+        openView: async (viewKey, query) => {
+          const key = contentTabKey(viewKey, query);
           if (
             queriesRef.current[key]?.selectionId &&
             (queriesRef.current[key]?.selectionId !== query.selectionId ||
@@ -372,7 +374,7 @@ export function useWorkbenchClientCommands({
               throw new Error(t('contentReview.Unsaved'));
           }
           if (currentContext.current !== context) return false;
-          if (!views.some((view) => view.key === key)) return false;
+          if (!views.some((view) => view.key === viewKey)) return false;
           setViewQueries((current) => ({ ...current, [key]: query }));
           selectView(key);
           setOpen(true);
@@ -380,7 +382,7 @@ export function useWorkbenchClientCommands({
           if (!resourceCard)
             rememberViewNavigation({
               target: 'workbench.view',
-              viewKey: key,
+              viewKey,
               ...(query.selectionId ? { selectionId: query.selectionId } : {}),
               ...(query.parameters ? { parameters: query.parameters } : {}),
             });

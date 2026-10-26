@@ -10,6 +10,7 @@ import type { EditorLifecycle } from '../editors/editor-lifecycle';
 const resourceSchema = z.object({
   resourceId: z.string().uuid(),
   providerKey: z.string().min(1).optional(),
+  editorKey: z.string().min(1).max(200).optional(),
   blockId: z.string().max(160).optional(),
 });
 export type ReviewSession = {
@@ -83,7 +84,7 @@ export async function executeContentCommand(
   const navigation = {
     target: 'workbench.view',
     viewKey: resolved.viewKey,
-    selectionId: resource.resourceId,
+    selectionId: resolved.selectionId ?? resource.resourceId,
     ...(resolved.parameters ? { parameters: resolved.parameters } : {}),
   };
   if (command === 'workbench.content.resolve')
@@ -94,7 +95,8 @@ export async function executeContentCommand(
     host.scope,
     {
       ...resource,
-      providerKey: resolved.parameters?.contentProvider ?? resource.providerKey,
+      // Keep a catalog reference stable even when its active implementation changes.
+      providerKey: resource.providerKey ?? resolved.parameters?.contentProvider,
     },
     resolved.viewKey,
   );
@@ -127,6 +129,7 @@ export function resourceLink(
         ? { contentProvider: resource.providerKey }
         : {}),
       ...(resource.blockId ? { blockId: resource.blockId } : {}),
+      ...(resource.editorKey ? { contentEditor: resource.editorKey } : {}),
     }),
   );
   return url.href;

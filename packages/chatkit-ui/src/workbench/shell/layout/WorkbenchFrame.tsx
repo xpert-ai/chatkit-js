@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { createPortal } from 'react-dom';
 import { WorkbenchLoadingIndicator } from './WorkbenchLoadingIndicator';
+import { WorkbenchNotifications } from './WorkbenchNotifications';
 import {
   Sheet,
   SheetContent,
@@ -86,22 +87,7 @@ export function WorkbenchFrame({
       aria-busy={initialLoading}
     >
       <WorkbenchLoadingIndicator pending={initialLoading} />
-      {notification && !open && (
-        <div
-          role="alert"
-          className="absolute inset-x-4 bottom-4 z-50 flex items-center gap-3 rounded-lg border bg-background p-3 text-sm shadow-lg"
-        >
-          <span className="flex-1">{notification.message}</span>
-          <button
-            type="button"
-            aria-label={t('workbench.close')}
-            className="rounded px-2 hover:bg-muted"
-            onClick={() => setNotification?.(null)}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <WorkbenchNotifications notification={notification} onClear={() => setNotification?.(null)} />
       {resizing && (
         <div
           aria-hidden="true"

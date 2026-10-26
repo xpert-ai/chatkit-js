@@ -13,6 +13,8 @@
         "Continue": "Continue"
     },
     "workbench": {
+        "notifications": "Workbench notifications",
+        "dismissNotification": "Dismiss notification",
         "mainChat": "Chat",
         "newTab": "New tab",
         "closeNewTab": "Close new tab",

@@ -1,3 +1,6 @@
+import { contentTabKey } from '../content/tab-identity';
+import { resolveContentEntry } from '../content/entry-navigation';
+import type { ContentClient, ContentScope } from '@xpert-ai/xpert-sdk';
 import type { EditorLifecycle } from '../editors/editor-lifecycle';
 import * as React from 'react';
 import type {
@@ -14,6 +17,8 @@ type EntryNavigationOptions = Pick<
   WorkbenchShellProps,
   'initialNavigation' | 'projectCreation'
 > & {
+  contentApi?: ContentClient;
+  contentScope?: ContentScope;
   editors?: EditorLifecycle;
   ready: boolean;
   runtimeScopeReady: boolean;
@@ -34,6 +39,8 @@ type EntryNavigationOptions = Pick<
 /** Apply explicit navigation only after the destination scope's views have loaded. */
 export function useWorkbenchEntryNavigation({
   editors,
+  contentApi,
+  contentScope,
   initialNavigation,
   projectCreation,
   ready,
@@ -49,7 +56,7 @@ export function useWorkbenchEntryNavigation({
 }: EntryNavigationOptions) {
   const { t } = useChatkitTranslation();
   React.useEffect(() => {
-    if (!initialNavigation || !ready) return;
+    if (!initialNavigation || !ready || !runtimeScopeReady) return;
     const navigation = parseNavigation(initialNavigation.payload);
     if (
       navigation.target === 'assistant.conversation' &&
@@ -58,39 +65,34 @@ export function useWorkbenchEntryNavigation({
       setExpanded(false);
       setOpen(false);
     }
-    const viewKey = navigation.viewKey;
-    if (viewKey && views.some((view) => view.key === viewKey)) {
-      let cancelled = false;
-      void (async () => {
-        if (editors?.isDirty(viewKey) && !(await editors.prepare(viewKey))) {
-          if (!cancelled)
-            setNotification({
-              level: 'error',
-              message: t('contentReview.Unsaved'),
-            });
-          return;
-        }
-        if (cancelled) return;
-        // Apply an explicitly requested resource after validating the destination.
-        if (
-          !navigation.preserveView ||
-          Object.keys(navigation.query).length > 0
-        )
-          setViewQueries((current) => ({
-            ...current,
-            [viewKey]: navigation.query,
-          }));
-        selectView(viewKey);
-        setOpen(true);
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
+    let cancelled = false;
+    void (async () => {
+      const resolved = contentApi && contentScope
+        ? await resolveContentEntry(navigation, contentApi, contentScope) : navigation;
+      if (cancelled) return;
+      if (!resolved.viewKey || !views.some((view) => view.key === resolved.viewKey)) return;
+      const viewKey = contentTabKey(resolved.viewKey, resolved.query);
+      if (editors?.isDirty(viewKey) && !(await editors.prepare(viewKey))) {
+        if (!cancelled) setNotification({ level: 'error', message: t('contentReview.Unsaved') });
+        return;
+      }
+      if (cancelled) return;
+      if (!resolved.preserveView || Object.keys(resolved.query).length > 0)
+        setViewQueries((current) => ({ ...current, [viewKey]: resolved.query }));
+      selectView(viewKey);
+      setOpen(true);
+    })().catch(() => {
+      if (!cancelled) setNotification({ level: 'error', message: t('workbench.loadFailed') });
+    });
+    return () => { cancelled = true; };
   }, [
     editors,
     initialNavigation,
+    contentApi,
+    contentScope?.projectId,
+    contentScope?.assistantId,
     ready,
+    runtimeScopeReady,
     views,
     selectView,
     setOpen,

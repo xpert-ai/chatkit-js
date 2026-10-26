@@ -1,3 +1,6 @@
+import { useContentTabs } from './content/useContentTabs';
+import type { ContentClient, ContentScope } from '@xpert-ai/xpert-sdk';
+import { contentTabKey, contentViewKey } from './content/tab-identity';
 import * as React from 'react';
 import type {
   XpertExtensionViewManifest,
@@ -8,6 +11,9 @@ import { useWorkbenchOpenRequest } from './useWorkbenchOpenRequest';
 /** Keep available views separate from open tabs, scoped to the current workspace. */
 export function useWorkbenchViewTabs(options: {
   views: XpertExtensionViewManifest[];
+  contentApi?: ContentClient;
+  contentScope?: ContentScope;
+  queries: Record<string, XpertViewQuery>;
   scope: string;
   enabled: boolean;
   ready: boolean;
@@ -19,7 +25,8 @@ export function useWorkbenchViewTabs(options: {
     React.SetStateAction<Record<string, XpertViewQuery>>
   >;
 }) {
-  const { views, scope, onSelect, onOpen, setQueries } = options;
+  const { views, onSelect, onOpen, setQueries } = options;
+  const scope = JSON.stringify([options.scope, options.projectId]);
   const [opened, setOpened] = React.useState<{
     scope: string;
     keys: string[];
@@ -29,9 +36,25 @@ export function useWorkbenchViewTabs(options: {
     keys: [],
     closed: [],
   });
+  useContentTabs({
+    scope, enabled: options.enabled,
+    ready: options.ready, api: options.contentApi, contentScope: options.contentScope,
+    views, keys: opened.scope === scope ? opened.keys : [], queries: options.queries,
+    restore: (queries) => {
+      setQueries((current) => ({ ...current, ...queries }));
+      setOpened((current) => ({ scope,
+        keys: [...new Set([...Object.keys(queries), ...(current.scope === scope ? current.keys : [])])],
+        closed: current.scope === scope ? current.closed : [],
+      }));
+    },
+  });
   const scopedViews = React.useMemo(
     () =>
-      views.filter(
+      [...views, ...(opened.scope === scope ? opened.keys : []).flatMap((key) => {
+        const source = contentViewKey(key);
+        const view = source !== key ? views.find((item) => item.key === source) : undefined;
+        return view ? [{ ...view, key }] : [];
+      })].filter(
         (view) =>
           !(opened.scope === scope && opened.closed.includes(view.key)) &&
           (view.workbench?.openMode !== 'on-demand' ||
@@ -64,16 +87,21 @@ export function useWorkbenchViewTabs(options: {
     open: React.useCallback(
       (request) => {
         if (!views.some((view) => view.key === request.viewKey)) return false;
+        const query = {
+          ...(request.selectionId ? { selectionId: request.selectionId } : {}),
+          ...(request.parameters ? { parameters: request.parameters } : {}),
+        };
+        const key = contentTabKey(request.viewKey, query);
         setQueries((current) => ({
           ...current,
-          [request.viewKey]: {
+          [key]: {
             ...(request.selectionId
               ? { selectionId: request.selectionId }
               : {}),
             ...(request.parameters ? { parameters: request.parameters } : {}),
           },
         }));
-        selectView(request.viewKey);
+        selectView(key);
         onOpen(true);
         return true;
       },

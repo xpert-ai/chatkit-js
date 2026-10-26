@@ -1,3 +1,4 @@
+import { workbenchAvailable, workbenchDisabledReason } from './shell/availability';
 import { EditorLifecycleContext, useEditorLifecycle } from './editors/context';
 import { useEditorTabClose } from './editors/useEditorTabClose';
 import { useWorkbenchFeedback } from './shell/useWorkbenchFeedback';
@@ -261,7 +262,8 @@ function WorkbenchContent({
   } = useWorkbenchLayout(layoutKey, containerWidth, isNarrow);
 
   const { scopedViews, selectView, closeView } = useWorkbenchViewTabs({
-    views,
+    views, queries: viewQueries, contentApi: stream.client.content,
+    contentScope: stream.projectId ? { assistantId: stream.assistantId, projectId: stream.projectId } : undefined,
     scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
     projectId: stream.projectId,
@@ -575,6 +577,8 @@ function WorkbenchContent({
 
   useWorkbenchEntryNavigation({
     editors,
+    contentApi: stream.client.content,
+    contentScope: stream.projectId ? { assistantId: stream.assistantId, projectId: stream.projectId } : undefined,
     initialNavigation,
     projectCreation,
     ready: !loading && viewsScope === viewScopeKey,
@@ -589,30 +593,17 @@ function WorkbenchContent({
     setNotification,
   });
 
-  const available =
-    (Boolean(stream.group) && authenticated && stream.runtimeScopeReady) ||
-    hasExternalRuns ||
-    (enabled &&
-      authenticated &&
-      Boolean(stream.assistantId.trim()) &&
-      (Boolean(sideChat) ||
-        (remoteViewsEnabled &&
-          viewsScope === viewScopeKey &&
-          (!loading || views.length > 0))));
+  const available = workbenchAvailable({
+    groupReady: Boolean(stream.group && stream.runtimeScopeReady), authenticated,
+    external: hasExternalRuns, enabled, assistantId: stream.assistantId,
+    sideChat: Boolean(sideChat), remoteViewsEnabled,
+    scopeReady: viewsScope === viewScopeKey, loading, count: views.length,
+  });
 
-  const disabledReason = hasExternalRuns
-    ? undefined
-    : !stream.assistantId.trim()
-      ? t('workbench.missingAssistant')
-      : !authenticated
-        ? t('workbench.loading')
-        : loading && views.length === 0
-          ? t('workbench.loading')
-          : error
-            ? t('workbench.loadFailed')
-            : views.length === 0 && !sideChatEnabled
-              ? t('workbench.empty')
-              : undefined;
+  const disabledReason = workbenchDisabledReason({
+    external: hasExternalRuns, assistantId: stream.assistantId, authenticated,
+    loading, count: views.length, error, sideChatEnabled, t,
+  });
 
   const { askInSideChat, requestCloseSideChat, confirmCloseSideChat } =
     useWorkbenchSideChat({
@@ -924,7 +915,6 @@ function WorkbenchContent({
       locale={locale}
       hostEvent={hostEvent}
       viewHosts={viewHosts}
-      notification={notification}
       error={error}
       loading={loading}
       startPageLoading={showLoading}

@@ -156,7 +156,11 @@ describe('WorkbenchShell', () => {
       expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
       if (result === 'resolve')
         expect(screen.getByTestId('side-chat')).toBeVisible();
-      else expect(screen.getByText('Side chat unavailable')).toBeVisible();
+      else
+        // Toasts mount before their visible state is committed on the next frame.
+        await waitFor(() =>
+          expect(screen.getByText('Side chat unavailable')).toBeVisible(),
+        );
     },
   );
 

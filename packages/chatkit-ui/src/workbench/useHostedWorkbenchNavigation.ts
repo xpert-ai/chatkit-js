@@ -1,3 +1,4 @@
+import { contentTabKey, contentViewKey } from './content/tab-identity';
 import * as React from 'react';
 import type {
   ChatKitWorkbenchNavigation,
@@ -161,7 +162,11 @@ export function useWorkbenchViewNavigation(input: {
   latest.current = input;
   const attempt = React.useRef(0);
   // Both host URL replay and local history use the editor's flush gate before replacing a document.
-  const navigate = (viewKey: string | undefined, action: () => void) => {
+  const navigate = (
+    viewKey: string | undefined,
+    action: () => void,
+    replacing = true,
+  ) => {
     const ticket = ++attempt.current;
     const perform = () => {
       if (
@@ -171,9 +176,9 @@ export function useWorkbenchViewNavigation(input: {
         return;
       action();
     };
-    const dirty = viewKey
-      ? input.editors?.isDirty(viewKey)
-      : input.editors?.dirty;
+    const dirty =
+      replacing &&
+      (viewKey ? input.editors?.isDirty(viewKey) : input.editors?.dirty);
     if (!dirty || !input.editors) {
       perform();
       return;
@@ -190,18 +195,37 @@ export function useWorkbenchViewNavigation(input: {
   };
   const restore = (view: NonNullable<ChatKitWorkbenchNavigation['view']>) => {
     if (!input.views.some((item) => item.key === view.viewKey)) return false;
-    const result = navigate(view.viewKey, () => {
-      input.setQueries((current) => ({
-        ...current,
-        [view.viewKey]: {
-          ...(view.selectionId ? { selectionId: view.selectionId } : {}),
-          ...(view.parameters ? { parameters: view.parameters } : {}),
-        },
-      }));
-      input.selectView(view.viewKey);
-      input.setOpen(true);
-      if (view.layout) input.setExpanded(view.layout === 'maximized');
-    });
+    const query = {
+      ...(view.selectionId ? { selectionId: view.selectionId } : {}),
+      ...(view.parameters ? { parameters: view.parameters } : {}),
+    };
+    const key = contentTabKey(view.viewKey, query);
+    const previous = input.queries[key];
+    // URL publication is echoed by the embedding host. Selecting the same
+    // mounted resource does not dispose its draft and must not request a flush.
+    // A different singleton selection or an explicit reload still uses the gate.
+    const replacing =
+      previous?.selectionId !== query.selectionId ||
+      Boolean(
+        query.parameters?.reload &&
+        query.parameters.reload !== previous?.parameters?.reload,
+      );
+    const result = navigate(
+      key,
+      () => {
+        input.setQueries((current) => ({
+          ...current,
+          [key]: {
+            ...(view.selectionId ? { selectionId: view.selectionId } : {}),
+            ...(view.parameters ? { parameters: view.parameters } : {}),
+          },
+        }));
+        input.selectView(key);
+        input.setOpen(true);
+        if (view.layout) input.setExpanded(view.layout === 'maximized');
+      },
+      replacing,
+    );
     return result ? result.then(() => true) : true;
   };
   const close = () => navigate(undefined, () => input.setOpen(false));
@@ -244,8 +268,11 @@ export function useWorkbenchViewNavigation(input: {
       ? { ...navigation, view: { ...requested, viewKey: resolved.key } }
       : navigation;
   const currentView = hostedWorkbenchView(
-    input.open && input.views.some((view) => view.key === input.activeViewKey)
-      ? input.activeViewKey
+    input.open &&
+      input.views.some(
+        (view) => view.key === contentViewKey(input.activeViewKey ?? ''),
+      )
+      ? contentViewKey(input.activeViewKey ?? '')
       : null,
     input.activeViewKey ? input.queries[input.activeViewKey] : undefined,
   );
@@ -261,12 +288,16 @@ export function useWorkbenchViewNavigation(input: {
     canPublish:
       !input.open ||
       !input.activeViewKey ||
-      input.views.some((view) => view.key === input.activeViewKey),
+      input.views.some(
+        (view) => view.key === contentViewKey(input.activeViewKey ?? ''),
+      ),
     close: () => {
       // Host URL state addresses Remote Views, not a file/browser/native tab.
       if (
         !input.activeViewKey ||
-        input.views.some((view) => view.key === input.activeViewKey)
+        input.views.some(
+          (view) => view.key === contentViewKey(input.activeViewKey ?? ''),
+        )
       )
         return close();
     },
