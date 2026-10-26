@@ -47,10 +47,7 @@ type AssistantTranscriptProps = Pick<
     ReturnType<typeof useChatAssistant>,
     'assistantTitle' | 'assistantAvatar'
   > &
-  Pick<
-    ReturnType<typeof useChatRunControl>,
-    'isVisibleStreaming' | 'isPauseActive'
-  > &
+  Pick<ReturnType<typeof useChatRunControl>, 'isRunActive' | 'isPauseActive'> &
   Pick<
     ReturnType<typeof useChatStreamingFeedback>,
     'lastStreamOutputAtRef' | 'streamingNow' | 'showLoadingDots'
@@ -105,7 +102,7 @@ export function getAssistantTranscriptProps({
   messagePresentation,
   assistantTitle,
   assistantAvatar,
-  isVisibleStreaming,
+  isRunActive,
   currentThreadIsRunning,
   isPauseActive,
   lastStreamOutputAtRef,
@@ -200,7 +197,7 @@ export function getAssistantTranscriptProps({
       },
       messages: messages,
       assistantTitle: assistantTitle,
-      isLoading: isVisibleStreaming,
+      isLoading: isRunActive && !isPauseActive && !stream.isThreadInterrupted,
       isThreadRunning:
         stream.connectionState &&
         stream.connectionState !== 'connected' &&

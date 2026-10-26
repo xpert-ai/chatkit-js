@@ -253,7 +253,6 @@ export function useStreamTransport({
             receivedOutput = true;
             setError(null);
           }
-          if (streamingRunId) recovery.succeeded(`run:${streamingRunId}`);
           if (chunk.data?.type === 'stream_snapshot') {
             const snapshot = parseDisplaySnapshot(chunk.data);
             if (
@@ -280,6 +279,8 @@ export function useStreamTransport({
             });
             // Keep the last display, but wait for an explicit resync or a continuous snapshot before applying deltas.
             awaitingContinuity = !snapshot.continuous;
+            if (snapshot.continuous && streamingRunId)
+              recovery.succeeded(`run:${streamingRunId}`);
             continue;
           }
           if (awaitingContinuity && chunk.data?.type !== 'stream_resync')
@@ -320,9 +321,14 @@ export function useStreamTransport({
           }
           if (chunk.data?.type === 'stream_resync') {
             streamCompleted = chunk.data.retryable !== true;
+            if (streamCompleted && streamingRunId)
+              recovery.succeeded(`run:${streamingRunId}`);
             replayState.current.delete(replayKey);
             break;
           }
+          // A retryable resync or an incomplete snapshot is not a recovered stream.
+          // Only accepted output (or confirmed completion) resets the backoff.
+          if (streamingRunId) recovery.succeeded(`run:${streamingRunId}`);
           applyStreamEvent(
             chunk as StreamChunk,
             setValues,

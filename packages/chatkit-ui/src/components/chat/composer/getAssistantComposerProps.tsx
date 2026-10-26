@@ -103,6 +103,7 @@ type AssistantComposerProps = Pick<
     | 'isResumingRun'
     | 'resumePauseId'
     | 'isVisibleStreaming'
+    | 'isRunActive'
   > &
   Pick<ReturnType<typeof useChatBranchState>, 'isChangingBranch'> &
   Pick<
@@ -198,6 +199,7 @@ export function getAssistantComposerProps({
   isResumingRun,
   resumePauseId,
   isVisibleStreaming,
+  isRunActive,
   trimmedDraft,
   projectsEnabled,
   isProjectScopeLocked,
@@ -319,10 +321,10 @@ export function getAssistantComposerProps({
     ),
     send: {
       disabled: isSendDisabled,
-      isLoading: stream.isLoading,
+      isLoading: isRunActive,
       showStop:
         !isPauseActive &&
-        (stream.isLoading || canPauseRun) &&
+        (isRunActive || canPauseRun) &&
         (!hasComposerInput || hasPendingInteractiveRequest),
       stopDisabled: isChangingBranch || isStoppingRun || !canPauseRun,
       onStop: () => void handleComposerRunControl('pause'),
