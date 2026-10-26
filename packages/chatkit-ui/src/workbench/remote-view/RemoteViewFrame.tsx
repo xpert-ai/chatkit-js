@@ -47,6 +47,7 @@ export type RemoteViewHostsClient = Pick<
 >;
 
 type RemoteViewFrameProps = {
+  instanceKey?: string;
   visible?: boolean;
   initialQuery?: XpertViewQuery;
   manifest: XpertExtensionViewManifest;
@@ -68,6 +69,7 @@ type RemoteViewFrameProps = {
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function RemoteViewFrame({
+  instanceKey,
   visible = true,
   manifest: incomingManifest,
   initialQuery,
@@ -188,7 +190,7 @@ export function RemoteViewFrame({
     const editor = new RemoteEditor(
       editors,
       instanceId,
-      manifest.key,
+      instanceKey ?? manifest.key,
       resourceId,
       (payload) =>
         sendToFrame('editorEvent', { ...payload, scopeRevision: revision }),
@@ -202,6 +204,7 @@ export function RemoteViewFrame({
     editors,
     instanceId,
     manifest.key,
+    instanceKey,
     resourceId,
     isEditor,
     revision,

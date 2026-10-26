@@ -554,6 +554,8 @@ export type ChatKitWorkbenchNavigation = {
   projectId: string | null;
   view: {
     viewKey: string;
+    /** Apply after authorization and pending edits are saved; omit to preserve the user's layout. */
+    layout?: 'split' | 'maximized';
     selectionId?: string;
     parameters?: Record<
       string,

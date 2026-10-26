@@ -18,7 +18,9 @@ export function useStreamScope({
 }: StreamScopeOptions) {
   const [queryThreadId, setQueryThreadId] = useQueryState('threadId');
   const [memoryThreadId, setMemoryThreadId] = useState<string | null>(
-    initialThread ?? null,
+    // A new credential scope restores initialThread through the history loader.
+    // Publishing it before the mount reset would briefly navigate the host to null.
+    resetThreadOnMount ? null : (initialThread ?? null),
   );
 
   const threadId =

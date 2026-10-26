@@ -132,6 +132,14 @@ export function useChatRunControl({
 
   const isVisibleStreaming =
     connected && stream.isLoading && !stream.isThreadInterrupted;
+  // Output consumers reconnect independently of the admitted execution.
+  const isRunActive =
+    stream.isLoading ||
+    (controlView
+      ? targetMatches &&
+        ['running', 'pausing', 'stopping'].includes(controlView.state)
+      : ['busy', 'pausing'].includes(branchState.current?.status ?? '') ||
+        ['running', 'terminating'].includes(currentRunControl?.state ?? ''));
   const handleComposerRunControl = async (
     action: 'pause' | 'resume' | 'stop',
   ) => {
@@ -236,6 +244,7 @@ export function useChatRunControl({
     isRunPausing,
     isRunPaused,
     isVisibleStreaming,
+    isRunActive,
     isPauseActive,
     runControlError,
     clearRunControlError,

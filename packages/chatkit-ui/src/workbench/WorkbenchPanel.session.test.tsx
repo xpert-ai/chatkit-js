@@ -138,7 +138,6 @@ function Panel() {
       selectedExternalId={null}
       hostEvent={null}
       viewHosts={main.client.viewHosts}
-      notification={null}
       error={null}
       loading={false}
       expanded={false}

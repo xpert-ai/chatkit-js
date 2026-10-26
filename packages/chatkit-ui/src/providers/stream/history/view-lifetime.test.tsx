@@ -3,6 +3,7 @@ import { act, render, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   setupHistoryTests,
+  mocks,
   StreamProvider,
   useTestStream,
   stream,
@@ -10,6 +11,36 @@ import {
 
 describe('Assistant View lifetime across chat scopes', () => {
   setupHistoryTests();
+
+  it('does not navigate the host to a new chat while credentials initialize for an explicit thread', async () => {
+    mocks.isParentAvailable = true;
+    mocks.sendCommand.mockResolvedValue({ secret: 'cs-x-test' });
+    function View() {
+      useTestStream();
+      return null;
+    }
+    const tree = (organizationId?: string) => (
+      <StreamProvider
+        apiKey=""
+        apiUrl="https://api.example.test/api/ai"
+        organizationId={organizationId}
+        xpertId="assistant-1"
+        initialThread="thread-1"
+        threadStateMode="memory"
+      >
+        <View />
+      </StreamProvider>
+    );
+    const { rerender } = render(tree(), { wrapper: React.StrictMode });
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    rerender(tree('organization-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(stream.threadId).toBe('thread-1');
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', [
+      'thread.change',
+      { threadId: null },
+    ]);
+  });
 
   it('preserves views through credential initialization and rotation, but clears them on sign-out', async () => {
     const unmount = vi.fn();

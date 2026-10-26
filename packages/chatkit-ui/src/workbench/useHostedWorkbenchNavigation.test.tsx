@@ -25,7 +25,11 @@ vi.mock('../hooks/useParentMessenger', () => ({
 const views = [{ key: 'markdown' }] as XpertExtensionViewManifest[];
 
 function fixture(
-  view: { viewKey: string; selectionId: string } | null = {
+  view:
+    | (NonNullable<ChatKitWorkbenchOptions['navigation']>['view'] & {
+        selectionId: string;
+      })
+    | null = {
     viewKey: 'markdown',
     selectionId: 'next',
   },
@@ -39,7 +43,7 @@ function fixture(
     tabKey: 'markdown',
     resourceId: 'old',
     dirty: true,
-    prepare: () => save,
+    prepare: vi.fn(() => save),
   };
   editors.register('editor', handle);
   const onError = vi.fn(),
@@ -54,6 +58,7 @@ function fixture(
         Record<string, XpertViewQuery>
       >({ markdown: { selectionId: 'old' } });
       const [open, setOpen] = React.useState(true);
+      const [expanded, setExpanded] = React.useState(false);
       const [activeViewKey, selectView] = React.useState('markdown');
       useWorkbenchViewNavigation({
         editors,
@@ -65,15 +70,17 @@ function fixture(
         scopeKey,
         ready: true,
         open,
+        expanded,
         activeViewKey,
         views,
         queries,
         setQueries,
         selectView,
         setOpen,
+        setExpanded,
         onError,
       });
-      return { queries, open };
+      return { queries, open, expanded, setExpanded };
     },
     { initialProps: { scopeKey: 'scope-1' } },
   );
@@ -81,6 +88,7 @@ function fixture(
     ...hook,
     onError,
     onNavigationChange,
+    prepare: handle.prepare,
     complete(ready: boolean) {
       if (ready) editors.register('editor', { ...handle, dirty: false });
       finish(ready);
@@ -89,6 +97,78 @@ function fixture(
 }
 
 describe('hosted navigation with collaborative editors', () => {
+  it('preserves resource identity when maximizing and reporting a resource tab layout', async () => {
+    const contentId = 'c46ba277-61ca-4606-8689-487cdacb7c0f';
+    const view = {
+      viewKey: 'markdown',
+      selectionId: contentId,
+      parameters: { contentId },
+      layout: 'maximized' as const,
+    };
+    const f = fixture(view);
+    await waitFor(() => expect(f.result.current.expanded).toBe(true));
+    expect(f.prepare).not.toHaveBeenCalled();
+    expect(f.onNavigationChange).not.toHaveBeenCalled();
+    act(() => f.result.current.setExpanded(false));
+    await waitFor(() =>
+      expect(f.onNavigationChange).toHaveBeenCalledWith({
+        projectId: 'project',
+        view: { ...view, layout: 'split' },
+      }),
+    );
+    expect(f.result.current.queries.markdown.selectionId).toBe('old');
+  });
+
+  it('maximizes only after the editor saves and reports a manual layout change', async () => {
+    const f = fixture({
+      viewKey: 'markdown',
+      selectionId: 'next',
+      layout: 'maximized',
+    });
+    expect(f.result.current.expanded).toBe(false);
+    await act(async () => f.complete(true));
+    await waitFor(() => expect(f.result.current.expanded).toBe(true));
+    expect(f.onNavigationChange).not.toHaveBeenCalled();
+    act(() => f.result.current.setExpanded(false));
+    await waitFor(() =>
+      expect(f.onNavigationChange).toHaveBeenCalledWith({
+        projectId: 'project',
+        view: { viewKey: 'markdown', selectionId: 'next', layout: 'split' },
+      }),
+    );
+  });
+
+  it('does not maximize or replace a document when saving is blocked', async () => {
+    const f = fixture({
+      viewKey: 'markdown',
+      selectionId: 'next',
+      layout: 'maximized',
+    });
+    await act(async () => f.complete(false));
+    await waitFor(() => expect(f.onError).toHaveBeenCalled());
+    expect(f.result.current.expanded).toBe(false);
+    expect(f.result.current.queries.markdown.selectionId).toBe('old');
+  });
+
+  it('selects an already mounted dirty resource without requesting a save on URL echo', async () => {
+    const f = fixture({ viewKey: 'markdown', selectionId: 'old' });
+    await act(async () => {});
+    expect(f.prepare).not.toHaveBeenCalled();
+    expect(f.onError).not.toHaveBeenCalled();
+    expect(f.result.current.queries.markdown.selectionId).toBe('old');
+  });
+
+  it('still gates an explicit reload of the same dirty resource', async () => {
+    const f = fixture({
+      viewKey: 'markdown',
+      selectionId: 'old',
+      parameters: { reload: 1 },
+    });
+    expect(f.prepare).toHaveBeenCalledTimes(1);
+    await act(async () => f.complete(false));
+    await waitFor(() => expect(f.onError).toHaveBeenCalledTimes(1));
+    expect(f.result.current.queries.markdown.parameters).toBeUndefined();
+  });
   it('awaits save before replaying a document address and disables competing local history', async () => {
     const f = fixture();
     expect(f.result.current.queries.markdown.selectionId).toBe('old');

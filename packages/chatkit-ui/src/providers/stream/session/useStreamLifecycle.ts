@@ -193,7 +193,9 @@ export function useStreamLifecycle({
     if (!shouldResetThreadOnMountRef.current) return;
     shouldResetThreadOnMountRef.current = false;
     consumedInitialThreadRef.current = null;
-    reset(null, []);
+    // Rebinding credentials clears local state; it is not a request to
+    // navigate the host away from its explicit initial thread.
+    reset(null, [], { suppressThreadChange: true });
   }, [reset]);
   return { reset };
 }

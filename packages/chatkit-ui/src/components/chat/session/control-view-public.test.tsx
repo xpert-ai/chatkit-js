@@ -58,6 +58,33 @@ function options(
   return { value, view };
 }
 describe('authoritative controls and delayed acknowledgements', () => {
+  it('keeps execution controls stable through repeated output reconnects until confirmed completion', () => {
+    const { value, view } = options('running', {
+      canPause: true,
+      canTerminate: true,
+    });
+    value.stream.isThreadInterrupted = false;
+    const { result, rerender } = renderHook(() => useChatRunControl(value));
+    for (const isLoading of [true, false, true, false]) {
+      value.stream.isLoading = isLoading;
+      value.stream.connectionState = isLoading ? 'connected' : 'reconnecting';
+      rerender();
+      expect(result.current.isRunActive).toBe(true);
+      expect(result.current.canStopRun).toBe(true);
+      expect(result.current.canSubmit).toBe(false);
+    }
+    value.stream.connectionState = 'connected';
+    value.branchState.current!.controlView = {
+      ...view,
+      state: 'completed',
+      actions: { ...actions, canSend: true },
+    };
+    rerender();
+    expect(result.current.isRunActive).toBe(false);
+    expect(result.current.canStopRun).toBe(false);
+    expect(result.current.canSubmit).toBe(true);
+    expect(value.stream.stop).not.toHaveBeenCalled();
+  });
   it('retains accepted stop through unavailable reads, and opens send only on confirmed settlement', async () => {
     const { value, view } = options('running', {
       canTerminate: true,
