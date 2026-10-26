@@ -37,12 +37,11 @@ export type NormalizedPetOptions = {
   imageRendering: NonNullable<ChatKitPetOptions['imageRendering']>;
 };
 
-export type ResolvedPetCharacter =
-  {
-    kind: 'atlas';
-    src: string;
-    atlas: PetSpriteAtlasDefinition;
-  };
+export type ResolvedPetCharacter = {
+  kind: 'atlas';
+  src: string;
+  atlas: PetSpriteAtlasDefinition;
+};
 
 export type PetPosition = {
   x: number;
@@ -132,7 +131,12 @@ export const DEFAULT_PET_SIZE = {
 
 /** v2's 16 poses are clockwise from up; a central dead zone restores idle. */
 export function petLookFrame(dx: number, dy: number, deadZone = 12) {
-  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) <= deadZone) return null;
+  if (
+    !Number.isFinite(dx) ||
+    !Number.isFinite(dy) ||
+    Math.hypot(dx, dy) <= deadZone
+  )
+    return null;
   const index = (Math.round(Math.atan2(dx, -dy) / (Math.PI / 8)) + 16) % 16;
   return { row: 9 + Math.floor(index / 8), column: index % 8 };
 }
@@ -145,6 +149,21 @@ export const DEFAULT_PET_BOUNDS_PADDING: ChatKitPetBoundsPadding = {
 };
 
 export const DEFAULT_PET_STORAGE_KEY = 'chatkit:pet:position:v1';
+
+/** Resource configuration remains available when the floating pet is disabled. */
+export function getPetAssetsBaseUrl(
+  pet: ChatKitOptions['pet'],
+): string | undefined {
+  return pet && typeof pet === 'object' ? pet.assetsBaseUrl : undefined;
+}
+
+/** Resolve only built-in resources. Explicit custom character URLs stay untouched. */
+export function getPetAssetUrl(id: string, assetsBaseUrl?: string): string {
+  const base = (assetsBaseUrl?.trim() || '/pets').replace(/\/+$/, '');
+  // Older settings used the metadata ID rather than this pet's directory name.
+  const resourceId = id === 'lando' ? 'lando-2' : id;
+  return `${base}/${encodeURIComponent(resourceId)}/spritesheet.webp`;
+}
 
 export const DEFAULT_PET_SPRITESHEET_URL = '/pets/boba/spritesheet.webp';
 
@@ -193,7 +212,8 @@ export function mergePetSpriteAtlas(
 
   return {
     columns: override?.columns ?? petSpriteAtlas.columns,
-    rows: override?.rows ?? (spriteVersionNumber === 2 ? 11 : petSpriteAtlas.rows),
+    rows:
+      override?.rows ?? (spriteVersionNumber === 2 ? 11 : petSpriteAtlas.rows),
     cellWidth: override?.cellWidth ?? petSpriteAtlas.cellWidth,
     cellHeight: override?.cellHeight ?? petSpriteAtlas.cellHeight,
     animations,
@@ -223,7 +243,10 @@ export function normalizePetOptions(
 
   if (pet === true) {
     return {
-      character: DEFAULT_PET_CHARACTER,
+      character: {
+        ...DEFAULT_PET_CHARACTER,
+        src: getPetAssetUrl('boba'),
+      },
       position: DEFAULT_POSITION,
       behavior: 'auto',
       ariaLabel: 'Animated pet',
@@ -236,7 +259,12 @@ export function normalizePetOptions(
   }
 
   return {
-    character: normalizeCharacter(pet.character),
+    character: pet.character?.src
+      ? normalizeCharacter(pet.character)
+      : {
+          ...DEFAULT_PET_CHARACTER,
+          src: getPetAssetUrl('boba', pet.assetsBaseUrl),
+        },
     position: {
       ...DEFAULT_POSITION,
       ...pet.position,

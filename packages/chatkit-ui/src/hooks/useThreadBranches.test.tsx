@@ -19,12 +19,14 @@ it('uses conversation branches and ignores a late response after selecting anoth
       useThreadBranches(client, 'conversation', threadId, true, false),
     { initialProps: { threadId: 'old' } },
   );
+  expect(result.current.resolved).toBe(false);
   rerender({ threadId: 'new' });
   await waitFor(() => expect(result.current.current?.thread_id).toBe('new'));
   await act(async () => {
     resolveOld([]);
   });
   expect(result.current.current?.thread_id).toBe('new');
+  expect(result.current.resolved).toBe(true);
   expect(listThreads).toHaveBeenCalledWith('conversation');
 });
 
@@ -37,9 +39,11 @@ it('hides unavailable branch controls on older platforms while surfacing real er
   const { result } = renderHook(() =>
     useThreadBranches(client, 'conversation', 'thread', true, false),
   );
-  await waitFor(() => expect(listThreads).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.resolved).toBe(true));
+  expect(listThreads).toHaveBeenCalledTimes(1);
   expect(result.current.branches).toEqual([]);
   expect(result.current.error).toBeNull();
+  expect(result.current.resolved).toBe(true);
   await act(async () => {
     await result.current.refresh();
   });

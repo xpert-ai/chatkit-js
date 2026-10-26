@@ -124,6 +124,10 @@ export function useAssistantConversation({
     assistantId: session.stream.assistantId,
     projectId: session.activeProjectId,
     threadId: session.stream.threadId,
+    scopeReady:
+      !session.stream.threadId ||
+      (!session.isHistoryUnavailable &&
+        session.stream.projectScopeResolved !== false),
     disabled:
       session.missingConfig ||
       !session.stream.client ||
@@ -203,6 +207,7 @@ export function useAssistantConversation({
   });
 
   const host = useChatHost({
+    canRespond: runControl.canRespond,
     ...draft,
     ...files,
     ...session,
@@ -295,6 +300,7 @@ export function useAssistantConversation({
     session.stream.connectionState !== 'connected',
   );
   const isSubmissionBlocked =
+    !runControl.canSubmit ||
     connectionUnavailable ||
     models.requiresModelSelection ||
     Boolean(conversation.conversationBranch.pendingMessageId) ||
@@ -729,6 +735,7 @@ export function useAssistantConversation({
           <ChatGoalStatus {...goal} {...session} {...draft} />
         </div>
         <ChatPendingActions
+          canRespond={runControl.canRespond}
           {...session}
           {...commands}
           {...host}

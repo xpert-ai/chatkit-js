@@ -1,4 +1,6 @@
+import type { Client } from '@xpert-ai/xpert-sdk';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
+import type { ThreadHistoryState } from '../../../providers/useThreadHistory';
 import type { PendingHITLRequest } from '../../../lib/hitl';
 
 import React from 'react';
@@ -33,6 +35,9 @@ const mocks = vi.hoisted(() => {
           getRuntimeCapabilities: vi.fn().mockRejectedValue({ status: 404 }),
         },
         conversations: {
+          listThreads: undefined as
+            | Client['conversations']['listThreads']
+            | undefined,
           getRuntimeResources: vi
             .fn()
             .mockResolvedValue({ revision: 0, resources: [] }),
@@ -49,6 +54,9 @@ const mocks = vi.hoisted(() => {
           listWorkspaceFiles: vi.fn().mockResolvedValue([]),
         },
         threads: {
+          getCapabilities: undefined as
+            | Client['threads']['getCapabilities']
+            | undefined,
           get: vi.fn().mockResolvedValue({ operation: null }),
         },
       },
@@ -60,6 +68,7 @@ const mocks = vi.hoisted(() => {
       conversationId: null as string | null,
       projectId: undefined as string | undefined,
       projectScopeResolved: false,
+      historyLoad: undefined as ThreadHistoryState | undefined,
       contextUsageByAgentKey: {},
       values: { messages: [] },
       messages: [] as Array<{
@@ -614,6 +623,8 @@ export function setupChatTest() {
         mocks.stream.selectedModelId = modelId;
       },
     );
+    mocks.stream.client.conversations.listThreads = undefined;
+    mocks.stream.client.threads.getCapabilities = undefined;
     mocks.stream.client.conversations.search.mockClear();
     mocks.stream.client.conversations.search.mockResolvedValue({ items: [] });
     mocks.stream.client.conversations.update.mockClear();
@@ -638,6 +649,7 @@ export function setupChatTest() {
     mocks.stream.conversationId = null;
     mocks.stream.projectId = undefined;
     mocks.stream.projectScopeResolved = false;
+    mocks.stream.historyLoad = undefined;
     mocks.stream.messages = [];
     mocks.stream.historyMessagePagination = {
       conversationId: null,

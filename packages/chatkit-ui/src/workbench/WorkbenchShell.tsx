@@ -1,6 +1,7 @@
 import { workbenchAvailable, workbenchDisabledReason } from './shell/availability';
 import { EditorLifecycleContext, useEditorLifecycle } from './editors/context';
 import { useEditorTabClose } from './editors/useEditorTabClose';
+import { useWorkbenchFeedback } from './shell/useWorkbenchFeedback';
 import { useWorkbenchRuntime, type WorkbenchRuntime } from './WorkbenchRuntime';
 import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
@@ -149,10 +150,8 @@ function WorkbenchContent({
     Record<string, number>
   >({});
   const [reloadVersion, setReloadVersion] = React.useState(0);
-  const [notification, setNotification] = React.useState<{
-    level: 'success' | 'error';
-    message: string;
-  } | null>(null);
+  const { notification, setNotification, reload, notify } =
+    useWorkbenchFeedback(editors, setReloadVersion, t('contentReview.Unsaved'));
 
   const [hostEvent, setHostEvent] =
     React.useState<XpertRemoteViewHostEventMessage | null>(null);
@@ -921,21 +920,9 @@ function WorkbenchContent({
       onClose={closeWorkbench}
       onRequestCloseSideChat={requestCloseSideChat}
       onToggleExpanded={() => setExpanded((current) => !current)}
-      onReload={() => {
-        if (!editors.dirty) return setReloadVersion((version) => version + 1);
-        void editors.prepare().then((ready) => {
-          if (ready) setReloadVersion((version) => version + 1);
-          else
-            setNotification({
-              level: 'error',
-              message: t('contentReview.Unsaved'),
-            });
-        });
-      }}
+      onReload={reload}
       onSelect={selectTab}
-      onNotify={(level, message) => {
-        setNotification({ level, message });
-      }}
+      onNotify={notify}
       onClientCommand={executeClientCommand}
     />
   );
@@ -948,41 +935,41 @@ function WorkbenchContent({
           scope={viewScopeKey}
           floating={mainChatInWorkbench && activeViewKey !== MAIN_CHAT_VIEW_KEY}
         >
-        <WorkbenchShellLayout
-          contextValue={contextValue}
-          rootRef={rootRef}
-          isNarrow={isNarrow}
-          workbenchSide={workbenchSide}
-          initialLoading={initialLoading}
-          t={t}
-          notification={notification}
-          open={open}
-          setNotification={setNotification}
-          resizing={resizing}
-          mainChatInWorkbench={mainChatInWorkbench}
-          chatHost={chatHost}
-          chat={chat}
-          sideChat={sideChat}
-          externalViewOpen={externalViewOpen}
-          expanded={expanded}
-          containerWidth={containerWidth}
-          resolvedPanelWidth={resolvedPanelWidth}
-          startResize={startResize}
-          setPanelWidth={setPanelWidth}
-          setExpanded={setExpanded}
-          swapSides={swapSides}
-          panelHost={panelHost}
-          setOpen={setOpen}
-          closeWorkbench={closeWorkbench}
-          panel={panel}
-          native={native}
-          activeViewKey={activeViewKey}
-          adjacentTab={adjacentTab}
-          setActiveViewKey={setActiveViewKey}
-          sideChatCloseDialogOpen={sideChatCloseDialogOpen}
-          setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
-          confirmCloseSideChat={confirmCloseSideChat}
-        />
+          <WorkbenchShellLayout
+            contextValue={contextValue}
+            rootRef={rootRef}
+            isNarrow={isNarrow}
+            workbenchSide={workbenchSide}
+            initialLoading={initialLoading}
+            t={t}
+            notification={notification}
+            open={open}
+            setNotification={setNotification}
+            resizing={resizing}
+            mainChatInWorkbench={mainChatInWorkbench}
+            chatHost={chatHost}
+            chat={chat}
+            sideChat={sideChat}
+            externalViewOpen={externalViewOpen}
+            expanded={expanded}
+            containerWidth={containerWidth}
+            resolvedPanelWidth={resolvedPanelWidth}
+            startResize={startResize}
+            setPanelWidth={setPanelWidth}
+            setExpanded={setExpanded}
+            swapSides={swapSides}
+            panelHost={panelHost}
+            setOpen={setOpen}
+            closeWorkbench={closeWorkbench}
+            panel={panel}
+            native={native}
+            activeViewKey={activeViewKey}
+            adjacentTab={adjacentTab}
+            setActiveViewKey={setActiveViewKey}
+            sideChatCloseDialogOpen={sideChatCloseDialogOpen}
+            setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
+            confirmCloseSideChat={confirmCloseSideChat}
+          />
         </WorkbenchChatProvider>
       </ResourceCardContext.Provider>
     </EditorLifecycleContext.Provider>

@@ -150,7 +150,6 @@
 }
 [data-slot='composer-input-shell'] [data-slot='composer-context-rail'] {
   column-gap: calc(0.5rem * var(--chat-density-scale, 1));
-  row-gap: var(--composer-context-padding);
 }
 /* A configured context can still render no available selectors. */
 [data-slot='composer-context-surface']:has(

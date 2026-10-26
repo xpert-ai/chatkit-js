@@ -116,9 +116,7 @@ type ParentEventMessage<K extends ParentEventName = ParentEventName> = {
 };
 
 type ParentMessage =
-  | ParentCommandMessage
-  | ParentResponseMessage
-  | ParentEventMessage;
+  ParentCommandMessage | ParentResponseMessage | ParentEventMessage;
 
 type ParentEnvelope = Partial<ParentMessage> & {
   __xpaiChatKit: true;
@@ -364,8 +362,7 @@ export function ParentMessengerProvider({
         const referenceComposition =
           params.referenceComposition ??
           (params.state?.[STATE_VARIABLE_HUMAN]?.referenceComposition as
-            | ChatKitReferenceCompositionMode
-            | undefined);
+            ChatKitReferenceCompositionMode | undefined);
         const humanInput = buildHumanMessageInputPayload({
           content: prompt,
           references,
@@ -636,9 +633,7 @@ export function ParentMessengerProvider({
 
       if (payload.type === 'command' && payload.command === 'onSetThreadId') {
         const data = payload.data as
-          | { threadId: string | null }
-          | null
-          | undefined;
+          { threadId: string | null } | null | undefined;
         const nextThreadId = data?.threadId ?? null;
         const transition = ++runtimeTransitionRef.current;
         const stream = streamRef.current;
@@ -791,6 +786,8 @@ function runtimeBinding(options: ChatKitOptions | null) {
     api?.apiUrl,
     api?.xpertId,
     api && 'projectId' in api ? api.projectId : undefined,
+    options?.group?.id,
+    options?.sessionKey,
     options?.initialThread,
   ]);
 }

@@ -1,3 +1,4 @@
+import { threadControlStatusKeys } from './ThreadControlStatus';
 import type { Thread } from '@xpert-ai/xpert-sdk';
 import {
   Select,
@@ -30,7 +31,11 @@ export function ThreadRunControls({
           {branches.map((branch, index) => (
             <SelectItem key={branch.thread_id} value={branch.thread_id}>
               {t('threadControl.branchNumber', { number: index + 1 })} ·{' '}
-              {t(`threadControl.status.${branch.status}`)}
+              {t(
+                branch.controlView
+                  ? threadControlStatusKeys[branch.controlView.state]
+                  : `threadControl.status.${branch.status}`,
+              )}
             </SelectItem>
           ))}
         </SelectContent>

@@ -1,5 +1,36 @@
 # @xpert-ai/chatkit-word-addin
 
+## 0.17.1
+
+### Patch Changes
+
+- Updated dependencies [39d89af]
+  - @xpert-ai/chatkit-types@0.18.0
+  - @xpert-ai/chatkit-react@0.17.1
+
+## 0.17.0
+
+### Patch Changes
+
+- @xpert-ai/chatkit-types@0.17.0
+- @xpert-ai/chatkit-react@0.17.0
+
+## 0.16.2
+
+### Patch Changes
+
+- Updated dependencies [386c37e]
+  - @xpert-ai/chatkit-types@0.16.2
+  - @xpert-ai/chatkit-react@0.16.2
+
+## 0.16.1
+
+### Patch Changes
+
+- Updated dependencies [80df500]
+  - @xpert-ai/chatkit-types@0.16.1
+  - @xpert-ai/chatkit-react@0.16.1
+
 ## 0.16.0
 
 ### Patch Changes

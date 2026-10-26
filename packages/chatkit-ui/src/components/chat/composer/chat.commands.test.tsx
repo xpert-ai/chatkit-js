@@ -175,6 +175,7 @@ describe('Chat slash commands and shortcuts', () => {
     );
 
     mocks.stream.threadId = 'existing-thread';
+    mocks.stream.projectScopeResolved = true;
     rerender(<Chat clientSecret="secret" options={baseChatOptions} />);
     expect(
       document.querySelector('[data-slot="prompt-workflow-shortcuts"]'),

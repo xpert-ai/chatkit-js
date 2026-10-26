@@ -319,6 +319,7 @@ describe('Chat runtime capability selection', () => {
 
   it('hydrates session runtime capabilities from the active conversation options', async () => {
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
       {
         skills: [
@@ -383,6 +384,7 @@ describe('Chat runtime capability selection', () => {
 
   it('persists session capability toggles without replacing other conversation options', async () => {
     mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
     mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce(
       {
         skills: [],
@@ -581,6 +583,7 @@ describe('Chat runtime capability selection', () => {
     });
     mocks.stream.submit.mockImplementationOnce(
       async (_values: any, options: any) => {
+        mocks.stream.projectScopeResolved = true;
         await options?.onThreadResolved?.('thread-new');
       },
     );

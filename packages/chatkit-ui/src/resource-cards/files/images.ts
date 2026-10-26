@@ -1,6 +1,6 @@
 import type { ResourceCardImage } from '@xpert-ai/chatkit-types';
 import type { ResourceFileAccessOptions } from './types';
-import { loadResourceCardFile } from './access';
+import { loadImagePreview } from '../../lib/files/image-preview';
 
 /** Image galleries use the same authorization as other file blocks. */
 export async function loadResourceCardImage(
@@ -10,15 +10,13 @@ export async function loadResourceCardImage(
   image: ResourceCardImage,
   signal: AbortSignal,
 ): Promise<Blob> {
-  const { blob } = await loadResourceCardFile(
+  const { blob } = await loadImagePreview(
     client,
     assistantId,
     runtimeScope,
     image.file,
     signal,
-    'preview',
-    ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
-    50 * 1024 * 1024,
+    'thumbnail',
   );
   return blob;
 }

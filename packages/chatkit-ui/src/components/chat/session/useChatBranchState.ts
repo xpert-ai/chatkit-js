@@ -15,6 +15,7 @@ export function useChatBranchState({ stream }: ChatBranchStateOptions) {
     Boolean(stream.isReady && stream.client?.conversations?.listThreads),
     stream.isLoading,
     stream.readThreadBranches,
+    stream.readThreadControl,
   );
 
   const [editingMessageId, setEditingMessageId] = React.useState<string | null>(

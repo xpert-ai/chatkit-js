@@ -150,6 +150,9 @@ export type StreamContextType = {
   pendingFollowUps: PendingFollowUp[];
   pendingRequestUserInput: PendingRequestUserInput | null;
   pendingHITLRequest: PendingHITLRequest | null;
+  readThreadControl?: (
+    threadId: string,
+  ) => Promise<import('@xpert-ai/xpert-sdk').ThreadControlView>;
   readThreadBranches?: () => Promise<import('@xpert-ai/xpert-sdk').Thread[]>;
   connectionState?: ConnectionState;
   isLoading: boolean;

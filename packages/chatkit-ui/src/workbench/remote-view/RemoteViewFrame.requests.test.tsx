@@ -25,6 +25,7 @@ const manifest: XpertExtensionViewManifest = {
     dataSource: { mode: 'platform' },
   },
   dataSource: { mode: 'platform' },
+  fileAccess: { purposes: ['preview', 'download'] },
   actions: [
     { key: 'approve', label: { en_US: 'Approve' }, actionType: 'invoke' },
   ],
@@ -46,7 +47,7 @@ async function setup() {
     revokeFileAccessSession: vi.fn().mockResolvedValue(undefined),
   } satisfies RemoteViewHostsClient;
   const onNotify = vi.fn();
-  render(
+  const { unmount } = render(
     <ThemeProvider>
       <RemoteViewFrame
         manifest={manifest}
@@ -81,7 +82,7 @@ async function setup() {
       Object.defineProperty(event, 'source', { value: contentWindow });
       window.dispatchEvent(event);
     });
-  return { viewHosts, onNotify, post, send };
+  return { viewHosts, onNotify, post, send, unmount };
 }
 
 describe('RemoteViewFrame request errors', () => {
@@ -118,6 +119,51 @@ describe('RemoteViewFrame request errors', () => {
     );
     expect(f.viewHosts.getData).toHaveBeenCalledTimes(2);
     expect(f.onNotify).not.toHaveBeenCalled();
+  });
+
+  it('bounds and coalesces iframe grant/content reads and cancels the queue on disposal', async () => {
+    const f = await setup();
+    const expiresAt = '2099-01-01T00:00:00Z';
+    f.viewHosts.createFileAccessSession.mockResolvedValue({
+      sessionId: 'session',
+      expiresAt,
+    });
+    f.viewHosts.createFileAccessGrant.mockImplementation(
+      async (_session: string, request: { fileKey: string }) => ({
+        url: `/content/${request.fileKey}`,
+        fileName: 'image.png',
+        mimeType: 'image/png',
+        expiresAt,
+      }),
+    );
+    const active: AbortSignal[] = [];
+    f.viewHosts.readFileAccess.mockImplementation(
+      (_url: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          active.push(options.signal);
+          options.signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Cancelled', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
+    for (let index = 0; index < 20; index++)
+      f.send({
+        type: 'requestFileAccess',
+        requestId: `request-${index}`,
+        fileKey: `file-${index % 10}`,
+        purpose: 'preview',
+      });
+    await waitFor(() => expect(active).toHaveLength(4));
+    expect(f.viewHosts.createFileAccessSession).toHaveBeenCalledTimes(1);
+    expect(f.viewHosts.createFileAccessGrant).toHaveBeenCalledTimes(4);
+    f.unmount();
+    await waitFor(() =>
+      expect(active.every((signal) => signal.aborted)).toBe(true),
+    );
+    expect(f.viewHosts.createFileAccessGrant).toHaveBeenCalledTimes(4);
+    expect(f.viewHosts.revokeFileAccessSession).toHaveBeenCalledWith('session');
   });
 
   it('returns action failures to the view and displays its explicit error notification once', async () => {
