@@ -13,6 +13,12 @@
         "Continue": "继续"
     },
     "workbench": {
+        "projectRecovery": {
+            "unavailable": "当前项目无法打开此视图，请确认项目类型和访问权限，或切换项目重试。",
+            "required": "请选择项目以打开此视图。",
+            "description": "请选择一个可用项目继续。",
+            "switchFailed": "切换项目失败，请重试。"
+        },
         "notifications": "工作台通知",
         "dismissNotification": "关闭通知",
         "mainChat": "聊天",

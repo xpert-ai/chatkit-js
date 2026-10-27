@@ -1,3 +1,4 @@
+import { viewProjectType } from './ProjectViewRecovery';
 import { EditorLifecycleContext } from '../editors/context';
 import { RemoteEditor } from '../editors/remote-editor';
 import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
@@ -47,6 +48,7 @@ export type RemoteViewHostsClient = Pick<
 >;
 
 type RemoteViewFrameProps = {
+  renderProjectRecovery?: (denied: boolean) => React.ReactNode;
   instanceKey?: string;
   visible?: boolean;
   initialQuery?: XpertViewQuery;
@@ -69,6 +71,7 @@ type RemoteViewFrameProps = {
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 
 export function RemoteViewFrame({
+  renderProjectRecovery,
   instanceKey,
   visible = true,
   manifest: incomingManifest,
@@ -397,6 +400,7 @@ export function RemoteViewFrame({
     [hostId, manifest.key, runtimeScope, viewHosts],
   );
 
+  const canRecoverProject = Boolean(renderProjectRecovery);
   const runRequest = React.useCallback(
     async (
       message: RemoteComponentMessage,
@@ -438,6 +442,17 @@ export function RemoteViewFrame({
           requestId: message.requestId,
           message: requestMessage,
         });
+        // A denied data refresh must also remove previously rendered project content.
+        if (
+          canRecoverProject &&
+          responseType === 'data' &&
+          requestError instanceof Error &&
+          'status' in requestError &&
+          (requestError.status === 403 || requestError.status === 404)
+        ) {
+          revokeSession();
+          setError(requestMessage);
+        }
         // The requesting view owns recovery and presentation; notify is explicit in the bridge protocol.
         workbenchDebug.warn('bridge.request.failed', {
           viewKey: manifest.key,
@@ -449,7 +464,7 @@ export function RemoteViewFrame({
         requestControllersRef.current.delete(controller);
       }
     },
-    [manifest.key, sendToFrame, t, revision],
+    [manifest.key, sendToFrame, t, revision, canRecoverProject, revokeSession],
   );
 
   React.useLayoutEffect(() => {
@@ -781,6 +796,15 @@ export function RemoteViewFrame({
     sendToFrame,
   ]);
 
+  if (
+    renderProjectRecovery &&
+    contextReady &&
+    !runtimeScope?.projectId &&
+    viewProjectType(listedManifest)
+  ) {
+    return <>{renderProjectRecovery(false)}</>;
+  }
+
   if (loading && !html) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -790,6 +814,7 @@ export function RemoteViewFrame({
   }
 
   if (error || !html) {
+    if (renderProjectRecovery) return <>{renderProjectRecovery(true)}</>;
     return (
       <div className="m-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
         {error ?? t('workbench.entryUnavailable')}

@@ -1,3 +1,4 @@
+import { ProjectCreateForm } from './ProjectCreateForm';
 import { SELECTOR_SEARCH_CLASS } from './selector-styles';
 import { resolveLocalizedText } from '../../i18n/localized-text';
 import * as React from 'react';
@@ -54,6 +55,8 @@ export type ProjectSelectorProps = {
   onProjectTypeCreate?: (projectType: XpertProjectTypeRef) => void;
   /** Limit creation to types supported by the caller's setup flow; discovery is unchanged. */
   createProjectTypes?: readonly XpertProjectTypeRef[];
+  /** Fixed discovery and creation scope for a View that requires a particular Project type. */
+  projectType?: XpertProjectTypeRef;
   management?: { label: string; onSelect: () => void; lockedReason?: string };
   triggerRef?: React.Ref<HTMLButtonElement>;
   onCloseAutoFocus?: React.ComponentProps<
@@ -81,6 +84,7 @@ export function ProjectSelector({
   createEnabled = false,
   onProjectTypeCreate,
   createProjectTypes,
+  projectType,
   management,
   triggerRef,
   onCloseAutoFocus,
@@ -90,6 +94,8 @@ export function ProjectSelector({
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [createMode, setCreateMode] = React.useState(false);
+  const [creationChoice, setCreationChoice] =
+    React.useState<XpertProjectTypeRef>();
   const [newProjectName, setNewProjectName] = React.useState('');
   const [creating, setCreating] = React.useState(false);
   const [createError, setCreateError] = React.useState(false);
@@ -97,6 +103,8 @@ export function ProjectSelector({
   React.useEffect(() => {
     setCreating(false);
     setCreateError(false);
+    setCreationChoice(undefined);
+    setCreateMode(false);
     return () => {
       createRequest.current?.abort();
       createRequest.current = null;
@@ -155,8 +163,8 @@ export function ProjectSelector({
     setHasDiscoveredProjects(false);
     setTypes([]);
     setDefaultType(undefined);
-    setApplicationKey('');
-    setProjectTypeKey('');
+    setApplicationKey(projectType?.applicationKey ?? '');
+    setProjectTypeKey(projectType?.projectTypeKey ?? '');
     setSkip(0);
     setCatalogReady(false);
     setCatalogFailed(false);
@@ -177,8 +185,16 @@ export function ProjectSelector({
         if (controller.signal.aborted) return;
         setTypes(catalog.items);
         setDefaultType(catalog.defaultProjectType);
-        setApplicationKey(catalog.defaultProjectType?.applicationKey ?? '');
-        setProjectTypeKey(catalog.defaultProjectType?.projectTypeKey ?? '');
+        setApplicationKey(
+          projectType?.applicationKey ??
+            catalog.defaultProjectType?.applicationKey ??
+            '',
+        );
+        setProjectTypeKey(
+          projectType?.projectTypeKey ??
+            catalog.defaultProjectType?.projectTypeKey ??
+            '',
+        );
         setCatalogReady(true);
       })
       .catch(() => {
@@ -187,7 +203,14 @@ export function ProjectSelector({
         }
       });
     return () => controller.abort();
-  }, [client, xpertId, locked, ready]);
+  }, [
+    client,
+    xpertId,
+    locked,
+    ready,
+    projectType?.applicationKey,
+    projectType?.projectTypeKey,
+  ]);
 
   React.useEffect(() => {
     if (
@@ -337,7 +360,7 @@ export function ProjectSelector({
   const scopedTypes = types.filter(
     (type) => type.applicationKey === applicationKey,
   );
-  const creationRef =
+  const filteredCreationRef =
     applicationKey && applicationKey !== '__unclassified'
       ? {
           applicationKey,
@@ -349,6 +372,7 @@ export function ProjectSelector({
           applicationKey: 'platform',
           projectTypeKey: 'general',
         });
+  const creationRef = projectType ?? creationChoice ?? filteredCreationRef;
   const creationType = types.find(
     (type) =>
       type.applicationKey === creationRef.applicationKey &&
@@ -392,6 +416,7 @@ export function ProjectSelector({
 
   /** Reset only the type scope; the user's search and selected Project remain intact. */
   const clearTypeFilter = () => {
+    if (projectType) return;
     setApplicationKey('');
     setProjectTypeKey('');
     setSkip(0);
@@ -515,7 +540,7 @@ export function ProjectSelector({
             data-slot="composer-project-command"
             className="flex min-h-0 w-full flex-col overflow-hidden"
           >
-            {!createMode && showFilters && types.length > 0 ? (
+            {!projectType && !createMode && showFilters && types.length > 0 ? (
               <div className="grid gap-1 p-1">
                 <select
                   aria-label={t('composer.projects.application')}
@@ -565,9 +590,32 @@ export function ProjectSelector({
               </div>
             ) : null}
             {createMode ? (
-              <form
-                data-slot="composer-project-create-form"
-                className="space-y-3"
+              <ProjectCreateForm
+                types={types.filter(
+                  (type) =>
+                    type.binding.kind === 'project' &&
+                    (!projectType ||
+                      (type.applicationKey === projectType.applicationKey &&
+                        type.projectTypeKey === projectType.projectTypeKey)) &&
+                    (!createProjectTypes ||
+                      createProjectTypes.some(
+                        (ref) =>
+                          ref.applicationKey === type.applicationKey &&
+                          ref.projectTypeKey === type.projectTypeKey,
+                      )),
+                )}
+                projectType={creationRef}
+                onTypeChange={setCreationChoice}
+                name={newProjectName}
+                onNameChange={setNewProjectName}
+                creating={creating}
+                error={createError}
+                canCreate={canCreate}
+                onCancel={() => {
+                  setCreateError(false);
+                  setCreateMode(false);
+                  setNewProjectName('');
+                }}
                 onSubmit={async (event) => {
                   event.preventDefault();
                   const name = newProjectName.trim();
@@ -610,51 +658,7 @@ export function ProjectSelector({
                     }
                   }
                 }}
-              >
-                <Input
-                  autoFocus
-                  disabled={creating}
-                  value={newProjectName}
-                  maxLength={120}
-                  onChange={(event) => setNewProjectName(event.target.value)}
-                  placeholder={t('composer.projects.namePlaceholder')}
-                  aria-label={t('composer.projects.namePlaceholder')}
-                  className={cn(
-                    'h-10 border-0 bg-muted px-3 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0',
-                    menuItemRoundedClass,
-                  )}
-                />
-                {createError && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {t('composer.projects.createError')}
-                  </p>
-                )}
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="rounded-chat-item px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    disabled={creating}
-                    onClick={() => {
-                      setCreateError(false);
-                      setCreateMode(false);
-                      setNewProjectName('');
-                    }}
-                  >
-                    {t('composer.projects.cancel')}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!newProjectName.trim() || creating}
-                    className="rounded-chat-item bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {t(
-                      creating
-                        ? 'composer.projects.creating'
-                        : 'composer.projects.create',
-                    )}
-                  </button>
-                </div>
-              </form>
+              />
             ) : (
               <>
                 <div
@@ -685,7 +689,7 @@ export function ProjectSelector({
                       menuItemRoundedClass,
                     )}
                   />
-                  {types.length > 0 || applicationKey ? (
+                  {!projectType && (types.length > 0 || applicationKey) ? (
                     <ProjectFilterButton
                       active={Boolean(applicationKey)}
                       label={t(
@@ -879,15 +883,17 @@ export function ProjectSelector({
                               >
                                 {group.label}
                               </button>
-                              <ProjectFilterButton
-                                active={filtered}
-                                label={t(
-                                  filtered
-                                    ? 'composer.projects.clearFilter'
-                                    : 'composer.projects.filterType',
-                                )}
-                                onClick={filtered ? clearTypeFilter : filter}
-                              />
+                              {!projectType && (
+                                <ProjectFilterButton
+                                  active={filtered}
+                                  label={t(
+                                    filtered
+                                      ? 'composer.projects.clearFilter'
+                                      : 'composer.projects.filterType',
+                                  )}
+                                  onClick={filtered ? clearTypeFilter : filter}
+                                />
+                              )}
                             </div>
                             {group.projects.map(renderProject)}
                           </section>
@@ -915,7 +921,10 @@ export function ProjectSelector({
                             projectTypeKey: creationType.projectTypeKey,
                           });
                           setOpen(false);
-                        } else setCreateMode(true);
+                        } else {
+                          setCreationChoice(undefined);
+                          setCreateMode(true);
+                        }
                       }}
                     >
                       <Plus className="size-4 shrink-0" />

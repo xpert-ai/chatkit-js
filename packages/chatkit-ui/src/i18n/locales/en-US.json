@@ -13,6 +13,12 @@
         "Continue": "Continue"
     },
     "workbench": {
+        "projectRecovery": {
+            "unavailable": "This view cannot be opened in the current project. Check the project type and access, or select another project.",
+            "required": "Select a project to open this view.",
+            "description": "Choose an available project to continue.",
+            "switchFailed": "Could not switch projects. Please try again."
+        },
         "notifications": "Workbench notifications",
         "dismissNotification": "Dismiss notification",
         "mainChat": "Chat",
