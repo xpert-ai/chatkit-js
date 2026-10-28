@@ -106,6 +106,9 @@ import {
 } from './Stream';
 import { WorkspaceFileMentionPalette } from '../components/composer/WorkspaceFileMentionPalette';
 import { ProjectSelector } from '../components/composer/ProjectSelector';
+import type { TChatRequestHuman } from '@xpert-ai/chatkit-types';
+import { buildInjectedRequestOptions } from '../lib/request-options';
+import { toQueuedSendRequest } from '../lib/follow-ups';
 
 let latestStream: StreamContextType | null = null;
 
@@ -177,6 +180,89 @@ describe('first submission setup', () => {
       yield* [];
     });
   });
+
+  it.each([
+    { label: 'selected', bindingIds: ['github-1'] },
+    { label: 'cleared', bindingIds: [] },
+  ])(
+    'sends $label connectors in input and human state for new and subsequent requests',
+    async ({ bindingIds }) => {
+      sdkMocks.threadsCreate.mockResolvedValue({
+        thread_id: 'thread-1',
+        metadata: { id: 'conversation-1' },
+      });
+      sdkMocks.conversationsCreate.mockResolvedValue({
+        id: 'conversation-1',
+        threadId: 'thread-1',
+      });
+      const humanInput: TChatRequestHuman = {
+        input: 'Read my issue',
+        model: 'model-1',
+        planMode: true,
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          skills: { ids: ['skill-1'] },
+          plugins: { nodeKeys: ['plugin-1'] },
+          subAgents: { nodeKeys: ['agent-1'] },
+          connectors: { bindingIds: ['github-old'] },
+        },
+      };
+      const { state } = buildInjectedRequestOptions({
+        defaults: {
+          state: { human: { customerId: 'customer-1' }, locale: 'en' },
+        },
+        humanInput,
+      });
+      const request = { input: humanInput, state };
+      const expectedHuman = {
+        ...humanInput,
+        runtimeCapabilities: {
+          ...humanInput.runtimeCapabilities,
+          connectors: bindingIds.length ? { bindingIds } : undefined,
+        },
+      };
+      renderStream();
+      await act(async () => {
+        await getStream().setConnectorBindingIds(bindingIds);
+        await getStream().submit(request, optimisticFirstMessage());
+      });
+
+      const subsequentRequests = [
+        { ...request, id: 'edited-message', executionId: 'execution-1' },
+        toQueuedSendRequest({
+          ...request,
+          id: 'queued-message',
+          followUpMode: 'queue',
+        }),
+      ];
+      for (const nextRequest of subsequentRequests) {
+        await act(async () => {
+          await getStream().submit(nextRequest);
+        });
+      }
+
+      expect(sdkMocks.runsStream).toHaveBeenCalledTimes(3);
+      for (let call = 1; call <= 3; call += 1) {
+        expect(sdkMocks.runsStream).toHaveBeenNthCalledWith(
+          call,
+          'thread-1',
+          'xpert-1',
+          expect.objectContaining({
+            input: expect.objectContaining({
+              input: expectedHuman,
+              state: {
+                locale: 'en',
+                human: { ...expectedHuman, customerId: 'customer-1' },
+              },
+            }),
+          }),
+        );
+      }
+      expect(state?.human?.runtimeCapabilities?.connectors).toEqual({
+        bindingIds: ['github-old'],
+      });
+    },
+  );
 
   it('shows the auto-created Project name and files during a live run without remounting the composer', async () => {
     sdkMocks.getProject.mockResolvedValue({

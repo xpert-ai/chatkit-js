@@ -1,3 +1,4 @@
+import { STATE_VARIABLE_HUMAN } from '@xpert-ai/chatkit-types';
 import type {
   ProjectSelection,
   ResumeStreamOptions,
@@ -15,7 +16,10 @@ export function withConversationScope(
     return input;
   }
 
-  const runtimeCapabilities = input.input.runtimeCapabilities;
+  // The backend prefers injected human state over the message input.
+  const humanState = input.state?.[STATE_VARIABLE_HUMAN];
+  const runtimeCapabilities =
+    humanState?.runtimeCapabilities ?? input.input.runtimeCapabilities;
   const normalizedConnectorBindingIds = Array.from(
     new Set(
       connectorBindingIds.map((bindingId) => bindingId.trim()).filter(Boolean),
@@ -47,6 +51,17 @@ export function withConversationScope(
         ? { runtimeCapabilities: nextRuntimeCapabilities }
         : { runtimeCapabilities: undefined }),
     },
+    ...(humanState
+      ? {
+          state: {
+            ...input.state,
+            [STATE_VARIABLE_HUMAN]: {
+              ...humanState,
+              runtimeCapabilities: nextRuntimeCapabilities,
+            },
+          },
+        }
+      : {}),
   };
 }
 
