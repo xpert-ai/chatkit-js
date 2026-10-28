@@ -35,6 +35,8 @@ export type WorkbenchCommandHost = {
   /** Let a routed host render legacy View types this shell cannot display yet. */
   forwardUnavailableView?: boolean;
   openPreview: (preview: WorkbenchPreview) => void;
+  openExternal?: (url: string) => boolean;
+  copyText?: (text: string) => Promise<boolean>;
   resolveFile?: (
     resource: ChatKitWorkbenchFileResource,
   ) => Promise<ResourceFileWorkbenchPreview>;
@@ -67,6 +69,12 @@ export async function executeWorkbenchCommand(
   const { commandKey, payload } = request;
   const stale = () => ({ success: false, code: 'stale_context' });
   if (host.isCurrent?.() === false) return stale();
+  if (commandKey === 'workbench.clipboard.write') {
+    const text = field(payload, 'text');
+    if (typeof text !== 'string' || text.length > 100000) return invalid();
+    if (!host.copyText) return unsupportedCommand(commandKey);
+    return { success: await host.copyText(text) };
+  }
   if (commandKey === 'assistant.composer.append_references') {
     const references = parseAppendReferences(payload);
     if (!references) return invalid();
@@ -119,6 +127,16 @@ export async function executeWorkbenchCommand(
       host.apiUrl,
     );
     if (!preview) return invalid();
+    if (
+      commandKey === 'workbench.browser.open' &&
+      field(payload, 'target') !== undefined
+    ) {
+      if (field(payload, 'target') !== 'external') return invalid();
+      if (!host.openExternal) return unsupportedCommand(commandKey);
+      return host.openExternal(preview.url)
+        ? { success: true, status: 'opened', url: preview.url }
+        : { success: false, code: 'popup_blocked' };
+    }
     host.openPreview(preview);
     return {
       success: true,

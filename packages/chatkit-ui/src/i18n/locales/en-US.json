@@ -1,4 +1,36 @@
 {
+    "sharing": {
+        "existingNotice": "This is your saved snapshot. Copying or opening it keeps the same link, messages and expiry.",
+        "editShare": "Edit sharing settings",
+        "action": "Share",
+        "title": "Share conversation",
+        "notice": "Review the exact text snapshot below. Later messages, profile details, attachments, tools and execution data are not included. Text you entered may still contain sensitive information.",
+        "preview": "Shared preview",
+        "loading": "Loading preview…",
+        "unavailable": "Sharing is available only to the owner of a private conversation in an active organization. The conversation may be empty or too large.",
+        "audience": "Who can view",
+        "organization": "Members of this organization with the link",
+        "public": "Anyone with the link",
+        "expires": "Link expires after",
+        "days": "{{count}} days",
+        "publicConsent": "I have reviewed this preview and understand anyone with this link can read and forward it.",
+        "link": "Share link",
+        "copy": "Copy link",
+        "copied": "Link copied",
+        "revoke": "Revoke link",
+        "revocationNotice": "Revoking stops future access. It cannot remove copies or screenshots already saved.",
+        "refresh": "Refresh preview",
+        "create": "Create and copy link",
+        "replace": "Replace link and copy",
+        "working": "Working…",
+        "createFailed": "Could not create the link. The conversation may have changed; refresh the preview and retry.",
+        "revokeFailed": "Could not revoke the link. Please retry.",
+        "copyFailed": "Copy failed. Select and copy the link above.",
+        "human": "You",
+        "ai": "Assistant",
+        "imageOmitted": "Image omitted from shared snapshot",
+        "manageLinks": "Manage all my shared links"
+    },
     "resourceCard": {
         "open": "Open",
         "moreImages": "More images ({{count}})",
@@ -13,6 +45,12 @@
         "Continue": "Continue"
     },
     "workbench": {
+        "projectRecovery": {
+            "unavailable": "This view cannot be opened in the current project. Check the project type and access, or select another project.",
+            "required": "Select a project to open this view.",
+            "description": "Choose an available project to continue.",
+            "switchFailed": "Could not switch projects. Please try again."
+        },
         "notifications": "Workbench notifications",
         "dismissNotification": "Dismiss notification",
         "mainChat": "Chat",

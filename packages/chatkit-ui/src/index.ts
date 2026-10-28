@@ -1,5 +1,6 @@
 export { Chat } from './components/chat';
 export type { ChatProps } from './components/chat';
+export { ReadonlyMessageList } from './components/sharing/ReadonlyMessageList';
 
 export { Button } from './components/ui/button';
 export { Input } from './components/ui/input';

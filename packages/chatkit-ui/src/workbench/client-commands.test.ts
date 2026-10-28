@@ -30,6 +30,59 @@ function fixture(result: unknown = { success: false, code: 'unsupported' }) {
   return { host, execute };
 }
 describe('Workbench built-in commands', () => {
+  it('opens authenticated pages externally only through an explicit host target', async () => {
+    const { host, execute } = fixture();
+    host.openExternal = vi.fn().mockReturnValue(true);
+    expect(
+      await execute('workbench.browser.open', {
+        url: '/artifacts/library/reference',
+        target: 'external',
+      }),
+    ).toMatchObject({
+      success: true,
+      url: 'https://xpert.example/artifacts/library/reference',
+    });
+    expect(host.openPreview).not.toHaveBeenCalled();
+    expect(host.forward).not.toHaveBeenCalled();
+    host.openExternal = vi.fn().mockReturnValue(false);
+    expect(
+      await execute('workbench.browser.open', {
+        url: 'https://example.test',
+        target: 'external',
+      }),
+    ).toEqual({ success: false, code: 'popup_blocked' });
+  });
+  it.each([
+    'javascript:alert(1)',
+    'file:///etc/passwd',
+    'data:text/html,hello',
+    'https://user:password@example.org',
+  ])('rejects unsafe external URLs %s', async (url) => {
+    const { host, execute } = fixture();
+    host.openExternal = vi.fn();
+    expect(
+      await execute('workbench.browser.open', { url, target: 'external' }),
+    ).toMatchObject({ code: 'bad_request' });
+    expect(host.openExternal).not.toHaveBeenCalled();
+  });
+  it('copies existing URLs through the host clipboard without forwarding a server mutation', async () => {
+    const { host, execute } = fixture();
+    host.copyText = vi.fn().mockResolvedValue(true);
+    expect(
+      await execute('workbench.clipboard.write', {
+        text: 'https://example.test/s/existing',
+      }),
+    ).toEqual({ success: true });
+    expect(host.copyText).toHaveBeenCalledWith(
+      'https://example.test/s/existing',
+    );
+    expect(host.forward).not.toHaveBeenCalled();
+    expect(await execute('workbench.clipboard.write', { text: {} })).toEqual({
+      success: false,
+      code: 'bad_request',
+    });
+  });
+
   it('discards a navigation authorization that completes after the context changes', async () => {
     const { host, execute } = fixture();
     let current = true;

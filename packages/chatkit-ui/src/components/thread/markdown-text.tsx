@@ -25,6 +25,7 @@ import { TooltipIconButton } from './tooltip-icon-button';
 import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { ParentMessengerContext } from '../../providers/ParentMessenger';
+import { useReadonlyTranscript } from './ReadonlyTranscriptContext';
 
 import 'katex/dist/katex.min.css';
 
@@ -137,8 +138,13 @@ function MarkdownAnchor({
   ...props
 }: MarkdownElementProps<'a'>) {
   const parentMessenger = useContext(ParentMessengerContext);
+  const readOnly = useReadonlyTranscript();
   const citationTarget = parseKnowledgebaseCitationHref(href);
   const anchorProps = stripMarkdownNode(props);
+
+  if (readOnly && (!href || !/^https?:\/\//i.test(href))) {
+    return <span className={className}>{anchorProps.children}</span>;
+  }
 
   return (
     <a
@@ -514,6 +520,15 @@ const defaultComponents: any = {
     />
   ),
   a: MarkdownAnchor,
+  img: function MarkdownImage({ alt, ...props }: MarkdownElementProps<'img'>) {
+    const readOnly = useReadonlyTranscript();
+    const { t } = useChatkitTranslation();
+    return readOnly ? (
+      <span className="text-muted-foreground">[{alt || t('sharing.imageOmitted')}]</span>
+    ) : (
+      <img alt={alt} {...stripMarkdownNode(props)} />
+    );
+  },
   blockquote: ({ className, ...props }: MarkdownElementProps<'blockquote'>) => (
     <blockquote
       className={cn(
@@ -628,6 +643,7 @@ const defaultComponents: any = {
     style,
     ...props
   }: MarkdownElementProps<'code'>) => {
+    const readOnly = useReadonlyTranscript();
     const match = /language-([\w-]+)/.exec(className || '');
     const code = getTextContent(children);
     const isBlockCode = code.includes('\n');
@@ -636,7 +652,7 @@ const defaultComponents: any = {
       const language = match[1];
       const normalizedCode = code.replace(/\n$/, '');
 
-      if (language === 'mermaid') {
+      if (language === 'mermaid' && !readOnly) {
         return <MermaidBlock code={normalizedCode} />;
       }
 

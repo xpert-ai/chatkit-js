@@ -333,6 +333,22 @@ export function useWorkbenchClientCommands({
         viewKey: manifest.key,
       };
       return executeWorkbenchCommand(request, {
+        openExternal: (url) => {
+          if (!userActivated) return false;
+          const popup = window.open('about:blank', '_blank');
+          if (!popup) return false;
+          popup.opener = null;
+          popup.location.replace(url);
+          return true;
+        },
+        copyText: async (text) => {
+          try {
+            await navigator.clipboard.writeText(text);
+            return true;
+          } catch {
+            return false;
+          }
+        },
         prepareLeave: () => editors.prepare(),
         apiUrl: stream.apiUrl,
         resolveFile: (resource) =>

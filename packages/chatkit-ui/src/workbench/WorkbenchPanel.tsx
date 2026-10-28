@@ -1,3 +1,4 @@
+import { ProjectViewRecovery } from './remote-view/ProjectViewRecovery';
 import { contentViewKey } from './content/tab-identity';
 import { workspaceFileScope } from './native/files/workspace-file-access';
 import type { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
@@ -126,6 +127,7 @@ type WorkbenchPanelProps = {
   onReload: () => void;
   onSelect: (viewKey: string) => void;
   onNotify: (level: 'success' | 'error', message: string) => void;
+  onOpenProject?: (projectId: string, viewKey?: string) => Promise<unknown>;
   onClientCommand: (
     commandKey: string,
     payload: unknown,
@@ -134,6 +136,7 @@ type WorkbenchPanelProps = {
 };
 
 export function WorkbenchPanel({
+  onOpenProject,
   tabOrder,
   mainChatHost,
   browserHistory = {},
@@ -402,7 +405,7 @@ export function WorkbenchPanel({
             role="alert"
             className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive"
           >
-            <span className="flex-1">{error}</span>
+            <span className="flex-1">{t('workbench.projectRecovery.unavailable')}</span>
             <button
               type="button"
               onClick={onReload}
@@ -595,6 +598,15 @@ export function WorkbenchPanel({
               className="h-full min-h-0"
             >
               <RemoteViewFrame
+                renderProjectRecovery={view.clientCommands?.some(command => command.key === 'workbench.navigation.open') ? denied => (
+                  <ProjectViewRecovery
+                    key={JSON.stringify([hostId, runtimeScope.projectId, view.key])}
+                    client={stream.client} hostId={hostId} manifest={view} denied={denied}
+                    createEnabled={options?.composer?.projects?.createEnabled !== false}
+                    onRetry={onReload}
+                    onSelect={projectId => onClientCommand('workbench.navigation.open',
+                      { target: 'assistant.project', projectId, viewKey: contentViewKey(view.key) }, view)} />
+                ) : undefined}
                 visible={view.key === activeViewKey && visible}
                 instanceKey={view.key}
                 manifest={contentViewKey(view.key) === view.key ? view : { ...view, key: contentViewKey(view.key) }}
@@ -623,11 +635,17 @@ export function WorkbenchPanel({
               {t('workbench.loading')}
             </div>
           ) : null
-        ) : activeView ? null : loading ? (
+        ) : activeView ? null : loading && !error ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" />
             {t('workbench.loading')}
           </div>
+        ) : error && onOpenProject ? (
+          <ProjectViewRecovery
+            key={JSON.stringify([hostId, runtimeScope.projectId])}
+            client={stream.client} hostId={hostId} denied onRetry={onReload}
+            createEnabled={options?.composer?.projects?.createEnabled !== false}
+            onSelect={projectId => onOpenProject(projectId)} />
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <p className="text-sm text-destructive">{error}</p>
