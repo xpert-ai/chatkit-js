@@ -25,6 +25,17 @@ export function withConversationScope(
       connectorBindingIds.map((bindingId) => bindingId.trim()).filter(Boolean),
     ),
   );
+  // The server merges recommendations back into the available capabilities.
+  const recommended = runtimeCapabilities?.recommended;
+  const recommendedConnectorBindingIds = Array.from(
+    new Set(
+      (recommended?.connectors?.bindingIds ?? [])
+        .map((bindingId) => bindingId.trim())
+        .filter((bindingId) =>
+          normalizedConnectorBindingIds.includes(bindingId),
+        ),
+    ),
+  );
   const nextRuntimeCapabilities =
     runtimeCapabilities || normalizedConnectorBindingIds.length
       ? {
@@ -39,6 +50,16 @@ export function withConversationScope(
                 connectors: { bindingIds: normalizedConnectorBindingIds },
               }
             : { connectors: undefined }),
+          ...(recommended
+            ? {
+                recommended: {
+                  ...recommended,
+                  connectors: recommendedConnectorBindingIds.length
+                    ? { bindingIds: recommendedConnectorBindingIds }
+                    : undefined,
+                },
+              }
+            : {}),
         }
       : undefined;
   return {

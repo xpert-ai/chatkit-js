@@ -182,11 +182,20 @@ describe('first submission setup', () => {
   });
 
   it.each([
-    { label: 'selected', bindingIds: ['github-1'] },
-    { label: 'cleared', bindingIds: [] },
+    {
+      label: 'selected',
+      bindingIds: ['github-1'],
+      recommendedConnectors: undefined,
+    },
+    { label: 'cleared', bindingIds: [], recommendedConnectors: undefined },
+    {
+      label: 'still recommended',
+      bindingIds: ['github-old'],
+      recommendedConnectors: { bindingIds: ['github-old'] },
+    },
   ])(
     'sends $label connectors in input and human state for new and subsequent requests',
-    async ({ bindingIds }) => {
+    async ({ bindingIds, recommendedConnectors }) => {
       sdkMocks.threadsCreate.mockResolvedValue({
         thread_id: 'thread-1',
         metadata: { id: 'conversation-1' },
@@ -205,6 +214,12 @@ describe('first submission setup', () => {
           plugins: { nodeKeys: ['plugin-1'] },
           subAgents: { nodeKeys: ['agent-1'] },
           connectors: { bindingIds: ['github-old'] },
+          recommended: {
+            skills: { ids: ['recommended-skill'] },
+            plugins: { nodeKeys: ['recommended-plugin'] },
+            subAgents: { nodeKeys: ['recommended-agent'] },
+            connectors: { bindingIds: ['github-old'] },
+          },
         },
       };
       const { state } = buildInjectedRequestOptions({
@@ -219,6 +234,12 @@ describe('first submission setup', () => {
         runtimeCapabilities: {
           ...humanInput.runtimeCapabilities,
           connectors: bindingIds.length ? { bindingIds } : undefined,
+          recommended: {
+            skills: { ids: ['recommended-skill'] },
+            plugins: { nodeKeys: ['recommended-plugin'] },
+            subAgents: { nodeKeys: ['recommended-agent'] },
+            connectors: recommendedConnectors,
+          },
         },
       };
       renderStream();
@@ -259,6 +280,11 @@ describe('first submission setup', () => {
         );
       }
       expect(state?.human?.runtimeCapabilities?.connectors).toEqual({
+        bindingIds: ['github-old'],
+      });
+      expect(
+        state?.human?.runtimeCapabilities?.recommended?.connectors,
+      ).toEqual({
         bindingIds: ['github-old'],
       });
     },

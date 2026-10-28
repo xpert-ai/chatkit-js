@@ -120,6 +120,82 @@ describe('conversation scope', () => {
     });
   });
 
+  it.each([
+    { label: 'cleared', selected: [], recommended: undefined },
+    { label: 'replaced', selected: ['github-new'], recommended: undefined },
+    {
+      label: 'still selected',
+      selected: [' github-old ', 'github-new', 'github-old'],
+      recommended: { bindingIds: ['github-old'] },
+    },
+  ])(
+    'limits $label recommended connectors to the current selection',
+    ({ selected, recommended }) => {
+      const humanInput: TChatRequestHuman = {
+        input: 'Continue with the current selection',
+        runtimeCapabilities: {
+          mode: 'allowlist',
+          inheritUnselected: true,
+          skills: { ids: ['skill-1'] },
+          plugins: { nodeKeys: ['plugin-1'] },
+          connectors: { bindingIds: ['github-old'] },
+          recommended: {
+            skills: { workspaceId: 'workspace-1', ids: ['recommended-skill'] },
+            plugins: { nodeKeys: ['recommended-plugin'] },
+            subAgents: { nodeKeys: ['recommended-agent'] },
+            connectors: {
+              bindingIds: [' github-old ', 'github-old', 'removed', ''],
+            },
+          },
+        },
+      };
+      const sourceSnapshot = structuredClone(humanInput);
+      const { state } = buildInjectedRequestOptions({
+        defaults: {
+          state: { human: { customerId: 'customer-1' }, locale: 'en' },
+        },
+        humanInput,
+      });
+      const result = withConversationScope(
+        { input: humanInput, state },
+        undefined,
+        selected,
+      );
+      const expectedRecommendations = {
+        skills: { workspaceId: 'workspace-1', ids: ['recommended-skill'] },
+        plugins: { nodeKeys: ['recommended-plugin'] },
+        subAgents: { nodeKeys: ['recommended-agent'] },
+        ...(recommended ? { connectors: recommended } : {}),
+      };
+
+      // Omitted JSON fields must not leave a stale recommendation for the server to merge.
+      expect(JSON.parse(JSON.stringify(result))).toMatchObject({
+        input: {
+          runtimeCapabilities: { recommended: expectedRecommendations },
+        },
+        state: {
+          locale: 'en',
+          human: {
+            customerId: 'customer-1',
+            runtimeCapabilities: { recommended: expectedRecommendations },
+          },
+        },
+      });
+      if (!result || 'action' in result)
+        throw new Error('Expected a send request');
+      expect(result.input.runtimeCapabilities?.recommended?.connectors).toEqual(
+        recommended,
+      );
+      expect(
+        result.state?.human?.runtimeCapabilities?.recommended?.connectors,
+      ).toEqual(recommended);
+      expect(humanInput).toEqual(sourceSnapshot);
+      expect(state?.human?.runtimeCapabilities).toEqual(
+        sourceSnapshot.runtimeCapabilities,
+      );
+    },
+  );
+
   it('preserves the capability policy injected by the host in human state', () => {
     const inputCapabilities = {
       mode: 'allowlist' as const,
