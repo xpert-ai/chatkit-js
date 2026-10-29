@@ -1,5 +1,4 @@
 import { HostedWebUpdateProvider } from './web-update/HostedWebUpdateProvider';
-import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import { A2UIProvider } from '@xpert-ai/a2ui-react';

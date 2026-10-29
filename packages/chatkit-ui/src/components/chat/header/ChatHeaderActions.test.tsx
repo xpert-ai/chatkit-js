@@ -65,8 +65,9 @@ it('keeps sharing available alongside About when both features are enabled', asy
   fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), {
     key: 'Enter',
   });
-  expect(await screen.findByRole('menuitem', { name: 'sharing.action' }))
-    .not.toHaveAttribute('aria-disabled', 'true');
+  expect(
+    await screen.findByRole('menuitem', { name: 'sharing.action' }),
+  ).not.toHaveAttribute('aria-disabled', 'true');
   fireEvent.click(screen.getByRole('menuitem', { name: 'webUpdate.about' }));
   expect(openAbout).toHaveBeenCalledTimes(1);
 });
