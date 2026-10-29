@@ -1,15 +1,17 @@
-import { useState, type ReactNode, type Ref } from 'react';
+import { useContext, useState, type ReactNode, type Ref } from 'react';
 import {
   ConversationShareDialog,
   type ConversationShareTarget,
 } from '../../sharing/ConversationShareDialog';
-import { Minus, MoreHorizontal, Share2 } from 'lucide-react';
+import { Info, Minus, MoreHorizontal, Share2 } from 'lucide-react';
+import { HostedWebUpdateContext } from '../../../web-update/context';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { WorkbenchToggleButton } from '../../../workbench/context';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
@@ -34,11 +36,12 @@ export function ChatHeaderActions({
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const { t } = useChatkitTranslation();
+  const webUpdate = useContext(HostedWebUpdateContext);
   const actionClass =
     'flex h-8 w-8 cursor-pointer items-center justify-center rounded-chat-item text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150';
   return (
     <>
-      {(menu || share) && (
+      {(menu || share || webUpdate) && (
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -74,6 +77,15 @@ export function ChatHeaderActions({
                 <Share2 size={16} />
                 {t('sharing.action')}
               </DropdownMenuItem>
+            )}
+            {webUpdate && (
+              <>
+                {(menu || share) && <DropdownMenuSeparator />}
+                <DropdownMenuItem onSelect={webUpdate.openAbout}>
+                  <Info className="size-4" />
+                  {t('webUpdate.about')}
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

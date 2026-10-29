@@ -1,4 +1,4 @@
-import type { XpertProjectTypeRef } from '@xpert-ai/xpert-sdk';
+import { HostedWebUpdateProvider } from './web-update/HostedWebUpdateProvider';
 import * as React from 'react';
 import type { ChatKitOptions, ProjectSelection } from '@xpert-ai/chatkit-types';
 import { A2UIProvider } from '@xpert-ai/a2ui-react';
@@ -250,99 +250,103 @@ export function App({
 
   return (
     <ThemeProvider theme={theme}>
-      <div className="flex h-screen">
-        <A2UIProvider
-          onAction={(action) => {
-            if (isParentAvailable)
-              sendCommand('onWidgetAction', {
-                action: action.actionId,
-                widgetItem: action.context,
-              });
-          }}
-        >
-          {activeOptions?.group ? (
-            <GroupConversationProvider
-              key={activeOptions.group.id}
-              workbench
-              options={activeOptions}
-              clientSecret={apiKey}
-              refreshClientSecret={getClientSecret}
-            >
-              <WorkbenchShell
+      <HostedWebUpdateProvider>
+        <div className="flex h-screen">
+          <A2UIProvider
+            onAction={(action) => {
+              if (isParentAvailable)
+                sendCommand('onWidgetAction', {
+                  action: action.actionId,
+                  widgetItem: action.context,
+                });
+            }}
+          >
+            {activeOptions?.group ? (
+              <GroupConversationProvider
+                key={activeOptions.group.id}
+                workbench
                 options={activeOptions}
-                locale={requestLocale}
-                onRequestContextChange={handleWorkbenchRequestContextChange}
-                onNavigate={navigation.navigate}
-                initializing={isClientSecretInitializing}
+                clientSecret={apiKey}
+                refreshClientSecret={getClientSecret}
               >
-                {chat}
-              </WorkbenchShell>
-            </GroupConversationProvider>
-          ) : (
-            <StreamProvider
-              runtimeKey={runtimeKey}
-              threadStateMode={
-                isParentAvailable || navigation.session ? 'memory' : 'url'
-              }
-              apiKey={apiKey}
-              organizationId={
-                navigation.session?.organizationId ?? organizationId
-              }
-              getClientSecret={navigation.refresh ?? getClientSecret}
-              apiUrl={options?.api.apiUrl || apiUrl}
-              xpertId={
-                navigation.session?.assistantId ||
-                options?.api.xpertId ||
-                resolvedXpertId ||
-                xpertId
-              }
-              projectId={
-                navigation.session
-                  ? (navigation.session.projectId ?? undefined)
-                  : (activeProjectId ?? undefined)
-              }
-              projectSelection={
-                navigation.session ? undefined : projectSelection
-              }
-              projectConversationRequest={
-                !navigation.session &&
-                projectConversationRequest?.binding === projectBinding
-                  ? projectConversationRequest.request
-                  : null
-              }
-              initialThread={
-                navigation.session
-                  ? navigation.session.threadId
-                  : scopedInitialThread
-              }
-              locale={requestLocale}
-              additionalContext={
-                workbenchEnabled ? workbenchRequestContext : undefined
-              }
-            >
-              <AssistantInfoProvider>
-                {workbenchEnabled ? (
-                  <WorkbenchShell
-                    options={activeOptions}
-                    locale={requestLocale}
-                    onRequestContextChange={handleWorkbenchRequestContextChange}
-                    onNavigate={navigation.navigate}
-                    initialNavigation={navigation.request}
-                    projectCreation={
-                      navigation.session ? undefined : creationNavigation
-                    }
-                    initializing={isClientSecretInitializing}
-                  >
-                    {chat}
-                  </WorkbenchShell>
-                ) : (
-                  chat
-                )}
-              </AssistantInfoProvider>
-            </StreamProvider>
-          )}
-        </A2UIProvider>
-      </div>
+                <WorkbenchShell
+                  options={activeOptions}
+                  locale={requestLocale}
+                  onRequestContextChange={handleWorkbenchRequestContextChange}
+                  onNavigate={navigation.navigate}
+                  initializing={isClientSecretInitializing}
+                >
+                  {chat}
+                </WorkbenchShell>
+              </GroupConversationProvider>
+            ) : (
+              <StreamProvider
+                runtimeKey={runtimeKey}
+                threadStateMode={
+                  isParentAvailable || navigation.session ? 'memory' : 'url'
+                }
+                apiKey={apiKey}
+                organizationId={
+                  navigation.session?.organizationId ?? organizationId
+                }
+                getClientSecret={navigation.refresh ?? getClientSecret}
+                apiUrl={options?.api.apiUrl || apiUrl}
+                xpertId={
+                  navigation.session?.assistantId ||
+                  options?.api.xpertId ||
+                  resolvedXpertId ||
+                  xpertId
+                }
+                projectId={
+                  navigation.session
+                    ? (navigation.session.projectId ?? undefined)
+                    : (activeProjectId ?? undefined)
+                }
+                projectSelection={
+                  navigation.session ? undefined : projectSelection
+                }
+                projectConversationRequest={
+                  !navigation.session &&
+                  projectConversationRequest?.binding === projectBinding
+                    ? projectConversationRequest.request
+                    : null
+                }
+                initialThread={
+                  navigation.session
+                    ? navigation.session.threadId
+                    : scopedInitialThread
+                }
+                locale={requestLocale}
+                additionalContext={
+                  workbenchEnabled ? workbenchRequestContext : undefined
+                }
+              >
+                <AssistantInfoProvider>
+                  {workbenchEnabled ? (
+                    <WorkbenchShell
+                      options={activeOptions}
+                      locale={requestLocale}
+                      onRequestContextChange={
+                        handleWorkbenchRequestContextChange
+                      }
+                      onNavigate={navigation.navigate}
+                      initialNavigation={navigation.request}
+                      projectCreation={
+                        navigation.session ? undefined : creationNavigation
+                      }
+                      initializing={isClientSecretInitializing}
+                    >
+                      {chat}
+                    </WorkbenchShell>
+                  ) : (
+                    chat
+                  )}
+                </AssistantInfoProvider>
+              </StreamProvider>
+            )}
+          </A2UIProvider>
+        </div>
+      </HostedWebUpdateProvider>
     </ThemeProvider>
   );
 }
