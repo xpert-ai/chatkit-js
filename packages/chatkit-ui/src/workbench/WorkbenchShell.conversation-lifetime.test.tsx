@@ -279,5 +279,8 @@ describe('Workbench conversation lifetime', () => {
       ),
     );
     expect(frame).not.toBeInTheDocument();
+    expect(await screen.findByText('This view cannot be opened in the current project. Check the project type and access, or select another project.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Select project' })).toBeEnabled();
+    expect(screen.queryByText('Forbidden')).not.toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import { HostedApp } from './HostedApp';
 import './index.css';
 import { ParentMessengerProvider } from './providers/ParentMessenger';
 import { useParentMessenger } from './hooks/useParentMessenger';
+import { SharedConversationFrame } from './components/sharing/SharedConversationFrame';
 
 /**
  * Decode base64 options from URL hash
@@ -45,8 +46,13 @@ const initialClientSecret =
     ? ''
     : (new URLSearchParams(window.location.search).get('clientSecret') ?? '');
 
-// Parse options from URL on initial load
-const initialFrameParams = decodeFrameParamsFromUrl();
+const isSharedConversation =
+  new URLSearchParams(window.location.search).get('view') ===
+  'shared-conversation';
+// Shared frames use their own credential-free channel protocol.
+const initialFrameParams = isSharedConversation
+  ? {}
+  : decodeFrameParamsFromUrl();
 const initialOptions = initialFrameParams.options ?? null;
 
 const AppContainer = () => {
@@ -65,10 +71,14 @@ const AppContainer = () => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <NuqsAdapter>
-      <ParentMessengerProvider channelId={initialFrameParams.channelId}>
-        <AppContainer />
-      </ParentMessengerProvider>
-    </NuqsAdapter>
+    {isSharedConversation ? (
+      <SharedConversationFrame />
+    ) : (
+      <NuqsAdapter>
+        <ParentMessengerProvider channelId={initialFrameParams.channelId}>
+          <AppContainer />
+        </ParentMessengerProvider>
+      </NuqsAdapter>
+    )}
   </React.StrictMode>,
 );

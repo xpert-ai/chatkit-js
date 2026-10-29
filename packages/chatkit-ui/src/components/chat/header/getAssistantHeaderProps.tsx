@@ -1,3 +1,4 @@
+import { supportsConversationSharing } from '../../sharing/share-client';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { History, Pencil, Settings } from 'lucide-react';
 import type * as React from 'react';
@@ -156,6 +157,24 @@ export function getAssistantHeaderProps({
     actions: (
       <>
         <ChatHeaderActions
+          share={
+            stream.conversationId &&
+            stream.threadId &&
+            !activeProjectId &&
+            stream.client &&
+            supportsConversationSharing(stream.client)
+              ? {
+                  client: stream.client,
+                  conversationId: stream.conversationId,
+                  threadId: stream.threadId,
+                  disabled:
+                    !stream.isReady ||
+                    stream.isLoading ||
+                    isHistoryLoading ||
+                    isChangingBranch,
+                }
+              : undefined
+          }
           moreButtonRef={headerMoreButtonRef}
           onMenuCloseAutoFocus={(event) => {
             if (petSettingsOpen || historyOpen) event.preventDefault();

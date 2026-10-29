@@ -795,6 +795,11 @@ function WorkbenchContent({
 
   const panel = (
     <WorkbenchPanel
+      onOpenProject={(projectId, viewKey) => executeClientCommand(
+        'workbench.navigation.open',
+        { target: 'assistant.project', projectId, viewKey },
+        { key: viewKey ?? 'chatkit.project-recovery' },
+      )}
       tabOrder={tabKeys}
       mainChatHost={mainChatInWorkbench ? chatHost.attach : undefined}
       native={native}
