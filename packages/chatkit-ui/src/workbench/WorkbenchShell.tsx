@@ -1,3 +1,4 @@
+import { useWebUpdateLeave } from '../web-update/context';
 import { workbenchAvailable, workbenchDisabledReason } from './shell/availability';
 import { EditorLifecycleContext, useEditorLifecycle } from './editors/context';
 import { useEditorTabClose } from './editors/useEditorTabClose';
@@ -94,6 +95,8 @@ function WorkbenchContent({
 }: WorkbenchShellProps & { stream: WorkbenchRuntime }) {
   const { t } = useChatkitTranslation();
   const editors = useEditorLifecycle();
+  const prepareWebUpdate = React.useCallback(() => editors.prepare(), [editors]);
+  useWebUpdateLeave(prepareWebUpdate);
   useParentMessenger({ onPrepareLeave: () => editors.prepare() });
   const groupRecord = useGroupExecutionRecord(stream.client, stream.group?.id);
   const parentMessenger = useParentMessenger();

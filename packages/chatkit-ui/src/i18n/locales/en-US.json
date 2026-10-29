@@ -1,4 +1,24 @@
 {
+    "webUpdate": {
+        "loadFailed": "The page could not load. Open About to check for updates.",
+        "about": "About",
+        "version": "Version {{version}}",
+        "notice": "The system has been updated. Save your work before refreshing.",
+        "updateNow": "Update now",
+        "confirmSaved": "Save your current work before updating. Refresh the page now?",
+        "leaveFailed": "Could not confirm that your work is saved. Please finish saving and try again.",
+        "incomplete": "Update incomplete. Please try again.",
+        "notChecked": "Updates have not been checked.",
+        "checking": "Checking for updates…",
+        "latest": "You are using the latest version.",
+        "available": "A new version is available.",
+        "checkFailed": "Could not check for updates. Please try again.",
+        "check": "Check for updates",
+        "retry": "Retry",
+        "cancel": "Cancel",
+        "notifications": "Web updates",
+        "dismiss": "Dismiss update notification"
+    },
     "resourceCard": {
         "open": "Open",
         "moreImages": "More images ({{count}})",

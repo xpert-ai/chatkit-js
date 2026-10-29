@@ -1,10 +1,13 @@
-import type { ReactNode, Ref } from 'react';
-import { Minus, MoreHorizontal } from 'lucide-react';
+import { useContext, type ReactNode, type Ref } from 'react';
+import { HostedWebUpdateContext } from '../../../web-update/context';
+import { Info, Minus, MoreHorizontal } from 'lucide-react';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { WorkbenchToggleButton } from '../../../workbench/context';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
@@ -26,11 +29,12 @@ export function ChatHeaderActions({
   onMenuCloseAutoFocus?: (event: Event) => void;
 }) {
   const { t } = useChatkitTranslation();
+  const webUpdate = useContext(HostedWebUpdateContext);
   const actionClass =
     'flex h-8 w-8 cursor-pointer items-center justify-center rounded-chat-item text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150';
   return (
     <>
-      {menu && (
+      {(menu || webUpdate) && (
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -55,6 +59,15 @@ export function ChatHeaderActions({
             onCloseAutoFocus={onMenuCloseAutoFocus}
           >
             {menu}
+            {webUpdate && (
+              <>
+                {menu && <DropdownMenuSeparator />}
+                <DropdownMenuItem onSelect={webUpdate.openAbout}>
+                  <Info className="size-4" />
+                  {t('webUpdate.about')}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
