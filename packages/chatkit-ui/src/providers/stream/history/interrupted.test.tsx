@@ -46,6 +46,71 @@ describe('generic interrupted thread lifecycle', () => {
   setupHistoryTests();
   afterEach(() => vi.useRealTimers());
 
+  it('restores a mixed input form from persisted interruption and resumes once after answering', async () => {
+    const args = {
+      schemaVersion: 1,
+      mode: 'blocking',
+      purpose: 'clarification',
+      title: 'Sales scope',
+      fields: [
+        { id: 'refunds', type: 'boolean', label: 'Refunds', required: true },
+      ],
+    };
+    const inputOperation = {
+      tasks: [
+        {
+          id: 'input-task',
+          name: 'request_user_input',
+          path: ['__pregel_pull', 'tools'],
+          interrupts: [
+            {
+              id: 'input-interrupt',
+              value: {
+                clientToolCalls: [
+                  { id: 'input-call', name: 'request_user_input', args },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    mocks.getThread.mockResolvedValue({
+      status: 'interrupted',
+      operation: inputOperation,
+      metadata: { id: 'conversation-thread-1' },
+    });
+    mocks.getConversation.mockResolvedValue({
+      id: 'conversation-thread-1',
+      status: 'interrupted',
+      operation: inputOperation,
+    });
+    render(provider('thread-1'));
+    await waitFor(() =>
+      expect(stream.pendingRequestUserInput?.id).toBe('input-call'),
+    );
+    expect(mocks.runStream).not.toHaveBeenCalled();
+    mocks.getThread.mockResolvedValue({ status: 'idle', operation: null });
+    mocks.getConversation.mockResolvedValue({ status: 'idle' });
+    await act(async () => {
+      stream.submitRequestUserInput({ refunds: false });
+      stream.submitRequestUserInput({ refunds: true });
+    });
+    expect(mocks.runStream).toHaveBeenCalledOnce();
+    expect(
+      mocks.runStream.mock.calls[0]?.[2]?.input?.command?.resume
+        ?.toolMessages?.[0],
+    ).toMatchObject({
+      tool_call_id: 'input-call',
+      content: {
+        status: 'submitted',
+        purpose: 'clarification',
+        values: { refunds: false },
+      },
+    });
+    expect(stream.pendingRequestUserInput).toBeNull();
+  });
+
   it('reconciles a busy task after SSE ends without marking it interrupted', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));

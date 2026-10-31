@@ -2,11 +2,15 @@ import * as React from 'react';
 import {
   REQUEST_USER_INPUT_RESULT_TYPE,
   REQUEST_USER_INPUT_TOOL_NAME,
+  isRequestUserInputForm,
+  validateUserInputValues,
+  type RequestUserInputForm,
+  type UserInputValues,
   type ChatkitMessage,
   type RequestUserInputAnswer,
   type TMessageContentComponent,
 } from '@xpert-ai/chatkit-types';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, CircleX } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
@@ -16,6 +20,9 @@ type RecordLike = Record<string, unknown>;
 export type RequestUserInputResultCardData = {
   toolCallId: string;
   answers: RequestUserInputAnswer[];
+  status?: 'submitted' | 'cancelled';
+  form?: RequestUserInputForm;
+  values?: UserInputValues;
 };
 
 function isRecord(value: unknown): value is RecordLike {
@@ -111,6 +118,9 @@ function normalizeAnswer(value: unknown): RequestUserInputAnswer | null {
 type ParsedRequestUserInputResult = {
   answers: RequestUserInputAnswer[];
   hasExplicitType: boolean;
+  status?: 'submitted' | 'cancelled';
+  form?: RequestUserInputForm;
+  values?: UserInputValues;
 };
 
 function parseResultOutput(
@@ -131,6 +141,24 @@ function parseResultOutput(
   }
 
   const hasExplicitType = result.type === REQUEST_USER_INPUT_RESULT_TYPE;
+  if (hasExplicitType && result.status === 'cancelled') {
+    return { answers: [], hasExplicitType, status: 'cancelled' };
+  }
+  if (
+    hasExplicitType &&
+    result.schemaVersion === 1 &&
+    isRequestUserInputForm(result.form)
+  ) {
+    const parsed = validateUserInputValues(result.form, result.values);
+    if (!parsed.valid) return null;
+    return {
+      answers: [],
+      hasExplicitType,
+      status: 'submitted',
+      form: result.form,
+      values: parsed.values,
+    };
+  }
   const answers = result.answers.map(normalizeAnswer);
   if (answers.some((answer) => answer === null)) {
     return null;
@@ -154,7 +182,12 @@ export function getRequestUserInputResultCardData(
   }
 
   const result = parseResultOutput(data.output);
-  if (!result || result.answers.length === 0) {
+  if (
+    !result ||
+    (result.answers.length === 0 &&
+      !result.form &&
+      result.status !== 'cancelled')
+  ) {
     return null;
   }
 
@@ -171,6 +204,8 @@ export function getRequestUserInputResultCardData(
   return {
     toolCallId: content.id,
     answers: result.answers,
+    ...(result.status ? { status: result.status } : {}),
+    ...(result.form ? { form: result.form, values: result.values } : {}),
   };
 }
 
@@ -185,22 +220,61 @@ export function RequestUserInputResultCard({
 
   return (
     <section
-      aria-label={t('message.requestUserInputResult.title')}
+      aria-label={t(
+        result.status === 'cancelled'
+          ? 'composer.userInputForm.cancelled'
+          : result.form
+            ? 'composer.userInputForm.answered'
+            : 'message.requestUserInputResult.title',
+      )}
       className={cn(
-        'rounded-lg border border-border bg-muted/25 px-3 py-2.5',
+        'rounded-chat-panel border border-border bg-muted/25 px-3 py-2.5',
         className,
       )}
     >
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <CheckCircle2 className="h-4 w-4 text-primary" />
-        <span>{t('message.requestUserInputResult.title')}</span>
+        {result.status === 'cancelled' ? (
+          <CircleX className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <CheckCircle2 className="h-4 w-4 text-primary" />
+        )}
+        <span>
+          {result.status === 'cancelled'
+            ? t('composer.userInputForm.cancelled')
+            : result.form
+              ? result.form.title
+              : t('message.requestUserInputResult.title')}
+        </span>
       </div>
 
       <div className="space-y-2">
+        {result.form?.fields.map((field) => {
+          const value = result.values?.[field.id];
+          if (value === undefined) return null;
+          const label = (item: string) =>
+            field.options?.find((option) => option.value === item)?.label ??
+            item;
+          const display =
+            typeof value === 'boolean'
+              ? t(value ? 'composer.hitl.true' : 'composer.hitl.false')
+              : Array.isArray(value)
+                ? value.map(label).join(', ')
+                : typeof value === 'object'
+                  ? `${value.start} – ${value.end}`
+                  : typeof value === 'string'
+                    ? label(value)
+                    : String(value);
+          return (
+            <div key={field.id} className="text-sm">
+              <span className="text-muted-foreground">{field.label}: </span>
+              <span className="whitespace-pre-wrap break-words">{display}</span>
+            </div>
+          );
+        })}
         {result.answers.map((answer, index) => (
           <div
             key={`${answer.id}-${index}`}
-            className="rounded-md bg-background/70 px-2.5 py-2"
+            className="rounded-chat-item bg-background/70 px-2.5 py-2"
           >
             <div className="text-xs font-medium leading-5 text-muted-foreground">
               {answer.question}

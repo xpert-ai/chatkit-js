@@ -3,6 +3,7 @@ import {
   REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION,
   REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
   REQUEST_USER_INPUT_TOOL_NAME,
+  isRequestUserInputForm,
   isClientToolRequest,
   isLangGraphInterruptPayload,
   type ClientToolMessageInput,
@@ -33,6 +34,7 @@ export function readTrimmedString(value: unknown): string | null {
 export function normalizeRequestUserInputParams(
   value: unknown,
 ): RequestUserInputToolArgs | null {
+  if (isRequestUserInputForm(value)) return value;
   if (!value || typeof value !== 'object') return null;
 
   const questions = (value as { questions?: unknown }).questions;
@@ -105,6 +107,7 @@ export function normalizeRequestUserInputToolCall(
 export function getRequestUserInputResultPurpose(
   params: RequestUserInputToolArgs,
 ): RequestUserInputResultPurpose {
+  if (isRequestUserInputForm(params)) return 'clarification';
   const questions = params.questions;
 
   if (questions.length === 1 && questions[0]?.id === 'implement_plan') {

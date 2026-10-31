@@ -3,7 +3,7 @@ import type {
   ClientToolResponse,
   HITLResponse,
 } from '@xpert-ai/chatkit-types';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { createConversationThreadSearchWhere } from '../../../lib/conversation-runtime-capabilities';
 import { buildHITLResumeRunInput, useHITLInterrupts } from '../../../lib/hitl';
 import type { useStreamHost } from '../host/useStreamHost';
@@ -16,6 +16,8 @@ import {
   collectClientToolRequests,
   normalizeToolMessagesResponse,
   resolveClientToolCallResponse,
+  normalizeRequestUserInputToolCall,
+  getToolCallIdentity,
 } from './client-tools';
 import type { useStreamUserInput } from './useStreamUserInput';
 
@@ -36,7 +38,10 @@ type StreamInterruptsOptions = Pick<
     | 'setError'
   > &
   Pick<ReturnType<typeof useStreamHost>, 'isParentAvailable' | 'sendCommand'> &
-  Pick<ReturnType<typeof useStreamUserInput>, 'waitForRequestUserInput'> & {
+  Pick<
+    ReturnType<typeof useStreamUserInput>,
+    'waitForRequestUserInput' | 'hasPendingUserInput'
+  > & {
     assistantId: string;
     projectId: string | undefined;
   };
@@ -57,7 +62,9 @@ export function useStreamInterrupts({
   isParentAvailable,
   sendCommand,
   waitForRequestUserInput,
+  hasPendingUserInput,
 }: StreamInterruptsOptions) {
+  const restoredInputRef = useRef<string | null>(null);
   const submitHITLResponse = useCallback(
     async (response: HITLResponse, executionId?: string) => {
       let conversationId = conversationIdRef.current?.trim() || null;
@@ -115,7 +122,7 @@ export function useStreamInterrupts({
     pendingHITLRequest,
     clearPendingHITLRequest,
     submitHITLDecision,
-    hydratePendingHITLRequestFromOperation,
+    hydratePendingHITLRequestFromOperation: hydrateHITL,
     handleHITLInterrupt,
   } = useHITLInterrupts({
     submitResponse: submitHITLResponse,
@@ -124,7 +131,7 @@ export function useStreamInterrupts({
   });
 
   const handleInterrupt = useCallback(
-    async (data: unknown) => {
+    async (data: unknown, restoredExecutionId?: string) => {
       const requests = collectClientToolRequests(data);
 
       const toolMessages: ClientToolMessageInput[] = [];
@@ -165,7 +172,8 @@ export function useStreamInterrupts({
                 toolMessages: toolMessages,
               } as ClientToolResponse,
             },
-            executionId: lastExecutionIdRef.current ?? undefined,
+            executionId:
+              restoredExecutionId ?? lastExecutionIdRef.current ?? undefined,
           },
           lastStreamOptionsRef.current,
         );
@@ -180,6 +188,31 @@ export function useStreamInterrupts({
       setError,
       waitForRequestUserInput,
     ],
+  );
+  // Restore only built-in input forms. Never execute unrelated client tools while loading history.
+  const hydratePendingHITLRequestFromOperation = useCallback(
+    (operation: unknown, executionId?: string | null) => {
+      const hitl = hydrateHITL(operation, executionId);
+      const calls = collectClientToolRequests(operation).flatMap(
+        (request) => request.clientToolCalls ?? [],
+      );
+      if (
+        !calls.length ||
+        calls.some((call) => !normalizeRequestUserInputToolCall(call))
+      ) {
+        restoredInputRef.current = null;
+        return hitl;
+      }
+      const identity = `${executionId ?? ''}:${calls.map(getToolCallIdentity).join('|')}`;
+      if (!hasPendingUserInput() && restoredInputRef.current !== identity) {
+        restoredInputRef.current = identity;
+        void handleInterrupt(operation, executionId ?? undefined).catch(
+          setError,
+        );
+      }
+      return true;
+    },
+    [hydrateHITL, hasPendingUserInput, handleInterrupt, setError],
   );
   return {
     clearPendingHITLRequest,
