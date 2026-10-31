@@ -8,6 +8,11 @@ import {
 } from './review-display.js';
 export * from './review-display.js';
 import { type ToolCall } from '@langchain/core/messages/tool';
+import type {
+  RequestUserInputForm,
+  UserInputValues,
+} from './user-input-form.js';
+export * from './user-input-form.js';
 
 export const REQUEST_USER_INPUT_TOOL_NAME = 'request_user_input';
 export type RequestUserInputToolName = typeof REQUEST_USER_INPUT_TOOL_NAME;
@@ -18,6 +23,7 @@ export const REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION =
 export const REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION =
   'implementation_confirmation';
 export type RequestUserInputResultPurpose =
+  | 'clarification'
   | typeof REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION
   | typeof REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION;
 
@@ -37,7 +43,9 @@ export interface RequestUserInputParams {
   questions: RequestUserInputQuestion[];
 }
 
-export type RequestUserInputToolArgs = RequestUserInputParams;
+export type RequestUserInputToolArgs =
+  | RequestUserInputParams
+  | RequestUserInputForm;
 
 export type RequestUserInputAnswerType = 'option' | 'other';
 
@@ -54,6 +62,11 @@ export interface RequestUserInputResult {
   type: RequestUserInputResultType;
   purpose: RequestUserInputResultPurpose;
   answers: RequestUserInputAnswer[];
+  status?: 'submitted' | 'cancelled';
+  schemaVersion?: 1;
+  requestId?: string;
+  values?: UserInputValues;
+  form?: RequestUserInputForm;
 }
 
 export type RequestUserInputToolCall = ToolCall & {
