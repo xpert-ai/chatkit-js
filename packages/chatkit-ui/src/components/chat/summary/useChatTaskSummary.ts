@@ -91,7 +91,9 @@ export function useChatTaskSummary({
             id: `user-input:${stream.pendingRequestUserInput.id}`,
             kind: 'user_input' as const,
             title:
-              stream.pendingRequestUserInput.params.questions[0]?.header ||
+              ('title' in stream.pendingRequestUserInput.params
+                ? stream.pendingRequestUserInput.params.title
+                : stream.pendingRequestUserInput.params.questions[0]?.header) ||
               t('taskSummary.pending.userInput'),
             createdAt: new Date(
               stream.pendingRequestUserInput.createdAt,

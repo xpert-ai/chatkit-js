@@ -40,7 +40,7 @@ vi.mock('../../providers/Theme', () => ({
 import { RequestUserInputPanel } from './request-user-input-panel';
 
 function createRequest(
-  questions: PendingRequestUserInput['params']['questions'],
+  questions: NonNullable<PendingRequestUserInput['params']['questions']>,
 ): PendingRequestUserInput {
   return {
     id: 'call-1',
@@ -156,7 +156,9 @@ describe('RequestUserInputPanel', () => {
     const continueButton = screen.getByRole('button', { name: /continue/i });
     expect(screen.getByText('1 of 2')).toBeInTheDocument();
     expect(screen.getByText('Which scope should I use?')).toBeInTheDocument();
-    expect(screen.queryByText('When should this ship?')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('When should this ship?'),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^2\. Broad$/i }));
 
@@ -164,12 +166,9 @@ describe('RequestUserInputPanel', () => {
     expect(screen.getByText('When should this ship?')).toBeInTheDocument();
     expect(continueButton).toBeDisabled();
 
-    fireEvent.change(
-      screen.getByPlaceholderText('Type a custom answer'),
-      {
-        target: { value: 'After design review' },
-      },
-    );
+    fireEvent.change(screen.getByPlaceholderText('Type a custom answer'), {
+      target: { value: 'After design review' },
+    });
     expect(continueButton).not.toBeDisabled();
 
     fireEvent.click(continueButton);

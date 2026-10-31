@@ -66,10 +66,12 @@ export function ChatPendingActions({
       >
         <RequestUserInputPanel
           request={stream.pendingRequestUserInput}
-          onSubmit={(answers) => {
-            if (canRespond) stream.submitRequestUserInput(answers);
+          onSubmit={(answers, status) => {
+            if (canRespond) stream.submitRequestUserInput(answers, status);
           }}
-          onDismiss={stream.stop}
+          onDismiss={() => {
+            if (canRespond) stream.submitRequestUserInput([], 'cancelled');
+          }}
           attachToComposer
         />
         <ToolAfterPanel disabled={!canRespond} />

@@ -711,7 +711,7 @@
             "other": "其他",
             "otherPlaceholder": "输入自定义回答",
             "continue": "继续",
-            "dismiss": "关闭",
+            "dismiss": "取消填写",
             "previousQuestion": "上一个问题",
             "nextQuestion": "下一个问题",
             "questionProgress": "{{current}} / {{total}}",
@@ -811,6 +811,27 @@
             "error": "无法加载对话",
             "untitled": "未命名对话",
             "remove": "移除对话引用：{{title}}"
+        },
+        "userInputForm": {
+            "chooseDate": "选择日期",
+            "clear": "清除选择",
+            "waiting": "需要补充信息才能继续",
+            "choose": "请选择",
+            "start": "开始日期",
+            "end": "结束日期",
+            "cancel": "取消填写",
+            "submit": "提交并继续",
+            "cancelled": "已取消填写",
+            "answered": "已补充信息",
+            "errors": {
+                "required": "请填写此项",
+                "type": "请输入有效值",
+                "range": "数值或日期范围不正确",
+                "choice": "请选择有效选项",
+                "length": "长度或选择数量不符合要求",
+                "date": "请输入有效日期",
+                "unknown": "包含未知字段"
+            }
         }
     },
     "settings": {
