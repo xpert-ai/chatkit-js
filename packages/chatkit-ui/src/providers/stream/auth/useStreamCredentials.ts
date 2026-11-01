@@ -39,7 +39,6 @@ export function useStreamCredentials({
   sendCommand,
   apiUrl,
   locale,
-  lastEventIdRef,
   clientRef,
 }: StreamCredentialsOptions) {
   const [runtimeClientSecret, setRuntimeClientSecret] = useState(apiKey);
@@ -175,7 +174,15 @@ export function useStreamCredentials({
           () => null,
         ),
       }),
-    [apiUrl, fetchWithClientSecretRefresh, locale],
+    // Scope changes must replace client-keyed caches; renewal alone must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      apiUrl,
+      fetchWithClientSecretRefresh,
+      locale,
+      runtimeOrganizationId,
+      apiKey,
+    ],
   );
 
   const readClient = useMemo(
@@ -198,7 +205,15 @@ export function useStreamCredentials({
           () => null,
         ),
       }),
-    [apiUrl, fetchWithClientSecretRefresh, locale],
+    // Scope changes must replace client-keyed caches; renewal alone must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      apiUrl,
+      fetchWithClientSecretRefresh,
+      locale,
+      runtimeOrganizationId,
+      apiKey,
+    ],
   );
 
   clientRef.current = client;
