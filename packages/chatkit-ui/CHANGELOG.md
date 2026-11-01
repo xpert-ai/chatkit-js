@@ -1,5 +1,22 @@
 # @xpert-ai/chatkit-ui
 
+## 0.21.0
+
+### Minor Changes
+
+- f54d8f4: Add versioned mixed-field user input forms, typed answer validation, explicit cancellation and pending form recovery. Reserve non-blocking delivery contracts while rejecting that mode until the runtime supports human-message delivery.
+
+### Patch Changes
+
+- b7e31cf: Preserve an in-flight first Project message when initial host credentials supply the organization. Continue replacing the session on later organization changes or sign-out.
+
+  Include the current scope revision on remote View host events so saved tool receipts can refresh the selected dashboard without weakening project isolation.
+
+- fdd21d2: Reveal the chat before scrolling to and highlighting a message located from a maximized Workbench view. On narrow screens, close the covering Workbench panel. Keep the current layout when the target message is unavailable.
+- Updated dependencies [f54d8f4]
+  - @xpert-ai/chatkit-types@0.20.0
+  - @xpert-ai/chatkit-web-shared@0.18.2
+
 ## 0.20.0
 
 ### Minor Changes
