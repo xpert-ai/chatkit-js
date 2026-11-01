@@ -3,18 +3,28 @@ import type {
   SharingClient,
   ConversationShareAudience,
   ConversationShareInfo,
-  ConversationSharePreview,
+  ConversationSharePreview as ConversationSharePreviewData,
 } from './share-client';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import { useTheme } from '../../providers/Theme';
-import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
 import { Button } from '../ui/button';
-import { ReadonlyMessageList } from './ReadonlyMessageList';
+import { ConversationSharePreview } from './ConversationSharePreview';
+import { Checkbox } from '../ui/checkbox';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
+  DialogBody,
+  DialogFooter,
   DialogTitle,
 } from '../ui/dialog';
 
@@ -57,8 +67,8 @@ export function ConversationShareDialog({
   onOpenChange: (value: boolean) => void;
 }) {
   const { t } = useChatkitTranslation();
-  const { theme } = useTheme();
-  const [preview, setPreview] = React.useState<ConversationSharePreview>();
+  const fieldId = React.useId();
+  const [preview, setPreview] = React.useState<ConversationSharePreviewData>();
   const [shares, setShares] = React.useState<ConversationShareInfo[]>([]);
   const existing = shares.find((share) => share.url);
   const [editing, setEditing] = React.useState(false);
@@ -152,8 +162,6 @@ export function ConversationShareDialog({
       setBusy(false);
     }
   };
-  const control =
-    'h-[calc(var(--chat-density-scale,1)*2.5rem)] px-[calc(var(--chat-density-scale,1)*0.75rem)] rounded-chat-item';
   return (
     <Dialog
       open={open}
@@ -161,155 +169,169 @@ export function ConversationShareDialog({
         if (!busy) onOpenChange(value);
       }}
     >
-      <DialogContent
-        style={getSurfaceThemeStyle(theme)}
-        className="w-[44rem] rounded-chat-panel gap-[calc(var(--chat-density-scale,1)*1rem)] p-[calc(var(--chat-density-scale,1)*1.5rem)]"
-      >
+      <DialogContent layout="sectioned" className="w-[36rem]">
         <DialogHeader>
           <DialogTitle>{t('sharing.title')}</DialogTitle>
           <DialogDescription>{t('sharing.notice')}</DialogDescription>
         </DialogHeader>
-        {loading && <p role="status">{t('sharing.loading')}</p>}
-        {preview && (!shares.length || editing) && (
-          <>
-            <section
-              aria-label={t('sharing.preview')}
-              className="max-h-[35vh] overflow-y-auto rounded-chat-panel border border-border p-[calc(var(--chat-density-scale,1)*1rem)] space-y-[calc(var(--chat-density-scale,1)*1rem)]"
-            >
-              <h3 className="font-semibold">{preview.snapshot.title}</h3>
-              <ReadonlyMessageList messages={preview.snapshot.messages} />
-            </section>
-            <label className="grid gap-1 text-sm">
-              {t('sharing.audience')}
-              <select
-                disabled={busy}
-                value={audience}
-                onChange={(event) => {
-                  setAudience(
-                    event.target.value === 'public' ? 'public' : 'organization',
-                  );
-                  setAcknowledge(false);
-                }}
-                className={`${control} border border-border bg-background text-foreground focus-visible:outline-ring`}
-              >
-                <option value="organization">
-                  {t('sharing.organization')}
-                </option>
-                {preview.publicSharingEnabled && (
-                  <option value="public">{t('sharing.public')}</option>
-                )}
-              </select>
-            </label>
-            <label className="grid gap-1 text-sm">
-              {t('sharing.expires')}
-              <select
-                disabled={busy}
-                value={days}
-                onChange={(event) =>
-                  setDays(
-                    event.target.value === '1'
-                      ? 1
-                      : event.target.value === '30'
-                        ? 30
-                        : 7,
-                  )
-                }
-                className={`${control} border border-border bg-background text-foreground focus-visible:outline-ring`}
-              >
-                {[1, 7, 30].map((value) => (
-                  <option value={value} key={value}>
-                    {t('sharing.days', { count: value })}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {audience === 'public' && (
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={acknowledge}
-                  disabled={busy}
-                  onChange={(event) => setAcknowledge(event.target.checked)}
-                />
-                {t('sharing.publicConsent')}
-              </label>
-            )}
-          </>
-        )}
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        {existing?.url && (
-          <div className="flex gap-2">
-            <input
-              aria-label={t('sharing.link')}
-              readOnly
-              value={existing.url}
-              onFocus={(event) => event.target.select()}
-              className={`${control} min-w-0 flex-1 border border-border bg-background text-foreground text-sm`}
-            />
-            <Button
-              className={control}
-              disabled={busy || loading}
-              onClick={() => {
-                if (existing.url) void copy(existing.url);
-              }}
-            >
-              {t('sharing.copy')}
-            </Button>
-          </div>
-        )}
-        {shares.length > 0 && !editing && (
-          <p className="text-sm text-muted-foreground">
-            {t(
-              existing?.url ? 'sharing.existingNotice' : 'sharing.unavailable',
-            )}
-          </p>
-        )}
-        {copied && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t('sharing.copied')}
-          </p>
-        )}
-        {shares.map((share) => (
-          <div
-            key={share.id}
-            className="flex items-center justify-between gap-2 text-sm"
-          >
-            <span>
-              {t(`sharing.${share.audience}`)} ·{' '}
-              {new Date(share.expiresAt).toLocaleString()}
-            </span>
-            <Button
-              variant="destructive"
-              className={control}
-              disabled={busy}
-              onClick={() => void revoke(share.id)}
-            >
-              {t('sharing.revoke')}
-            </Button>
-          </div>
-        ))}
-        <p className="text-xs text-muted-foreground">
-          {t('sharing.revocationNotice')}
-        </p>
-        {preview?.managementUrl &&
-          /^https?:\/\//i.test(preview.managementUrl) && (
-            <a
-              href={preview.managementUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary underline underline-offset-4"
-            >
-              {t('sharing.manageLinks')}
-            </a>
+        <DialogBody className="space-y-4">
+          {loading && <p role="status">{t('sharing.loading')}</p>}
+          {preview && (!shares.length || editing) && (
+            <>
+              <ConversationSharePreview snapshot={preview.snapshot} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid min-w-0 gap-2">
+                  <Label htmlFor={`${fieldId}-audience`}>
+                    {t('sharing.audience')}
+                  </Label>
+                  <Select
+                    disabled={busy}
+                    value={audience}
+                    onValueChange={(value) => {
+                      if (value !== 'organization' && value !== 'public')
+                        return;
+                      setAudience(value);
+                      setAcknowledge(false);
+                    }}
+                  >
+                    <SelectTrigger
+                      id={`${fieldId}-audience`}
+                      className="w-full"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="organization">
+                        {t('sharing.organization')}
+                      </SelectItem>
+                      {preview.publicSharingEnabled && (
+                        <SelectItem value="public">
+                          {t('sharing.public')}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid min-w-0 gap-2">
+                  <Label htmlFor={`${fieldId}-expires`}>
+                    {t('sharing.expires')}
+                  </Label>
+                  <Select
+                    disabled={busy}
+                    value={String(days)}
+                    onValueChange={(value) => {
+                      if (value === '1' || value === '7' || value === '30')
+                        setDays(value === '1' ? 1 : value === '30' ? 30 : 7);
+                    }}
+                  >
+                    <SelectTrigger id={`${fieldId}-expires`} className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      {[1, 7, 30].map((value) => (
+                        <SelectItem key={value} value={String(value)}>
+                          {t('sharing.days', { count: value })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {audience === 'public' && (
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id={`${fieldId}-consent`}
+                    checked={acknowledge}
+                    disabled={busy}
+                    onCheckedChange={(checked) =>
+                      setAcknowledge(checked === true)
+                    }
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor={`${fieldId}-consent`}
+                    className="font-normal leading-relaxed"
+                  >
+                    {t('sharing.publicConsent')}
+                  </Label>
+                </div>
+              )}
+            </>
           )}
-        <div className="flex justify-end gap-2">
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          {existing?.url && (
+            <div className="flex gap-2">
+              <Input
+                aria-label={t('sharing.link')}
+                readOnly
+                value={existing.url}
+                onFocus={(event) => event.target.select()}
+                className="min-w-0 flex-1"
+              />
+              <Button
+                disabled={busy || loading}
+                onClick={() => {
+                  if (existing.url) void copy(existing.url);
+                }}
+              >
+                {t('sharing.copy')}
+              </Button>
+            </div>
+          )}
+          {shares.length > 0 && !editing && (
+            <p className="text-sm text-muted-foreground">
+              {t(
+                existing?.url
+                  ? 'sharing.existingNotice'
+                  : 'sharing.unavailable',
+              )}
+            </p>
+          )}
+          {copied && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t('sharing.copied')}
+            </p>
+          )}
+          {shares.map((share) => (
+            <div
+              key={share.id}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
+              <span>
+                {t(`sharing.${share.audience}`)} ·{' '}
+                {new Date(share.expiresAt).toLocaleString()}
+              </span>
+              <Button
+                variant="destructive"
+                disabled={busy}
+                onClick={() => void revoke(share.id)}
+              >
+                {t('sharing.revoke')}
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            {t('sharing.revocationNotice')}
+          </p>
+          {preview?.managementUrl &&
+            /^https?:\/\//i.test(preview.managementUrl) && (
+              <a
+                href={preview.managementUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary underline underline-offset-4"
+              >
+                {t('sharing.manageLinks')}
+              </a>
+            )}
+        </DialogBody>
+        <DialogFooter>
           <Button
             variant="outline"
-            className={control}
             disabled={busy || loading}
             onClick={refresh}
           >
@@ -317,7 +339,6 @@ export function ConversationShareDialog({
           </Button>
           <Button
             variant={shares.length ? 'outline' : 'default'}
-            className={control}
             disabled={
               busy ||
               loading ||
@@ -341,7 +362,7 @@ export function ConversationShareDialog({
                   : 'sharing.create',
             )}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
