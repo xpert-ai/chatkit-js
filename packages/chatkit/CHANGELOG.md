@@ -1,5 +1,17 @@
 # @xpert-ai/chatkit-types
 
+## 0.20.1
+
+### Patch Changes
+
+- 338edd8: Make the chat header transparent with standalone new-chat and share actions, and keep the background within the responsive action toolbar.
+
+  Hide the inline avatar, title, and status block by default; opt in with `header.identity.enabled`.
+
+  Use consistent icon sizes across chat and Workbench toolbars, tighten View menu spacing and alignment, and explain why sharing is unavailable for project conversations.
+
+- b5b77f9: Reuse authorized conversation metadata and the initial thread control snapshot across history, title, project and resource consumers. Reveal history before background run recovery completes, avoid rereading unchanged completed-run messages, and load auxiliary summaries and resource commands only when needed with scoped short-lived caches. Include lightweight conversation context in `thread.load.end`, with compatibility for older servers and hosts.
+
 ## 0.20.0
 
 ### Minor Changes
