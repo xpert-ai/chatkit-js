@@ -18,6 +18,9 @@ function fixture() {
     historyReady: true,
     loadMore: vi.fn(async () => {}),
     rootRef: { current: root },
+    revealMessage: vi.fn(() => {
+      root.hidden = false;
+    }),
     unavailableMessage: 'Unavailable',
   };
 }
@@ -29,7 +32,10 @@ const target = {
 describe('message focus', () => {
   it('loads older history, scrolls and highlights the exact message', async () => {
     const input = fixture();
-    const scroll = vi.fn();
+    input.rootRef.current.hidden = true;
+    const scroll = vi.fn(() =>
+      expect(input.rootRef.current.hidden).toBe(false),
+    );
     input.loadMore.mockImplementation(async () => {
       input.history = { ...input.history, loadedCount: 20, hasMore: false };
       const anchor = document.createElement('div');
@@ -48,6 +54,7 @@ describe('message focus', () => {
       expect(response).toEqual({ success: true, status: 'opened' }),
     );
     expect(input.loadMore).toHaveBeenCalledTimes(1);
+    expect(input.revealMessage).toHaveBeenCalledTimes(1);
     expect(scroll).toHaveBeenCalledTimes(1);
     expect(
       input.rootRef.current.querySelector('[data-message-focused]'),
@@ -76,6 +83,7 @@ describe('message focus', () => {
         message: 'Unavailable',
       }),
     );
+    expect(input.revealMessage).not.toHaveBeenCalled();
   });
   it('cancels a pending location when the user opens a different branch', async () => {
     const input = fixture();

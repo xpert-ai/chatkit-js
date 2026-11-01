@@ -173,6 +173,7 @@ export function RemoteViewFrame({
           channel: REMOTE_COMPONENT_CHANNEL,
           protocolVersion: REMOTE_COMPONENT_PROTOCOL_VERSION,
           instanceId,
+          scopeRevision: contextRef.current.revision,
           type,
           ...body,
         },

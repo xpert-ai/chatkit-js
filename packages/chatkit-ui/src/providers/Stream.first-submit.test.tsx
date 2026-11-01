@@ -181,6 +181,34 @@ describe('first submission setup', () => {
     });
   });
 
+  it('keeps the initial credential bootstrap mounted but isolates later organization changes', () => {
+    let mounts = 0;
+    function MountProbe() {
+      React.useEffect(() => {
+        mounts += 1;
+      }, []);
+      return <StreamProbe />;
+    }
+    const view = (secret: string, organizationId?: string) => (
+      <StreamProvider
+        apiKey={secret}
+        organizationId={organizationId}
+        xpertId="xpert-1"
+        projectId="project-1"
+      >
+        <MountProbe />
+      </StreamProvider>
+    );
+    const { rerender } = render(view(''));
+    expect(mounts).toBe(1);
+    rerender(view('cs-ready', 'org-1'));
+    expect(mounts).toBe(1);
+    rerender(view('cs-ready', 'org-2'));
+    expect(mounts).toBe(2);
+    rerender(view('', 'org-2'));
+    expect(mounts).toBe(3);
+  });
+
   it.each([
     {
       label: 'selected',

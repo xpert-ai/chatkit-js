@@ -11,7 +11,10 @@ import {
 import type {
   RequestUserInputAnswer,
   RequestUserInputQuestion,
+  UserInputValues,
 } from '@xpert-ai/chatkit-types';
+import { isRequestUserInputForm } from '@xpert-ai/chatkit-types';
+import { UserInputFormPanel } from './user-input-form-panel';
 
 import type { PendingRequestUserInput } from '../../providers/Stream';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
@@ -35,7 +38,10 @@ const emptyQuestions: RequestUserInputQuestion[] = [];
 
 export type RequestUserInputPanelProps = {
   request: PendingRequestUserInput | null;
-  onSubmit: (answers: RequestUserInputAnswer[]) => void;
+  onSubmit: (
+    answers: RequestUserInputAnswer[] | UserInputValues,
+    status?: 'submitted' | 'cancelled',
+  ) => void;
   onDismiss?: () => void;
   attachToComposer?: boolean;
   className?: string;
@@ -179,6 +185,33 @@ export function RequestUserInputPanel({
   request,
   onSubmit,
   onDismiss,
+  ...props
+}: RequestUserInputPanelProps) {
+  if (request && isRequestUserInputForm(request.params)) {
+    return (
+      <UserInputFormPanel
+        key={request.id}
+        form={request.params}
+        onSubmit={onSubmit}
+        onCancel={onDismiss}
+        {...props}
+      />
+    );
+  }
+  return (
+    <LegacyRequestUserInputPanel
+      request={request}
+      onSubmit={onSubmit}
+      onDismiss={onDismiss}
+      {...props}
+    />
+  );
+}
+
+function LegacyRequestUserInputPanel({
+  request,
+  onSubmit,
+  onDismiss,
   attachToComposer = true,
   className,
 }: RequestUserInputPanelProps) {
@@ -263,9 +296,7 @@ export function RequestUserInputPanel({
   );
   const canSubmit = answers.length === questions.length;
   const currentQuestion = questions[currentQuestionIndex] ?? null;
-  const currentDraft = currentQuestion
-    ? drafts[currentQuestion.id]
-    : undefined;
+  const currentDraft = currentQuestion ? drafts[currentQuestion.id] : undefined;
   const currentAnswer = currentQuestion
     ? getAnswerForQuestion(currentQuestion, currentDraft)
     : null;
@@ -274,7 +305,9 @@ export function RequestUserInputPanel({
   const buildAnswersFromDrafts = React.useCallback(
     (nextDrafts: Record<string, AnswerDraft>) =>
       questions
-        .map((question) => getAnswerForQuestion(question, nextDrafts[question.id]))
+        .map((question) =>
+          getAnswerForQuestion(question, nextDrafts[question.id]),
+        )
         .filter((answer): answer is RequestUserInputAnswer => Boolean(answer)),
     [questions],
   );
@@ -345,7 +378,10 @@ export function RequestUserInputPanel({
     (direction: 1 | -1) => {
       if (!currentQuestion) return;
       const choiceCount = currentQuestion.options.length + 1;
-      const currentIndex = getSelectedChoiceIndex(currentQuestion, currentDraft);
+      const currentIndex = getSelectedChoiceIndex(
+        currentQuestion,
+        currentDraft,
+      );
       const nextIndex =
         currentIndex === -1
           ? direction === 1
@@ -597,8 +633,8 @@ export function RequestUserInputPanel({
                 </span>
                 {parsedLabel.recommended ? (
                   <span className="ml-1.5 inline-flex items-center gap-1 text-sm font-semibold text-primary">
-                    <Check className="h-3.5 w-3.5" />
-                    ({t('composer.requestUserInput.recommended')})
+                    <Check className="h-3.5 w-3.5" />(
+                    {t('composer.requestUserInput.recommended')})
                   </span>
                 ) : null}
                 {option.description ? (
@@ -675,10 +711,7 @@ export function RequestUserInputPanel({
       </div>
 
       <div
-        className={cn(
-          'flex items-center justify-end',
-          rounded.density.footer,
-        )}
+        className={cn('flex items-center justify-end', rounded.density.footer)}
       >
         {onDismiss ? (
           <button

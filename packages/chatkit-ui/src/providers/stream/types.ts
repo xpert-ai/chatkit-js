@@ -7,6 +7,7 @@ import type {
   FollowUpBehavior,
   HITLDecision,
   RequestUserInputAnswer,
+  UserInputValues,
   RequestUserInputToolArgs,
   TChatRequest,
   TChatTaskSummaryContribution,
@@ -194,7 +195,10 @@ export type StreamContextType = {
   canSendPendingFollowUpNow: (id: string) => boolean;
   sendPendingFollowUpNow: (id: string) => Promise<void>;
   promotePendingFollowUpToSteer: (id: string) => Promise<void>;
-  submitRequestUserInput: (answers: RequestUserInputAnswer[]) => void;
+  submitRequestUserInput: (
+    answers: RequestUserInputAnswer[] | UserInputValues,
+    status?: 'submitted' | 'cancelled',
+  ) => void;
   submitHITLDecision: (decisions: HITLDecision[]) => void;
   stopRuntimeActivityItem: (
     providerId: RuntimeActivityProviderId,

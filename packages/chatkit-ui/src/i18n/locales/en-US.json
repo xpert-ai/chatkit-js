@@ -711,7 +711,7 @@
             "other": "Other",
             "otherPlaceholder": "Type a custom answer",
             "continue": "Continue",
-            "dismiss": "Dismiss",
+            "dismiss": "Cancel input",
             "previousQuestion": "Previous question",
             "nextQuestion": "Next question",
             "questionProgress": "{{current}} of {{total}}",
@@ -811,6 +811,27 @@
             "error": "Could not load conversations",
             "untitled": "Untitled conversation",
             "remove": "Remove conversation reference: {{title}}"
+        },
+        "userInputForm": {
+            "chooseDate": "Choose date",
+            "clear": "Clear selection",
+            "waiting": "Input is needed to continue",
+            "choose": "Choose an option",
+            "start": "Start date",
+            "end": "End date",
+            "cancel": "Cancel input",
+            "submit": "Submit and continue",
+            "cancelled": "Input cancelled",
+            "answered": "Information provided",
+            "errors": {
+                "required": "This field is required",
+                "type": "Enter a valid value",
+                "range": "Check the value or date range",
+                "choice": "Choose a valid option",
+                "length": "Check the length or number of selections",
+                "date": "Enter a valid date",
+                "unknown": "Unknown field"
+            }
         }
     },
     "settings": {
