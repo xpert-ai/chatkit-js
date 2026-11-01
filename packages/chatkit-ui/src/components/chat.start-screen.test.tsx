@@ -270,10 +270,13 @@ const defaultGetBoundingClientRect =
   HTMLElement.prototype.getBoundingClientRect;
 vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
   function (this: HTMLElement) {
-    if (this.hasAttribute('data-chatkit-root')) {
+    if (
+      this.hasAttribute('data-chatkit-root') ||
+      this.dataset.slot === 'chatkit-chat-header'
+    ) {
       return domRect(taskSummaryGeometry.viewportRight);
     }
-    if (this.dataset.slot === 'chatkit-chat-header') {
+    if (this.dataset.slot === 'chatkit-chat-column-anchor') {
       return domRect(taskSummaryGeometry.chatColumnRight);
     }
     return defaultGetBoundingClientRect.call(this);
@@ -512,7 +515,7 @@ describe('Chat start screen prompts', () => {
     expect(screen.queryByText('Analyze notice')).not.toBeInTheDocument();
   });
 
-  it('limits the chat column width when layout maxWidth is configured', async () => {
+  it('limits the transcript and measurement column while keeping the header full width', async () => {
     const { container } = renderChat({
       ...baseOptions,
       layout: {
@@ -521,7 +524,7 @@ describe('Chat start screen prompts', () => {
     });
 
     const columnSlots = [
-      'chatkit-chat-header',
+      'chatkit-chat-column-anchor',
       'chatkit-chat-content',
       'chatkit-chat-composer',
     ];
@@ -541,9 +544,15 @@ describe('Chat start screen prompts', () => {
     );
     expect(headerContainer).toHaveClass('sticky', 'w-full', 'shrink-0');
     expect(headerContainer?.style.maxWidth).toBe('');
-    expect(headerContainer).toContainElement(
-      container.querySelector('[data-slot="chatkit-chat-header"]'),
+    const header = container.querySelector<HTMLElement>(
+      '[data-slot="chatkit-chat-header"]',
     );
+    expect(headerContainer).toContainElement(header);
+    expect(header).toHaveClass('w-full');
+    expect(header?.style.maxWidth).toBe('');
+    expect(
+      container.querySelector('[data-slot="chatkit-chat-column-anchor"]'),
+    ).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('keeps horizontal overflow inside responsive composer panels', async () => {
@@ -557,7 +566,7 @@ describe('Chat start screen prompts', () => {
     });
   });
 
-  it('positions the scroll-to-bottom button above the composer input shell', async () => {
+  it('anchors the scroll-to-bottom button above the collapsing composer content', async () => {
     mocks.stream.messages = [
       { id: 'message-1', type: 'human', content: 'Earlier message' },
     ];
@@ -585,10 +594,19 @@ describe('Chat start screen prompts', () => {
     const inputShell = container.querySelector<HTMLElement>(
       '[data-slot="composer-input-shell"]',
     );
+    const content = inputShell?.querySelector(
+      '[data-slot="composer-content"]',
+    );
+    const editor = inputShell?.querySelector(
+      '[data-slot="composer-editor-surface"]',
+    );
 
     expect(affordance).toHaveAttribute('data-slot', 'scroll-to-bottom');
     expect(composer).toContainElement(affordance);
-    expect(inputShell).not.toContainElement(affordance);
+    expect(inputShell).toHaveAttribute('data-layout', 'compact');
+    expect(content).toHaveClass('relative');
+    expect(affordance?.parentElement).toBe(content);
+    expect(editor).not.toContainElement(affordance);
     expect(affordance).toHaveClass(
       'absolute',
       'top-0',
