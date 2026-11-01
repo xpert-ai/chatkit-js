@@ -42,7 +42,10 @@ export function ChatView({
         style={view.transcript.chatColumnStyle}
       >
         {view.composerBefore}
-        <ChatComposerForm {...view.composer} />
+        <ChatComposerForm
+          {...view.composer}
+          compact={!compact && view.composer.compact}
+        />
         {view.composerAfter}
       </ChatComposerDock>
       {view.footer}

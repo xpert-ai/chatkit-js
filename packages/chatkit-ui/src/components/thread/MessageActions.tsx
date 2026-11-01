@@ -10,6 +10,7 @@ import {
 import type { ChatMessageBranching } from '@xpert-ai/xpert-sdk';
 import type { ChatkitMessage, ChatSkillUsage } from '@xpert-ai/chatkit-types';
 import { MessageSkills } from './MessageSkills';
+import { messageActionButtonClassName } from './message-action-styles';
 import { MessageTimestamp } from './MessageTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
@@ -37,7 +38,7 @@ function MessageActionButton({
       aria-label={label}
       disabled={disabled}
       className={cn(
-        'rounded-chat-item p-[calc(0.375rem*var(--chat-density-scale,1))] [&>svg]:size-[calc(0.875rem*var(--chat-density-scale,1))] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+        messageActionButtonClassName,
         className,
       )}
     />
@@ -148,7 +149,7 @@ export function MessageActions({
           onTooltipOpen={onActionTooltipOpen}
           className={cn(copied && 'text-green-500')}
         >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
+          {copied ? <Check /> : <Copy />}
         </MessageActionButton>
         {!isAssistant && onEdit && (
           <MessageActionButton
@@ -156,7 +157,7 @@ export function MessageActions({
             onClick={onEdit}
             onTooltipOpen={onActionTooltipOpen}
           >
-            <Pencil size={14} />
+            <Pencil />
           </MessageActionButton>
         )}
         {isAssistant && onRetry && (
@@ -166,7 +167,7 @@ export function MessageActions({
             disabled={retryDisabled}
             onTooltipOpen={onActionTooltipOpen}
           >
-            <RefreshCw size={14} />
+            <RefreshCw />
           </MessageActionButton>
         )}
         {isAssistant && onBranch && branching && (
@@ -179,9 +180,9 @@ export function MessageActions({
             aria-busy={isBranching}
           >
             {isBranching ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 className="animate-spin" />
             ) : (
-              <GitBranch size={14} />
+              <GitBranch />
             )}
           </MessageActionButton>
         )}

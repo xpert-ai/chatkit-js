@@ -23,6 +23,13 @@ remain visible independently. The centered character uses the separate
 `header.character` setting; when it is displayed, the inline identity stays
 hidden to avoid a duplicate.
 
+## Composer while reading history
+
+While the scroll-to-bottom action is visible, the composer fades into a single
+row and hides the project, file, and resource toolbar. Returning to the bottom
+restores the full composer. Drafts, multiline text, selections, and input focus
+are preserved; reduced-motion preferences disable the transition.
+
 ## Assistant Workbench layout
 
 The chat / Workbench split remembers its chat width, open state and maximized

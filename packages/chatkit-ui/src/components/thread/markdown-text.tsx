@@ -22,6 +22,7 @@ import { SyntaxHighlighter } from './syntax-highlighter';
 import { MermaidBlock } from './mermaid-block';
 
 import { TooltipIconButton } from './tooltip-icon-button';
+import { messageActionButtonClassName } from './message-action-styles';
 import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { ParentMessengerContext } from '../../providers/ParentMessenger';
@@ -452,7 +453,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       <TooltipIconButton
         tooltip={t('markdown.copy')}
         onClick={onCopy}
-        className="size-[calc(1.5rem*var(--density-spacing,1))] rounded-chat-item"
+        className={messageActionButtonClassName}
       >
         {!isCopied && <CopyIcon />}
         {isCopied && <CheckIcon />}

@@ -447,6 +447,7 @@
             "pending": "Pending follow-ups",
             "queue": "Queue",
             "steerAction": "Steer",
+            "steerActionHint": "Submit without interrupting the current run",
             "sendNow": "Send now",
             "remove": "Remove pending follow-up",
             "more": "More actions",

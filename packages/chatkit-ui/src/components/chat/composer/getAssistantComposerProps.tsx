@@ -110,6 +110,7 @@ type AssistantComposerProps = Pick<
     ReturnType<typeof useChatConversationActions>,
     'handleProjectSelectionChange'
   > & {
+    compact: boolean;
     isProjectSelectorVisible: boolean;
     isFileSelectorVisible: boolean;
     isPromptEditDisabled: boolean;
@@ -139,6 +140,7 @@ type AssistantComposerProps = Pick<
 
 import type { ChatComposerFormProps } from './ChatComposerForm';
 export function getAssistantComposerProps({
+  compact,
   handleSubmit,
   theme,
   isProjectSelectorVisible,
@@ -216,6 +218,7 @@ export function getAssistantComposerProps({
   runtimeResources,
 }: AssistantComposerProps): ChatComposerFormProps {
   return {
+    compact,
     onSubmit: handleSubmit,
     style: getSurfaceThemeStyle(theme),
     paddedBottom: !isProjectSelectorVisible && !isFileSelectorVisible,

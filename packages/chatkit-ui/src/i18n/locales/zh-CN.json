@@ -447,6 +447,7 @@
             "pending": "待处理 Follow-up",
             "queue": "排队",
             "steerAction": "引导",
+            "steerActionHint": "提交，但不中断模型运行",
             "sendNow": "立即发送",
             "remove": "移除此待处理 Follow-up",
             "more": "更多操作",

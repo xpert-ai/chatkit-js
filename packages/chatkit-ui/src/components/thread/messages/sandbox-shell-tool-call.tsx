@@ -5,6 +5,7 @@ import { Check, Copy } from 'lucide-react';
 import { resolveLocalizedText } from '../../../i18n/localized-text';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
+import { messageActionButtonClassName } from '../message-action-styles';
 import { formatDisplayValue } from '../json-tree-view';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import type { ComponentMessagePartialStepData } from './component-message-renderers';
@@ -237,7 +238,8 @@ function ShellCopyButton({
     <button
       type="button"
       className={cn(
-        'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        messageActionButtonClassName,
+        'hover:bg-background',
         className,
       )}
       aria-label={label}
@@ -245,9 +247,9 @@ function ShellCopyButton({
       onClick={handleCopy}
     >
       {isCopied ? (
-        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        <Check aria-hidden="true" />
       ) : (
-        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        <Copy aria-hidden="true" />
       )}
     </button>
   );
@@ -317,8 +319,10 @@ export function SandboxShellToolCallCard({
   const output = getSandboxShellOutput(data);
   const exitCode = getSandboxShellExitCode(data);
   const copyButtonClassName =
-    'absolute right-1 top-1 h-6 w-6 opacity-0 transition-opacity group-hover/shell-copy:opacity-100 group-focus-within/shell-copy:opacity-100 in-data-[density=compact]:right-0.5 in-data-[density=compact]:top-0.5 in-data-[density=compact]:h-5 in-data-[density=compact]:w-5 in-data-[density=spacious]:right-1.5 in-data-[density=spacious]:top-1.5 in-data-[density=spacious]:h-7 in-data-[density=spacious]:w-7';
+    'absolute right-1 top-1 opacity-0 transition-opacity group-hover/shell-copy:opacity-100 group-focus-within/shell-copy:opacity-100 in-data-[density=compact]:right-0.5 in-data-[density=compact]:top-0.5 in-data-[density=spacious]:right-1.5 in-data-[density=spacious]:top-1.5';
 
+  const copySpaceClassName =
+    'min-h-[max(2.25rem,calc(2.5rem*var(--chat-density-scale,1)))] pr-[max(2.25rem,calc(2.5rem*var(--chat-density-scale,1)))] pointer-coarse:min-h-12 pointer-coarse:pr-12';
   return (
     <div
       className="flex max-h-64 min-w-0 flex-col overflow-hidden rounded-md bg-muted/60 px-3 my-1 text-left shadow-sm ring-1 ring-border/30 in-data-[density=compact]:max-h-52 in-data-[density=compact]:px-2 in-data-[density=compact]:py-1.5 in-data-[density=spacious]:max-h-80 in-data-[density=spacious]:px-4 in-data-[density=spacious]:py-3"
@@ -343,7 +347,8 @@ export function SandboxShellToolCallCard({
           <TooltipTrigger asChild>
             <pre
               className={cn(
-                'line-clamp-2 cursor-help whitespace-pre-wrap break-words pr-8 font-mono text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 in-data-[density=compact]:pr-6 in-data-[density=spacious]:pr-10',
+                'line-clamp-2 cursor-help whitespace-pre-wrap break-words font-mono text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                copySpaceClassName,
                 SANDBOX_SHELL_TEXT_CLASS,
               )}
               data-slot="sandbox-shell-command"
@@ -376,7 +381,8 @@ export function SandboxShellToolCallCard({
         >
           <pre
             className={cn(
-              'min-h-0 whitespace-pre pr-8 font-mono text-muted-foreground/85 in-data-[density=compact]:pr-6 in-data-[density=spacious]:pr-10',
+              'whitespace-pre font-mono text-muted-foreground/85',
+              copySpaceClassName,
               SANDBOX_SHELL_TEXT_CLASS,
             )}
             data-slot="sandbox-shell-output"

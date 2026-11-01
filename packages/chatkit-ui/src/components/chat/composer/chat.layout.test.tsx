@@ -10,6 +10,48 @@ import {
 
 describe('Chat composer layout', () => {
   setupChatTest();
+  it('uses the scroll-to-bottom threshold for compact mode and keeps the editor and context mounted', async () => {
+    mocks.stream.messages = [
+      { id: 'message', type: 'human', content: 'Hello' },
+    ];
+    const view = renderChat();
+    await act(async () => {});
+    const viewport = view.container.querySelector<HTMLElement>(
+      '[data-chatkit-root]',
+    );
+    if (!viewport) throw new Error('Missing viewport');
+    Object.defineProperties(viewport, {
+      scrollHeight: { configurable: true, value: 2000 },
+      clientHeight: { configurable: true, value: 500 },
+    });
+    const input = screen.getByRole('textbox');
+    const shell = view.container.querySelector(
+      '[data-slot="composer-input-shell"]',
+    );
+    const context = view.container.querySelector(
+      '[data-slot="composer-context-collapse"]',
+    );
+    viewport.scrollTop = 1451;
+    fireEvent.scroll(viewport);
+    expect(
+      screen.getByRole('button', { name: 'chat.scrollToBottom' }),
+    ).toBeVisible();
+    expect(shell).toHaveAttribute('data-layout', 'compact');
+    expect(context).toHaveAttribute('inert');
+    expect(context).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('textbox')).toBe(input);
+    viewport.scrollTop = 1452;
+    fireEvent.scroll(viewport);
+    expect(
+      screen.queryByRole('button', { name: 'chat.scrollToBottom' }),
+    ).toBeNull();
+    expect(shell).toHaveAttribute('data-layout', 'stacked');
+    expect(context).not.toHaveAttribute('inert');
+    expect(screen.getByRole('textbox')).toBe(input);
+    expect(
+      view.container.querySelector('[data-slot="composer-context-collapse"]'),
+    ).toBe(context);
+  });
   it('updates composer surface geometry after a theme change', () => {
     mocks.theme = { radius: 'sharp', density: 'compact' };
     const { rerender } = render(
@@ -98,8 +140,12 @@ describe('Chat composer layout', () => {
     const contextSurface = document.querySelector(
       '[data-slot="composer-context-surface"]',
     );
-    expect(contextSurface?.parentElement).toBe(composerShell);
-    expect(editorSurface?.parentElement).toBe(composerShell);
+    expect(contextSurface?.closest('[data-slot="composer-input-shell"]')).toBe(
+      composerShell,
+    );
+    expect(editorSurface?.closest('[data-slot="composer-input-shell"]')).toBe(
+      composerShell,
+    );
     expect(contextSurface).toContainElement(projectRail);
     expect(editorSurface).not.toContainElement(projectRail);
 
@@ -141,7 +187,9 @@ describe('Chat composer layout', () => {
     const contextSurface = document.querySelector(
       '[data-slot="composer-context-surface"]',
     );
-    expect(contextSurface?.parentElement).toBe(composerShell);
+    expect(contextSurface?.closest('[data-slot="composer-input-shell"]')).toBe(
+      composerShell,
+    );
     expect(contextSurface).toContainElement(
       document.querySelector('[data-slot="composer-file-selector"]'),
     );

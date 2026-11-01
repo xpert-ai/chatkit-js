@@ -5,6 +5,7 @@ import {
   type ChatSkillUsage,
 } from '@xpert-ai/chatkit-types';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { messageActionButtonClassName } from './message-action-styles';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 
 export function MessageSkills({
@@ -49,7 +50,7 @@ export function MessageSkills({
         <button
           type="button"
           aria-label={t('messageActions.skills.title')}
-          className="rounded-chat-item p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={messageActionButtonClassName}
           onPointerEnter={(event) => {
             if (event.pointerType !== 'touch') show();
           }}
@@ -65,7 +66,7 @@ export function MessageSkills({
             }
           }}
         >
-          <BookOpen size={14} aria-hidden="true" />
+          <BookOpen aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent
