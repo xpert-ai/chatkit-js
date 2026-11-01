@@ -8,6 +8,21 @@ This package contains the UI application rendered inside the ChatKit iframe, pro
 - Implements the chat view, message rendering, and interactive widgets for end users.
 - Serves as the iframe-facing surface that communicates with the host app via ChatKit APIs.
 
+## Header identity
+
+The inline avatar, title, and status block is hidden by default. Enable it with:
+
+```ts
+const options = {
+  header: { identity: { enabled: true } },
+};
+```
+
+This applies to Assistant and group chats. New conversation and header actions
+remain visible independently. The centered character uses the separate
+`header.character` setting; when it is displayed, the inline identity stays
+hidden to avoid a duplicate.
+
 ## Assistant Workbench layout
 
 The chat / Workbench split remembers its chat width, open state and maximized

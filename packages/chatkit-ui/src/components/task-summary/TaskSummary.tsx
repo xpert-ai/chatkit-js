@@ -24,6 +24,7 @@ import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn } from '../../lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { ToolbarButton } from '../ui/toolbar-button';
 
 const PREVIEW_SIZE = 3;
 
@@ -69,17 +70,16 @@ export function TaskSummaryTrigger({
     [controlledOpen, onOpenChange],
   );
   const triggerButton = (
-    <button
+    <ToolbarButton
       type="button"
       style={getSurfaceThemeStyle(theme)}
-      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
       data-slot="task-summary-trigger"
       aria-label={t('taskSummary.open')}
       aria-expanded={open}
       onClick={displayMode === 'docked' ? () => setOpen(!open) : undefined}
     >
       <ListChecks size={16} />
-    </button>
+    </ToolbarButton>
   );
 
   if (displayMode === 'docked') {

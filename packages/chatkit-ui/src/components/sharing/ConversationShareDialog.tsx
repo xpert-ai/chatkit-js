@@ -62,9 +62,11 @@ export function ConversationShareDialog({
   threadId,
   open,
   onOpenChange,
+  onCloseAutoFocus,
 }: ConversationShareTarget & {
   open: boolean;
   onOpenChange: (value: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { t } = useChatkitTranslation();
   const fieldId = React.useId();
@@ -169,7 +171,11 @@ export function ConversationShareDialog({
         if (!busy) onOpenChange(value);
       }}
     >
-      <DialogContent layout="sectioned" className="w-[36rem]">
+      <DialogContent
+        layout="sectioned"
+        className="w-[36rem]"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader>
           <DialogTitle>{t('sharing.title')}</DialogTitle>
           <DialogDescription>{t('sharing.notice')}</DialogDescription>

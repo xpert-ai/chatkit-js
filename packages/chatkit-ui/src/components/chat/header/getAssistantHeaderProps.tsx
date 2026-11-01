@@ -1,6 +1,6 @@
 import { supportsConversationSharing } from '../../sharing/share-client';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import { History, Pencil, Settings } from 'lucide-react';
+import { History, Settings } from 'lucide-react';
 import type * as React from 'react';
 import { ChatHeaderActions } from './ChatHeaderActions';
 import { ConversationTitle } from '../../history/ConversationTitle';
@@ -124,6 +124,19 @@ export function getAssistantHeaderProps({
     columnRef: chatColumnRef,
     style: chatColumnStyle,
     characterPresentation,
+    showIdentity: options?.header?.identity?.enabled === true,
+    newThread:
+      history?.enabled !== false
+        ? {
+            label: t(
+              activeProjectId
+                ? 'history.newThreadInProject'
+                : 'history.newThread',
+            ),
+            disabled: missingConfig || isHistoryLoading,
+            onClick: handleNewThread,
+          }
+        : undefined,
     avatar: (
       <div className="relative shrink-0">
         <ChatkitAvatar
@@ -160,14 +173,17 @@ export function getAssistantHeaderProps({
           share={
             stream.conversationId &&
             stream.threadId &&
-            !activeProjectId &&
             stream.client &&
             supportsConversationSharing(stream.client)
               ? {
                   client: stream.client,
                   conversationId: stream.conversationId,
                   threadId: stream.threadId,
+                  disabledReason: activeProjectId
+                    ? t('sharing.projectUnavailable')
+                    : undefined,
                   disabled:
+                    Boolean(activeProjectId) ||
                     !stream.isReady ||
                     stream.isLoading ||
                     isHistoryLoading ||
@@ -189,26 +205,13 @@ export function getAssistantHeaderProps({
                   </DropdownMenuItem>
                 )}
                 {history?.enabled !== false && (
-                  <>
-                    <DropdownMenuItem
-                      onSelect={handleNewThread}
-                      disabled={missingConfig || isHistoryLoading}
-                    >
-                      <Pencil size={16} />
-                      {t(
-                        activeProjectId
-                          ? 'history.newThreadInProject'
-                          : 'history.newThread',
-                      )}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => setHistoryOpen(true)}
-                      disabled={missingConfig || isHistoryLoading}
-                    >
-                      <History size={16} />
-                      {t('history.threadHistory')}
-                    </DropdownMenuItem>
-                  </>
+                  <DropdownMenuItem
+                    onSelect={() => setHistoryOpen(true)}
+                    disabled={missingConfig || isHistoryLoading}
+                  >
+                    <History size={16} />
+                    {t('history.threadHistory')}
+                  </DropdownMenuItem>
                 )}
               </>
             ) : undefined

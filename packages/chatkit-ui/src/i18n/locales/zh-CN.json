@@ -1,5 +1,6 @@
 {
     "sharing": {
+        "projectUnavailable": "暂不支持分享项目内的对话。",
         "existingNotice": "这是已分享的固定快照。复制或打开不会生成新链接，也不会更新消息或有效期。",
         "editShare": "修改分享设置",
         "action": "分享",

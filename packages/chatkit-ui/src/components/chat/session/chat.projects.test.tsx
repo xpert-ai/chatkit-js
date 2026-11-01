@@ -139,11 +139,7 @@ describe('Chat project scope', () => {
         onProjectChange={onProjectChange}
       />,
     );
-    fireEvent.keyDown(
-      screen.getByRole('button', { name: 'chat.moreActions' }),
-      { key: 'Enter' },
-    );
-    const button = await screen.findByRole('menuitem', {
+    const button = await screen.findByRole('button', {
       name: 'history.newThreadInProject',
     });
     await waitFor(() => expect(button).toBeEnabled());
@@ -172,11 +168,7 @@ describe('Chat project scope', () => {
     expect(screen.getByTestId('project-selector')).toHaveTextContent(
       'project-b',
     );
-    fireEvent.keyDown(
-      screen.getByRole('button', { name: 'chat.moreActions' }),
-      { key: 'Enter' },
-    );
-    const button = await screen.findByRole('menuitem', {
+    const button = await screen.findByRole('button', {
       name: 'history.newThreadInProject',
     });
     await waitFor(() => expect(button).toBeEnabled());
@@ -201,11 +193,7 @@ describe('Chat project scope', () => {
       />,
     );
     expect(screen.queryByTestId('project-locked')).not.toBeInTheDocument();
-    fireEvent.keyDown(
-      screen.getByRole('button', { name: 'chat.moreActions' }),
-      { key: 'Enter' },
-    );
-    const button = await screen.findByRole('menuitem', {
+    const button = await screen.findByRole('button', {
       name: 'history.newThread',
     });
     await waitFor(() => expect(button).toBeEnabled());

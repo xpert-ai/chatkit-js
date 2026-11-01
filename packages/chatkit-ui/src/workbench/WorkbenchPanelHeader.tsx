@@ -7,6 +7,7 @@ import {
 } from '../components/ui/tooltip';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { cn } from '../lib/utils';
+import { ToolbarButton } from '../components/ui/toolbar-button';
 
 export function WorkbenchPanelHeader({
   children,
@@ -31,14 +32,13 @@ export function WorkbenchPanelHeader({
       {onNewTab && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <ToolbarButton
               type="button"
               onClick={onNewTab}
               aria-label={t('workbench.newTab')}
-              className="flex size-8 shrink-0 items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Plus size={18} aria-hidden="true" />
-            </button>
+              <Plus aria-hidden="true" />
+            </ToolbarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t('workbench.newTab')}</TooltipContent>
         </Tooltip>
@@ -46,14 +46,10 @@ export function WorkbenchPanelHeader({
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <ToolbarButton
               type="button"
               onClick={onToggleExpanded}
-              className={cn(
-                'flex h-8 w-8 items-center justify-center rounded-chat-item text-muted-foreground transition-colors',
-                'hover:bg-muted hover:text-foreground',
-                expanded && 'bg-muted text-foreground',
-              )}
+              className={cn(expanded && 'bg-muted text-foreground')}
               aria-label={
                 expanded
                   ? t('workbench.restorePanel')
@@ -61,8 +57,8 @@ export function WorkbenchPanelHeader({
               }
               aria-pressed={expanded}
             >
-              {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
+              {expanded ? <Minimize2 /> : <Maximize2 />}
+            </ToolbarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">
             {expanded
@@ -72,15 +68,15 @@ export function WorkbenchPanelHeader({
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <ToolbarButton
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-chat-item bg-muted text-foreground transition-colors hover:bg-muted/80"
+              className="bg-muted text-foreground hover:bg-muted/80"
               aria-label={t('workbench.toggleSidebar')}
               aria-pressed={true}
             >
-              <PanelRight size={17} />
-            </button>
+              <PanelRight />
+            </ToolbarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">
             {t('workbench.toggleSidebar')}
