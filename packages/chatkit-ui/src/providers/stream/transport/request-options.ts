@@ -1,3 +1,4 @@
+import { STATE_VARIABLE_HUMAN } from '@xpert-ai/chatkit-types';
 import type {
   ProjectSelection,
   ResumeStreamOptions,
@@ -15,10 +16,24 @@ export function withConversationScope(
     return input;
   }
 
-  const runtimeCapabilities = input.input.runtimeCapabilities;
+  // The backend prefers injected human state over the message input.
+  const humanState = input.state?.[STATE_VARIABLE_HUMAN];
+  const runtimeCapabilities =
+    humanState?.runtimeCapabilities ?? input.input.runtimeCapabilities;
   const normalizedConnectorBindingIds = Array.from(
     new Set(
       connectorBindingIds.map((bindingId) => bindingId.trim()).filter(Boolean),
+    ),
+  );
+  // The server merges recommendations back into the available capabilities.
+  const recommended = runtimeCapabilities?.recommended;
+  const recommendedConnectorBindingIds = Array.from(
+    new Set(
+      (recommended?.connectors?.bindingIds ?? [])
+        .map((bindingId) => bindingId.trim())
+        .filter((bindingId) =>
+          normalizedConnectorBindingIds.includes(bindingId),
+        ),
     ),
   );
   const nextRuntimeCapabilities =
@@ -35,6 +50,16 @@ export function withConversationScope(
                 connectors: { bindingIds: normalizedConnectorBindingIds },
               }
             : { connectors: undefined }),
+          ...(recommended
+            ? {
+                recommended: {
+                  ...recommended,
+                  connectors: recommendedConnectorBindingIds.length
+                    ? { bindingIds: recommendedConnectorBindingIds }
+                    : undefined,
+                },
+              }
+            : {}),
         }
       : undefined;
   return {
@@ -47,6 +72,17 @@ export function withConversationScope(
         ? { runtimeCapabilities: nextRuntimeCapabilities }
         : { runtimeCapabilities: undefined }),
     },
+    ...(humanState
+      ? {
+          state: {
+            ...input.state,
+            [STATE_VARIABLE_HUMAN]: {
+              ...humanState,
+              runtimeCapabilities: nextRuntimeCapabilities,
+            },
+          },
+        }
+      : {}),
   };
 }
 

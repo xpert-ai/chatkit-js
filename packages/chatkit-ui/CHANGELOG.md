@@ -1,5 +1,79 @@
 # @xpert-ai/chatkit-ui
 
+## 0.20.0
+
+### Minor Changes
+
+- 9e051df: Support the allowlisted workbench clipboard command so remote views can copy existing Artifact share URLs through the host. Allow an explicit external target for validated browser URLs, opening authenticated pages in a separate tab after user interaction while preserving preview iframe isolation.
+- 9e051df: Add a conversation sharing dialog with exact text preview, organization/public audience selection, expiration, copy, and revocation. Reuse MessageList for read-only Markdown previews and shared pages, with a credential-free iframe renderer that synchronizes the host theme and disables private resource actions and remote images. Upgrade to Xpert SDK 0.20.0 and reuse its exported sharing contracts. Requires the Xpert sharing API.
+
+  Link to personal shared-link management in Xpert settings without forwarding chat credentials or share tokens.
+
+  Reopen sharing dialogs with the persisted owner-only URL and copy it without regenerating a share. Replacing an existing snapshot is a separate explicit action.
+
+### Patch Changes
+
+- 82b7cfb: Keep selected connector bindings consistent between outgoing human input and injected human state. Preserve host capability settings and apply explicit connector deselection to both representations, including recommended connectors that the server merges into the available selection.
+
+## 0.19.2
+
+### Patch Changes
+
+- 149e56d: Display Workbench and Remote View notifications as themed, dismissible toasts so editor canvases keep their height. Scope notifications to their Workbench and avoid clearing newer feedback when an older toast expires.
+- 9d0162d: Allow routed Workbench Views to request a maximized or split layout. Apply it only after the destination is authorized and pending editor saves succeed, and report manual layout changes through the existing navigation callback without remounting the View.
+- 9854bcb: Keep new Workbench feedback visible when an earlier notification is dismissed on the next animation frame. Give each notification its own toast identity and scope cleanup to that notification.
+- 149e56d: Keep a mounted content editor's unsaved draft when the embedding host echoes its
+  current resource URL. Only replacement or explicit reload invokes the save gate;
+  switching resource tabs does not require discarding or saving another tab.
+- 2e225d6: Upgrade Xpert SDK to 0.19.0 so content navigation uses the published editor selection and provider-native selection ID contracts.
+- 149e56d: Resolve stable Project catalog links on Workbench entry and use the provider's resolved selection ID. Keep multiple resources of the same editor in independent tabs, preserve per-instance unsaved state, and restore bounded Project-scoped tab selections after refresh with fresh authorization. Preserve editor choice and reject stale or unauthorized link targets.
+- 66f09cc: Keep active-run controls stable while output streams reconnect, and preserve retry backoff when replay is temporarily unavailable. Restore the selected conversation after credential initialization without navigating the host to an empty chat.
+- Updated dependencies [9d0162d]
+  - @xpert-ai/chatkit-types@0.19.1
+
+## 0.19.1
+
+### Patch Changes
+
+- fb81896: Limit visible image and remote View file reads to four concurrent operations, coalesce identical pending reads, cancel abandoned work, and keep session cleanup off the rendering path. Use single-request thumbnails and explicit original image reads when the host supplies the new Xpert SDK image-preview API; preserve authenticated legacy fallback for older SDKs or servers.
+
+  The direct-preview path requires the companion SDK release from xpert-sdk-js (.changeset/authorized-image-previews.md) and the server image-preview endpoint. Update the SDK dependency and lockfile after that release; this change does not publish packages or deploy the server.
+
+- e7a75b6: Show an End run action when the backend permits termination. Keep pause/resume separate and retain the stopping state until execution has actually settled.
+- 191db55: Wait for historical project scope and branch status before reading capabilities, and share identical pending reads across concurrent consumers. Preserve validation after runs, scope isolation, stale-response protection, and compatibility with older servers without caching completed authorization results.
+- e7a75b6: Check the installed SDK's public control-view and abortable read contract before building ChatKit. Reject older runtime packages even when local source tests or dependency patches appear to work. Pair the eventual SDK release and refresh release locks before publishing ChatKit.
+- e7a75b6: Keep recovery reads retryable when an expired session cannot renew during a temporary network or service outage. Preserve HTTP status and Retry-After across the host frame boundary, share renewal attempts, and retain terminal handling for denied credentials.
+- e7a75b6: Use the backend control view for concise stopping/settling hints and available actions. Retain accepted stop through refresh and unavailable reads, ignore stale responses, and preserve necessary input during pause. Requires the paired SDK control-view release and backend migration.
+- e7a75b6: Upgrade Xpert SDK to 0.18.0 and use its published thread control and abortable read APIs without the legacy 0.15.0 patch.
+- Updated dependencies [e7a75b6]
+  - @xpert-ai/chatkit-web-shared@0.18.1
+
+## 0.19.0
+
+### Minor Changes
+
+- fabff21: Move built-in pet images out of the UI distribution into the independently versioned optional @xpert-ai/chatkit-assets package. Add per-instance pet.assetsBaseUrl configuration for built-in pets, appearance sprites and host overlays. Deployments must copy the offline package's pets directory to /pets (the compatible default), or host it separately and configure pet.assetsBaseUrl. Existing custom sprite URLs remain unchanged.
+- 663952a: Handle content editor discovery, document navigation, resource links, and content review inside ChatKit Workbench. Review supports proposals, comments, revision restoration, and external-file reconciliation through the Xpert SDK.
+
+  Expose `prepareLeave()` through the web component and framework integrations so embedding applications can wait for pending editor saves before navigating or unmounting. Native and remote editors share leave protection, and remote editor tabs display the current document name and an unsaved-changes indicator.
+
+  Remote views must declare their content commands. `workbench.content.*` and `assistant.content.review` are handled locally without falling through to embedder callbacks; use `workbench.content.resolve` followed by `workbench.navigation.open` instead of the removed `workbench.content.open` command. Configure `workbench.linkBaseUrl` for public resource links.
+
+  Release prerequisite: publish and adopt an Xpert SDK version providing `Client.content` and required view-command declarations before releasing this change. The currently declared SDK 0.14.0 does not provide these APIs; local integration uses the unpublished SDK until the formal dependency is updated.
+
+### Patch Changes
+
+- 2da5c67: Save pending editor changes before host group or session replacements, and block replacement when saving fails. Adapt content review spacing to the active theme density.
+- a2198c4: Upgrade Xpert SDK to 0.17.0 to support content APIs and run status polling.
+- 2f29eff: Notify retained Workbench views of their visibility so hidden views can pause polling without losing local state. Pause external Assistant status polling in hidden browser tabs and refresh when visible again.
+
+  Use the SDK's compact run-status endpoint when available, retain compatibility with older SDKs and servers, and preserve existing Assistant presentation and timing fields when merging partial status updates.
+
+- Updated dependencies [fabff21]
+- Updated dependencies [663952a]
+  - @xpert-ai/chatkit-types@0.19.0
+  - @xpert-ai/chatkit-web-shared@0.18.0
+
 ## 0.18.1
 
 ### Patch Changes
