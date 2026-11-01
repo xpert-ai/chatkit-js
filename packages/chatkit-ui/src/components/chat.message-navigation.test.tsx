@@ -435,7 +435,7 @@ describe('Chat message navigation', () => {
     );
   });
 
-  it('shows the current thread title in the header status row', () => {
+  it('shows the current thread title when header identity is enabled', () => {
     mocks.threads.push({
       id: 'thread-1',
       recordId: 'conversation-1',
@@ -443,7 +443,9 @@ describe('Chat message navigation', () => {
       status: 'idle',
     });
 
-    render(<Chat options={baseOptions} />);
+    render(
+      <Chat options={{ ...baseOptions, header: { identity: { enabled: true } } }} />,
+    );
 
     expect(screen.getByText('Fix onboarding copy')).toBeInTheDocument();
     expect(screen.queryByText('Online')).not.toBeInTheDocument();
@@ -456,7 +458,9 @@ describe('Chat message navigation', () => {
       title: 'Original title',
       status: 'idle',
     });
-    render(<Chat options={baseOptions} />);
+    render(
+      <Chat options={{ ...baseOptions, header: { identity: { enabled: true } } }} />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'chat.conversationTitle.rename' }));
     const input = screen.getByRole('textbox', { name: 'chat.conversationTitle.label' });
     fireEvent.change(input, { target: { value: 'Renamed conversation' } });

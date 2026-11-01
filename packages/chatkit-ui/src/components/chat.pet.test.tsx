@@ -273,7 +273,9 @@ describe('Chat pet integration', () => {
     mocks.stream.client.conversations.search.mockResolvedValue({ items: [
       { id: 'older-record', threadId: 'older-thread', title: 'Older search result' },
     ] });
-    render(<Chat options={baseOptions} />);
+    render(
+      <Chat options={{ ...baseOptions, header: { identity: { enabled: true } } }} />,
+    );
     fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem', { name: 'history.threadHistory' }));
     fireEvent.change(await screen.findByRole('searchbox'), { target: { value: 'Older' } });
