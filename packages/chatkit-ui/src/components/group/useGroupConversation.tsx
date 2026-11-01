@@ -21,6 +21,7 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 import { GroupMembers } from './GroupMembers';
+import { ToolbarButton } from '../ui/toolbar-button';
 import { GroupAvatar } from './GroupAvatar';
 import { GroupInteractions } from './GroupInteractions';
 import { GroupRunStatus } from './GroupRunStatus';
@@ -235,18 +236,15 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     membersButton: (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
+          <ToolbarButton
             ref={membersTrigger}
             onClick={() => changeMembersOpen(!membersOpen)}
             aria-haspopup="dialog"
-            size="icon"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground"
             aria-label={t('group.membersTitle')}
             aria-expanded={membersOpen}
           >
-            <Users className="size-4" />
-          </Button>
+            <Users />
+          </ToolbarButton>
         </TooltipTrigger>
         <TooltipContent side="bottom">{t('group.membersTitle')}</TooltipContent>
       </Tooltip>
@@ -361,6 +359,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     header: {
       visible: headerVisible,
       characterPresentation,
+      showIdentity: props.options?.header?.identity?.enabled === true,
       style: { maxWidth: props.options?.layout?.maxWidth ?? 960 },
       avatar: (
         <button

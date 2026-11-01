@@ -1,5 +1,6 @@
 import { act, render, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { ThreadControlView } from '@xpert-ai/xpert-sdk';
 import {
   deferred,
   history,
@@ -14,6 +15,58 @@ import {
 
 describe('thread history restoration', () => {
   setupHistoryTests();
+
+  it('shares thread metadata and the first control snapshot without waiting for run discovery', async () => {
+    const runs = deferred<never[]>();
+    mocks.listRuns.mockReturnValue(runs.promise);
+    const controlView: ThreadControlView = {
+      version: 1,
+      threadId: 'thread-1',
+      runId: null,
+      revision: '1',
+      state: 'idle',
+      actions: {
+        canPause: false,
+        canResume: false,
+        canTerminate: false,
+        canSend: true,
+        canQueue: false,
+        canRetry: false,
+        canRespond: false,
+      },
+    };
+    const conversation = {
+      id: 'conversation-thread-1',
+      threadId: 'thread-1',
+      title: 'Saved title',
+      projectId: 'saved-project',
+      status: 'idle',
+    };
+    mocks.getThread.mockResolvedValue({
+      metadata: { id: conversation.id },
+      conversation,
+      controlView,
+    });
+    mocks.getControlView.mockResolvedValue({ ...controlView, revision: '2' });
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    expect(mocks.listRuns).toHaveBeenCalledOnce();
+    expect(stream.conversation).toEqual(conversation);
+    expect(stream.projectId).toBe('saved-project');
+    expect(stream.messages).toHaveLength(2);
+    expect(mocks.searchConversations).not.toHaveBeenCalled();
+    expect(mocks.getConversation).not.toHaveBeenCalled();
+    expect(mocks.searchMessages).toHaveBeenCalledOnce();
+    await expect(stream.readThreadControl!('thread-1')).resolves.toEqual(
+      controlView,
+    );
+    expect(mocks.getControlView).not.toHaveBeenCalled();
+    await expect(stream.readThreadControl!('thread-1')).resolves.toMatchObject({
+      revision: '2',
+    });
+    expect(mocks.getControlView).toHaveBeenCalledOnce();
+    await act(async () => runs.resolve([]));
+  });
 
   it('reveals history and the view scope while sandbox discovery is still pending', async () => {
     const services = deferred<void>();
@@ -194,7 +247,21 @@ describe('thread history restoration', () => {
     ).toEqual([
       [
         'public_event',
-        ['thread.load.end', { threadId: 'thread-1' }],
+        [
+          'thread.load.end',
+          {
+            threadId: 'thread-1',
+            conversation: {
+              id: 'conversation-thread-1',
+              threadId: 'thread-1',
+              projectId: 'project-b',
+              title: undefined,
+              xpertId: undefined,
+              from: undefined,
+              status: 'idle',
+            },
+          },
+        ],
         undefined,
       ],
     ]);

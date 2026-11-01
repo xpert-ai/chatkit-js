@@ -788,6 +788,11 @@ export type ChatKitOptions = {
    */
   header?: {
     enabled?: boolean;
+    /** Inline avatar, title, and status block. Hidden by default; separate from the centered character. */
+    identity?: {
+      /** Show the identity block when the centered character is not displayed. Defaults to false. */
+      enabled?: boolean;
+    };
     /** Center the published Assistant character in bubble mode. Defaults to true. */
     character?: {
       enabled?: boolean;

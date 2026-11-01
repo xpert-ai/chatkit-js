@@ -660,9 +660,8 @@ export function ComposerMenu({
           aria-expanded={open}
           aria-label={open ? t('composer.closeMenu') : t('composer.openMenu')}
           className={cn(
-            'size-9 shrink-0 transition-[background-color,border-radius] duration-300 hover:bg-muted',
+            'size-9 shrink-0 transition-[background-color,border-radius] duration-300 hover:bg-foreground/10 dark:hover:bg-foreground/10 aria-expanded:bg-foreground/10',
             roundedClass,
-            open && 'bg-muted',
           )}
         >
           <Plus

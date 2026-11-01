@@ -16,16 +16,25 @@ import {
 
 afterEach(cleanup);
 
+function composerElement(container: HTMLElement, slot: string) {
+  const element = container.querySelector(`[data-slot="${slot}"]`);
+  if (!element) throw new Error(`Missing ${slot}`);
+  return element;
+}
+
 function Composer({
   disabled = false,
+  compact = false,
   onRemove = () => undefined,
 }: {
   disabled?: boolean;
+  compact?: boolean;
   onRemove?: () => void;
 }) {
   const draft = useChatDraft();
   return (
     <ChatComposerForm
+      compact={compact}
       onSubmit={(event) => event.preventDefault()}
       send={{ disabled: true, sendLabel: 'Send' }}
       editor={{
@@ -52,12 +61,27 @@ function Composer({
 }
 
 describe('shared Composer focus', () => {
+  it('preserves a multiline draft and selection when compacting and restoring', async () => {
+    const view = render(<Composer />);
+    const input = screen.getByRole('textbox');
+    input.textContent = 'First line\nSecond line';
+    input.focus();
+    setComposerSelectionOffset(input, 5);
+    fireEvent.input(input);
+    view.rerender(<Composer compact />);
+    expect(screen.getByRole('textbox')).toBe(input);
+    expect(input.textContent).toBe('First line\nSecond line');
+    expect(input).toHaveFocus();
+    expect(getComposerSelectionOffset(input)).toBe(5);
+    view.rerender(<Composer />);
+    expect(screen.getByRole('textbox')).toBe(input);
+    expect(input.textContent).toBe('First line\nSecond line');
+    expect(getComposerSelectionOffset(input)).toBe(5);
+  });
   it('keeps the caret after the first character entered following a focus request', async () => {
     const { container } = render(<Composer />);
     const input = screen.getByRole('textbox');
-    fireEvent.click(
-      container.querySelector('[data-slot="composer-editor-surface"]')!,
-    );
+    fireEvent.click(composerElement(container, 'composer-editor-surface'));
     await waitFor(() => expect(input).toHaveFocus());
     input.textContent = '你';
     setComposerSelectionOffset(input, 1);
@@ -71,9 +95,12 @@ describe('shared Composer focus', () => {
       const clicked =
         target === 'tag'
           ? screen.getByText('Selected skill')
-          : container.querySelector(
-              `[data-slot="${target === 'surface' ? 'composer-editor-surface' : 'composer-body'}"]`,
-            )!;
+          : composerElement(
+              container,
+              target === 'surface'
+                ? 'composer-editor-surface'
+                : 'composer-body',
+            );
       fireEvent.click(clicked);
       await waitFor(() => expect(screen.getByRole('textbox')).toHaveFocus());
       expect(window.getSelection()?.anchorNode).toBe(
@@ -93,9 +120,7 @@ describe('shared Composer focus', () => {
 
     rerender(<Composer disabled />);
     fireEvent.click(screen.getByText('Selected skill'));
-    fireEvent.click(
-      container.querySelector('[data-slot="composer-editor-surface"]')!,
-    );
+    fireEvent.click(composerElement(container, 'composer-editor-surface'));
     expect(screen.getByRole('textbox')).not.toHaveFocus();
     expect(screen.getByRole('textbox')).toHaveAttribute(
       'contenteditable',

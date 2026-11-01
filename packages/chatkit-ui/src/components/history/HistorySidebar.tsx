@@ -1,5 +1,13 @@
 import * as React from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../ui/dialog';
 import {
   ChevronDown,
   ChevronRight,
@@ -11,11 +19,8 @@ import {
   Plus,
   RefreshCw,
   Search,
-  X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
-import { useTheme } from '../../providers/Theme';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ScrollArea } from '../ui/scroll-area';
@@ -41,7 +46,7 @@ export type HistorySidebarProps = {
   onOpenChange?: (open: boolean) => void;
   showTrigger?: boolean;
   onCloseAutoFocus?: React.ComponentProps<
-    typeof Dialog.Content
+    typeof DialogContent
   >['onCloseAutoFocus'];
   threads?: ThreadItem[];
   total?: number;
@@ -98,7 +103,6 @@ export function HistorySidebar({
   hasCurrentProject = false,
 }: HistorySidebarProps) {
   const { t, i18n } = useChatkitTranslation();
-  const themeContext = useTheme({ optional: true });
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = controlledOpen ?? internalOpen;
   const setOpen = (value: boolean) => {
@@ -164,12 +168,12 @@ export function HistorySidebar({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen}>
       {showTrigger && (
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="inline-flex h-8 w-8">
-              <Dialog.Trigger asChild>
+              <DialogTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -179,7 +183,7 @@ export function HistorySidebar({
                 >
                   <History size={16} />
                 </Button>
-              </Dialog.Trigger>
+              </DialogTrigger>
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -187,338 +191,326 @@ export function HistorySidebar({
           </TooltipContent>
         </Tooltip>
       )}
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0" />
-        <Dialog.Content
-          data-slot="message-history-dialog"
-          style={themeContext && getSurfaceThemeStyle(themeContext.theme)}
-          onCloseAutoFocus={onCloseAutoFocus}
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            searchRef.current?.focus();
-          }}
-          className="fixed left-1/2 top-1/2 z-50 flex h-[min(40rem,calc(100dvh-2rem))] w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-chat-panel border border-border bg-background text-foreground shadow-xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
-        >
-          <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-6">
-            <div className="min-w-0">
-              <Dialog.Title className="flex items-center gap-2 text-lg font-semibold">
-                <History size={20} className="text-muted-foreground" />
-                {t('history.title')}
-              </Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-muted-foreground">
-                {t('history.description')}
-              </Dialog.Description>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              {onRefresh && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => void onRefresh()}
-                  disabled={disabled || isRefreshing || isLoadingMore}
-                  className="cursor-pointer text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  aria-label={t('history.refresh')}
-                  title={t('history.refresh')}
-                  aria-busy={isRefreshing}
-                >
-                  <RefreshCw
-                    size={16}
-                    className={cn(isRefreshing && 'animate-spin')}
-                  />
-                </Button>
-              )}
-              <Dialog.Close asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="cursor-pointer text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  aria-label={t('sheet.close')}
-                >
-                  <X size={16} />
-                </Button>
-              </Dialog.Close>
-            </div>
+      <DialogContent
+        layout="sectioned"
+        closeLabel={t('sheet.close')}
+        data-slot="message-history-dialog"
+        onCloseAutoFocus={onCloseAutoFocus}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          searchRef.current?.focus();
+        }}
+        className="h-[min(40rem,calc(100dvh-2rem))] w-[48rem]"
+      >
+        <DialogHeader className="relative">
+          <div className="min-w-0">
+            <DialogTitle className="flex items-center gap-2 pr-8">
+              <History size={20} className="text-muted-foreground" />
+              {t('history.title')}
+            </DialogTitle>
+            <DialogDescription className="mt-1">
+              {t('history.description')}
+            </DialogDescription>
           </div>
-
-          <div className="space-y-3 border-b px-5 pb-4 sm:px-6">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-[calc(0.75rem*var(--chat-density-scale,1))] top-1/2 size-[max(0.875rem,calc(1.0625rem*var(--chat-density-scale,1)))] -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                ref={searchRef}
-                type="search"
-                value={query}
-                onChange={(event) => onQueryChange?.(event.target.value)}
-                aria-label={t('history.search')}
-                placeholder={t('history.searchPlaceholder')}
-                className="h-[calc(2.5rem*var(--chat-density-scale,1))] min-h-8 px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] pl-[calc(2.25rem*var(--chat-density-scale,1))]"
-              />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              {onScopeChange && (
-                <Select
-                  value={projectFilter ? 'selected-project' : scope}
-                  onValueChange={(value) => {
-                    if (
-                      value === 'all' ||
-                      value === 'current-project' ||
-                      value === 'no-project'
-                    )
-                      onScopeChange(value);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label={t('history.scope.label')}
-                    className="max-w-full bg-background *:data-[slot=select-value]:min-w-0"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent
-                    position="popper"
-                    align="start"
-                    className="max-w-[min(28rem,calc(100vw-2rem))]"
-                  >
-                    <SelectGroup>
-                      <SelectItem value="all">
-                        {t('history.scope.all')}
-                      </SelectItem>
-                      {projectFilter && (
-                        <SelectItem value="selected-project">
-                          <span className="truncate" title={projectFilter.name}>
-                            {projectFilter.name}
-                          </span>
-                        </SelectItem>
-                      )}
-                      <SelectItem
-                        value="current-project"
-                        disabled={!hasCurrentProject}
-                      >
-                        {t('history.scope.currentProject')}
-                      </SelectItem>
-                      <SelectItem value="no-project">
-                        {t('history.scope.noProject')}
-                      </SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              )}
-              <div
-                role="group"
-                aria-label={t('history.grouping')}
-                className="flex rounded-chat-item bg-muted p-0.5"
-              >
-                {(['recent', 'project'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={view === mode}
-                    onClick={() => setView(mode)}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-chat-item px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      view === mode
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {mode === 'recent' ? (
-                      <Clock3 size={14} />
-                    ) : (
-                      <Folder size={14} />
-                    )}
-                    {t(`history.${mode}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {(error || deleteError) && (
-            <div
-              role="alert"
-              className="mx-5 mt-3 flex items-center justify-between gap-3 rounded-chat-item bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-6"
-            >
-              <span>
-                {t(deleteError ? 'history.deleteFailed' : 'history.loadFailed')}
-              </span>
-              {error && (
-                <button
-                  type="button"
-                  onClick={() => void onRefresh?.()}
-                  className="shrink-0 underline"
-                >
-                  {t('history.retry')}
-                </button>
-              )}
-            </div>
-          )}
-          <ScrollArea
-            className="min-h-0 flex-1"
-            aria-busy={isRefreshing || isLoadingMore}
-          >
-            <div className="px-3 py-3 sm:px-4">
-              {threads.length === 0 ? (
-                <div
-                  role="status"
-                  className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground"
-                >
-                  {isRefreshing ? (
-                    <Loader2 className="size-6 animate-spin" />
-                  ) : (
-                    <MessageSquare className="size-8 opacity-50" />
-                  )}
-                  {t(
-                    isRefreshing
-                      ? 'history.loading'
-                      : error
-                        ? 'history.loadFailed'
-                        : query.trim()
-                          ? 'history.noResults'
-                          : 'history.empty',
-                  )}
-                </div>
-              ) : (
-                Array.from(groups, ([key, group], index) => (
-                  <section
-                    key={key}
-                    className="mb-[calc(0.75rem*var(--chat-density-scale,1))] last:mb-0"
-                  >
-                    {view === 'project' && (
-                      <button
-                        type="button"
-                        aria-expanded={!collapsed.has(key)}
-                        aria-controls={`${groupId}-${index}`}
-                        onClick={() =>
-                          setCollapsed((current) => {
-                            const next = new Set(current);
-                            if (next.has(key)) next.delete(key);
-                            else next.add(key);
-                            return next;
-                          })
-                        }
-                        className="mb-[calc(0.25rem*var(--chat-density-scale,1))] flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {collapsed.has(key) ? (
-                          <ChevronRight size={14} />
-                        ) : (
-                          <ChevronDown size={14} />
-                        )}
-                        <Folder size={14} className="shrink-0" />
-                        <span
-                          className="min-w-0 flex-1 truncate"
-                          title={group.name}
-                        >
-                          {group.name}
-                        </span>
-                        <span>{group.threads.length}</span>
-                      </button>
-                    )}
-                    <ul
-                      id={`${groupId}-${index}`}
-                      hidden={view === 'project' && collapsed.has(key)}
-                    >
-                      {group.threads.map((thread) => {
-                        const updatedAt = thread.lastMessageAt;
-                        const validDate =
-                          updatedAt && !Number.isNaN(updatedAt.getTime());
-                        const active = currentThreadId === thread.id;
-                        return (
-                          <HistoryThreadItem
-                            key={thread.recordId}
-                            thread={thread}
-                            active={active}
-                            disabled={disabled || Boolean(deletingId)}
-                            deleting={deletingId === thread.recordId}
-                            project={
-                              view === 'recent' && thread.projectId
-                                ? {
-                                    id: thread.projectId,
-                                    name: projectLabel(thread),
-                                  }
-                                : undefined
-                            }
-                            projectSelected={
-                              projectFilter?.id === thread.projectId
-                            }
-                            onFilterProject={onProjectFilterChange}
-                            updatedLabel={
-                              validDate
-                                ? updatedAt.toDateString() ===
-                                  new Date().toDateString()
-                                  ? dateFormat.time.format(updatedAt)
-                                  : dateFormat.compact.format(updatedAt)
-                                : undefined
-                            }
-                            updatedTitle={
-                              validDate
-                                ? dateFormat.full.format(updatedAt)
-                                : undefined
-                            }
-                            onSelect={() => {
-                              onSelectThread?.(thread);
-                              setOpen(false);
-                            }}
-                            onDelete={
-                              showDelete && onDeleteThread
-                                ? () => void deleteThread(thread)
-                                : undefined
-                            }
-                          />
-                        );
-                      })}
-                    </ul>
-                  </section>
-                ))
-              )}
-              {hasMore && onLoadMore && (
-                <div className="px-2 pb-2 pt-3 text-center">
-                  {loadMoreError && (
-                    <p role="alert" className="mb-2 text-xs text-destructive">
-                      {t('history.loadMoreFailed')}
-                    </p>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={onLoadMore}
-                    disabled={isRefreshing || isLoadingMore}
-                  >
-                    {isLoadingMore && (
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                    )}
-                    {t(loadMoreError ? 'history.retry' : 'history.loadMore')}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3 sm:px-6">
-            <span role="status" className="text-xs text-muted-foreground">
-              {isRefreshing
-                ? t('history.loading')
-                : t('history.count', { count: threads.length, total })}
-            </span>
-            {onNewThread && (
+          <div className="absolute right-10 top-2">
+            {onRefresh && (
               <Button
                 type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  onNewThread();
-                  setOpen(false);
-                }}
-                disabled={disabled}
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => void onRefresh()}
+                disabled={disabled || isRefreshing || isLoadingMore}
+                aria-label={t('history.refresh')}
+                title={t('history.refresh')}
+                aria-busy={isRefreshing}
               >
-                <Plus size={15} />
-                {newThreadLabel ?? t('history.newThread')}
+                <RefreshCw
+                  size={16}
+                  className={cn(isRefreshing && 'animate-spin')}
+                />
               </Button>
             )}
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </DialogHeader>
+
+        <div className="space-y-3 border-b px-(--dialog-padding) pb-4">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-[calc(0.75rem*var(--chat-density-scale,1))] top-1/2 size-[max(0.875rem,calc(1.0625rem*var(--chat-density-scale,1)))] -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => onQueryChange?.(event.target.value)}
+              aria-label={t('history.search')}
+              placeholder={t('history.searchPlaceholder')}
+              className="h-[calc(2.5rem*var(--chat-density-scale,1))] min-h-8 px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] pl-[calc(2.25rem*var(--chat-density-scale,1))]"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {onScopeChange && (
+              <Select
+                value={projectFilter ? 'selected-project' : scope}
+                onValueChange={(value) => {
+                  if (
+                    value === 'all' ||
+                    value === 'current-project' ||
+                    value === 'no-project'
+                  )
+                    onScopeChange(value);
+                }}
+              >
+                <SelectTrigger
+                  aria-label={t('history.scope.label')}
+                  className="max-w-full bg-background *:data-[slot=select-value]:min-w-0"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  align="start"
+                  className="max-w-[min(28rem,calc(100vw-2rem))]"
+                >
+                  <SelectGroup>
+                    <SelectItem value="all">
+                      {t('history.scope.all')}
+                    </SelectItem>
+                    {projectFilter && (
+                      <SelectItem value="selected-project">
+                        <span className="truncate" title={projectFilter.name}>
+                          {projectFilter.name}
+                        </span>
+                      </SelectItem>
+                    )}
+                    <SelectItem
+                      value="current-project"
+                      disabled={!hasCurrentProject}
+                    >
+                      {t('history.scope.currentProject')}
+                    </SelectItem>
+                    <SelectItem value="no-project">
+                      {t('history.scope.noProject')}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+            <div
+              role="group"
+              aria-label={t('history.grouping')}
+              className="flex rounded-chat-item bg-muted p-0.5"
+            >
+              {(['recent', 'project'] as const).map((mode) => (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  key={mode}
+                  type="button"
+                  aria-pressed={view === mode}
+                  onClick={() => setView(mode)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-chat-item px-2.5 py-1.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    view === mode
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {mode === 'recent' ? (
+                    <Clock3 size={14} />
+                  ) : (
+                    <Folder size={14} />
+                  )}
+                  {t(`history.${mode}`)}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {(error || deleteError) && (
+          <div
+            role="alert"
+            className="mx-5 mt-3 flex items-center justify-between gap-3 rounded-chat-item bg-destructive/10 px-3 py-2 text-sm text-destructive sm:mx-6"
+          >
+            <span>
+              {t(deleteError ? 'history.deleteFailed' : 'history.loadFailed')}
+            </span>
+            {error && (
+              <Button
+                type="button"
+                onClick={() => void onRefresh?.()}
+                variant="link"
+                size="sm"
+              >
+                {t('history.retry')}
+              </Button>
+            )}
+          </div>
+        )}
+        <ScrollArea
+          className="min-h-0 flex-1"
+          aria-busy={isRefreshing || isLoadingMore}
+        >
+          <div className="px-3 py-3 sm:px-4">
+            {threads.length === 0 ? (
+              <div
+                role="status"
+                className="flex flex-col items-center gap-3 px-4 py-16 text-center text-sm text-muted-foreground"
+              >
+                {isRefreshing ? (
+                  <Loader2 className="size-6 animate-spin" />
+                ) : (
+                  <MessageSquare className="size-8 opacity-50" />
+                )}
+                {t(
+                  isRefreshing
+                    ? 'history.loading'
+                    : error
+                      ? 'history.loadFailed'
+                      : query.trim()
+                        ? 'history.noResults'
+                        : 'history.empty',
+                )}
+              </div>
+            ) : (
+              Array.from(groups, ([key, group], index) => (
+                <section
+                  key={key}
+                  className="mb-[calc(0.75rem*var(--chat-density-scale,1))] last:mb-0"
+                >
+                  {view === 'project' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={!collapsed.has(key)}
+                      aria-controls={`${groupId}-${index}`}
+                      onClick={() =>
+                        setCollapsed((current) => {
+                          const next = new Set(current);
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })
+                      }
+                      className="mb-[calc(0.25rem*var(--chat-density-scale,1))] flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {collapsed.has(key) ? (
+                        <ChevronRight size={14} />
+                      ) : (
+                        <ChevronDown size={14} />
+                      )}
+                      <Folder size={14} className="shrink-0" />
+                      <span
+                        className="min-w-0 flex-1 truncate"
+                        title={group.name}
+                      >
+                        {group.name}
+                      </span>
+                      <span>{group.threads.length}</span>
+                    </Button>
+                  )}
+                  <ul
+                    id={`${groupId}-${index}`}
+                    hidden={view === 'project' && collapsed.has(key)}
+                  >
+                    {group.threads.map((thread) => {
+                      const updatedAt = thread.lastMessageAt;
+                      const validDate =
+                        updatedAt && !Number.isNaN(updatedAt.getTime());
+                      const active = currentThreadId === thread.id;
+                      return (
+                        <HistoryThreadItem
+                          key={thread.recordId}
+                          thread={thread}
+                          active={active}
+                          disabled={disabled || Boolean(deletingId)}
+                          deleting={deletingId === thread.recordId}
+                          project={
+                            view === 'recent' && thread.projectId
+                              ? {
+                                  id: thread.projectId,
+                                  name: projectLabel(thread),
+                                }
+                              : undefined
+                          }
+                          projectSelected={
+                            projectFilter?.id === thread.projectId
+                          }
+                          onFilterProject={onProjectFilterChange}
+                          updatedLabel={
+                            validDate
+                              ? updatedAt.toDateString() ===
+                                new Date().toDateString()
+                                ? dateFormat.time.format(updatedAt)
+                                : dateFormat.compact.format(updatedAt)
+                              : undefined
+                          }
+                          updatedTitle={
+                            validDate
+                              ? dateFormat.full.format(updatedAt)
+                              : undefined
+                          }
+                          onSelect={() => {
+                            onSelectThread?.(thread);
+                            setOpen(false);
+                          }}
+                          onDelete={
+                            showDelete && onDeleteThread
+                              ? () => void deleteThread(thread)
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))
+            )}
+            {hasMore && onLoadMore && (
+              <div className="px-2 pb-2 pt-3 text-center">
+                {loadMoreError && (
+                  <p role="alert" className="mb-2 text-xs text-destructive">
+                    {t('history.loadMoreFailed')}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={onLoadMore}
+                  disabled={isRefreshing || isLoadingMore}
+                >
+                  {isLoadingMore && (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  )}
+                  {t(loadMoreError ? 'history.retry' : 'history.loadMore')}
+                </Button>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+        <DialogFooter className="justify-between">
+          <span role="status" className="text-xs text-muted-foreground">
+            {isRefreshing
+              ? t('history.loading')
+              : t('history.count', { count: threads.length, total })}
+          </span>
+          {onNewThread && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                onNewThread();
+                setOpen(false);
+              }}
+              disabled={disabled}
+            >
+              <Plus size={15} />
+              {newThreadLabel ?? t('history.newThread')}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

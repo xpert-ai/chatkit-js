@@ -48,7 +48,7 @@ export function useChatHistory({
 
   const { threads, updateThread, deleteThread, refreshThreads } = useThreads(
     undefined,
-    surface === 'main' && history?.enabled !== false,
+    false, // Message history owns lazy browsing; this hook only manages mutations.
   );
 
   const messageHistory = useMessageHistory({

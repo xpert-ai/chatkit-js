@@ -138,6 +138,7 @@ describe('Assistant identity across project lifecycles', () => {
         .mockReturnValueOnce(oldRefresh.promise);
       const { rerender } = render(session('project-1'));
       await screen.findByText('Assistant bid');
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001);
       refreshFromHost();
       expect(oldGet).toHaveBeenCalledTimes(2);
 
@@ -180,6 +181,7 @@ describe('Assistant identity across project lifecycles', () => {
     render(session('project'));
     await screen.findByText('Assistant bid');
     renders.length = 0;
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001);
     refreshFromHost();
     expect(screen.getByText('Assistant bid')).toBeVisible();
     await act(async () => refresh.reject(new Error('temporary outage')));

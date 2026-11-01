@@ -59,7 +59,7 @@ export function ChatComposerDock({
       data-slot="chatkit-chat-composer"
       data-position={initial ? 'centered' : 'bottom'}
       className={cn(
-        'mx-auto w-full max-w-2xl px-4 pb-4 pt-2 z-10',
+        'pointer-events-none mx-auto w-full max-w-2xl px-4 pb-4 pt-2 z-10 [&>:not(form)]:pointer-events-auto',
         initial ? 'mb-auto' : 'sticky bottom-0',
       )}
       style={style}

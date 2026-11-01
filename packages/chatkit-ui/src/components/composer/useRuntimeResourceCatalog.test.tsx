@@ -6,7 +6,10 @@ import {
   type RuntimeResourceKind,
   type RuntimeResourceReference,
 } from '@xpert-ai/xpert-sdk';
-import { useRuntimeResourceCatalog } from './useRuntimeResourceCatalog';
+import {
+  RESOURCE_CATALOG_TTL_MS,
+  useRuntimeResourceCatalog,
+} from './useRuntimeResourceCatalog';
 const resource = (
   kind: RuntimeResourceKind,
   index = 0,
@@ -129,6 +132,7 @@ describe('resource catalog cache', () => {
           enabled: true,
           query: '',
           selectedResources: [selected],
+          browseEnabled: false,
           projectId,
         }),
       { initialProps: { projectId: 'one' } },
@@ -189,26 +193,24 @@ describe('resource catalog cache', () => {
     expect(result.current.selectedItems[0].components).toEqual([]);
   });
 
-  it('loads every unfiltered page before deciding a selected resource is missing', async () => {
+  it('loads only exact selected references while the menu is closed', async () => {
     const { result, fetch, validate, selected } = selectionSetup(
       resource('external_xpert', 101),
     );
-    fetch.mockImplementation(async (_id, options) => ({
-      items: options?.offset
-        ? [selected]
-        : Array.from({ length: 100 }, (_, index) =>
-            resource('agent_plugin', index),
-          ),
-      total: 101,
-    }));
-    expect(result.current.selectedItems[0].status).toBe('checking');
     await waitFor(() =>
       expect(result.current.selectedItems[0].status).toBe('ready'),
     );
-    expect(result.current.selectedItems[0].kind).toBe('external_xpert');
-    expect(
-      fetch.mock.calls.filter(([, options]) => options && 'purpose' in options),
-    ).toHaveLength(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      'assistant',
+      expect.objectContaining({
+        purpose: 'selection',
+        references: [
+          { bindingId: selected.bindingId, version: selected.version },
+        ],
+        offset: 0,
+      }),
+    );
     expect(validate).not.toHaveBeenCalled();
   });
 
@@ -247,7 +249,7 @@ describe('resource catalog cache', () => {
     expect(result.current.selectedItems[0].status).toBe('unavailable');
   });
 
-  it('rechecks availability when returning from workspace management', async () => {
+  it('retains fresh caches on focus and rechecks availability after expiry', async () => {
     const { result, fetch, validate } = selectionSetup();
     await waitFor(() =>
       expect(result.current.selectedItems[0].status).toBe('ready'),
@@ -256,7 +258,15 @@ describe('resource catalog cache', () => {
     validate.mockRejectedValue(
       Object.assign(new Error('disabled'), { status: 403 }),
     );
+    const count = fetch.mock.calls.length;
     act(() => window.dispatchEvent(new Event('focus')));
+    expect(fetch).toHaveBeenCalledTimes(count);
+    expect(result.current.selectedItems[0].status).toBe('ready');
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.now() + RESOURCE_CATALOG_TTL_MS + 1);
+    act(() => window.dispatchEvent(new Event('focus')));
+    now.mockRestore();
     await waitFor(() =>
       expect(result.current.selectedItems[0].status).toBe('unavailable'),
     );
@@ -329,7 +339,7 @@ describe('resource catalog cache', () => {
       expect(result.current.selectedItems[0].status).toBe('unverified'),
     );
     expect(result.current.loadError).toBe('catalog offline');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(validate).not.toHaveBeenCalled();
     fetch.mockResolvedValue({ items: [selected], total: 1 });
     act(() => result.current.refresh());
@@ -339,26 +349,28 @@ describe('resource catalog cache', () => {
     expect(result.current.loadError).toBeNull();
   });
 
-  it('searches localized descriptions in cached resources without fetching again', async () => {
+  it('sends searches for every category to the server instead of scanning incomplete pages locally', async () => {
     const { result, rerender, fetch } = setup();
     await waitFor(() => expect(result.current.loading).toBe(false));
-    fetch.mockResolvedValueOnce({
-      items: [
-        {
-          ...resource('middleware'),
-          description: { en_US: 'Canvas helper', zh_Hans: '画布助手' },
-        },
-      ],
-      total: 1,
-    });
     rerender({ kind: 'middleware', query: '画布', projectId: 'one' });
-    await waitFor(() => expect(result.current.items).toHaveLength(1));
-    rerender({ kind: 'middleware', query: 'Canvas', projectId: 'one' });
-    expect(result.current.items).toHaveLength(1);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetch).toHaveBeenLastCalledWith(
+      'assistant',
+      expect.objectContaining({
+        kind: 'middleware',
+        search: '画布',
+        offset: 0,
+      }),
+    );
+    rerender({ kind: 'external_xpert', query: 'Canvas', projectId: 'one' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetch).toHaveBeenLastCalledWith(
+      'assistant',
+      expect.objectContaining({ kind: 'external_xpert', search: 'Canvas' }),
+    );
   });
 
-  it('reuses each category when switching, searches direct resources locally and refreshes explicitly', async () => {
+  it('reuses category pages and refreshes explicitly', async () => {
     const { result, rerender, fetch } = setup();
     await waitFor(() => expect(result.current.loading).toBe(false));
     for (const kind of ['middleware', 'external_xpert'] as const) {
@@ -366,35 +378,35 @@ describe('resource catalog cache', () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
     }
     expect(fetch).toHaveBeenCalledTimes(3);
-    rerender({ kind: 'middleware', query: 'missing', projectId: 'one' });
-    expect(result.current.items).toEqual([]);
-    expect(result.current.loading).toBe(false);
     rerender({ kind: 'agent_plugin', query: '', projectId: 'one' });
     expect(result.current.items[0].kind).toBe('agent_plugin');
     expect(fetch).toHaveBeenCalledTimes(3);
     act(() => result.current.refresh());
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
   });
-  it('fetches every page of middleware once, without a user pagination action', async () => {
-    const { result, rerender, fetch } = setup();
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    fetch.mockImplementation(async (_id, options) => ({
-      items: Array.from({ length: options?.offset ? 1 : 100 }, (_, index) =>
-        resource('middleware', (options?.offset ?? 0) + index),
-      ),
-      total: 101,
-    }));
-    rerender({ kind: 'middleware', query: '', projectId: 'one' });
-    await waitFor(() => expect(result.current.items).toHaveLength(101));
-    expect(result.current.loading).toBe(false);
-    expect(fetch).toHaveBeenLastCalledWith(
-      'assistant',
-      expect.objectContaining({ kind: 'middleware', offset: 100, limit: 100 }),
-    );
-    rerender({ kind: 'middleware', query: '100', projectId: 'one' });
-    expect(result.current.items).toHaveLength(1);
-    expect(fetch).toHaveBeenCalledTimes(3);
-  });
+  it.each(['middleware', 'external_xpert', 'agent_plugin'] as const)(
+    'loads later %s pages only on request',
+    async (kind) => {
+      const { result, rerender, fetch } = setup();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      fetch.mockImplementation(async (_id, options) => ({
+        items: Array.from({ length: options?.offset ? 1 : 100 }, (_, index) =>
+          resource(kind, (options?.offset ?? 0) + index),
+        ),
+        total: 101,
+      }));
+      rerender({ kind, query: '', projectId: 'two' });
+      await waitFor(() => expect(result.current.items).toHaveLength(100));
+      expect(result.current.total).toBe(101);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      act(() => result.current.more());
+      await waitFor(() => expect(result.current.items).toHaveLength(101));
+      expect(fetch).toHaveBeenLastCalledWith(
+        'assistant',
+        expect.objectContaining({ kind, offset: 100, limit: 100 }),
+      );
+    },
+  );
   it('isolates project caches and never displays metadata from the previous project', async () => {
     const { result, rerender, fetch } = setup();
     await waitFor(() => expect(result.current.known.size).toBe(1));

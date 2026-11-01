@@ -16,6 +16,36 @@ import {
 describe('thread history restoration', () => {
   setupHistoryTests();
 
+  it('shares inline metadata and shows messages while run discovery is still pending', async () => {
+    const pending = deferred<[]>();
+    mocks.listRuns.mockReturnValue(pending.promise);
+    mocks.getThread.mockResolvedValue({
+      metadata: { id: 'conversation-thread-1' },
+      status: 'busy',
+      conversation: {
+        id: 'conversation-thread-1',
+        threadId: 'thread-1',
+        title: 'Loaded title',
+        projectId: 'project-b',
+        status: 'busy',
+      },
+    });
+    render(provider());
+    await act(async () => {
+      await stream.loadThread('thread-1');
+    });
+    expect(stream.historyLoad.status).toBe('loaded');
+    expect(stream.messages).toHaveLength(2);
+    expect(stream.conversation?.title).toBe('Loaded title');
+    expect(stream.projectId).toBe('project-b');
+    expect(mocks.getConversation).not.toHaveBeenCalled();
+    expect(mocks.searchConversations).not.toHaveBeenCalled();
+    act(() => stream.reset(null));
+    await act(async () => pending.resolve([]));
+    expect(stream.conversation).toBeNull();
+    expect(mocks.joinStream).not.toHaveBeenCalled();
+  });
+
   it('does not let an older thread lookup overwrite a newer selection', async () => {
     const slow = deferred<{ metadata: { id: string } }>();
     mocks.getThread.mockImplementation((id: string) =>
@@ -278,7 +308,9 @@ describe('in-place project changes', () => {
 
   it('adopts the persisted project of the current conversation without resetting its transcript or readiness', async () => {
     mocks.getConversation.mockImplementation(async (id: string) => ({
-      id, status: 'idle', projectId: 'project-1',
+      id,
+      status: 'idle',
+      projectId: 'project-1',
     }));
     const { rerender } = render(provider('thread-1', 'cs-x-test', ''));
     await waitFor(() => expect(stream.messages).toHaveLength(2));
@@ -301,9 +333,18 @@ describe('in-place project changes', () => {
   });
 
   it('clears personal history when automatic project creation is selected', async () => {
-    mocks.getConversation.mockResolvedValue({ id: 'personal', projectId: undefined });
+    mocks.getConversation.mockResolvedValue({
+      id: 'personal',
+      projectId: undefined,
+    });
     const selection = (mode: 'none' | 'auto-new') => (
-      <StreamProvider apiKey="cs-x-test" xpertId="assistant-1" initialThread="personal-thread" projectSelection={{ mode }} threadStateMode="memory">
+      <StreamProvider
+        apiKey="cs-x-test"
+        xpertId="assistant-1"
+        initialThread="personal-thread"
+        projectSelection={{ mode }}
+        threadStateMode="memory"
+      >
         <Probe />
       </StreamProvider>
     );
@@ -317,15 +358,28 @@ describe('in-place project changes', () => {
 
   it('keeps the child DOM mounted and clears the previous conversation and connector selection', async () => {
     const { rerender, getByTestId } = render(
-      <StreamProvider apiKey="cs-x-test" xpertId="assistant-1" projectId="project-1" initialThread="thread-1" threadStateMode="memory">
-        <Probe /><input data-testid="stable-composer" defaultValue="draft" />
+      <StreamProvider
+        apiKey="cs-x-test"
+        xpertId="assistant-1"
+        projectId="project-1"
+        initialThread="thread-1"
+        threadStateMode="memory"
+      >
+        <Probe />
+        <input data-testid="stable-composer" defaultValue="draft" />
       </StreamProvider>,
     );
     await waitFor(() => expect(stream.messages).toHaveLength(2));
     const composer = getByTestId('stable-composer');
     rerender(
-      <StreamProvider apiKey="cs-x-test" xpertId="assistant-1" projectId="project-2" threadStateMode="memory">
-        <Probe /><input data-testid="stable-composer" defaultValue="draft" />
+      <StreamProvider
+        apiKey="cs-x-test"
+        xpertId="assistant-1"
+        projectId="project-2"
+        threadStateMode="memory"
+      >
+        <Probe />
+        <input data-testid="stable-composer" defaultValue="draft" />
       </StreamProvider>,
     );
     await waitFor(() => expect(stream.threadId).toBeNull());

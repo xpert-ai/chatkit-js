@@ -1,22 +1,20 @@
 import * as React from 'react';
 import {
-  CornerDownLeft,
+  CornerDownRight,
+  FileText,
+  ImageIcon,
+  ListEnd,
   Ellipsis,
-  Info,
   PencilLine,
   Trash2,
 } from 'lucide-react';
 
 import { getReferenceLabel, normalizeReferences } from '../../lib/references';
-import {
-  cn,
-  getMenuItemRoundedClass,
-  getPanelRoundedClass,
-} from '../../lib/utils';
-import { useTheme } from '../../providers/Theme';
+import { cn } from '../../lib/utils';
 import type { PendingFollowUp } from '../../lib/follow-ups';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 export type PendingFollowUpsProps = {
   items: PendingFollowUp[];
@@ -52,13 +50,52 @@ function getPendingFollowUpText(
   return `${firstReferenceLabel} +${references.length - 1}`;
 }
 
-function useRoundedClasses() {
-  const { theme } = useTheme();
+const actionClassName =
+  'inline-flex h-[max(1.75rem,calc(2rem*var(--chat-density-scale,1)))] shrink-0 items-center justify-center gap-1.5 rounded-chat-item text-sm text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 pointer-coarse:min-h-11 [&>svg]:size-4 [&>svg]:shrink-0';
+const iconActionClassName = cn(
+  actionClassName,
+  'aspect-square p-0 pointer-coarse:min-w-11',
+);
 
-  return {
-    panel: getPanelRoundedClass(theme.radius),
-    control: getMenuItemRoundedClass(theme.radius),
-  };
+function PendingFollowUpPreview({ item }: { item: PendingFollowUp }) {
+  const image = normalizeReferences(item.request.input.references).find(
+    (reference) => reference.type === 'image',
+  );
+  const file = item.request.input.files?.[0];
+  const fileName = file
+    ? ('originalName' in file && file.originalName) || file.name
+    : undefined;
+  const label = image ? getReferenceLabel(image) : fileName;
+  const fileMime = file && (('mimeType' in file && file.mimeType) || file.type);
+  const thumbnail =
+    image?.url ||
+    (file &&
+      (('thumbUrl' in file && file.thumbUrl) ||
+        (fileMime?.startsWith('image/') &&
+          (('fileUrl' in file && file.fileUrl) ||
+            ('url' in file && file.url)))));
+  const [failedUrl, setFailedUrl] = React.useState<string | null>(null);
+  if (!image && !file) return null;
+
+  return (
+    <span
+      className="flex size-[max(1.75rem,calc(2rem*var(--chat-density-scale,1)))] shrink-0 items-center justify-center overflow-hidden rounded-chat-item bg-muted text-muted-foreground"
+      title={label}
+    >
+      {thumbnail && failedUrl !== thumbnail ? (
+        <img
+          src={thumbnail}
+          alt={label ?? ''}
+          className="size-full object-cover"
+          onError={() => setFailedUrl(thumbnail)}
+        />
+      ) : image ? (
+        <ImageIcon className="size-4" aria-hidden="true" />
+      ) : (
+        <FileText className="size-4" aria-hidden="true" />
+      )}
+    </span>
+  );
 }
 
 export function PendingFollowUps({
@@ -73,7 +110,6 @@ export function PendingFollowUps({
   className,
 }: PendingFollowUpsProps) {
   const { t } = useChatkitTranslation();
-  const rounded = useRoundedClasses();
   const referencedContentFallback = t('chat.referencedContentOnly');
 
   const [openMenuId, setOpenMenuId] = React.useState<string | null>(null);
@@ -90,159 +126,147 @@ export function PendingFollowUps({
 
   return (
     <div
+      role="region"
+      aria-label={t('chat.followUps.pending')}
+      data-slot="pending-follow-ups"
       className={cn(
-        'space-y-2 mx-2 p-2 border border-border',
-        rounded.panel,
-        attachToComposer ? 'rounded-b-none border-b-0' : null,
+        'mx-[calc(0.75rem*var(--chat-density-scale,1))] min-w-0 rounded-chat-panel border border-border/70 bg-background px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.375rem*var(--chat-density-scale,1))]',
+        attachToComposer && 'rounded-b-none border-b-0',
         className,
       )}
     >
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-medium text-foreground">
-            {t('chat.followUps.pending')}
-          </div>
-        </div>
-
+      <ul className="max-h-40 overflow-y-auto divide-y divide-border/50">
         {items.map((item) => {
           const canSendItemNow = item.mode === 'queue' && canSendNow(item.id);
+          const text = getPendingFollowUpText(item, referencedContentFallback);
+          const hint =
+            item.mode === 'queue'
+              ? canSendItemNow
+                ? t('chat.followUps.manualQueueHint')
+                : t('chat.followUps.queueHint')
+              : t('chat.followUps.steerHint');
 
           return (
-            <div
+            <li
               key={item.id}
-              className={cn(
-                'border border-border/50 bg-muted/15 px-2 py-1',
-                rounded.control,
-              )}
+              className="flex min-w-0 items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))]"
             >
-              <div className="flex items-start gap-2.5">
-                <CornerDownLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className="truncate text-[13px] leading-5 text-foreground"
-                        title={getPendingFollowUpText(
-                          item,
-                          referencedContentFallback,
-                        )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    tabIndex={0}
+                    aria-label={hint}
+                    className="flex size-5 shrink-0 items-center justify-center rounded-chat-item text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <ListEnd className="size-4" aria-hidden="true" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">{hint}</TooltipContent>
+              </Tooltip>
+              <PendingFollowUpPreview item={item} />
+              <span
+                className="min-w-0 flex-1 truncate text-sm text-foreground"
+                title={text}
+              >
+                {text}
+              </span>
+              <div className="flex shrink-0 items-center gap-[calc(0.25rem*var(--chat-density-scale,1))]">
+                {item.mode === 'queue' &&
+                  isLoading &&
+                  !item.queuedFromSteer && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => void onPromoteToSteer(item.id)}
+                          className={cn(
+                            actionClassName,
+                            'bg-muted px-[calc(0.75rem*var(--chat-density-scale,1))]',
+                          )}
+                          aria-label={t('chat.followUps.steerAction')}
+                        >
+                          <CornerDownRight aria-hidden="true" />
+                          {t('chat.followUps.steerAction')}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {t('chat.followUps.steerActionHint')}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                {canSendItemNow && (
+                  <button
+                    type="button"
+                    onClick={() => void onSendNow(item.id)}
+                    className={cn(
+                      actionClassName,
+                      'bg-muted px-[calc(0.75rem*var(--chat-density-scale,1))]',
+                    )}
+                    aria-label={t('chat.followUps.sendNow')}
+                    title={t('chat.followUps.sendNow')}
+                  >
+                    <CornerDownRight aria-hidden="true" />
+                    {t('chat.followUps.sendNow')}
+                  </button>
+                )}
+                {item.mode === 'queue' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(item.id)}
+                      className={iconActionClassName}
+                      aria-label={t('chat.followUps.remove')}
+                      title={t('chat.followUps.remove')}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </button>
+                    <Popover
+                      open={openMenuId === item.id}
+                      onOpenChange={(open) =>
+                        setOpenMenuId(open ? item.id : null)
+                      }
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            iconActionClassName,
+                            'data-[state=open]:bg-muted data-[state=open]:text-foreground',
+                          )}
+                          aria-label={t('chat.followUps.more')}
+                          title={t('chat.followUps.more')}
+                        >
+                          <Ellipsis aria-hidden="true" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        side="bottom"
+                        className="w-56 max-w-[calc(100vw-2rem)] border-border/70 p-[calc(0.375rem*var(--chat-density-scale,1))]"
                       >
-                        {getPendingFollowUpText(
-                          item,
-                          referencedContentFallback,
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {item.mode === 'queue' &&
-                        isLoading &&
-                        !item.queuedFromSteer && (
-                          <button
-                            type="button"
-                            onClick={() => void onPromoteToSteer(item.id)}
-                            className={cn(
-                              'inline-flex h-6 items-center border border-primary/20 bg-primary/5 px-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10',
-                              rounded.control,
-                            )}
-                            aria-label={t('chat.followUps.steerAction')}
-                            title={t('chat.followUps.steerAction')}
-                          >
-                            {t('chat.followUps.steerAction')}
-                          </button>
-                        )}
-                      {canSendItemNow && (
                         <button
                           type="button"
-                          onClick={() => void onSendNow(item.id)}
-                          className={cn(
-                            'inline-flex h-6 items-center border border-primary/20 bg-primary/5 px-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10',
-                            rounded.control,
-                          )}
-                          aria-label={t('chat.followUps.sendNow')}
-                          title={t('chat.followUps.sendNow')}
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onEdit(item.id);
+                          }}
+                          className="flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {t('chat.followUps.sendNow')}
+                          <PencilLine
+                            className="size-4 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span>{t('chat.followUps.edit')}</span>
                         </button>
-                      )}
-                      {item.mode === 'queue' && (
-                        <button
-                          type="button"
-                          onClick={() => onRemove(item.id)}
-                          className={cn(
-                            'inline-flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                            rounded.control,
-                          )}
-                          aria-label={t('chat.followUps.remove')}
-                          title={t('chat.followUps.remove')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                      {item.mode === 'queue' && (
-                        <Popover
-                          open={openMenuId === item.id}
-                          onOpenChange={(open) =>
-                            setOpenMenuId(open ? item.id : null)
-                          }
-                        >
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className={cn(
-                                'inline-flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-                                rounded.control,
-                              )}
-                              aria-label={t('chat.followUps.more')}
-                              title={t('chat.followUps.more')}
-                            >
-                              <Ellipsis size={13} />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="end"
-                            side="bottom"
-                            className={cn(
-                              'w-52 border-border/70 bg-background p-1.5',
-                              rounded.panel,
-                            )}
-                          >
-                            <div className="flex flex-col gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  onEdit(item.id);
-                                }}
-                                className={cn(
-                                  'flex items-center gap-2 px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted',
-                                  rounded.control,
-                                )}
-                              >
-                                <PencilLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span>{t('chat.followUps.edit')}</span>
-                              </button>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[10px] leading-4 text-muted-foreground">
-                    <Info className="h-3 w-3 shrink-0" />
-                    <span className="truncate">
-                      {item.mode === 'queue'
-                        ? canSendItemNow
-                          ? t('chat.followUps.manualQueueHint')
-                          : t('chat.followUps.queueHint')
-                        : t('chat.followUps.steerHint')}
-                    </span>
-                  </div>
-                </div>
+                      </PopoverContent>
+                    </Popover>
+                  </>
+                )}
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }

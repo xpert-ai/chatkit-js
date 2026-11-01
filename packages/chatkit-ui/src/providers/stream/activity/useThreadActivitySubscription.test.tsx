@@ -5,7 +5,7 @@ import type { Client, ThreadActivitySnapshot } from '@xpert-ai/xpert-sdk';
 import type { StateType } from '../types';
 import { useThreadActivitySubscription } from './useThreadActivitySubscription';
 
-type Run = ThreadActivitySnapshot['runs'][number];
+type Run = ThreadActivitySnapshot['runs'][number] & { messageCount?: number };
 const run = (id: string, status: string): Run => ({
   id,
   status,
@@ -86,6 +86,55 @@ function fixture() {
 describe('background answer discovery', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+  it('reuses complete message versions and recovers a reply committed during history loading', async () => {
+    const f = fixture();
+    const stamp = '2026-10-06T12:00:01.000Z';
+    f.valuesRef.current.messages = [
+      {
+        id: 'reply',
+        type: 'ai',
+        executionId: 'fast',
+        content: 'saved',
+        updatedAt: stamp,
+      },
+    ];
+    const view = renderHook(() => useThreadActivitySubscription(f.options));
+    await f.publish([
+      { ...run('fast', 'success'), messageCount: 1, messageRevision: stamp },
+    ]);
+    await f.tick();
+    expect(f.searchMessages).not.toHaveBeenCalled();
+    await f.publish([
+      {
+        ...run('fast', 'success'),
+        messageCount: 1,
+        messageRevision: '2026-10-06T12:00:02.000Z',
+      },
+    ]);
+    await f.tick();
+    expect(f.searchMessages).toHaveBeenCalledOnce();
+    view.unmount();
+  });
+  it('does not treat a paginated fragment as a complete run', async () => {
+    const f = fixture();
+    const stamp = '2026-10-06T12:00:01.000Z';
+    f.valuesRef.current.messages = [
+      {
+        id: 'reply',
+        type: 'ai',
+        executionId: 'fast',
+        content: 'saved',
+        updatedAt: stamp,
+      },
+    ];
+    const view = renderHook(() => useThreadActivitySubscription(f.options));
+    await f.publish([
+      { ...run('fast', 'success'), messageCount: 2, messageRevision: stamp },
+    ]);
+    await f.tick();
+    expect(f.searchMessages).toHaveBeenCalledOnce();
+    view.unmount();
+  });
   it('reconciles concurrent completed answers independently and picks up delayed final persistence', async () => {
     const f = fixture();
     f.searchMessages.mockImplementation(async (_id, query) => ({

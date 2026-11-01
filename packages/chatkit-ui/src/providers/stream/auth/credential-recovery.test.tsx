@@ -24,6 +24,7 @@ function setup(getClientSecret: () => Promise<{ secret: string }>) {
         }),
   );
   vi.stubGlobal('fetch', fetch);
+  const sendCommand = vi.fn();
   const view = renderHook(() =>
     useStreamCredentials({
       apiKey: 'cs-x-expired',
@@ -32,7 +33,7 @@ function setup(getClientSecret: () => Promise<{ secret: string }>) {
       locale: 'zh-CN',
       isParentAvailable: false,
       getClientSecret,
-      sendCommand: vi.fn(),
+      sendCommand,
       lastEventIdRef: { current: null },
       clientRef: { current: null },
     }),
@@ -44,6 +45,27 @@ function setup(getClientSecret: () => Promise<{ secret: string }>) {
     );
   return { fetch, view, recovery, read };
 }
+
+it('keeps clients stable on credential renewal and replaces them when the organization changes', async () => {
+  const refresh = vi
+    .fn()
+    .mockResolvedValue({ secret: 'cs-x-new', organizationId: 'org' });
+  const { view } = setup(refresh);
+  const client = view.result.current.client;
+  const readClient = view.result.current.readClient;
+  await act(async () => {
+    await view.result.current.refreshClientSecret();
+  });
+  expect(view.result.current.client).toBe(client);
+  expect(view.result.current.readClient).toBe(readClient);
+  refresh.mockResolvedValue({ secret: 'cs-x-other', organizationId: 'other' });
+  await act(async () => {
+    await view.result.current.refreshClientSecret();
+  });
+  expect(view.result.current.client).not.toBe(client);
+  expect(view.result.current.readClient).not.toBe(readClient);
+  view.unmount();
+});
 
 it.each([0, 408, 429, 503])(
   'recovers an expired credential after refresh HTTP %i without dispatching execution',

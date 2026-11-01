@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { CircleHelp } from 'lucide-react';
 
+import { useAssistantInfo } from '../../hooks/useAssistantInfo';
 import { cn } from '../../lib/utils';
 import { useStreamContext } from '../../providers/Stream';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
@@ -72,17 +73,19 @@ export function ContextUsageIndicator({
 }: ContextUsageIndicatorProps) {
   const { t } = useChatkitTranslation();
   const stream = useStreamContext();
-  const [assistantContext, setAssistantContext] = React.useState<{
-    assistantId: string;
-    maxContextSize: number | null;
-    agentKey: string | null;
-  } | null>(null);
-  const assistantReady = assistantContext?.assistantId === stream.assistantId;
-  const assistantAgentKey = assistantReady
-    ? (assistantContext?.agentKey ?? null)
+  const hasApiConfiguration = Boolean(
+    stream.apiUrl?.trim() && stream.apiKey?.trim(),
+  );
+  const assistant = useAssistantInfo(
+    hasApiConfiguration ? stream.client : null,
+    stream.assistantId,
+  );
+  const assistantReady = !!assistant;
+  const assistantAgentKey = assistant
+    ? resolveAssistantAgentKey(assistant)
     : null;
-  const maxContextSize = assistantReady
-    ? (assistantContext?.maxContextSize ?? null)
+  const maxContextSize = assistant
+    ? resolveAssistantContextSize(assistant)
     : null;
   const scope = React.useMemo(
     () => ({
@@ -106,38 +109,6 @@ export function ContextUsageIndicator({
   const realtimeUsedContextSize =
     getThreadContextUsageTotalTokens(realtimeUsage);
   const latestRealtimeUsageRef = React.useRef(realtimeUsage);
-  const hasApiConfiguration = Boolean(
-    stream.apiUrl?.trim() && stream.apiKey?.trim(),
-  );
-
-  React.useEffect(() => {
-    if (!hasApiConfiguration || !stream.client || !stream.assistantId) {
-      setAssistantContext(null);
-      return;
-    }
-
-    let cancelled = false;
-    stream.client.assistants
-      .get(stream.assistantId)
-      .then((assistant) => {
-        if (cancelled || !assistant) return;
-        setAssistantContext({
-          assistantId: stream.assistantId,
-          maxContextSize: resolveAssistantContextSize(assistant),
-          agentKey: resolveAssistantAgentKey(assistant),
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.warn('[Chat] Failed to load assistant context size:', err);
-        setAssistantContext(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [hasApiConfiguration, stream.client, stream.assistantId]);
-
   React.useEffect(() => {
     latestRealtimeUsageRef.current = realtimeUsage;
     if (realtimeUsedContextSize == null || realtimeUsedContextSize === 0)

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
+import { ToolbarButton } from '../components/ui/toolbar-button';
 
 export function WorkbenchTabs({
   activeKey,
@@ -139,13 +140,13 @@ export function WorkbenchTabs({
     );
     const Icon = direction === -1 ? ChevronLeft : ChevronRight;
     return (
-      <button
+      <ToolbarButton
         type="button"
         aria-label={label}
         title={label}
         aria-controls={id}
         disabled={direction === -1 ? !edges.left : !edges.right}
-        className="flex size-7 shrink-0 touch-none select-none items-center justify-center rounded-chat-item text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-30"
+        className="touch-none disabled:cursor-default disabled:opacity-30"
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           event.preventDefault();
@@ -161,8 +162,8 @@ export function WorkbenchTabs({
           if (event.detail === 0) move(direction * 128);
         }}
       >
-        <Icon size={16} aria-hidden="true" />
-      </button>
+        <Icon aria-hidden="true" />
+      </ToolbarButton>
     );
   };
 

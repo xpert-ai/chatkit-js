@@ -94,7 +94,9 @@ describe('conversation share dialog', () => {
     wrap();
     fireEvent.click(await screen.findByText('sharing.editShare'));
     expect(methods.createShare).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('sharing.audience')).toHaveValue('public');
+    expect(screen.getByLabelText('sharing.audience')).toHaveTextContent(
+      'sharing.public',
+    );
     expect(screen.getByText('sharing.replace')).toBeDisabled();
     fireEvent.click(screen.getByText('sharing.copy'));
     await waitFor(() => expect(clipboard).toHaveBeenCalledWith(share.url));
@@ -111,8 +113,8 @@ describe('conversation share dialog', () => {
     wrap();
     await screen.findByText('Shared answer');
     expect(document.querySelector('img')).toBeNull();
-    expect(screen.getByLabelText('sharing.audience')).toHaveValue(
-      'organization',
+    expect(screen.getByLabelText('sharing.audience')).toHaveTextContent(
+      'sharing.organization',
     );
     fireEvent.click(screen.getByText('sharing.create'));
     await waitFor(() => expect(clipboard).toHaveBeenCalledWith(share.url));
@@ -128,9 +130,13 @@ describe('conversation share dialog', () => {
   it('requires public consent and honors server policy', async () => {
     wrap();
     await screen.findByText('Shared answer');
-    fireEvent.change(screen.getByLabelText('sharing.audience'), {
-      target: { value: 'public' },
-    });
+    fireEvent.keyDown(
+      screen.getByRole('combobox', { name: 'sharing.audience' }),
+      { key: 'ArrowDown' },
+    );
+    fireEvent.click(
+      await screen.findByRole('option', { name: 'sharing.public' }),
+    );
     expect(screen.getByText('sharing.create')).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox'));
     expect(screen.getByText('sharing.create')).toBeEnabled();
@@ -142,6 +148,11 @@ describe('conversation share dialog', () => {
     });
     wrap();
     await screen.findByText('Shared answer');
+    fireEvent.keyDown(
+      screen.getByRole('combobox', { name: 'sharing.audience' }),
+      { key: 'ArrowDown' },
+    );
+    await screen.findByRole('listbox');
     expect(screen.queryByRole('option', { name: 'sharing.public' })).toBeNull();
   });
   it('can revoke an existing share even when a new snapshot is unavailable', async () => {
@@ -180,6 +191,66 @@ describe('conversation share dialog', () => {
     expect(exec).toHaveBeenCalledWith('copy');
     expect(document.querySelector('textarea')).toBeNull();
   });
+  it('previews only opening excerpts while creating the complete snapshot', async () => {
+    methods.previewShare.mockResolvedValue({
+      ...preview,
+      snapshot: {
+        ...preview.snapshot,
+        messages: [
+          ...preview.snapshot.messages,
+          { role: 'human', text: 'Later message excluded from preview' },
+        ],
+      },
+    });
+    wrap();
+    await screen.findByText('Shared answer');
+    expect(
+      screen.queryByText('Later message excluded from preview'),
+    ).toBeNull();
+    expect(screen.getByText('sharing.create')).toHaveAttribute(
+      'data-size',
+      'default',
+    );
+    expect(screen.getByText('sharing.refresh')).toHaveAttribute(
+      'data-size',
+      'default',
+    );
+    fireEvent.click(screen.getByText('sharing.create'));
+    await waitFor(() =>
+      expect(methods.createShare).toHaveBeenCalledWith(
+        'chat',
+        expect.objectContaining({ digest: preview.digest }),
+      ),
+    );
+  });
+
+  it('inherits live theme changes in the portaled audience menu', async () => {
+    const { rerender } = wrap({
+      radius: 'sharp',
+      density: 'compact',
+      colorScheme: 'light',
+    });
+    await screen.findByText('Shared answer');
+    fireEvent.keyDown(
+      screen.getByRole('combobox', { name: 'sharing.audience' }),
+      { key: 'ArrowDown' },
+    );
+    const menu = await screen.findByRole('listbox');
+    expect(menu.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
+    expect(menu.style.getPropertyValue('--chat-density-scale')).toBe('0.75');
+    rerender(
+      <ThemeProvider
+        theme={{ radius: 'round', density: 'spacious', colorScheme: 'dark' }}
+      >
+        <ConversationShareDialog {...props} />
+      </ThemeProvider>,
+    );
+    expect(menu.style.getPropertyValue('--chat-density-scale')).toBe('1.25');
+    expect(menu.style.getPropertyValue('--chat-panel-radius')).toBe(
+      'calc(var(--radius, 0.625rem) + 4px)',
+    );
+  });
+
   it('updates portal radius and density while the dialog remains open', async () => {
     const { rerender } = wrap({
       radius: 'sharp',

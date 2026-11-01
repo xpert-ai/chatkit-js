@@ -9,6 +9,8 @@ import {
 } from '../components/ui/popover';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { resolveManifestText } from './manifest-text';
+import { useTheme } from '../providers/Theme';
+import { getDensitySpacing } from '../lib/theme-surfaces';
 
 export type WorkbenchViewMenuProps = {
   views: XpertExtensionViewManifest[];
@@ -24,6 +26,11 @@ export function WorkbenchViewMenu({
   children,
 }: WorkbenchViewMenuProps) {
   const { t } = useChatkitTranslation();
+  const theme = useTheme({ optional: true });
+  const iconSize = Math.max(
+    16,
+    20 * getDensitySpacing(theme?.theme.density ?? 'normal').spacing,
+  );
   const [open, setOpen] = React.useState(false);
   const closeTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
   const keyboardOpen = React.useRef(false);
@@ -82,7 +89,7 @@ export function WorkbenchViewMenu({
         sideOffset={8}
         collisionPadding={12}
         aria-labelledby={titleId}
-        className="w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-chat-panel border-border/60 p-[calc(0.5rem*var(--chat-density-scale,1))] shadow-lg"
+        className="w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-chat-panel border-border/60 p-[calc(0.25rem*var(--chat-density-scale,1))] shadow-lg"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           if (keyboardOpen.current) firstViewRef.current?.focus();
@@ -99,12 +106,12 @@ export function WorkbenchViewMenu({
       >
         <div
           id={titleId}
-          className="px-[calc(0.625rem*var(--chat-density-scale,1))] pb-[calc(0.5rem*var(--chat-density-scale,1))] pt-[calc(0.25rem*var(--chat-density-scale,1))] text-sm font-medium text-muted-foreground"
+          className="px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.375rem*var(--chat-density-scale,1))] text-sm font-medium text-muted-foreground"
         >
           {t('workbench.views')}
         </div>
-        {/* Reserve equal gutters even without overflow; keep their width stable on hover. */}
-        <div className="max-h-72 space-y-[calc(0.125rem*var(--chat-density-scale,1))] overflow-y-auto overscroll-contain [scrollbar-gutter:stable_both-edges] [scrollbar-width:thin]!">
+        {/* Keep scrollbar space on the right so headings and item icons share a left edge. */}
+        <div className="max-h-72 space-y-[calc(0.125rem*var(--chat-density-scale,1))] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [scrollbar-width:thin]!">
           {views.map((view, index) => {
             const label = resolveManifestText(
               view.workbench?.menu?.label ?? view.title,
@@ -117,23 +124,25 @@ export function WorkbenchViewMenu({
                 ref={index === 0 ? firstViewRef : undefined}
                 type="button"
                 title={label}
-                className="flex w-full items-center gap-[calc(0.625rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.625rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className="flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] text-left text-sm transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                 onClick={() => {
                   close();
                   onSelect(view.key);
                 }}
               >
-                <IconDefinitionRenderer
-                  icon={view.workbench?.menu?.icon ?? view.icon}
-                  size={18}
-                  fallback={
-                    <PanelsTopLeft
-                      size={18}
-                      className="shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  }
-                />
+                <span className="flex size-[calc(1.5rem*var(--chat-density-scale,1))] shrink-0 items-center justify-center">
+                  <IconDefinitionRenderer
+                    icon={view.workbench?.menu?.icon ?? view.icon}
+                    size={iconSize}
+                    fallback={
+                      <PanelsTopLeft
+                        size={iconSize}
+                        className="shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    }
+                  />
+                </span>
                 <span className="min-w-0 truncate">{label}</span>
               </button>
             );

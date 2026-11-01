@@ -2,6 +2,7 @@ import { Loader2, Trash2 } from 'lucide-react';
 import type { ThreadHistoryProject, ThreadItem } from '../../hooks/useThreads';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn } from '../../lib/utils';
+import { Button } from '../ui/button';
 
 export function HistoryThreadItem({
   thread,
@@ -40,30 +41,34 @@ export function HistoryThreadItem({
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-[calc(0.5rem*var(--chat-density-scale,1))]">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           onClick={onSelect}
           disabled={disabled}
           aria-current={active ? 'true' : undefined}
           aria-label={thread.title}
           title={thread.title}
-          className="min-w-0 truncate py-[calc(0.25rem*var(--chat-density-scale,1))] text-left text-sm font-medium after:absolute after:inset-0 after:rounded-chat-item focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring disabled:opacity-50"
+          className="block h-auto min-w-0 shrink border-0 px-0 truncate py-[calc(0.25rem*var(--chat-density-scale,1))] text-left text-sm font-medium after:absolute after:inset-0 after:rounded-chat-item focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring disabled:opacity-50"
         >
           {thread.title}
           {active && <span className="sr-only">{t('history.current')}</span>}
-        </button>
+        </Button>
         {project && (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="xs"
             onClick={() => onFilterProject?.(project)}
             disabled={disabled || !onFilterProject}
             aria-label={t('history.filterProject', { name: project.name })}
             aria-pressed={projectSelected}
             title={project.name}
-            className="relative max-w-[min(40%,14rem)] shrink-0 truncate rounded-chat-item border border-border bg-background/80 px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.125rem*var(--chat-density-scale,1))] text-xs text-foreground hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            className="relative block h-auto max-w-[min(40%,14rem)] shrink-0 truncate rounded-chat-item border border-border bg-background/80 px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.125rem*var(--chat-density-scale,1))] text-xs text-foreground hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           >
             {project.name}
-          </button>
+          </Button>
         )}
       </div>
       {updatedLabel && thread.lastMessageAt && (
@@ -77,8 +82,10 @@ export function HistoryThreadItem({
         </time>
       )}
       {onDelete && (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           onClick={onDelete}
           disabled={disabled}
           aria-label={t('history.deleteThread', { title: thread.title })}
@@ -89,7 +96,7 @@ export function HistoryThreadItem({
           ) : (
             <Trash2 size={15} />
           )}
-        </button>
+        </Button>
       )}
     </li>
   );

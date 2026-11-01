@@ -1,0 +1,125 @@
+/* Keep the same editor and controls mounted while their presentation changes. */
+[data-slot='composer-input-shell'] {
+  container-type: inline-size;
+  /* Animated controls must not become the browser's scroll anchor. */
+  overflow-anchor: none;
+}
+[data-slot='composer-input-shell'] [data-slot='composer-editor-surface'] {
+  transition:
+    min-height 220ms ease,
+    padding 220ms ease,
+    border-radius 220ms ease;
+  animation: composer-expand 220ms ease;
+}
+[data-slot='composer-context-collapse'] {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease,
+    visibility 0s;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-context-collapse'] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease,
+    visibility 0s 220ms;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-context-collapse']
+  > div,
+[data-slot='composer-context-collapse'][data-restoring] > div {
+  /* Clip both directions: overflowing toolbar contents otherwise increase the
+     viewport's scrollHeight and cross the scroll-to-bottom threshold again. */
+  overflow: hidden;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-editor-surface'] {
+  --composer-compact-inset-block: calc(0.375rem * var(--chat-density-scale, 1));
+  /* Follow the inner control radius plus its inset; keep sharp themes square. */
+  border-radius: min(
+    calc(var(--chat-panel-radius, var(--radius)) * 2),
+    calc(var(--chat-item-radius, var(--radius)) + var(--composer-compact-inset-block))
+  );
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: calc(0.5rem * var(--chat-density-scale, 1));
+  min-height: calc(
+    var(--composer-action-size) + 2 * var(--composer-compact-inset-block)
+  );
+  padding: var(--composer-compact-inset-block) var(--composer-action-inset);
+  animation-name: composer-collapse;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-action-bar'] {
+  display: contents;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-leading-actions'] {
+  grid-row: 1;
+  grid-column: 1;
+  max-width: min(calc(9rem * var(--chat-density-scale, 1)), 25cqi);
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-model-picker-label'] {
+  display: none;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-send-actions'] {
+  grid-row: 1;
+  grid-column: 3;
+  min-width: 0;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-body'] {
+  grid-row: 1;
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(1.5rem + 0.5rem * var(--chat-density-scale, 1));
+  padding: calc(0.25rem * var(--chat-density-scale, 1)) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+[data-slot='composer-input-shell'][data-layout='compact']
+  [data-slot='composer-body']
+  > [role='textbox'] {
+  min-height: 1.5rem;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+/* Two names restart the fade in either direction without remounting the editor. */
+@keyframes composer-collapse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes composer-expand {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='composer-input-shell'][data-layout]
+    [data-slot='composer-editor-surface'],
+  [data-slot='composer-input-shell'][data-layout]
+    [data-slot='composer-context-collapse'] {
+    animation: none;
+    transition: none;
+  }
+}

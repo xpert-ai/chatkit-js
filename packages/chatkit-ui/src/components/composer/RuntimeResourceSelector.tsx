@@ -470,8 +470,7 @@ export function RuntimeResourceSelector({
               className="mx-auto my-4 size-5 animate-spin text-muted-foreground"
             />
           )}
-          {kind === 'agent_plugin' &&
-            catalog.items.length < catalog.total &&
+          {catalog.items.length < catalog.total &&
             (menu ? (
               <Menu.Item
                 disabled={catalog.loading}

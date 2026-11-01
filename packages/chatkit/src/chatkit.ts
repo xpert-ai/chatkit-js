@@ -269,7 +269,19 @@ export type ChatKitEvents = {
   'chatkit.thread.load.start': CustomEvent<{ threadId: string }>;
 
   /** Emitted when ChatKit finished loading a thread. */
-  'chatkit.thread.load.end': CustomEvent<{ threadId: string }>;
+  /** Metadata for the loaded branch; excludes messages, resources and execution internals. */
+  'chatkit.thread.load.end': CustomEvent<{
+    threadId: string;
+    conversation?: {
+      id: string;
+      threadId: string;
+      title?: string;
+      projectId?: string;
+      xpertId?: string;
+      from?: string;
+      status?: 'idle' | 'busy' | 'pausing' | 'paused' | 'interrupted' | 'error';
+    };
+  }>;
 
   /** Diagnostic events that can be used for logging/analytics. */
   'chatkit.log': CustomEvent<{

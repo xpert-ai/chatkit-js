@@ -22,6 +22,31 @@ function setup(projectId?: string) {
 }
 
 describe('persisted conversation Project scope', () => {
+  it('does not treat a canceled metadata read as a completed cache entry', async () => {
+    const { get, props } = setup();
+    let finish!: (value: ChatConversation) => void;
+    get.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    get.mockResolvedValue({
+      id: 'conversation-1',
+      projectId: 'current-project',
+    });
+    const { result, rerender } = renderHook(useConversationProject, {
+      initialProps: props,
+    });
+    rerender({ ...props, historyMessageLoadVersion: 1 });
+    await waitFor(() =>
+      expect(result.current.projectId).toBe('current-project'),
+    );
+    await act(async () =>
+      finish({ id: 'conversation-1', threadId: 'thread-1', projectId: 'stale-project' }),
+    );
+    expect(result.current.projectId).toBe('current-project');
+  });
+
   it('hydrates pending confirmation and refreshes to the first confirmed binding', async () => {
     const { get, props } = setup();
     const pending = {
