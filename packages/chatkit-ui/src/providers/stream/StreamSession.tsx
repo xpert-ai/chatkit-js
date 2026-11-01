@@ -156,6 +156,7 @@ export const StreamSession = ({
   });
 
   const conversationProject = useConversationProject({
+    onResolve: scope.updateLoadedConversation,
     client: credentials.client,
     projectId,
     conversationId: scope.conversationId,
@@ -389,10 +390,16 @@ export const StreamSession = ({
   }, [connection.recovery, credentials.readClient, scope.conversationId]);
 
   const readThreadControl = useCallback(
-    (threadId: string) =>
-      connection.recovery.read(`control:${threadId}`, (signal) =>
+    (threadId: string) => {
+      const initial = scope.initialControlViewRef.current;
+      if (initial?.threadId === threadId) {
+        scope.initialControlViewRef.current = null;
+        return Promise.resolve(initial);
+      }
+      return connection.recovery.read(`control:${threadId}`, (signal) =>
         credentials.readClient.threads.getControlView(threadId, { signal }),
-      ),
+      );
+    },
     [connection.recovery, credentials.readClient],
   );
 
@@ -418,6 +425,10 @@ export const StreamSession = ({
     organizationId: credentials.runtimeOrganizationId,
     threadId: scope.threadId ?? null,
     conversationId: scope.conversationId,
+    conversation:
+      scope.loadedConversation?.threadId === scope.threadId
+        ? scope.loadedConversation.conversation
+        : null,
     connectorBindingIds: scope.connectorBindingIds,
     threadGoal: messages.threadGoal,
     contextUsageByAgentKey: messages.contextUsageByAgentKey,

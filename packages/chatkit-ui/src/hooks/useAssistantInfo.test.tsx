@@ -50,9 +50,13 @@ describe('Assistant presentation configuration', () => {
     for (let cycle = 0; cycle < 3; cycle++) {
       await act(async () => window.dispatchEvent(new Event('focus')));
       visibility.mockReturnValue('hidden');
-      await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+      await act(async () =>
+        document.dispatchEvent(new Event('visibilitychange')),
+      );
       visibility.mockReturnValue('visible');
-      await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+      await act(async () =>
+        document.dispatchEvent(new Event('visibilitychange')),
+      );
     }
     await act(async () => vi.advanceTimersByTime(180000));
 
@@ -60,7 +64,7 @@ describe('Assistant presentation configuration', () => {
     expect(result.current).toBe(loadedProfile);
   });
 
-  it('revalidates published settings on a host update without clearing the current profile', async () => {
+  it('revalidates expired published settings on a host update without clearing the current profile', async () => {
     let refresh: () => void = () => {};
     const context: NonNullable<
       React.ContextType<typeof ParentMessengerContext>
@@ -110,6 +114,13 @@ describe('Assistant presentation configuration', () => {
         readAssistantMessagePresentation(result.current?.config)?.mode,
       ).toBe('transcript'),
     );
+    await act(async () => {
+      refresh();
+      refresh();
+    });
+    expect(get).toHaveBeenCalledTimes(1);
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now + 60_001);
     act(() => refresh());
     expect(readAssistantMessagePresentation(result.current?.config)?.mode).toBe(
       'transcript',

@@ -28,6 +28,8 @@ const command = {
 describe('plugin commands in ChatKit conversations', () => {
   setupChatTest();
   beforeEach(() => {
+    // Each scenario starts a new session, including its client-scoped command cache.
+    mocks.stream.client = { ...mocks.stream.client };
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockReturnValue({

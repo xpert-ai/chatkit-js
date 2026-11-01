@@ -197,7 +197,10 @@ export function useChatTaskSummary({
   );
 
   const taskSummary = useTaskSummary({
-    enabled: taskSummaryEnabled,
+    enabled:
+      taskSummaryEnabled &&
+      taskSummaryOpen &&
+      stream.runtimeScopeReady !== false,
     conversationId: taskSummaryConversationId,
     client: stream.client,
     live: liveTaskSummary,

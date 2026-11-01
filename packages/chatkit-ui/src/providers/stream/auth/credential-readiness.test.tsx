@@ -105,12 +105,12 @@ describe('thread history restoration', () => {
     expect(stream.messages[1].id).toBe('new-ai');
     expect(mocks.sendEvent).not.toHaveBeenCalledWith(
       'public_event',
-      ['thread.load.end', { threadId: 'old' }],
+      ['thread.load.end', expect.objectContaining({ threadId: 'old' })],
       undefined,
     );
     expect(mocks.sendEvent).toHaveBeenCalledWith(
       'public_event',
-      ['thread.load.end', { threadId: 'new' }],
+      ['thread.load.end', expect.objectContaining({ threadId: 'new' })],
       undefined,
     );
   });

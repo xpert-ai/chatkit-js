@@ -138,6 +138,8 @@ export type StreamContextType = {
   organizationId?: string;
   threadId: string | null;
   conversationId: string | null;
+  /** Metadata resolved by the history loader for the current thread only. */
+  conversation?: import('@xpert-ai/xpert-sdk').ChatConversation | null;
   connectorBindingIds: string[];
   threadGoal: ThreadGoal | null;
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;

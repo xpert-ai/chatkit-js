@@ -23,6 +23,10 @@ type TaskSummaryHistorySections = Partial<{
 }>;
 
 type LoadedSnapshot = {
+  client: Client;
+  refreshVersion: number;
+  retryVersion: number;
+  expires: number;
   conversationId: string;
   snapshot: TaskSummarySnapshot;
 };
@@ -40,11 +44,14 @@ export function useTaskSummary({
   live: TaskSummaryLiveData;
   refreshVersion?: number;
 }) {
+  const cache = React.useRef<LoadedSnapshot | null>(null);
   const [loaded, setLoaded] = React.useState<LoadedSnapshot | null>(null);
   const [historySections, setHistorySections] =
     React.useState<TaskSummaryHistorySections>({});
   const [historySectionsConversationId, setHistorySectionsConversationId] =
     React.useState<string | null>(null);
+  const [historySectionsClient, setHistorySectionsClient] =
+    React.useState<Client | null>(null);
   const [loadingSections, setLoadingSections] = React.useState<
     Partial<Record<TaskSummarySection, boolean>>
   >({});
@@ -64,22 +71,36 @@ export function useTaskSummary({
 
   React.useEffect(() => {
     abortSectionRequests();
-    setHistorySections({});
-    setHistorySectionsConversationId(conversationId);
     setLoadingSections({});
-    setError(null);
-    if (!enabled || !conversationId) {
-      setLoaded(null);
-      setHistorySectionsConversationId(null);
+    if (!enabled || !conversationId) return;
+    const cached = cache.current;
+    if (
+      cached?.client === client &&
+      cached.conversationId === conversationId &&
+      cached.refreshVersion === refreshVersion &&
+      cached.retryVersion === retryVersion &&
+      cached.expires > Date.now()
+    )
       return;
-    }
+    setHistorySections({});
+    setHistorySectionsClient(client);
+    setHistorySectionsConversationId(conversationId);
+    setError(null);
     const controller = new AbortController();
     const requestVersion = ++requestVersionRef.current;
     client.conversations
       .getTaskSummary(conversationId, { signal: controller.signal })
       .then((snapshot) => {
         if (requestVersionRef.current !== requestVersion) return;
-        setLoaded({ conversationId, snapshot });
+        cache.current = {
+          client,
+          conversationId,
+          snapshot,
+          refreshVersion,
+          retryVersion,
+          expires: Date.now() + 60_000,
+        };
+        setLoaded(cache.current);
       })
       .catch((nextError) => {
         if (
@@ -107,11 +128,22 @@ export function useTaskSummary({
   ]);
 
   const snapshot =
-    loaded?.conversationId === conversationId ? loaded.snapshot : null;
+    loaded?.client === client && loaded.conversationId === conversationId
+      ? loaded.snapshot
+      : null;
   const activeHistorySections = React.useMemo(
     () =>
-      historySectionsConversationId === conversationId ? historySections : {},
-    [conversationId, historySections, historySectionsConversationId],
+      historySectionsClient === client &&
+      historySectionsConversationId === conversationId
+        ? historySections
+        : {},
+    [
+      client,
+      conversationId,
+      historySections,
+      historySectionsClient,
+      historySectionsConversationId,
+    ],
   );
 
   const loadSection = React.useCallback(

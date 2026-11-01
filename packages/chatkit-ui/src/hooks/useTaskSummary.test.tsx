@@ -10,6 +10,58 @@ import { collectLiveTaskSummary } from '../lib/task-summary';
 import { changesReceipt } from '../test/file-activity-fixtures';
 
 describe('useTaskSummary', () => {
+  it('loads only while visible, reuses fresh history, and refreshes expired or differently scoped history', async () => {
+    const getTaskSummary = vi
+      .fn()
+      .mockResolvedValue(snapshot('conversation-1', 'Plan'));
+    const client = {
+      conversations: { getTaskSummary, listTaskSummaryItems: vi.fn() },
+    } as unknown as Client;
+    const otherGet = vi
+      .fn()
+      .mockResolvedValue(snapshot('conversation-1', 'Other account'));
+    const other = {
+      conversations: {
+        getTaskSummary: otherGet,
+        listTaskSummaryItems: vi.fn(),
+      },
+    } as unknown as Client;
+    const live = emptyLive();
+    const { result, rerender, unmount } = renderHook(
+      ({ enabled, activeClient }) =>
+        useTaskSummary({
+          enabled,
+          conversationId: 'conversation-1',
+          client: activeClient,
+          live,
+        }),
+      { initialProps: { enabled: false, activeClient: client } },
+    );
+    expect(getTaskSummary).not.toHaveBeenCalled();
+    rerender({ enabled: true, activeClient: client });
+    await waitFor(() =>
+      expect(result.current.summary.plan?.title).toBe('Plan'),
+    );
+    rerender({ enabled: false, activeClient: client });
+    rerender({ enabled: true, activeClient: client });
+    expect(getTaskSummary).toHaveBeenCalledTimes(1);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001);
+    try {
+      rerender({ enabled: false, activeClient: client });
+      rerender({ enabled: true, activeClient: client });
+      await waitFor(() => expect(getTaskSummary).toHaveBeenCalledTimes(2));
+      rerender({ enabled: true, activeClient: other });
+      expect(result.current.summary.plan).toBeUndefined();
+      await waitFor(() =>
+        expect(result.current.summary.plan?.title).toBe('Other account'),
+      );
+      expect(otherGet).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+      unmount();
+    }
+  });
+
   it('refreshes persisted net changes and preserves the baseline when a later refresh fails', async () => {
     const live = collectLiveTaskSummary({
       messages: [{ id: 'message', content: [changesReceipt] }],

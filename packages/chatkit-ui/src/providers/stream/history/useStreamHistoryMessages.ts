@@ -1,5 +1,5 @@
 import type { ReadRecovery } from '../connection/read-recovery';
-import type { Thread } from '@xpert-ai/xpert-sdk';
+import type { ChatConversation, Thread } from '@xpert-ai/xpert-sdk';
 import { useCallback } from 'react';
 import {
   getAutoDrainQueuedFollowUpIds,
@@ -57,6 +57,7 @@ type StreamHistoryMessagesOptions = Pick<
     ReturnType<typeof useStreamScope>,
     | 'activeThreadIdRef'
     | 'updateConversationId'
+    | 'updateLoadedConversation'
     | 'conversationIdRef'
     | 'setThreadId'
   > &
@@ -101,6 +102,7 @@ export function useStreamHistoryMessages({
   activeThreadIdRef,
   clearRuntimeActivities,
   updateConversationId,
+  updateLoadedConversation,
   updateHistoryMessagePagination,
   client,
   readClient,
@@ -132,6 +134,7 @@ export function useStreamHistoryMessages({
       requestedThreadId: string | undefined,
       request: HistoryRequest,
       threadOperation?: Thread['operation'],
+      initialConversation?: ChatConversation,
     ) => {
       await ensureHistoryCredentials();
       if (!request.isCurrent()) return [];
@@ -150,13 +153,14 @@ export function useStreamHistoryMessages({
         threadId: requestedThreadId ?? null,
       });
       const [conversationDetail, response] = await Promise.all([
-        client.conversations.get(recordId).catch((detailError) => {
-          console.warn(
-            '[chatkit-ui] Failed to load conversation detail for pending HITL',
-            detailError,
-          );
-          return null;
-        }),
+        initialConversation ??
+          client.conversations.get(recordId).catch((detailError) => {
+            console.warn(
+              '[chatkit-ui] Failed to load conversation detail for pending HITL',
+              detailError,
+            );
+            return null;
+          }),
         client.conversations.searchMessages(recordId, {
           ...createConversationMessagesPageQuery(0),
           ...(requestedThreadId
@@ -193,6 +197,11 @@ export function useStreamHistoryMessages({
         rememberActiveRunId(null);
       }
       if (loadedThreadId) {
+        if (conversationDetail)
+          updateLoadedConversation({
+            threadId: loadedThreadId,
+            conversation: conversationDetail,
+          });
         activeThreadIdRef.current = loadedThreadId;
         setThreadId(loadedThreadId);
       }
@@ -226,6 +235,7 @@ export function useStreamHistoryMessages({
       setThreadId,
       disconnect,
       updateConversationId,
+      updateLoadedConversation,
       updateHistoryMessagePagination,
       updateTodos,
     ],

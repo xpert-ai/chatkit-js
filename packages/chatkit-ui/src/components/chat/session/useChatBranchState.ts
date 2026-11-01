@@ -12,7 +12,11 @@ export function useChatBranchState({ stream }: ChatBranchStateOptions) {
     stream.client,
     stream.conversationId,
     stream.threadId,
-    Boolean(stream.isReady && stream.client?.conversations?.listThreads),
+    Boolean(
+      stream.isReady &&
+      stream.runtimeScopeReady !== false &&
+      stream.client?.conversations?.listThreads,
+    ),
     stream.isLoading,
     stream.readThreadBranches,
     stream.readThreadControl,

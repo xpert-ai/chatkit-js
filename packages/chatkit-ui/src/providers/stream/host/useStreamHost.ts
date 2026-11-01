@@ -10,7 +10,10 @@ import type { useStreamScope } from '../scope/useStreamScope';
 
 type StreamHostOptions = Pick<
   ReturnType<typeof useStreamScope>,
-  'threadId' | 'hasObservedThreadSelectionRef' | 'suppressThreadChangeRef'
+  | 'threadId'
+  | 'hasObservedThreadSelectionRef'
+  | 'suppressThreadChangeRef'
+  | 'loadedConversationRef'
 > & {
   hostIntegration: boolean;
 };
@@ -20,6 +23,7 @@ export function useStreamHost({
   threadId,
   hasObservedThreadSelectionRef,
   suppressThreadChangeRef,
+  loadedConversationRef,
 }: StreamHostOptions) {
   const { isParentAvailable, sendCommand, sendEvent } = useParentMessenger();
   const streamSendEvent: ParentMessenger['sendEvent'] = useCallback(
@@ -40,7 +44,28 @@ export function useStreamHost({
       streamSendEvent('public_event', ['thread.load.start', { threadId }]);
     },
     onLoadEnd: (threadId) => {
-      streamSendEvent('public_event', ['thread.load.end', { threadId }]);
+      const loaded = loadedConversationRef.current;
+      const conversation =
+        loaded?.threadId === threadId ? loaded.conversation : null;
+      streamSendEvent('public_event', [
+        'thread.load.end',
+        {
+          threadId,
+          ...(conversation
+            ? {
+                conversation: {
+                  id: conversation.id,
+                  threadId,
+                  title: conversation.title,
+                  projectId: conversation.projectId,
+                  xpertId: conversation.xpertId,
+                  from: conversation.from,
+                  status: conversation.status,
+                },
+              }
+            : {}),
+        },
+      ]);
     },
   });
 

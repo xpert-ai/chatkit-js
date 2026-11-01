@@ -253,7 +253,9 @@ export function useAssistantConversation({
   const runtimeResources = useRuntimeResources({
     client: session.xpertPlatformClient,
     enabled: resourcesEnabled,
-    isReady: session.stream.isReady,
+    isReady:
+      session.stream.isReady && session.stream.runtimeScopeReady !== false,
+    conversation: session.stream.conversation,
     assistantId: session.stream.assistantId,
     projectId: session.activeProjectId,
     conversationId: session.stream.conversationId,

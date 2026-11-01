@@ -1,6 +1,7 @@
 import * as React from 'react';
 import type {
   Client,
+  ChatConversation,
   RuntimeResourceCatalogItem,
   RuntimeResourcesSelection,
 } from '@xpert-ai/xpert-sdk';
@@ -24,6 +25,7 @@ export function useRuntimeResources({
   assistantId,
   projectId,
   conversationId,
+  conversation,
   threadId,
 }: {
   client: Client<unknown> | null;
@@ -32,6 +34,7 @@ export function useRuntimeResources({
   assistantId?: string | null;
   projectId?: string | null;
   conversationId?: string | null;
+  conversation?: ChatConversation | null;
   threadId?: string | null;
 }) {
   const { t } = useChatkitTranslation();
@@ -50,6 +53,8 @@ export function useRuntimeResources({
   } | null>(null);
   const generation = React.useRef(0);
   const mutation = React.useRef(false);
+  const initialConversation = React.useRef(conversation);
+  initialConversation.current = conversation;
   const submission = React.useRef<ResourceSubmission | null>(null);
   // A failed history read must never turn an existing conversation into a draft.
   // Drafts may still remove resources after project validation fails.
@@ -109,8 +114,11 @@ export function useRuntimeResources({
             )?.id
           : null);
       if (!isDraft && !id) throw new Error(conversationUnavailable);
+      const metadata = initialConversation.current;
       const value = id
-        ? await client.conversations.getRuntimeResources(id)
+        ? reload === 0 && metadata?.id === id
+          ? (metadata.options?.runtimeResources ?? empty())
+          : await client.conversations.getRuntimeResources(id)
         : local;
       if (!id && value.resources.length)
         await client.assistants.validateResources(
