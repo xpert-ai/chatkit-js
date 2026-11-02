@@ -95,19 +95,27 @@ export const StreamProvider: React.FC<{
   const hasClientSecret = Boolean(apiKey?.trim());
   const [credentialSession, setCredentialSession] = useState({
     hasClientSecret,
+    organizationId,
     generation: 0,
   });
-  if (credentialSession.hasClientSecret !== hasClientSecret) {
+  if (credentialSession.hasClientSecret !== hasClientSecret || credentialSession.organizationId !== organizationId) {
     // Initial credentials must preserve host callbacks. Clearing credentials
     // still replaces the session so a signed-out host cannot retain its views.
     setCredentialSession({
       hasClientSecret,
-      generation: credentialSession.generation + (hasClientSecret ? 0 : 1),
+      organizationId,
+      // The first credential response supplies the organization along with the secret.
+      // Preserve the waiting submission, but replace sessions on later organization changes.
+      generation: credentialSession.generation + (
+        !hasClientSecret && credentialSession.hasClientSecret ||
+        credentialSession.organizationId !== organizationId &&
+          (credentialSession.hasClientSecret || credentialSession.organizationId != null)
+          ? 1 : 0
+      ),
     });
   }
   const streamScopeKey = JSON.stringify([
     apiUrl,
-    organizationId,
     assistantId,
     credentialSession.generation,
   ]);

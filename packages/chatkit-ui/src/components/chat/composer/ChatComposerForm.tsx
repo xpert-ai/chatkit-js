@@ -59,7 +59,10 @@ export function ChatComposerForm({
             )}
             {leadingActions}
           </div>
-          <div className="pointer-events-auto flex shrink-0 items-center gap-1">
+          <div
+            data-slot="composer-send-actions"
+            className="pointer-events-auto flex shrink-0 items-center gap-1"
+          >
             <div data-slot="composer-trailing-actions" className="contents">
               {trailingActions}
             </div>

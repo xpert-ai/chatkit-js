@@ -354,7 +354,13 @@ describe('group conversation UI', () => {
     await waitFor(() => expect(members).toHaveFocus());
     rerender(
       <Chat
-        options={{ ...groupOptions, header: { character: { enabled: false } } }}
+        options={{
+          ...groupOptions,
+          header: {
+            character: { enabled: false },
+            identity: { enabled: true },
+          },
+        }}
       />,
     );
     expect(
@@ -365,6 +371,16 @@ describe('group conversation UI', () => {
     expect(screen.getByRole('dialog', { name: 'group.details' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'group.closeDetails' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    rerender(
+      <Chat
+        options={{ ...groupOptions, header: { character: { enabled: false } } }}
+      />,
+    );
+    expect(screen.queryByRole('heading', { name: 'D' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'group.details' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'group.membersTitle' }),
+    ).toBeVisible();
     rerender(
       <Chat options={{ ...groupOptions, header: { enabled: false } }} />,
     );

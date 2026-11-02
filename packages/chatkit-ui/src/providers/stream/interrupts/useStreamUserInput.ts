@@ -2,6 +2,9 @@ import type { ToolCall } from '@langchain/core/messages/tool';
 import {
   REQUEST_USER_INPUT_RESULT_TYPE,
   REQUEST_USER_INPUT_TOOL_NAME,
+  isRequestUserInputForm,
+  validateUserInputValues,
+  type UserInputValues,
   type ClientToolMessageInput,
   type RequestUserInputAnswer,
   type RequestUserInputResult,
@@ -52,6 +55,14 @@ export function useStreamUserInput() {
 
   const waitForRequestUserInput = useCallback(
     (toolCall: ToolCall, params: RequestUserInputToolArgs) => {
+      if (isRequestUserInputForm(params) && params.mode !== 'blocking') {
+        throw new Error(
+          'Non-blocking user input is not supported by this host.',
+        );
+      }
+      if (pendingRequestUserInputRef.current?.id === toolCall.id) {
+        throw new Error('This user input request is already being handled.');
+      }
       clearPendingRequestUserInput(
         createAbortError('A newer user input request replaced this one.'),
       );
@@ -77,17 +88,39 @@ export function useStreamUserInput() {
   );
 
   const submitRequestUserInput = useCallback(
-    (answers: RequestUserInputAnswer[]) => {
+    (
+      answers: RequestUserInputAnswer[] | UserInputValues,
+      status: 'submitted' | 'cancelled' = 'submitted',
+    ) => {
       const pendingRequest = pendingRequestUserInputRef.current;
       const resolver = requestUserInputResolverRef.current;
       if (!pendingRequest || !resolver) {
         return;
       }
 
+      const form = isRequestUserInputForm(pendingRequest.params)
+        ? pendingRequest.params
+        : undefined;
+      const validated =
+        form && status === 'submitted'
+          ? validateUserInputValues(form, answers)
+          : null;
+      if (validated && !validated.valid) return;
+      if (!form && !Array.isArray(answers)) return;
       const content: RequestUserInputResult = {
         type: REQUEST_USER_INPUT_RESULT_TYPE,
         purpose: getRequestUserInputResultPurpose(pendingRequest.params),
-        answers,
+        answers:
+          Array.isArray(answers) && status === 'submitted' ? answers : [],
+        status,
+        requestId: pendingRequest.id,
+        ...(form
+          ? {
+              schemaVersion: 1,
+              form,
+              ...(validated?.valid ? { values: validated.values } : {}),
+            }
+          : {}),
       };
       requestUserInputResolverRef.current = null;
       updatePendingRequestUserInput(null);
@@ -100,7 +133,12 @@ export function useStreamUserInput() {
     },
     [updatePendingRequestUserInput],
   );
+  const hasPendingUserInput = useCallback(
+    () => pendingRequestUserInputRef.current !== null,
+    [],
+  );
   return {
+    hasPendingUserInput,
     clearPendingRequestUserInput,
     waitForRequestUserInput,
     pendingRequestUserInput,

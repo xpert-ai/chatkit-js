@@ -114,7 +114,9 @@ export function ModelPicker({
             imageClassName="p-0.5"
             iconClassName="size-3"
           />
-          <span className="truncate">{selectedModel?.label ?? copy.label}</span>
+          <span data-slot="composer-model-picker-label" className="truncate">
+            {selectedModel?.label ?? copy.label}
+          </span>
           <ChevronDown
             aria-hidden="true"
             className="size-3 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"

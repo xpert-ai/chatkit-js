@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './theme-surfaces.css';
+@import './components/chat/composer/composer-layout.css';
 @import './workbench/floating-chat/floating-chat.css';
 @import './message-bubbles.css';
 @import 'tw-animate-css';

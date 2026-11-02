@@ -20,11 +20,13 @@
         "dismiss": "关闭更新提示"
     },
     "sharing": {
+        "projectUnavailable": "暂不支持分享项目内的对话。",
         "existingNotice": "这是已分享的固定快照。复制或打开不会生成新链接，也不会更新消息或有效期。",
         "editShare": "修改分享设置",
         "action": "分享",
         "title": "分享会话",
-        "notice": "请检查下方实际分享的文字快照。后续消息、个人资料、附件、工具和执行数据不会包含在内。你输入的文字仍可能包含敏感信息。",
+        "notice": "下方仅预览文字快照的开头部分，链接将分享本次快照中的全部消息。后续消息、个人资料、附件、工具和执行数据不会包含在内。你输入的文字仍可能包含敏感信息。",
+        "previewSummary": "仅展示开头摘要，链接将分享全部 {{total}} 条消息。",
         "preview": "分享预览",
         "loading": "正在加载预览…",
         "unavailable": "仅有效组织中的私有会话所有者可以分享。会话也可能为空或超出大小限制。",
@@ -33,7 +35,7 @@
         "public": "任何持链接的人",
         "expires": "链接有效期",
         "days": "{{count}} 天",
-        "publicConsent": "我已检查预览，并了解任何持链接的人都能查看和转发这些内容。",
+        "publicConsent": "我确认分享本次快照中的全部消息，并了解任何持链接的人都能查看和转发这些内容。",
         "link": "分享链接",
         "copy": "复制链接",
         "copied": "链接已复制",
@@ -465,6 +467,7 @@
             "pending": "待处理 Follow-up",
             "queue": "排队",
             "steerAction": "引导",
+            "steerActionHint": "提交，但不中断模型运行",
             "sendNow": "立即发送",
             "remove": "移除此待处理 Follow-up",
             "more": "更多操作",
@@ -731,7 +734,7 @@
             "other": "其他",
             "otherPlaceholder": "输入自定义回答",
             "continue": "继续",
-            "dismiss": "关闭",
+            "dismiss": "取消填写",
             "previousQuestion": "上一个问题",
             "nextQuestion": "下一个问题",
             "questionProgress": "{{current}} / {{total}}",
@@ -831,6 +834,27 @@
             "error": "无法加载对话",
             "untitled": "未命名对话",
             "remove": "移除对话引用：{{title}}"
+        },
+        "userInputForm": {
+            "chooseDate": "选择日期",
+            "clear": "清除选择",
+            "waiting": "需要补充信息才能继续",
+            "choose": "请选择",
+            "start": "开始日期",
+            "end": "结束日期",
+            "cancel": "取消填写",
+            "submit": "提交并继续",
+            "cancelled": "已取消填写",
+            "answered": "已补充信息",
+            "errors": {
+                "required": "请填写此项",
+                "type": "请输入有效值",
+                "range": "数值或日期范围不正确",
+                "choice": "请选择有效选项",
+                "length": "长度或选择数量不符合要求",
+                "date": "请输入有效日期",
+                "unknown": "包含未知字段"
+            }
         }
     },
     "settings": {

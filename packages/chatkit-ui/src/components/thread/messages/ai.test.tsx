@@ -1265,8 +1265,7 @@ describe('AssistantMessage tool components', () => {
     expect(copyButtons).toHaveLength(2);
     expect(copyButtons[0]).toHaveClass(
       'opacity-0',
-      'in-data-[density=compact]:h-5',
-      'in-data-[density=spacious]:h-7',
+      'rounded-chat-item',
     );
     fireEvent.click(copyButtons[0]);
     await waitFor(() => {

@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { resourceDescriptionSearchText } from './resource-description';
 import type {
   Client,
   RuntimeResourceCatalogItem,
@@ -16,25 +15,22 @@ interface CachedCatalog {
   loading: boolean;
   loaded: boolean;
   error: string | null;
+  expires: number;
 }
 
 type CatalogQuery = {
   kind?: RuntimeResourceKind;
   purpose?: 'selection';
   search: string;
-  allPages: boolean;
+  references?: RuntimeResourceReference[];
 };
-const catalogKey = ({ kind, search, purpose }: CatalogQuery) =>
-  JSON.stringify([kind ?? 'all', search, purpose ?? 'browse']);
+const catalogKey = ({ kind, search, purpose, references }: CatalogQuery) =>
+  JSON.stringify([kind ?? 'all', search, purpose ?? 'browse', references]);
 const resourceKey = ({ bindingId, version }: RuntimeResourceReference) =>
   JSON.stringify([bindingId, version]);
 const noSelection: RuntimeResourceReference[] = [];
 const noItems: RuntimeResourceCatalogItem[] = [];
-const fullCatalog: CatalogQuery = {
-  search: '',
-  allPages: true,
-  purpose: 'selection',
-};
+export const RESOURCE_CATALOG_TTL_MS = 60_000;
 
 /** One cache per client / Assistant / project. Menu navigation never invalidates it. */
 export function useRuntimeResourceCatalog({
@@ -72,12 +68,20 @@ export function useRuntimeResourceCatalog({
   const [revision, redraw] = React.useReducer((value) => value + 1, 0);
   const [actionError, setLoadError] = React.useState<string | null>(null);
   const hasSelected = selectedResources.length > 0;
-  const allPages =
-    kind === 'middleware' ||
-    kind === 'external_xpert' ||
-    (!kind && hasSelected);
-  const search = kind === 'agent_plugin' ? query.trim() : '';
-  const key = catalogKey({ kind, search, allPages });
+  const search = query.trim();
+  const key = catalogKey({ kind, search });
+  const fullCatalog = React.useMemo<CatalogQuery>(
+    () => ({
+      search: '',
+      purpose: 'selection',
+      references: selectedResources.map(({ bindingId, version }) => ({
+        bindingId,
+        version,
+      })),
+    }),
+    [selectedResources],
+  );
+  const selectedKey = catalogKey(fullCatalog);
 
   const refresh = React.useCallback(() => {
     for (const controller of cache.controllers) controller.abort();
@@ -91,9 +95,24 @@ export function useRuntimeResourceCatalog({
 
   React.useEffect(() => {
     setLoadError(null);
-    window.addEventListener('focus', refresh);
+    const refreshExpired = () => {
+      let changed = false;
+      for (const [key, entry] of cache.entries) {
+        if (!entry.loading && entry.expires <= Date.now()) {
+          cache.entries.delete(key);
+          for (const item of entry.items) cache.known.delete(resourceKey(item));
+          changed = true;
+        }
+      }
+      if (changed) {
+        cache.verified.clear();
+        setLoadError(null);
+        redraw();
+      }
+    };
+    window.addEventListener('focus', refreshExpired);
     return () => {
-      window.removeEventListener('focus', refresh);
+      window.removeEventListener('focus', refreshExpired);
       for (const controller of cache.controllers) controller.abort();
     };
   }, [cache, refresh]);
@@ -103,15 +122,24 @@ export function useRuntimeResourceCatalog({
       const { client, assistantId, projectId } = cache.scope;
       const key = catalogKey(target);
       const existing = cache.entries.get(key);
-      if (existing?.loading || (!more && (existing?.loaded || existing?.error)))
+      if (
+        existing?.loading ||
+        (!more &&
+          existing &&
+          existing.expires > Date.now() &&
+          (existing.loaded || existing.error))
+      )
         return;
-      const entry: CachedCatalog = existing ?? {
+      const entry: CachedCatalog = (existing && existing.expires > Date.now()
+        ? existing
+        : undefined) ?? {
         items: [],
         total: 0,
         offset: 0,
         loading: false,
         loaded: false,
         error: null,
+        expires: 0,
       };
       cache.entries.set(key, entry);
       entry.loading = true;
@@ -120,33 +148,33 @@ export function useRuntimeResourceCatalog({
       cache.controllers.add(abort);
       redraw();
       try {
-        do {
-          const result = await client.assistants.getResources(assistantId, {
-            projectId: projectId ?? undefined,
-            search: target.search || undefined,
-            kind: target.kind,
-            ...(target.purpose ? { purpose: target.purpose } : {}),
-            offset: entry.offset,
-            limit: 100,
-            signal: abort.signal,
-          });
-          if (abort.signal.aborted) return;
-          entry.total = result.total;
-          entry.offset += result.items.length;
-          for (const item of result.items) {
-            cache.known.set(resourceKey(item), item);
-            cache.history.set(resourceKey(item), item);
-            if (
-              !entry.items.some((value) => value.bindingId === item.bindingId)
-            )
-              entry.items.push(item);
-          }
-          // Stop on empty pages even when a concurrently changing catalog has an old total.
-          if (!result.items.length) {
-            entry.total = entry.offset;
-            break;
-          }
-        } while (target.allPages && entry.offset < entry.total);
+        const options = {
+          projectId: projectId ?? undefined,
+          search: target.search || undefined,
+          kind: target.kind,
+          ...(target.purpose ? { purpose: target.purpose } : {}),
+          ...(target.references ? { references: target.references } : {}),
+          offset: entry.offset,
+          limit: 100,
+          signal: abort.signal,
+        };
+        const result = await client.assistants.getResources(
+          assistantId,
+          options,
+        );
+        if (abort.signal.aborted) return;
+        entry.total = result.total;
+        entry.offset += result.items.length;
+        for (const item of result.items) {
+          cache.known.set(resourceKey(item), item);
+          cache.history.set(resourceKey(item), item);
+          if (!entry.items.some((value) => value.bindingId === item.bindingId))
+            entry.items.push(item);
+        }
+        // Stop on empty pages even when a concurrently changing catalog has an old total.
+        if (!result.items.length) {
+          entry.total = entry.offset;
+        }
         entry.loaded = true;
       } catch (reason) {
         if (!abort.signal.aborted)
@@ -155,6 +183,7 @@ export function useRuntimeResourceCatalog({
       } finally {
         cache.controllers.delete(abort);
         entry.loading = false;
+        entry.expires = Date.now() + RESOURCE_CATALOG_TTL_MS;
         if (!abort.signal.aborted) redraw();
       }
     },
@@ -162,44 +191,32 @@ export function useRuntimeResourceCatalog({
   );
 
   React.useEffect(() => {
-    if (!enabled || !browseEnabled || cache.entries.has(key)) return;
+    if (!enabled || !browseEnabled) return;
+    const entry = cache.entries.get(key);
+    if (entry && (entry.loading || entry.expires > Date.now())) return;
     const timer = window.setTimeout(
-      () => void load({ kind, search, allPages }),
+      () => void load({ kind, search }),
       search ? 150 : 0,
     );
     return () => window.clearTimeout(timer);
-  }, [
-    enabled,
-    browseEnabled,
-    cache,
-    key,
-    load,
-    search,
-    kind,
-    allPages,
-    revision,
-  ]);
+  }, [enabled, browseEnabled, cache, key, load, search, kind, revision]);
 
   // Restore labels/status for assistant-role packages without offering them in menus.
   // Selection inventory has its own cache, independent of candidate menu/search.
-  // Finish pagination before treating a missing item as an old or removed version.
+  // Resolve exact references before treating a missing version as unavailable.
   React.useEffect(() => {
     if (!enabled || !hasSelected) return;
-    const entry = cache.entries.get(catalogKey(fullCatalog));
+    const entry = cache.entries.get(selectedKey);
     if (
       entry?.loading ||
-      entry?.error ||
-      (entry?.loaded && entry.offset >= entry.total)
+      (entry && entry.expires > Date.now() && (entry.error || entry.loaded))
     )
       return;
-    const timer = window.setTimeout(
-      () => void load(fullCatalog, !!entry?.loaded),
-      0,
-    );
+    const timer = window.setTimeout(() => void load(fullCatalog), 0);
     return () => window.clearTimeout(timer);
-  }, [enabled, hasSelected, cache, load, revision]);
+  }, [enabled, hasSelected, selectedKey, fullCatalog, cache, load, revision]);
 
-  const completeCatalog = cache.entries.get(catalogKey(fullCatalog));
+  const completeCatalog = cache.entries.get(selectedKey);
   const fullItems = completeCatalog?.items ?? noItems;
   const complete =
     !!completeCatalog?.loaded &&
@@ -290,19 +307,12 @@ export function useRuntimeResourceCatalog({
   );
 
   const entry = cache.entries.get(key);
-  const items =
-    allPages && query.trim()
-      ? (entry?.items ?? []).filter((item) =>
-          `${item.title} ${resourceDescriptionSearchText(item.description)}`
-            .toLocaleLowerCase()
-            .includes(query.trim().toLocaleLowerCase()),
-        )
-      : (entry?.items ?? []);
+  const items = entry?.items ?? noItems;
   return {
     items,
     known: cache.known,
     selectedItems,
-    total: allPages ? items.length : (entry?.total ?? 0),
+    total: entry?.total ?? 0,
     loading: enabled && browseEnabled && (!entry || entry.loading),
     loadError:
       actionError ||
@@ -311,6 +321,6 @@ export function useRuntimeResourceCatalog({
       null,
     setLoadError,
     refresh,
-    more: () => void load({ kind, search, allPages }, true),
+    more: () => void load({ kind, search }, true),
   };
 }

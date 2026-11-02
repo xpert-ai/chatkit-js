@@ -20,11 +20,13 @@
         "dismiss": "Dismiss update notification"
     },
     "sharing": {
+        "projectUnavailable": "Sharing project conversations is not supported yet.",
         "existingNotice": "This is your saved snapshot. Copying or opening it keeps the same link, messages and expiry.",
         "editShare": "Edit sharing settings",
         "action": "Share",
         "title": "Share conversation",
-        "notice": "Review the exact text snapshot below. Later messages, profile details, attachments, tools and execution data are not included. Text you entered may still contain sensitive information.",
+        "notice": "The preview shows the beginning of the text snapshot; the link shares all messages in this snapshot. Later messages, profile details, attachments, tools and execution data are not included. Text you entered may still contain sensitive information.",
+        "previewSummary": "Only opening excerpts are shown. The link shares all {{total}} messages.",
         "preview": "Shared preview",
         "loading": "Loading preview…",
         "unavailable": "Sharing is available only to the owner of a private conversation in an active organization. The conversation may be empty or too large.",
@@ -33,7 +35,7 @@
         "public": "Anyone with the link",
         "expires": "Link expires after",
         "days": "{{count}} days",
-        "publicConsent": "I have reviewed this preview and understand anyone with this link can read and forward it.",
+        "publicConsent": "I confirm sharing all messages in this snapshot and understand anyone with this link can read and forward them.",
         "link": "Share link",
         "copy": "Copy link",
         "copied": "Link copied",
@@ -465,6 +467,7 @@
             "pending": "Pending follow-ups",
             "queue": "Queue",
             "steerAction": "Steer",
+            "steerActionHint": "Submit without interrupting the current run",
             "sendNow": "Send now",
             "remove": "Remove pending follow-up",
             "more": "More actions",
@@ -731,7 +734,7 @@
             "other": "Other",
             "otherPlaceholder": "Type a custom answer",
             "continue": "Continue",
-            "dismiss": "Dismiss",
+            "dismiss": "Cancel input",
             "previousQuestion": "Previous question",
             "nextQuestion": "Next question",
             "questionProgress": "{{current}} of {{total}}",
@@ -831,6 +834,27 @@
             "error": "Could not load conversations",
             "untitled": "Untitled conversation",
             "remove": "Remove conversation reference: {{title}}"
+        },
+        "userInputForm": {
+            "chooseDate": "Choose date",
+            "clear": "Clear selection",
+            "waiting": "Input is needed to continue",
+            "choose": "Choose an option",
+            "start": "Start date",
+            "end": "End date",
+            "cancel": "Cancel input",
+            "submit": "Submit and continue",
+            "cancelled": "Input cancelled",
+            "answered": "Information provided",
+            "errors": {
+                "required": "This field is required",
+                "type": "Enter a valid value",
+                "range": "Check the value or date range",
+                "choice": "Choose a valid option",
+                "length": "Check the length or number of selections",
+                "date": "Enter a valid date",
+                "unknown": "Unknown field"
+            }
         }
     },
     "settings": {

@@ -1,73 +1,248 @@
-import * as React from 'react';
-import { Client } from '@xpert-ai/xpert-sdk';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
-import { ChatHeaderActions } from './ChatHeaderActions';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HostedWebUpdateContext } from '../../../web-update/context';
+import { DropdownMenuItem } from '../../ui/dropdown-menu';
 import { ThemeProvider } from '../../../providers/Theme';
+import type { SharingClient } from '../../sharing/share-client';
+import { ChatHeaderActions } from './ChatHeaderActions';
 
+const translate = (key: string) => key;
 vi.mock('../../../i18n/useChatkitTranslation', () => ({
-  useChatkitTranslation: () => ({ t: (key: string) => key }),
+  useChatkitTranslation: () => ({ t: translate }),
 }));
-vi.mock('../../../workbench/context', () => ({
-  WorkbenchToggleButton: () => null,
-}));
-afterEach(cleanup);
 
-it('offers About in the real actions menu for an opted-in standalone page', async () => {
-  const openAbout = vi.fn();
-  render(
-    <ThemeProvider>
-      <HostedWebUpdateContext.Provider
-        value={{ openAbout, registerLeave: () => () => undefined }}
-      >
+beforeEach(() => {
+  // Tooltip placement is not measured in jsdom; keep its observer lifecycle intact.
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+function createShareTarget(disabled = false) {
+  const conversations = {
+    previewShare: vi.fn().mockResolvedValue({
+      snapshot: { title: 'Example', messages: [] },
+      digest: 'preview',
+      publicSharingEnabled: true,
+    }),
+    listShares: vi.fn().mockResolvedValue([]),
+    createShare: vi.fn(),
+    revokeShare: vi.fn(),
+  };
+  return {
+    client: { conversations } as unknown as SharingClient,
+    conversationId: 'conversation',
+    threadId: 'branch',
+    disabled,
+  };
+}
+
+describe('Chat header sharing', () => {
+  it('opens sharing directly and returns keyboard focus without creating a link', async () => {
+    const share = createShareTarget();
+    render(
+      <ThemeProvider>
+        <ChatHeaderActions share={share} />
+      </ThemeProvider>,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'chat.moreActions' }),
+    ).toBeNull();
+    const trigger = screen.getByRole('button', { name: 'sharing.action' });
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    await screen.findByRole('dialog');
+    await waitFor(() =>
+      expect(share.client.conversations.previewShare).toHaveBeenCalledWith(
+        'conversation',
+        'branch',
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'composer.resources.close' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(share.client.conversations.createShare).not.toHaveBeenCalled();
+  });
+
+  it('keeps sharing disabled until the conversation is ready', () => {
+    const share = createShareTarget(true);
+    render(
+      <ThemeProvider>
+        <ChatHeaderActions share={share} />
+      </ThemeProvider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'sharing.action' });
+    expect(trigger).toBeDisabled();
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(share.client.conversations.previewShare).not.toHaveBeenCalled();
+  });
+
+  it('explains unavailable sharing without requesting a preview or creating a link', async () => {
+    const share = {
+      ...createShareTarget(),
+      disabledReason: 'Project conversations cannot be shared.',
+    };
+    render(
+      <ThemeProvider>
+        <ChatHeaderActions share={share} />
+      </ThemeProvider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'sharing.action' });
+    expect(trigger).toBeVisible();
+    expect(trigger).toBeDisabled();
+    fireEvent.focus(screen.getByLabelText(share.disabledReason));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      share.disabledReason,
+    );
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(share.client.conversations.previewShare).not.toHaveBeenCalled();
+    expect(share.client.conversations.createShare).not.toHaveBeenCalled();
+  });
+});
+
+describe('Hosted web update actions', () => {
+  it('offers About in the real actions menu for an opted-in standalone page', async () => {
+    const openAbout = vi.fn();
+    render(
+      <ThemeProvider>
+        <HostedWebUpdateContext.Provider
+          value={{ openAbout, registerLeave: () => () => undefined }}
+        >
+          <ChatHeaderActions />
+        </HostedWebUpdateContext.Provider>
+      </ThemeProvider>,
+    );
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: 'chat.moreActions' }),
+      { key: 'Enter' },
+    );
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'webUpdate.about' }),
+    );
+    expect(openAbout).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not add an update menu to an embed or third-party application', () => {
+    render(
+      <ThemeProvider>
         <ChatHeaderActions />
-      </HostedWebUpdateContext.Provider>
-    </ThemeProvider>,
-  );
-  fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), {
-    key: 'Enter',
+      </ThemeProvider>,
+    );
+    expect(
+      screen.queryByRole('button', { name: 'chat.moreActions' }),
+    ).not.toBeInTheDocument();
   });
-  fireEvent.click(
-    await screen.findByRole('menuitem', { name: 'webUpdate.about' }),
-  );
-  expect(openAbout).toHaveBeenCalledTimes(1);
-});
 
-it('does not add an update menu to an embed or third-party application', () => {
-  render(
-    <ThemeProvider>
-      <ChatHeaderActions />
-    </ThemeProvider>,
-  );
-  expect(
-    screen.queryByRole('button', { name: 'chat.moreActions' }),
-  ).not.toBeInTheDocument();
-});
-
-it('keeps sharing available alongside About when both features are enabled', async () => {
-  const openAbout = vi.fn();
-  render(
-    <ThemeProvider>
-      <HostedWebUpdateContext.Provider
-        value={{ openAbout, registerLeave: () => () => undefined }}
-      >
-        <ChatHeaderActions
-          share={{
-            client: new Client({ apiUrl: 'https://example.test/api' }),
-            conversationId: 'conversation',
-            threadId: 'thread',
-          }}
-        />
-      </HostedWebUpdateContext.Provider>
-    </ThemeProvider>,
-  );
-  fireEvent.keyDown(screen.getByRole('button', { name: 'chat.moreActions' }), {
-    key: 'Enter',
+  it('keeps sharing as a direct action alongside About and restores its focus', async () => {
+    const share = createShareTarget();
+    const openAbout = vi.fn();
+    render(
+      <ThemeProvider>
+        <HostedWebUpdateContext.Provider
+          value={{ openAbout, registerLeave: () => () => undefined }}
+        >
+          <ChatHeaderActions share={share} />
+        </HostedWebUpdateContext.Provider>
+      </ThemeProvider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'sharing.action' });
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    await screen.findByRole('dialog');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'composer.resources.close' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: 'chat.moreActions' }),
+      { key: 'Enter' },
+    );
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'webUpdate.about' }),
+    );
+    expect(openAbout).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole('menuitem', { name: 'sharing.action' }),
+    ).toBeNull();
+    expect(share.client.conversations.createShare).not.toHaveBeenCalled();
   });
-  expect(
-    await screen.findByRole('menuitem', { name: 'sharing.action' }),
-  ).not.toHaveAttribute('aria-disabled', 'true');
-  fireEvent.click(screen.getByRole('menuitem', { name: 'webUpdate.about' }));
-  expect(openAbout).toHaveBeenCalledTimes(1);
+
+  it('preserves runtime menu commands alongside About', async () => {
+    const openAbout = vi.fn();
+    render(
+      <ThemeProvider>
+        <HostedWebUpdateContext.Provider
+          value={{ openAbout, registerLeave: () => () => undefined }}
+        >
+          <ChatHeaderActions
+            menu={<DropdownMenuItem>Existing command</DropdownMenuItem>}
+          />
+        </HostedWebUpdateContext.Provider>
+      </ThemeProvider>,
+    );
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: 'chat.moreActions' }),
+      { key: 'Enter' },
+    );
+    expect(
+      await screen.findByRole('menuitem', { name: 'Existing command' }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'webUpdate.about' }));
+    expect(openAbout).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps unavailable sharing disabled while About remains accessible', async () => {
+    const share = {
+      ...createShareTarget(),
+      disabledReason: 'Project conversations cannot be shared.',
+    };
+    const openAbout = vi.fn();
+    render(
+      <ThemeProvider>
+        <HostedWebUpdateContext.Provider
+          value={{ openAbout, registerLeave: () => () => undefined }}
+        >
+          <ChatHeaderActions share={share} />
+        </HostedWebUpdateContext.Provider>
+      </ThemeProvider>,
+    );
+    expect(
+      screen.getByRole('button', { name: 'sharing.action' }),
+    ).toBeDisabled();
+    fireEvent.focus(screen.getByLabelText(share.disabledReason));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      share.disabledReason,
+    );
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: 'chat.moreActions' }),
+      { key: 'Enter' },
+    );
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'webUpdate.about' }),
+    );
+    expect(openAbout).toHaveBeenCalledTimes(1);
+    expect(share.client.conversations.previewShare).not.toHaveBeenCalled();
+    expect(share.client.conversations.createShare).not.toHaveBeenCalled();
+  });
 });

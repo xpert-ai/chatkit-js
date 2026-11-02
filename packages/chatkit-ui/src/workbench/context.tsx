@@ -15,7 +15,7 @@ import {
   type WorkbenchViewMenuProps,
 } from './WorkbenchViewMenu';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
-import { cn } from '../lib/utils';
+import { ToolbarButton } from '../components/ui/toolbar-button';
 import {
   Tooltip,
   TooltipContent,
@@ -78,16 +78,11 @@ export function WorkbenchToggleButton() {
   const tooltip = workbench.disabledReason ?? label;
   const viewMenu = workbench.viewMenu;
   const button = (
-    <button
+    <ToolbarButton
       type="button"
       onClick={workbench.toggle}
       disabled={!workbench.available}
-      className={cn(
-        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-chat-item',
-        'text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground data-[state=open]:bg-muted',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
-      )}
+      className="data-[state=open]:bg-muted"
       aria-label={label}
     >
       {workbench.loading ? (
@@ -95,7 +90,7 @@ export function WorkbenchToggleButton() {
       ) : (
         <WorkbenchViewsIcon count={viewMenu?.views.length ?? 0} />
       )}
-    </button>
+    </ToolbarButton>
   );
 
   if (workbench.available && viewMenu?.views.length) {
@@ -105,7 +100,7 @@ export function WorkbenchToggleButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex h-8 w-8">{button}</span>
+        <span className="inline-flex">{button}</span>
       </TooltipTrigger>
       <TooltipContent side="bottom">{tooltip}</TooltipContent>
     </Tooltip>

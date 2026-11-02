@@ -7,6 +7,7 @@ import type {
   FollowUpBehavior,
   HITLDecision,
   RequestUserInputAnswer,
+  UserInputValues,
   RequestUserInputToolArgs,
   TChatRequest,
   TChatTaskSummaryContribution,
@@ -137,6 +138,8 @@ export type StreamContextType = {
   organizationId?: string;
   threadId: string | null;
   conversationId: string | null;
+  /** Metadata resolved by the history loader for the current thread only. */
+  conversation?: import('@xpert-ai/xpert-sdk').ChatConversation | null;
   connectorBindingIds: string[];
   threadGoal: ThreadGoal | null;
   contextUsageByAgentKey: ThreadContextUsageByAgentKey;
@@ -194,7 +197,10 @@ export type StreamContextType = {
   canSendPendingFollowUpNow: (id: string) => boolean;
   sendPendingFollowUpNow: (id: string) => Promise<void>;
   promotePendingFollowUpToSteer: (id: string) => Promise<void>;
-  submitRequestUserInput: (answers: RequestUserInputAnswer[]) => void;
+  submitRequestUserInput: (
+    answers: RequestUserInputAnswer[] | UserInputValues,
+    status?: 'submitted' | 'cancelled',
+  ) => void;
   submitHITLDecision: (decisions: HITLDecision[]) => void;
   stopRuntimeActivityItem: (
     providerId: RuntimeActivityProviderId,

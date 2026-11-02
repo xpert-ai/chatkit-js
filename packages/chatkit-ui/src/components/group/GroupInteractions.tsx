@@ -176,6 +176,7 @@ export function GroupInteractions({
       <RequestUserInputPanel
         request={userInput.pendingRequestUserInput}
         onSubmit={userInput.submitRequestUserInput}
+        onDismiss={() => userInput.submitRequestUserInput([], 'cancelled')}
       />
       <HITLApprovalPanel
         request={approval}

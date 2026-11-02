@@ -10,6 +10,66 @@ const command: RuntimeResourceCommand = {
   command: {},
 };
 describe('selected plugin command discovery', () => {
+  it('reuses unchanged resource versions across renders and remounts, but isolates clients and expiry', async () => {
+    const client = new Client<unknown>({
+      apiUrl: 'https://example.test/api/ai',
+    });
+    const other = new Client<unknown>({
+      apiUrl: 'https://example.test/api/ai',
+    });
+    const list = vi
+      .spyOn(client.assistants, 'getResourceCommands')
+      .mockResolvedValue([command]);
+    const otherList = vi
+      .spyOn(other.assistants, 'getResourceCommands')
+      .mockResolvedValue([]);
+    const useCommands = (
+      activeClient: Client<unknown>,
+      revision: number,
+      enabled = true,
+    ) =>
+      useResourceCommands({
+        client: activeClient,
+        assistantId: 'assistant',
+        enabled,
+        selection: { revision, resources: [{ ...command.skill }] },
+      });
+    const hook = renderHook(
+      ({ revision, enabled, activeClient }) =>
+        useCommands(activeClient, revision, enabled),
+      {
+        initialProps: { revision: 1, enabled: true, activeClient: client },
+      },
+    );
+    await waitFor(() =>
+      expect(hook.result.current.commands).toEqual([command]),
+    );
+    hook.rerender({ revision: 2, enabled: true, activeClient: client });
+    expect(list).toHaveBeenCalledTimes(1);
+    hook.unmount();
+    const reopened = renderHook(
+      ({ activeClient, enabled }) => useCommands(activeClient, 3, enabled),
+      {
+        initialProps: { activeClient: client, enabled: true },
+      },
+    );
+    await waitFor(() =>
+      expect(reopened.result.current.commands).toEqual([command]),
+    );
+    expect(list).toHaveBeenCalledTimes(1);
+    reopened.rerender({ activeClient: other, enabled: true });
+    expect(reopened.result.current.commands).toEqual([]);
+    await waitFor(() => expect(otherList).toHaveBeenCalledTimes(1));
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_001);
+    try {
+      reopened.rerender({ activeClient: client, enabled: true });
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    } finally {
+      clock.mockRestore();
+      reopened.unmount();
+    }
+  });
+
   it('uses pinned resources and clears stale results on deselection or scope changes', async () => {
     const client = new Client<unknown>({
       apiUrl: 'https://example.test/api/ai',

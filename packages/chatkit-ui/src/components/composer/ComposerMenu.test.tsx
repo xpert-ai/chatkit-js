@@ -112,7 +112,7 @@ describe('ComposerMenu', () => {
       'duration-300',
     );
     expect(closeTrigger.querySelector('.lucide-x')).not.toBeInTheDocument();
-    expect(closeTrigger).toHaveClass('rounded-chat-item', 'bg-muted');
+    expect(closeTrigger).toHaveClass('rounded-chat-item', 'aria-expanded:bg-foreground/10');
     expect(closeTrigger).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });

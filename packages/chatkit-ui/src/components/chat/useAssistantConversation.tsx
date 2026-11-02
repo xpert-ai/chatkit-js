@@ -253,7 +253,9 @@ export function useAssistantConversation({
   const runtimeResources = useRuntimeResources({
     client: session.xpertPlatformClient,
     enabled: resourcesEnabled,
-    isReady: session.stream.isReady,
+    isReady:
+      session.stream.isReady && session.stream.runtimeScopeReady !== false,
+    conversation: session.stream.conversation,
     assistantId: session.stream.assistantId,
     projectId: session.activeProjectId,
     conversationId: session.stream.conversationId,
@@ -532,6 +534,7 @@ export function useAssistantConversation({
           }
         : undefined,
   };
+  const compactComposer = !viewport.isAtBottom && messages.length > 0;
   return {
     workbench:
       surface === 'main'
@@ -661,42 +664,66 @@ export function useAssistantConversation({
       messagePresentation: messagePresentation,
     }),
     afterTranscript: <ChatQuoteActions {...quotes} {...session} />,
-    composer: getAssistantComposerProps({
-      ...commands,
-      ...session,
-      ...draft,
-      ...capabilities,
-      ...input,
-      ...files,
-      ...goal,
-      ...runtime,
-      ...modelState,
-      ...models,
-      ...runControl,
-      ...branch,
-      ...conversation,
-      isProjectSelectorVisible: isProjectSelectorVisible,
-      isFileSelectorVisible: isFileSelectorVisible,
-      isPromptEditDisabled: isPromptEditDisabled,
-      hasPendingInteractiveRequest: hasPendingInteractiveRequest,
-      inputPlaceholder: inputPlaceholder,
-      planModeEnabled: planModeEnabled,
-      setPlanModeEnabled: setPlanModeEnabled,
-      onConnectorsChange: onConnectorsChange,
-      connectorsEnabled: connectorsEnabled,
-      resourcesEnabled: resourcesEnabled,
-      isSendDisabled: isSendDisabled,
-      hasComposerInput: hasComposerInput,
-      projectsEnabled: projectsEnabled,
-      isProjectScopeLocked: isProjectScopeLocked,
-      isProjectSelectionLocked: isProjectSelectionLocked,
-      projectSelection: projectSelection,
-      options: options,
-      setHasSelectableProjects: setHasSelectableProjects,
-      onProjectCreate: onProjectCreate,
-      onProjectTypeCreate: onProjectTypeCreate,
-      runtimeResources: runtimeResources,
-    }),
+    composer: {
+      ...getAssistantComposerProps({
+        ...commands,
+        ...session,
+        ...draft,
+        ...capabilities,
+        ...input,
+        ...files,
+        ...goal,
+        ...runtime,
+        ...modelState,
+        ...models,
+        ...runControl,
+        ...branch,
+        ...conversation,
+        isProjectSelectorVisible: isProjectSelectorVisible,
+        isFileSelectorVisible: isFileSelectorVisible,
+        isPromptEditDisabled: isPromptEditDisabled,
+        hasPendingInteractiveRequest: hasPendingInteractiveRequest,
+        inputPlaceholder: inputPlaceholder,
+        planModeEnabled: planModeEnabled,
+        setPlanModeEnabled: setPlanModeEnabled,
+        onConnectorsChange: onConnectorsChange,
+        connectorsEnabled: connectorsEnabled,
+        resourcesEnabled: resourcesEnabled,
+        isSendDisabled: isSendDisabled,
+        hasComposerInput: hasComposerInput,
+        projectsEnabled: projectsEnabled,
+        isProjectScopeLocked: isProjectScopeLocked,
+        isProjectSelectionLocked: isProjectSelectionLocked,
+        projectSelection: projectSelection,
+        options: options,
+        setHasSelectableProjects: setHasSelectableProjects,
+        onProjectCreate: onProjectCreate,
+        onProjectTypeCreate: onProjectTypeCreate,
+        runtimeResources: runtimeResources,
+        compact: compactComposer,
+      }),
+      overlay: compactComposer && (
+        <div
+          data-slot="scroll-to-bottom"
+          className="pointer-events-none absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-full justify-center"
+        >
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={viewport.hasUpdatesBelow ? 'default' : 'outline'}
+            className={cn(
+              'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
+              viewport.hasUpdatesBelow && 'animate-bounce',
+            )}
+            onClick={() => viewport.scrollToBottom(true, true)}
+            aria-label={session.t('chat.scrollToBottom')}
+            title={session.t('chat.scrollToBottom')}
+          >
+            <ArrowDown size={16} />
+          </Button>
+        </div>
+      ),
+    },
     composerBefore: (
       <>
         <ConnectionStatus state={session.stream.connectionState} />
@@ -704,27 +731,6 @@ export function useAssistantConversation({
           <p role="alert" className="text-xs text-destructive">
             {runControl.runControlError.message}
           </p>
-        )}
-        {!viewport.isAtBottom && messages.length > 0 && (
-          <div
-            data-slot="scroll-to-bottom"
-            className="pointer-events-none absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-full justify-center"
-          >
-            <Button
-              type="button"
-              size="icon-sm"
-              variant={viewport.hasUpdatesBelow ? 'default' : 'outline'}
-              className={cn(
-                'pointer-events-auto rounded-full shadow-md dark:border-white/20 dark:ring-1 dark:ring-white/15 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_30px_rgba(0,0,0,0.45)]',
-                viewport.hasUpdatesBelow && 'animate-bounce',
-              )}
-              onClick={() => viewport.scrollToBottom(true, true)}
-              aria-label={session.t('chat.scrollToBottom')}
-              title={session.t('chat.scrollToBottom')}
-            >
-              <ArrowDown size={16} />
-            </Button>
-          </div>
         )}
         {threadErrorMessage && (
           <div className="mb-3 rounded-chat-panel border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto">

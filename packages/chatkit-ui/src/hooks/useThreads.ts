@@ -114,6 +114,7 @@ export function useThreads(
   const {
     client,
     threadId,
+    conversation,
     assistantId,
     projectId,
     isReady,
@@ -151,6 +152,10 @@ export function useThreads(
     },
     [filterProjectId],
   );
+
+  React.useEffect(() => {
+    if (conversation) upsertThreadRecord(conversation);
+  }, [conversation, upsertThreadRecord]);
 
   const refreshThreads = React.useCallback(async () => {
     if (!enabled) return;
@@ -278,7 +283,14 @@ export function useThreads(
   }, [threadId, streamError]);
 
   React.useEffect(() => {
-    if (!enabled || !isReady || !threadId || isStreamLoading) return;
+    if (
+      conversation !== undefined ||
+      !enabled ||
+      !isReady ||
+      !threadId ||
+      isStreamLoading
+    )
+      return;
 
     let cancelled = false;
 
@@ -303,6 +315,7 @@ export function useThreads(
     };
   }, [
     enabled,
+    conversation,
     assistantId,
     client,
     isReady,

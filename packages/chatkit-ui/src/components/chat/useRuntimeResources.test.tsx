@@ -22,6 +22,31 @@ function setup() {
   return { client, read, update, validate };
 }
 describe('conversation resource selection', () => {
+  it('hydrates the saved selection from history metadata and reads the server on explicit refresh', async () => {
+    const { client, read } = setup();
+    const { result } = renderHook(() =>
+      useRuntimeResources({
+        client,
+        enabled: true,
+        assistantId: 'assistant',
+        conversationId: 'conversation',
+        threadId: 'thread',
+        conversation: {
+          id: 'conversation',
+          threadId: 'thread',
+          options: { runtimeResources: saved },
+        },
+      }),
+    );
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    expect(result.current.selection).toEqual(saved);
+    expect(read).not.toHaveBeenCalled();
+    read.mockResolvedValue({ revision: 3, resources: [] });
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.selection.revision).toBe(3));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
   const resources = [
     ref,
     { bindingId: 'middleware', version: '2' },
@@ -334,12 +359,10 @@ describe('conversation resource selection', () => {
 describe('runtime resources authentication readiness', () => {
   it('does not search or restore resources until authenticated', async () => {
     const { client, read } = setup();
-    const search = vi
-      .spyOn(client.conversations, 'search')
-      .mockResolvedValue({
-        items: [{ id: 'conversation', threadId: 'thread' }],
-        total: 1,
-      });
+    const search = vi.spyOn(client.conversations, 'search').mockResolvedValue({
+      items: [{ id: 'conversation', threadId: 'thread' }],
+      total: 1,
+    });
     const { result, rerender } = renderHook(
       ({ isReady }) =>
         useRuntimeResources({

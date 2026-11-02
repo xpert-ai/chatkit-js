@@ -4,6 +4,7 @@ import { Check, Copy } from 'lucide-react';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { parseToolOutputPresentation } from '../../../lib/tool-output-attachments';
 import { cn } from '../../../lib/utils';
+import { messageActionButtonClassName } from '../message-action-styles';
 import {
   getJsonValueSummary,
   JsonTreeView,
@@ -57,7 +58,8 @@ function ToolCallCopyButton({
     <button
       type="button"
       className={cn(
-        'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        messageActionButtonClassName,
+        'hover:bg-background',
         className,
       )}
       aria-label={label}
@@ -65,9 +67,9 @@ function ToolCallCopyButton({
       onClick={handleCopy}
     >
       {isCopied ? (
-        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        <Check aria-hidden="true" />
       ) : (
-        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        <Copy aria-hidden="true" />
       )}
     </button>
   );

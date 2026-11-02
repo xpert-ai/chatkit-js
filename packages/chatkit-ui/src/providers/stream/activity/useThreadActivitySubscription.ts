@@ -7,6 +7,7 @@ import { applyResourceCard } from '../../../lib/stream-resource-card';
 import { normalizeConversationMessagesPage } from '../history/pagination';
 import { waitForAbortableDelay } from '../history/reconciliation';
 import { upsertMessages } from '../messages/reducer';
+import { hasLoadedRunMessages } from './message-baseline';
 import type { useStreamMessages } from '../messages/useStreamMessages';
 import type { useStreamRunState } from '../runs/useStreamRunState';
 import type { useStreamTransport } from '../transport/useStreamTransport';
@@ -47,8 +48,10 @@ export function useThreadActivitySubscription(options: Options) {
       current.current.threadId === threadId &&
       current.current.conversationId === conversationId &&
       current.current.scopeKey === scopeKey;
-    const key = (run: ThreadActivitySnapshot['runs'][number]) =>
-      `${run.status}:${run.updatedAt}:${run.messageRevision}`;
+    const key = (
+      run: ThreadActivitySnapshot['runs'][number] & { messageCount?: number },
+    ) =>
+      `${run.status}:${run.updatedAt}:${run.messageRevision}:${run.messageCount ?? ''}`;
     const live = (status: string) =>
       status === 'pending' || status === 'running';
 
@@ -121,6 +124,16 @@ export function useThreadActivitySubscription(options: Options) {
             )
               break;
             if (observed.get(run.id) === key(run)) continue;
+            if (
+              !live(run.status) &&
+              hasLoadedRunMessages(
+                run,
+                current.current.valuesRef.current.messages,
+              )
+            ) {
+              observed.set(run.id, key(run));
+              continue;
+            }
             try {
               if (live(run.status)) {
                 await current.current.runStream(

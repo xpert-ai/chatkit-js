@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { Assistant, Client } from '@xpert-ai/xpert-sdk';
 import { ParentMessengerContext } from '../providers/ParentMessenger';
 
@@ -31,11 +31,17 @@ function useAssistantProfile(
   assistantId: string | null | undefined,
 ) {
   const messenger = useContext(ParentMessengerContext);
+  const validatedAt = useRef(0);
+  const pending = useRef(false);
   const [revision, setRevision] = useState(0);
   const registerOnSetOptions = messenger?.registerOnSetOptions;
   useEffect(() => {
     if (!client || !assistantId) return;
-    return registerOnSetOptions?.(() => setRevision((value) => value + 1));
+    return registerOnSetOptions?.(() => {
+      // Layout, navigation and credential options do not invalidate published defaults.
+      if (!pending.current && Date.now() - validatedAt.current >= 60_000)
+        setRevision((value) => value + 1);
+    });
   }, [client, assistantId, registerOnSetOptions]);
   const [profile, setProfile] = useState<{
     client: AssistantClient;
@@ -50,18 +56,27 @@ function useAssistantProfile(
     }
     // Host updates revalidate published defaults without flashing the transcript or clearing local chat state.
     let cancelled = false;
-    client.assistants.get(assistantId).then(
-      (assistant) => {
-        if (!cancelled && assistant)
-          setProfile({ client, id: assistantId, assistant });
-      },
-      (error) => {
-        if (!cancelled)
-          console.warn('[ChatKit] Failed to load assistant info:', error);
-      },
-    );
+    pending.current = true;
+    client.assistants
+      .get(assistantId)
+      .then(
+        (assistant) => {
+          if (!cancelled && assistant) {
+            validatedAt.current = Date.now();
+            setProfile({ client, id: assistantId, assistant });
+          }
+        },
+        (error) => {
+          if (!cancelled)
+            console.warn('[ChatKit] Failed to load assistant info:', error);
+        },
+      )
+      .finally(() => {
+        if (!cancelled) pending.current = false;
+      });
     return () => {
       cancelled = true;
+      pending.current = false;
     };
   }, [client, assistantId, revision]);
 

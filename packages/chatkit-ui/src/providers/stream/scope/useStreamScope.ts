@@ -1,4 +1,5 @@
-import type { Client } from '@xpert-ai/xpert-sdk';
+import type { Client, ThreadControlView } from '@xpert-ai/xpert-sdk';
+import type { LoadedConversation } from '../history/conversation-context';
 import { useQueryState } from 'nuqs';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { persistConversationConnectorBindingIds } from '../../../lib/conversation-connectors';
@@ -38,6 +39,17 @@ export function useStreamScope({
   );
 
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loadedConversation, setLoadedConversation] =
+    useState<LoadedConversation | null>(null);
+  const loadedConversationRef = useRef<LoadedConversation | null>(null);
+  const initialControlViewRef = useRef<ThreadControlView | null>(null);
+  const updateLoadedConversation = useCallback(
+    (value: LoadedConversation | null) => {
+      loadedConversationRef.current = value;
+      setLoadedConversation(value);
+    },
+    [],
+  );
   const [connectorBindingIds, setConnectorBindingIdsState] = useState<string[]>(
     [],
   );
@@ -68,8 +80,12 @@ export function useStreamScope({
     (nextConversationId: string | null) => {
       conversationIdRef.current = nextConversationId;
       setConversationId(nextConversationId);
+      if (!nextConversationId) {
+        updateLoadedConversation(null);
+        initialControlViewRef.current = null;
+      }
     },
-    [],
+    [updateLoadedConversation],
   );
 
   const updateConnectorBindingIdsState = useCallback(
@@ -111,6 +127,10 @@ export function useStreamScope({
     [updateConnectorBindingIdsState],
   );
   return {
+    loadedConversation,
+    loadedConversationRef,
+    updateLoadedConversation,
+    initialControlViewRef,
     conversationIdRef,
     activeThreadIdRef,
     clientRef,

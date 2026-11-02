@@ -15,6 +15,7 @@ export type MessageFocusRequest = ChatKitMessageFocusRequest;
 type Pending = MessageFocusRequest & {
   startingThreadId: string | null | undefined;
   reachedTarget: boolean;
+  revealed: boolean;
   resolve: (result: ChatKitMessageFocusResult) => void;
   timer: ReturnType<typeof setTimeout>;
 };
@@ -27,6 +28,7 @@ type MessageFocusOptions = {
   historyError?: string;
   loadMore: () => Promise<unknown>;
   rootRef: RefObject<HTMLElement | null>;
+  revealMessage: () => void;
   unavailableMessage: string;
 };
 
@@ -71,6 +73,7 @@ export function useMessageFocus(input: MessageFocusOptions) {
           timer,
           startingThreadId: latestThread.current,
           reachedTarget: false,
+          revealed: false,
         };
         update((value) => value + 1);
       });
@@ -116,6 +119,13 @@ export function useMessageFocus(input: MessageFocusOptions) {
         element.dataset.messageId === active.messageId,
     );
     if (anchor) {
+      if (!active.revealed) {
+        active.revealed = true;
+        input.revealMessage();
+        // Scroll after React commits the visible chat layout.
+        update((value) => value + 1);
+        return;
+      }
       anchor.scrollIntoView({ block: 'center', behavior: 'smooth' });
       anchor.setAttribute('data-message-focused', 'true');
       highlight.current = anchor;

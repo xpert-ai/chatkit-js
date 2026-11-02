@@ -10,6 +10,7 @@ export function useConversationTitle(
     | 'client'
     | 'assistantId'
     | 'conversationId'
+    | 'conversation'
     | 'threadId'
     | 'isReady'
     | 'isLoading'
@@ -28,7 +29,14 @@ export function useConversationTitle(
   } | null>(null);
   React.useEffect(() => {
     const currentId = conversationId ?? threadId;
-    if (!enabled || !isReady || knownTitle?.trim() || !currentId) return;
+    if (
+      stream.conversation !== undefined ||
+      !enabled ||
+      !isReady ||
+      knownTitle?.trim() ||
+      !currentId
+    )
+      return;
     let cancelled = false;
     const request = conversationId
       ? client.conversations.get(conversationId)
@@ -61,9 +69,11 @@ export function useConversationTitle(
     isReady,
     isLoading,
     knownTitle,
+    stream.conversation,
   ]);
   return (
     knownTitle?.trim() ||
+    stream.conversation?.title?.trim() ||
     (loaded?.scope === scope && loaded.client === client
       ? loaded.title
       : undefined)

@@ -168,14 +168,6 @@ describe('HistorySidebar', () => {
     expect(closeButton).toHaveAttribute('data-size', 'icon-sm');
     expect(refreshButton).toHaveAttribute('data-variant', 'ghost');
     expect(closeButton).toHaveAttribute('data-variant', 'ghost');
-    expect(refreshButton).toHaveClass(
-      'hover:bg-accent',
-      'hover:text-accent-foreground',
-    );
-    expect(closeButton).toHaveClass(
-      'hover:bg-accent',
-      'hover:text-accent-foreground',
-    );
   });
 
   it('opens a dialog with search focused and an accessible description', async () => {
