@@ -209,7 +209,7 @@
   border-radius: var(--chat-panel-radius, 0.625rem);
 }
 .chatkit-file-change-header {
-  padding: calc(1rem * var(--chat-density-scale, 1));
+  padding: calc(0.75rem * var(--chat-density-scale, 1)) calc(1rem * var(--chat-density-scale, 1));
   gap: calc(0.75rem * var(--chat-density-scale, 1));
 }
 .chatkit-change-review-button {
