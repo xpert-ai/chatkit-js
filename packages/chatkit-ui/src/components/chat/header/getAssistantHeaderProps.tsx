@@ -1,4 +1,8 @@
-import { supportsConversationSharing } from '../../sharing/share-client';
+import {
+  activeConversationTarget,
+  getConversationActions,
+  type ConversationActionContext,
+} from '../../conversation/conversation-actions';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { History, Settings } from 'lucide-react';
 import type * as React from 'react';
@@ -52,7 +56,10 @@ type AssistantHeaderProps = Pick<
   > &
   Pick<
     ReturnType<typeof useChatConversationActions>,
-    'handleNewThread' | 'handleSelectThread' | 'handleDeleteThread'
+    | 'handleNewThread'
+    | 'handleSelectThread'
+    | 'handleDeleteThread'
+    | 'isCurrentConversationView'
   > &
   Pick<
     ReturnType<typeof useChatTaskSummary>,
@@ -73,6 +80,7 @@ type AssistantHeaderProps = Pick<
     headerMoreButtonRef: React.RefObject<HTMLButtonElement | null>;
     restoreHeaderFocus: (event: Event) => void;
     characterPresentation?: boolean;
+    openSideChat?: () => Promise<void>;
   };
 
 import type { ChatHeaderProps } from './ChatHeader';
@@ -117,8 +125,70 @@ export function getAssistantHeaderProps({
   setHistoryProjectFilter,
   handleSelectThread,
   handleDeleteThread,
+  isCurrentConversationView,
   characterPresentation = false,
+  openSideChat,
 }: AssistantHeaderProps): ChatHeaderProps {
+  const conversationActions: ConversationActionContext = {
+    client: stream.client,
+    scopeKey: JSON.stringify([
+      stream.apiUrl,
+      stream.organizationId,
+      stream.assistantId,
+      stream.projectId,
+      stream.conversationId,
+      stream.threadId,
+    ]),
+    ready:
+      stream.isReady &&
+      stream.runtimeScopeReady !== false &&
+      !missingConfig &&
+      !isHistoryLoading &&
+      !isChangingBranch &&
+      (!stream.connectionState || stream.connectionState === 'connected'),
+    activeConversationId: stream.conversationId,
+    activeThreadId: stream.threadId,
+    running: stream.isLoading,
+    history,
+    branchEnabled: options?.threadItemActions?.branch !== false,
+    sideChat: openSideChat,
+    rename: async (target, title) => {
+      await updateThread(target.recordId, { title });
+      if (isCurrentConversationView()) messageHistory.refresh();
+    },
+    delete: handleDeleteThread,
+    navigate: (record) => {
+      setHistoryOpen(false);
+      handleSelectThread({
+        recordId: record.id,
+        id: record.threadId,
+        title: record.title || t('history.threadFallback'),
+        status: record.status ?? 'idle',
+        projectId: record.projectId ?? null,
+      });
+      messageHistory.refresh();
+    },
+  };
+  const target = activeConversationTarget(
+    conversationActions,
+    currentThread,
+    stream.conversation,
+    assistantStatusText,
+    activeProjectId,
+  );
+  const inlineRename =
+    target &&
+    getConversationActions(
+      conversationActions,
+      target,
+      {
+        id: target.recordId,
+        threadId: target.id,
+        title: target.title,
+        status: target.status,
+      },
+      null,
+    ).rename;
   return {
     visible: surface === 'main' && options?.header?.enabled !== false,
     columnRef: chatColumnRef,
@@ -148,48 +218,28 @@ export function getAssistantHeaderProps({
       </div>
     ),
     title: assistantTitle,
-    subtitle: (
+    conversationTitle: target ? (
       <ConversationTitle
         key={stream.conversationId ?? stream.threadId ?? 'new'}
-        title={assistantStatusText}
+        title={target.title}
+        variant="toolbar"
         onSave={
-          currentThread &&
-          stream.threadId &&
-          stream.isReady &&
-          !isHistoryLoading &&
-          !isChangingBranch
+          target && inlineRename?.visible && !inlineRename.disabled
             ? async (nextTitle) => {
-                await updateThread(currentThread.recordId, {
-                  title: nextTitle,
-                });
+                await conversationActions.rename(target, nextTitle);
               }
             : undefined
         }
       />
-    ),
+    ) : undefined,
+    subtitle: !target ? (
+      <ConversationTitle title={assistantStatusText} />
+    ) : undefined,
     actions: (
       <>
         <ChatHeaderActions
-          share={
-            stream.conversationId &&
-            stream.threadId &&
-            stream.client &&
-            supportsConversationSharing(stream.client)
-              ? {
-                  client: stream.client,
-                  conversationId: stream.conversationId,
-                  threadId: stream.threadId,
-                  disabledReason: activeProjectId
-                    ? t('sharing.projectUnavailable')
-                    : undefined,
-                  disabled:
-                    Boolean(activeProjectId) ||
-                    !stream.isReady ||
-                    stream.isLoading ||
-                    isHistoryLoading ||
-                    isChangingBranch,
-                }
-              : undefined
+          conversationMenu={
+            target ? { context: conversationActions, target } : undefined
           }
           moreButtonRef={headerMoreButtonRef}
           onMenuCloseAutoFocus={(event) => {
@@ -259,6 +309,7 @@ export function getAssistantHeaderProps({
             onRefresh={messageHistory.refresh}
             onSelectThread={handleSelectThread}
             onDeleteThread={handleDeleteThread}
+            conversationActions={conversationActions}
             isRefreshing={messageHistory.isLoading}
             showDelete={history?.showDelete !== false}
             disabled={missingConfig || isHistoryLoading}

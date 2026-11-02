@@ -97,6 +97,20 @@ export function useChatConversationActions({
   setIsChangingBranch,
   options,
 }: ChatConversationActionsOptions) {
+  const currentView = React.useRef({
+    client: stream.client,
+    conversationId: stream.conversationId,
+    threadId: stream.threadId,
+  });
+  currentView.current = {
+    client: stream.client,
+    conversationId: stream.conversationId,
+    threadId: stream.threadId,
+  };
+  const isCurrentConversationView = () =>
+    currentView.current.client === stream.client &&
+    currentView.current.conversationId === stream.conversationId &&
+    currentView.current.threadId === stream.threadId;
   const legacyCanRetry = useThreadCapabilities({
     client: stream.client,
     threadId: stream.threadId,
@@ -273,8 +287,13 @@ export function useChatConversationActions({
   const handleDeleteThread = async (thread: ThreadItem) => {
     setHistoryError(null);
     await deleteThread(thread.recordId);
+    if (!isCurrentConversationView()) return;
     messageHistory.remove(thread.recordId);
-    if (stream.threadId === thread.id) stream.reset(null, []);
+    if (
+      currentView.current.conversationId === thread.recordId ||
+      currentView.current.threadId === thread.id
+    )
+      stream.reset(null, []);
     messageHistory.refresh();
     await refreshThreads();
   };
@@ -391,6 +410,7 @@ export function useChatConversationActions({
     handleNewThread,
     handleSelectThread,
     handleDeleteThread,
+    isCurrentConversationView,
     loadThreadHistory,
     handlePromptEdit,
     saveEditedMessage,

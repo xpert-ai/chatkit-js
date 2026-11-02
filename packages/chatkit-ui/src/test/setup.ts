@@ -1,5 +1,25 @@
 import '@testing-library/jest-dom/vitest';
 
+// jsdom has no media-query engine. Tests for responsive behavior override matches.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string) =>
+      Object.assign(new EventTarget(), {
+        media: query,
+        matches: false,
+        onchange: null,
+        addListener(this: MediaQueryList, listener: EventListener) {
+          this.addEventListener('change', listener);
+        },
+        removeListener(this: MediaQueryList, listener: EventListener) {
+          this.removeEventListener('change', listener);
+        },
+      }),
+  });
+}
+
 // jsdom has no layout or scrolling. Radix Select calls this while moving focus;
 // actual scrolling and menu positioning are verified in the browser.
 if (

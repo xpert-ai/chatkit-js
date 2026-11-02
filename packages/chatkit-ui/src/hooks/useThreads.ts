@@ -121,6 +121,8 @@ export function useThreads(
     isLoading: isStreamLoading,
     error: streamError,
   } = useStreamContext();
+  const mutationScope = React.useRef({ client, assistantId });
+  mutationScope.current = { client, assistantId };
   const [threadRecords, setThreadRecords] = React.useState<ThreadRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<unknown>(null);
@@ -210,19 +212,28 @@ export function useThreads(
     async (recordId: string, payload: Partial<ThreadRecord>) => {
       setError(null);
       const updated = await client.conversations.update(recordId, payload);
-      upsertThreadRecord(updated);
+      if (
+        mutationScope.current.client === client &&
+        mutationScope.current.assistantId === assistantId
+      )
+        upsertThreadRecord(updated);
       return updated;
     },
-    [client, upsertThreadRecord],
+    [client, assistantId, upsertThreadRecord],
   );
 
   const deleteThread = React.useCallback(
     async (recordId: string) => {
       setError(null);
       await client.conversations.delete(recordId);
+      if (
+        mutationScope.current.client !== client ||
+        mutationScope.current.assistantId !== assistantId
+      )
+        return;
       setThreadRecords((prev) => prev.filter((item) => item.id !== recordId));
     },
-    [client],
+    [client, assistantId],
   );
 
   React.useEffect(() => {

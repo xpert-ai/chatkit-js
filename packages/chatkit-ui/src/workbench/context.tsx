@@ -47,7 +47,7 @@ export type WorkbenchContextValue = {
   toggle: () => void;
   viewMenu?: Omit<WorkbenchViewMenuProps, 'children'>;
   sideChatEnabled: boolean;
-  askInSideChat: (reference: ChatKitReference) => Promise<void>;
+  askInSideChat: (reference?: ChatKitReference) => Promise<void>;
   externalAssistantsEnabled?: boolean;
   openExternalAssistant?: (executionId: string) => void;
 };

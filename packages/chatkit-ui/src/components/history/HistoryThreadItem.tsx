@@ -3,6 +3,7 @@ import type { ThreadHistoryProject, ThreadItem } from '../../hooks/useThreads';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
+import type { ReactNode } from 'react';
 
 export function HistoryThreadItem({
   thread,
@@ -16,6 +17,7 @@ export function HistoryThreadItem({
   onSelect,
   onFilterProject,
   onDelete,
+  actions,
 }: {
   thread: ThreadItem;
   active: boolean;
@@ -28,6 +30,7 @@ export function HistoryThreadItem({
   onSelect: () => void;
   onFilterProject?: (project: ThreadHistoryProject) => void;
   onDelete?: () => void;
+  actions?: ReactNode;
 }) {
   const { t } = useChatkitTranslation();
   return (
@@ -81,23 +84,24 @@ export function HistoryThreadItem({
           {updatedLabel}
         </time>
       )}
-      {onDelete && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onDelete}
-          disabled={disabled}
-          aria-label={t('history.deleteThread', { title: thread.title })}
-          className="relative shrink-0 rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
-        >
-          {deleting ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Trash2 size={15} />
-          )}
-        </Button>
-      )}
+      {actions ??
+        (onDelete && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onDelete}
+            disabled={disabled}
+            aria-label={t('history.deleteThread', { title: thread.title })}
+            className="relative shrink-0 rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            {deleting ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Trash2 size={15} />
+            )}
+          </Button>
+        ))}
     </li>
   );
 }

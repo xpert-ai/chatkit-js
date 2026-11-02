@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
         getRuntimeCapabilities: vi.fn(() => new Promise(() => undefined)),
       },
       conversations: {
+        get: vi.fn(),
         branch: vi.fn().mockResolvedValue({ id: 'branched-conversation', threadId: 'branched-thread' }),
         listThreads: vi.fn().mockResolvedValue([]),
         search: vi.fn().mockResolvedValue({ items: [] }),
@@ -443,7 +444,7 @@ describe('Chat message navigation', () => {
       status: 'idle',
     });
 
-    render(<Chat options={baseOptions} />);
+    render(<Chat options={{ ...baseOptions, header: { identity: { enabled: true } } }} />);
 
     expect(screen.getByText('Fix onboarding copy')).toBeInTheDocument();
     expect(screen.queryByText('Online')).not.toBeInTheDocument();
@@ -456,7 +457,7 @@ describe('Chat message navigation', () => {
       title: 'Original title',
       status: 'idle',
     });
-    render(<Chat options={baseOptions} />);
+    render(<Chat options={{ ...baseOptions, header: { identity: { enabled: true } } }} />);
     fireEvent.click(screen.getByRole('button', { name: 'chat.conversationTitle.rename' }));
     const input = screen.getByRole('textbox', { name: 'chat.conversationTitle.label' });
     fireEvent.change(input, { target: { value: 'Renamed conversation' } });

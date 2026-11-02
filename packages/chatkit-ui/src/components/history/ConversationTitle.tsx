@@ -2,14 +2,20 @@ import * as React from 'react';
 import { Check, Loader2, Pencil, X } from 'lucide-react';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { Input } from '../ui/input';
+import { cn } from '../../lib/utils';
 
 export type ConversationTitleProps = {
   title: string;
   onSave?: (title: string) => Promise<void>;
+  variant?: 'subtitle' | 'toolbar';
 };
 
 /** Key by conversation ID so navigation discards an unfinished title edit. */
-export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
+export function ConversationTitle({
+  title,
+  onSave,
+  variant = 'subtitle',
+}: ConversationTitleProps) {
   const { t } = useChatkitTranslation();
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(title);
@@ -23,6 +29,13 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
   const restoreFocusRef = React.useRef(false);
   const mountedRef = React.useRef(true);
   const errorId = React.useId();
+  const toolbar = variant === 'toolbar';
+  const textClass = toolbar
+    ? 'text-sm font-medium text-foreground'
+    : 'text-xs leading-4 text-muted-foreground';
+  const heightClass = toolbar
+    ? 'h-[max(2rem,calc(2.25rem*var(--chat-density-scale,1)))]'
+    : 'h-4';
 
   React.useEffect(() => {
     mountedRef.current = true;
@@ -75,10 +88,7 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
 
   if (!onSave) {
     return (
-      <p
-        className="h-4 truncate text-xs leading-4 text-muted-foreground"
-        title={title}
-      >
+      <p className={cn('truncate', textClass, !toolbar && 'h-4')} title={title}>
         {title}
       </p>
     );
@@ -89,7 +99,11 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
       <button
         ref={triggerRef}
         type="button"
-        className="group flex h-4 max-w-full items-center gap-1 rounded text-left text-xs leading-4 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          'group/conversation-title flex min-w-0 max-w-full items-center gap-[calc(0.25rem*var(--chat-density-scale,1))] rounded-chat-item text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          heightClass,
+          textClass,
+        )}
         title={title}
         aria-label={t('chat.conversationTitle.rename')}
         onClick={() => {
@@ -102,7 +116,10 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
         <span className="truncate">{title}</span>
         <Pencil
           aria-hidden="true"
-          className="h-3 w-3 shrink-0 opacity-50 group-hover:opacity-100"
+          className={cn(
+            'shrink-0 opacity-0 group-hover/conversation-title:opacity-100 group-focus-visible/conversation-title:opacity-100',
+            toolbar ? 'size-3.5' : 'size-3',
+          )}
         />
       </button>
     );
@@ -116,12 +133,19 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
           void save(false);
       }}
     >
-      <div className="flex h-4 items-center gap-1" aria-busy={saving}>
+      <div
+        className={cn('flex items-center gap-1', heightClass)}
+        aria-busy={saving}
+      >
         <Input
           ref={inputRef}
           value={draft}
           readOnly={saving}
-          className="h-4 min-w-0 rounded-none border-0 border-b border-transparent bg-transparent p-0 text-xs leading-4 shadow-none focus-visible:border-muted-foreground/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+          className={cn(
+            'min-w-0 rounded-none border-0 border-b border-transparent bg-transparent p-0 shadow-none focus-visible:border-muted-foreground/50 focus-visible:ring-0 focus-visible:ring-offset-0',
+            heightClass,
+            textClass,
+          )}
           aria-label={t('chat.conversationTitle.label')}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
@@ -153,7 +177,12 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
         />
         <button
           type="button"
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className={cn(
+            'flex shrink-0 items-center justify-center rounded-chat-item text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+            toolbar
+              ? 'size-[max(2rem,calc(2.25rem*var(--chat-density-scale,1)))]'
+              : 'size-4',
+          )}
           disabled={saving}
           aria-label={t('chat.conversationTitle.save')}
           title={t('chat.conversationTitle.save')}
@@ -167,7 +196,12 @@ export function ConversationTitle({ title, onSave }: ConversationTitleProps) {
         </button>
         <button
           type="button"
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className={cn(
+            'flex shrink-0 items-center justify-center rounded-chat-item text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+            toolbar
+              ? 'size-[max(2rem,calc(2.25rem*var(--chat-density-scale,1)))]'
+              : 'size-4',
+          )}
           disabled={saving}
           aria-label={t('chat.conversationTitle.cancel')}
           title={t('chat.conversationTitle.cancel')}

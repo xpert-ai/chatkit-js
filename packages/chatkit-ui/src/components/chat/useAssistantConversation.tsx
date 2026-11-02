@@ -75,6 +75,7 @@ import {
   type AssistantPresenceProps,
 } from './header/AssistantPresence';
 import type { ChatViewModel } from './ChatViewModel';
+import { useWorkbench } from '../../workbench/context';
 export function useAssistantConversation({
   className,
   options,
@@ -93,6 +94,7 @@ export function useAssistantConversation({
   onProjectTypeCreate,
   onConnectorsChange,
 }: ChatProps): ChatViewModel {
+  const workbench = useWorkbench();
   const session = useChatEnvironment({
     options,
     configuredProjectId,
@@ -605,6 +607,10 @@ export function useAssistantConversation({
       ),
     },
     header: getAssistantHeaderProps({
+      openSideChat:
+        surface === 'main' && workbench.sideChatEnabled
+          ? () => workbench.askInSideChat()
+          : undefined,
       characterPresentation: characterPresentation,
       ...assistant,
       ...session,
