@@ -425,7 +425,7 @@ describe('Chat start screen prompts', () => {
     const inputShell = container.querySelector('[data-slot="composer-input-shell"]');
     const content = container.querySelector('[data-slot="chatkit-chat-content"]');
 
-    expect(inputShell?.closest('form')?.nextElementSibling).toHaveAttribute(
+    expect(inputShell?.nextElementSibling).toHaveAttribute(
       'data-slot', 'starter-prompt-suggestions',
     );
     expect(composer).toContainElement(suggestion);
@@ -468,8 +468,10 @@ describe('Chat start screen prompts', () => {
     setComposerText(screen.getByRole('textbox'), '/');
     const palette = container.querySelector('[data-slot="slash-palette"]');
     const form = screen.getByRole('textbox').closest('form');
+    const panels = container.querySelector('[data-slot="composer-before"]');
     expect(palette).toBeInTheDocument();
-    expect(palette?.nextElementSibling).toBe(form);
+    expect(panels?.lastElementChild).toBe(palette);
+    expect(panels?.nextElementSibling).toContainElement(form);
     const shortcut = container.querySelector('[data-slot="prompt-workflow-shortcuts"]');
     if (!shortcut || !palette) throw new Error('Missing composer menus');
     for (const card of [attachment, reference]) {
@@ -480,7 +482,7 @@ describe('Chat start screen prompts', () => {
         card.compareDocumentPosition(palette) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
-    expect(form?.nextElementSibling).toHaveAttribute(
+    expect(form?.closest('[data-slot="composer-input-shell"]')?.nextElementSibling).toHaveAttribute(
       'data-slot', 'starter-prompt-suggestions',
     );
   });

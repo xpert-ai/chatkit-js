@@ -41,9 +41,9 @@ export function ChatView({
         initial={view.transcript.isInitialComposer}
         style={view.transcript.chatColumnStyle}
       >
-        {view.composerBefore}
         <ChatComposerForm
           {...view.composer}
+          before={view.composerBefore}
           compact={!compact && view.composer.compact}
         />
         {view.composerAfter}

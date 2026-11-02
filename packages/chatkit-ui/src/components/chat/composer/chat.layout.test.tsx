@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import {
   baseChatOptions,
   Chat,
@@ -10,6 +11,85 @@ import {
 
 describe('Chat composer layout', () => {
   setupChatTest();
+  it.each([
+    { radius: 'sharp', density: 'compact', colorScheme: 'light' },
+    { radius: 'round', density: 'spacious', colorScheme: 'dark' },
+  ] satisfies ChatKitTheme[])(
+    'keeps tasks and errors attached through shrinking/restoring ($radius/$density/$colorScheme)',
+    async (theme) => {
+      mocks.theme = theme;
+      mocks.stream.messages = [
+        { id: 'message', type: 'human', content: 'Hello' },
+      ];
+      mocks.stream.error = new Error('Save was not confirmed');
+      mocks.stream.todos = {
+        componentId: 'tasks',
+        title: 'Tasks',
+        tool: 'write_todos',
+        category: 'Tool',
+        toolset: 'todos',
+        status: 'running',
+        createdDate: '2026-11-02T10:00:00Z',
+        receivedAt: 0,
+        items: [
+          { id: 'task', content: 'Check the result', status: 'in_progress' },
+        ],
+      };
+      const view = renderChat();
+      await act(async () => {});
+      const viewport = view.container.querySelector<HTMLElement>(
+        '[data-chatkit-root]',
+      );
+      if (!viewport) throw new Error('Missing viewport');
+      Object.defineProperties(viewport, {
+        scrollHeight: { configurable: true, value: 2000 },
+        clientHeight: { configurable: true, value: 500 },
+      });
+      const input = screen.getByRole('textbox');
+      const shell = view.container.querySelector<HTMLElement>(
+        '[data-slot="composer-input-shell"]',
+      );
+      const content = view.container.querySelector(
+        '[data-slot="composer-content"]',
+      );
+      const panels = view.container.querySelector<HTMLElement>(
+        '[data-slot="composer-before"]',
+      );
+      const toggle = screen.getByRole('button', { name: 'chat.todos.summary' });
+      const error = screen.getByText('Save was not confirmed');
+      const assertAttached = (layout: string) => {
+        expect(shell).toHaveAttribute('data-layout', layout);
+        expect(content).toContainElement(panels);
+        expect(panels).toContainElement(toggle);
+        expect(panels).toContainElement(error);
+        expect(panels?.nextElementSibling).toContainElement(input);
+        expect(panels?.parentElement).toBe(content);
+        expect(input.closest('form')).not.toContainElement(panels);
+        expect(screen.getByRole('textbox')).toBe(input);
+        expect(shell).toHaveClass('pointer-events-none', 'justify-end');
+        expect(shell?.style.getPropertyValue('--chat-density-scale')).toBe(
+          theme.density === 'compact' ? '0.75' : '1.25',
+        );
+      };
+      viewport.scrollTop = 1452;
+      fireEvent.scroll(viewport);
+      assertAttached('stacked');
+      viewport.scrollTop = 1451;
+      fireEvent.scroll(viewport);
+      assertAttached('compact');
+      expect(
+        screen.getByRole('button', { name: 'chat.scrollToBottom' })
+          .parentElement?.parentElement,
+      ).toBe(content);
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      viewport.scrollTop = 1452;
+      fireEvent.scroll(viewport);
+      assertAttached('stacked');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(mocks.stream.submit).not.toHaveBeenCalled();
+    },
+  );
   it('uses the scroll-to-bottom threshold for compact mode and keeps the editor and context mounted', async () => {
     mocks.stream.messages = [
       { id: 'message', type: 'human', content: 'Hello' },
