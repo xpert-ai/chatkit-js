@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-ui
 
+## 0.21.2
+
+### Patch Changes
+
+- 42a63c1: Keep task and error panels attached to the input in compact and expanded composer layouts while preserving scroll stabilization.
+
 ## 0.21.1
 
 ### Patch Changes
