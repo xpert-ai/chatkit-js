@@ -1,5 +1,47 @@
 # @xpert-ai/chatkit-ui
 
+## 0.21.1
+
+### Patch Changes
+
+- 292b406: Keep the composer menu button's hover and expanded background visible on dark input surfaces using theme foreground colors.
+- 292b406: Present pending follow-ups as compact rows attached to the composer, with attachment previews, inline steering and queue actions, and contextual hints. Preserve theme-aware sizing and existing send, edit, and remove behavior.
+- a9d0589: Update @xpert-ai/xpert-sdk to ^0.20.1 and refresh the locked package version.
+- b7da5ea: Load exact selected resources before browsing, fetch candidate pages only when the resource menu opens, and refresh expired caches on focus. Keep catalog caches isolated when the runtime organization changes.
+- 338edd8: Make the chat header transparent with standalone new-chat and share actions, and keep the background within the responsive action toolbar.
+
+  Hide the inline avatar, title, and status block by default; opt in with `header.identity.enabled`.
+
+  Use consistent icon sizes across chat and Workbench toolbars, tighten View menu spacing and alignment, and explain why sharing is unavailable for project conversations.
+
+- 292b406: Keep message action icons readable at compact density and align copy, edit, retry, branch, and skill buttons with shared sizing. Apply the same bounded hit target to code block, tool output, and Shell copy buttons, reserving space so they do not cover the content.
+- 3ebdba7: Unify conversation sharing and message history with the shared shadcn Base-style Dialog surface, theme-aware controls and default-size footer actions. Show only opening message excerpts in the share preview while preserving the full snapshot and consent checks.
+- b5b77f9: Reuse authorized conversation metadata and the initial thread control snapshot across history, title, project and resource consumers. Reveal history before background run recovery completes, avoid rereading unchanged completed-run messages, and load auxiliary summaries and resource commands only when needed with scoped short-lived caches. Include lightweight conversation context in `thread.load.end`, with compatibility for older servers and hosts.
+- 292b406: Compact the composer into a single row while the scroll-to-bottom action is visible. Fade between layouts, hide the context toolbar while reading history, and preserve the editor, draft, selection, and scroll footprint.
+
+  Use a smaller theme-derived outer radius in the compact layout, coordinated with the inner buttons and padding, and animate radius changes with the layout transition.
+
+- Updated dependencies [338edd8]
+- Updated dependencies [b5b77f9]
+  - @xpert-ai/chatkit-types@0.20.1
+
+## 0.21.0
+
+### Minor Changes
+
+- f54d8f4: Add versioned mixed-field user input forms, typed answer validation, explicit cancellation and pending form recovery. Reserve non-blocking delivery contracts while rejecting that mode until the runtime supports human-message delivery.
+
+### Patch Changes
+
+- b7e31cf: Preserve an in-flight first Project message when initial host credentials supply the organization. Continue replacing the session on later organization changes or sign-out.
+
+  Include the current scope revision on remote View host events so saved tool receipts can refresh the selected dashboard without weakening project isolation.
+
+- fdd21d2: Reveal the chat before scrolling to and highlighting a message located from a maximized Workbench view. On narrow screens, close the covering Workbench panel. Keep the current layout when the target message is unavailable.
+- Updated dependencies [f54d8f4]
+  - @xpert-ai/chatkit-types@0.20.0
+  - @xpert-ai/chatkit-web-shared@0.18.2
+
 ## 0.20.0
 
 ### Minor Changes

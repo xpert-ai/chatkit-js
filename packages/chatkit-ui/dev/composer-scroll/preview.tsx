@@ -7,6 +7,8 @@ import {
 } from '../../src/components/chat/ChatLayout';
 import { ChatComposerForm } from '../../src/components/chat/composer/ChatComposerForm';
 import { ModelPicker } from '../../src/components/composer/ModelPicker';
+import { PendingTodos } from '../../src/components/composer/pending-todos';
+import type { TodoListSnapshot } from '../../src/lib/todos';
 import { useChatDraft } from '../../src/components/chat/composer/useChatDraft';
 import { ThemeProvider } from '../../src/providers/Theme';
 import { Button } from '../../src/components/ui/button';
@@ -18,6 +20,22 @@ import {
 import '../../src/i18n';
 import '../../src/index.css';
 
+const tasks: TodoListSnapshot = {
+  componentId: 'composer-layout-preview',
+  title: 'Tasks',
+  tool: 'write_todos',
+  category: 'Tool',
+  toolset: 'preview',
+  status: 'running',
+  createdDate: '2026-11-02T00:00:00Z',
+  receivedAt: 0,
+  items: [
+    { id: 'status', content: '核对本轮执行的最新状态', status: 'in_progress' },
+    { id: 'result', content: '等待任务完成并返回结果', status: 'pending' },
+    { id: 'review', content: '复核交付并确认下一步', status: 'pending' },
+  ],
+};
+
 // Isolated geometry and theme checks; this preview never sends API requests.
 function Preview() {
   const viewport = useRef<HTMLDivElement>(null);
@@ -28,6 +46,8 @@ function Preview() {
   const [spacious, setSpacious] = useState(false);
   const [sharp, setSharp] = useState(false);
   const [narrow, setNarrow] = useState(false);
+  const [showTasks, setShowTasks] = useState(true);
+  const [showError, setShowError] = useState(true);
   const [submitted, setSubmitted] = useState('');
   useEffect(() => {
     viewport.current?.scrollTo({ top: viewport.current.scrollHeight });
@@ -82,6 +102,22 @@ function Preview() {
             />{' '}
             Narrow
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={showTasks}
+              onChange={(e) => setShowTasks(e.target.checked)}
+            />{' '}
+            任务面板
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={showError}
+              onChange={(e) => setShowError(e.target.checked)}
+            />{' '}
+            错误提示
+          </label>
           <Button onClick={() => scroll(49)}>距底部 49px</Button>
           <Button onClick={() => scroll(47)}>距底部 47px</Button>
           <Button onClick={() => scroll(500)}>阅读历史</Button>
@@ -119,6 +155,19 @@ function Preview() {
             <ChatComposerDock>
               <ChatComposerForm
                 compact={compact}
+                before={
+                  <>
+                    {showError && (
+                      <div
+                        role="alert"
+                        className="mb-3 rounded-chat-panel border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive overflow-auto"
+                      >
+                        示例错误：操作尚未确认，请核对执行结果。
+                      </div>
+                    )}
+                    {showTasks && <PendingTodos snapshot={tasks} />}
+                  </>
+                }
                 overlay={
                   compact && (
                     <Button
