@@ -13,6 +13,8 @@ export function ComposerSurface({
   children,
   actions,
   footer,
+  before,
+  formProps,
   style,
   onFocusEditor,
   paddedBottom = !footer,
@@ -22,19 +24,42 @@ export function ComposerSurface({
   children: ReactNode;
   actions: ReactNode;
   footer?: ReactNode;
+  before?: ReactNode;
+  formProps?: Pick<ComponentProps<'form'>, 'onSubmit' | 'ref'>;
   paddedBottom?: boolean;
   style?: CSSProperties;
   onFocusEditor?: () => void;
   compact?: boolean;
   overlay?: ReactNode;
 }) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const beforeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [beforeHeight, setBeforeHeight] = useState(0);
   const [expandedHeight, setExpandedHeight] = useState<number | null>(null);
   // Measure the expanded geometry before the first paint even when mounted
   // while already reading history (for example after a development hot reload).
   const compact = compactRequested && expandedHeight !== null;
   const [isRestoring, setIsRestoring] = useState(false);
   const wasCompact = useRef(false);
+  // Panels remain live in both layouts: collapsing a task list or displaying an
+  // error must not consume the space reserved for the expanded input below it.
+  useLayoutEffect(() => {
+    const panels = beforeRef.current;
+    if (!panels) {
+      setBeforeHeight(0);
+      return;
+    }
+    const measure = () =>
+      setBeforeHeight(panels.getBoundingClientRect().height);
+    measure();
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(measure);
+    observer?.observe(panels);
+    return () => observer?.disconnect();
+  }, [before]);
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
@@ -45,7 +70,7 @@ export function ComposerSurface({
     let settling = restoring;
     const measure = () => {
       if (settling) return;
-      const shell = content.parentElement;
+      const shell = shellRef.current;
       const shellStyle = shell ? getComputedStyle(shell) : null;
       const padding =
         (parseFloat(shellStyle?.paddingTop ?? '') || 0) +
@@ -72,44 +97,64 @@ export function ComposerSurface({
       observer?.disconnect();
     };
   }, [compact, paddedBottom]);
+  const editor = (
+    <>
+      <div
+        data-slot="composer-editor-surface"
+        className="relative z-10 flex min-w-0 flex-col bg-input-background shadow-composer-shell"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onFocusEditor?.();
+        }}
+      >
+        {children}
+        {actions}
+      </div>
+      {footer && (
+        <div
+          data-slot="composer-context-collapse"
+          data-restoring={isRestoring || undefined}
+          inert={compact}
+          aria-hidden={compact || undefined}
+        >
+          <div className="min-h-0">
+            <div data-slot="composer-context-surface">{footer}</div>
+          </div>
+        </div>
+      )}
+    </>
+  );
   return (
     <div
+      ref={shellRef}
       data-slot="composer-input-shell"
       data-layout={compact ? 'compact' : 'stacked'}
-      style={{ ...style, minHeight: expandedHeight || undefined }}
+      style={{
+        ...style,
+        minHeight:
+          expandedHeight === null ? undefined : expandedHeight + beforeHeight,
+      }}
       className={cn(
         'pointer-events-none relative isolate flex min-w-0 flex-1 flex-col justify-end overflow-visible',
         paddedBottom && 'pb-composer-inset',
       )}
     >
       <div
-        ref={contentRef}
         className="pointer-events-auto relative"
         data-slot="composer-content"
       >
         {overlay}
-        <div
-          data-slot="composer-editor-surface"
-          className="relative z-10 flex min-w-0 flex-col bg-input-background shadow-composer-shell"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) onFocusEditor?.();
-          }}
-        >
-          {children}
-          {actions}
-        </div>
-        {footer && (
+        {before != null && (
           <div
-            data-slot="composer-context-collapse"
-            data-restoring={isRestoring || undefined}
-            inert={compact}
-            aria-hidden={compact || undefined}
+            ref={beforeRef}
+            data-slot="composer-before"
+            className="flow-root"
           >
-            <div className="min-h-0">
-              <div data-slot="composer-context-surface">{footer}</div>
-            </div>
+            {before}
           </div>
         )}
+        <div ref={contentRef} data-slot="composer-input-content">
+          {formProps ? <form {...formProps}>{editor}</form> : editor}
+        </div>
       </div>
     </div>
   );
@@ -120,17 +165,13 @@ export function ChatComposerFormFrame({
   formRef,
   children,
   ...surface
-}: ComponentProps<typeof ComposerSurface> & {
+}: Omit<ComponentProps<typeof ComposerSurface>, 'formProps'> & {
   onSubmit: ComponentProps<'form'>['onSubmit'];
   formRef?: Ref<HTMLFormElement>;
 }) {
   return (
-    <form
-      ref={formRef}
-      className="pointer-events-none flex items-end"
-      onSubmit={onSubmit}
-    >
-      <ComposerSurface {...surface}>{children}</ComposerSurface>
-    </form>
+    <ComposerSurface {...surface} formProps={{ onSubmit, ref: formRef }}>
+      {children}
+    </ComposerSurface>
   );
 }

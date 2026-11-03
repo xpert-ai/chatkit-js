@@ -2,6 +2,7 @@ import type { Client } from '@xpert-ai/xpert-sdk';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import type { ThreadHistoryState } from '../../../providers/useThreadHistory';
 import type { PendingHITLRequest } from '../../../lib/hitl';
+import type { TodoListSnapshot } from '../../../lib/todos';
 
 import React from 'react';
 
@@ -85,7 +86,7 @@ const mocks = vi.hoisted(() => {
         hasMore: false,
         isLoadingMore: false,
       },
-      todos: null,
+      todos: null as TodoListSnapshot | null,
       runtimeActivities: {
         sandboxServices: {
           providerId: 'sandbox-services',
@@ -364,10 +365,6 @@ vi.mock('../../history/HistorySidebar', () => ({
 
 vi.mock('../../composer/pending-follow-ups', () => ({
   PendingFollowUps: () => null,
-}));
-
-vi.mock('../../composer/pending-todos', () => ({
-  PendingTodos: () => null,
 }));
 
 vi.mock('../../composer/pending-runtime-services', () => ({
@@ -651,6 +648,7 @@ export function setupChatTest() {
     mocks.stream.projectScopeResolved = false;
     mocks.stream.historyLoad = undefined;
     mocks.stream.messages = [];
+    mocks.stream.todos = null;
     mocks.stream.historyMessagePagination = {
       conversationId: null,
       loadedCount: 0,
