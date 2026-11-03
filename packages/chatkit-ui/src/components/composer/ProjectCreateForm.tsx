@@ -1,14 +1,25 @@
-import type { FormEvent } from 'react';
+import { useId, type FormEvent } from 'react';
 import type {
   XpertProjectTypeRef,
   XpertProjectTypeSummary,
 } from '@xpert-ai/xpert-sdk';
 import { resolveLocalizedText } from '../../i18n/localized-text';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 
 const typeKey = (type: XpertProjectTypeRef) =>
   JSON.stringify([type.applicationKey, type.projectTypeKey]);
+
+const controlClassName =
+  'h-[max(1.75rem,calc(2rem*var(--chat-density-scale,1)))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))]';
 
 export function ProjectCreateForm({
   types,
@@ -34,24 +45,24 @@ export function ProjectCreateForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const { t, i18n } = useChatkitTranslation();
+  const typeId = useId();
+  const selectedType = types.find(
+    (type) => typeKey(type) === typeKey(projectType),
+  );
   return (
     <form
       data-slot="composer-project-create-form"
-      className="space-y-3 p-1"
+      className="grid gap-[calc(0.75rem*var(--chat-density-scale,1))] p-[calc(0.25rem*var(--chat-density-scale,1))]"
       onSubmit={onSubmit}
     >
       {types.length > 0 && (
-        <label className="grid gap-1 text-sm">
-          {t('composer.projects.type')}
-          <select
-            aria-label={t('composer.projects.type')}
-            className="min-w-0 rounded-chat-item border border-border bg-popover px-2 py-1 text-sm"
-            value={typeKey(projectType)}
+        <div className="grid min-w-0 gap-[calc(0.25rem*var(--chat-density-scale,1))] text-sm">
+          <label htmlFor={typeId}>{t('composer.projects.type')}</label>
+          <Select
+            value={selectedType ? typeKey(selectedType) : ''}
             disabled={creating}
-            onChange={(event) => {
-              const type = types.find(
-                (item) => typeKey(item) === event.target.value,
-              );
+            onValueChange={(value) => {
+              const type = types.find((item) => typeKey(item) === value);
               if (type)
                 onTypeChange({
                   applicationKey: type.applicationKey,
@@ -59,23 +70,33 @@ export function ProjectCreateForm({
                 });
             }}
           >
-            {!types.some((type) => typeKey(type) === typeKey(projectType)) && (
-              <option value={typeKey(projectType)} disabled>
-                {t('composer.projects.type')}
-              </option>
-            )}
-            {types.map((type) => (
-              <option
-                key={typeKey(type)}
-                value={typeKey(type)}
-                disabled={!type.available}
-              >
-                {resolveLocalizedText(type.applicationTitle, i18n.language)} /{' '}
-                {resolveLocalizedText(type.title, i18n.language)}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger
+              id={typeId}
+              aria-label={t('composer.projects.type')}
+              className={`w-full min-w-0 bg-background ${controlClassName}`}
+            >
+              <SelectValue placeholder={t('composer.projects.type')} />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              align="start"
+              className="max-w-[calc(100vw-1rem)]"
+            >
+              {types.map((type) => (
+                <SelectItem
+                  key={typeKey(type)}
+                  value={typeKey(type)}
+                  disabled={!type.available}
+                >
+                  <span className="truncate">
+                    {resolveLocalizedText(type.applicationTitle, i18n.language)}{' '}
+                    / {resolveLocalizedText(type.title, i18n.language)}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       <Input
         autoFocus
@@ -85,33 +106,34 @@ export function ProjectCreateForm({
         onChange={(event) => onNameChange(event.target.value)}
         placeholder={t('composer.projects.namePlaceholder')}
         aria-label={t('composer.projects.namePlaceholder')}
-        className="rounded-chat-item"
+        className={controlClassName}
       />
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {t('composer.projects.createError')}
         </p>
       )}
-      <div className="flex justify-end gap-2">
-        <button
+      <div className="flex justify-end gap-[calc(0.5rem*var(--chat-density-scale,1))]">
+        <Button
           type="button"
+          variant="ghost"
           disabled={creating}
           onClick={onCancel}
-          className="rounded-chat-item px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className={`${controlClassName} font-normal text-muted-foreground hover:bg-accent hover:text-accent-foreground`}
         >
           {t('composer.projects.cancel')}
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
           disabled={!name.trim() || creating || !canCreate}
-          className="rounded-chat-item bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className={`${controlClassName} font-normal disabled:cursor-not-allowed`}
         >
           {t(
             creating
               ? 'composer.projects.creating'
               : 'composer.projects.create',
           )}
-        </button>
+        </Button>
       </div>
     </form>
   );
