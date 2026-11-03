@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
         getRuntimeCapabilities: vi.fn(() => new Promise(() => undefined)),
       },
       conversations: {
+        get: vi.fn(),
         branch: vi.fn().mockResolvedValue({ id: 'branched-conversation', threadId: 'branched-thread' }),
         listThreads: vi.fn().mockResolvedValue([]),
         search: vi.fn().mockResolvedValue({ items: [] }),

@@ -13,6 +13,10 @@ import {
   DropdownMenuTrigger,
 } from '../../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
+import {
+  ConversationMenu,
+  type ConversationMenuProps,
+} from '../../conversation/ConversationMenu';
 
 /** Shared actions for both conversation runtimes; each supplies its supported commands. */
 export function ChatHeaderActions({
@@ -23,7 +27,9 @@ export function ChatHeaderActions({
   onMinimize,
   moreButtonRef,
   onMenuCloseAutoFocus,
+  conversationMenu,
 }: {
+  conversationMenu?: Pick<ConversationMenuProps, 'context' | 'target'>;
   menu?: ReactNode;
   share?: ConversationShareTarget & { disabledReason?: string };
   summary?: ReactNode;
@@ -37,34 +43,43 @@ export function ChatHeaderActions({
   const { t } = useChatkitTranslation();
   return (
     <>
-      {menu && (
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <ToolbarButton
-                  ref={moreButtonRef}
-                  type="button"
-                  aria-label={t('chat.moreActions')}
-                >
-                  <MoreHorizontal size={16} />
-                </ToolbarButton>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {t('chat.moreActions')}
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent
-            align="end"
-            className="min-w-52"
-            onCloseAutoFocus={(event) => {
-              onMenuCloseAutoFocus?.(event);
-            }}
-          >
-            {menu}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {conversationMenu ? (
+        <ConversationMenu
+          {...conversationMenu}
+          extraItems={menu}
+          moreButtonRef={moreButtonRef}
+          onMenuCloseAutoFocus={onMenuCloseAutoFocus}
+        />
+      ) : (
+        menu && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <ToolbarButton
+                    ref={moreButtonRef}
+                    type="button"
+                    aria-label={t('chat.moreActions')}
+                  >
+                    <MoreHorizontal size={16} />
+                  </ToolbarButton>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t('chat.moreActions')}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              className="min-w-52"
+              onCloseAutoFocus={(event) => {
+                onMenuCloseAutoFocus?.(event);
+              }}
+            >
+              {menu}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
       )}
       {share && (
         <Tooltip>

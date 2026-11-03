@@ -4,6 +4,9 @@ import { SquarePen } from 'lucide-react';
 import { ToolbarButton } from '../../ui/toolbar-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 
+const toolbarSurfaceClass =
+  'pointer-events-auto rounded-chat-panel bg-background px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))]';
+
 export type ChatHeaderProps = {
   visible?: boolean;
   columnRef?: Ref<HTMLDivElement>;
@@ -13,6 +16,7 @@ export type ChatHeaderProps = {
   avatar: ReactNode;
   title: string;
   subtitle?: ReactNode;
+  conversationTitle?: ReactNode;
   actions?: ReactNode;
   newThread?: { label: string; disabled?: boolean; onClick: () => void };
 };
@@ -26,6 +30,7 @@ export function ChatHeader({
   avatar,
   title,
   subtitle,
+  conversationTitle,
   actions,
   newThread,
 }: ChatHeaderProps) {
@@ -50,21 +55,43 @@ export function ChatHeader({
           data-slot="chatkit-chat-header"
           className="mx-auto flex w-full min-w-0 items-center justify-between gap-[calc(0.5rem*var(--chat-density-scale,1))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))]"
         >
-          <div className="flex min-w-0 flex-1 items-center gap-[calc(0.75rem*var(--chat-density-scale,1))]">
-            {newThread && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ToolbarButton
-                    className="pointer-events-auto"
-                    aria-label={newThread.label}
-                    disabled={newThread.disabled}
-                    onClick={newThread.onClick}
-                  >
-                    <SquarePen />
-                  </ToolbarButton>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">{newThread.label}</TooltipContent>
-              </Tooltip>
+          <div
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-[calc(0.75rem*var(--chat-density-scale,1))]',
+              characterPresentation && 'max-w-[calc(50%-4rem)]',
+            )}
+          >
+            {(newThread || conversationTitle) && (
+              <div
+                data-slot="chatkit-conversation-heading"
+                className={cn(
+                  toolbarSurfaceClass,
+                  'flex min-w-0 max-w-[min(100%,24rem)] items-center gap-[calc(0.25rem*var(--chat-density-scale,1))] text-foreground',
+                )}
+              >
+                {newThread && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <ToolbarButton
+                        className="shrink-0"
+                        aria-label={newThread.label}
+                        disabled={newThread.disabled}
+                        onClick={newThread.onClick}
+                      >
+                        <SquarePen />
+                      </ToolbarButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      {newThread.label}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {conversationTitle && (
+                  <div className="min-w-0 px-[calc(0.5rem*var(--chat-density-scale,1))]">
+                    {conversationTitle}
+                  </div>
+                )}
+              </div>
             )}
             {showIdentity && !characterPresentation && (
               <div
@@ -83,7 +110,10 @@ export function ChatHeader({
           </div>
           <div
             data-slot="chatkit-header-actions"
-            className="pointer-events-auto flex shrink-0 items-center gap-[calc(0.25rem*var(--chat-density-scale,1))] rounded-chat-panel bg-background px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] empty:hidden"
+            className={cn(
+              toolbarSurfaceClass,
+              'flex shrink-0 items-center gap-[calc(0.25rem*var(--chat-density-scale,1))] empty:hidden',
+            )}
           >
             {actions}
           </div>

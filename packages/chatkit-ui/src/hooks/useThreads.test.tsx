@@ -5,15 +5,24 @@ import { useThreads, type ThreadHistoryScope } from './useThreads';
 
 const mocks = vi.hoisted(() => ({
   search: vi.fn(),
+  update: vi.fn(),
+  delete: vi.fn(),
+  assistantId: 'assistant-1',
   projectId: 'project-a' as string | undefined,
   threadId: null as string | null,
 }));
 vi.mock('../providers/Stream', () => {
-  const client = { conversations: { search: mocks.search } };
+  const client = {
+    conversations: {
+      search: mocks.search,
+      update: mocks.update,
+      delete: mocks.delete,
+    },
+  };
   return {
     useStreamContext: () => ({
       client,
-      assistantId: 'assistant-1',
+      assistantId: mocks.assistantId,
       projectId: mocks.projectId,
       threadId: mocks.threadId,
       isReady: true,
@@ -29,8 +38,61 @@ function conversation(id: string, projectId?: string): ChatConversation {
 describe('Assistant history scopes', () => {
   beforeEach(() => {
     mocks.search.mockReset();
+    mocks.update.mockReset();
+    mocks.delete.mockReset();
+    mocks.assistantId = 'assistant-1';
     mocks.projectId = 'project-a';
     mocks.threadId = null;
+  });
+
+  it('does not insert a late rename into another Assistant history', async () => {
+    let resolve!: (value: ChatConversation) => void;
+    mocks.search.mockResolvedValue({ items: [conversation('same-id')] });
+    mocks.update.mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const { result, rerender } = renderHook(() => useThreads());
+    await waitFor(() => expect(result.current.threads).toHaveLength(1));
+    let mutation!: Promise<ChatConversation>;
+    act(() => {
+      mutation = result.current.updateThread('same-id', {
+        title: 'Old scope title',
+      });
+    });
+    mocks.assistantId = 'assistant-2';
+    rerender();
+    await waitFor(() => expect(mocks.search).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      resolve({ ...conversation('same-id'), title: 'Old scope title' });
+      await mutation;
+    });
+    expect(result.current.threads[0].title).toBe('same-id');
+  });
+
+  it('does not remove a new Assistant history record after an old delete completes', async () => {
+    let resolve!: () => void;
+    mocks.search.mockResolvedValue({ items: [conversation('same-id')] });
+    mocks.delete.mockReturnValue(
+      new Promise<void>((done) => {
+        resolve = done;
+      }),
+    );
+    const { result, rerender } = renderHook(() => useThreads());
+    await waitFor(() => expect(result.current.threads).toHaveLength(1));
+    let mutation!: Promise<void>;
+    act(() => {
+      mutation = result.current.deleteThread('same-id');
+    });
+    mocks.assistantId = 'assistant-2';
+    rerender();
+    await waitFor(() => expect(mocks.search).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      resolve();
+      await mutation;
+    });
+    expect(result.current.threads).toHaveLength(1);
   });
 
   it('lists bound and personal conversations regardless of the current Project', async () => {

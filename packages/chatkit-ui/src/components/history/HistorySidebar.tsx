@@ -40,8 +40,11 @@ import type {
   ThreadItem,
 } from '../../hooks/useThreads';
 import { HistoryThreadItem } from './HistoryThreadItem';
+import { ConversationMenu } from '../conversation/ConversationMenu';
+import type { ConversationActionContext } from '../conversation/conversation-actions';
 
 export type HistorySidebarProps = {
+  conversationActions?: ConversationActionContext;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   showTrigger?: boolean;
@@ -101,6 +104,7 @@ export function HistorySidebar({
   projectFilter,
   onProjectFilterChange,
   hasCurrentProject = false,
+  conversationActions,
 }: HistorySidebarProps) {
   const { t, i18n } = useChatkitTranslation();
   const [internalOpen, setInternalOpen] = React.useState(false);
@@ -420,6 +424,24 @@ export function HistorySidebar({
                       const active = currentThreadId === thread.id;
                       return (
                         <HistoryThreadItem
+                          actions={
+                            conversationActions ? (
+                              <ConversationMenu
+                                context={conversationActions}
+                                target={
+                                  thread.recordId ===
+                                    conversationActions.activeConversationId &&
+                                  conversationActions.activeThreadId
+                                    ? {
+                                        ...thread,
+                                        id: conversationActions.activeThreadId,
+                                      }
+                                    : thread
+                                }
+                                placement="history"
+                              />
+                            ) : undefined
+                          }
                           key={thread.recordId}
                           thread={thread}
                           active={active}
