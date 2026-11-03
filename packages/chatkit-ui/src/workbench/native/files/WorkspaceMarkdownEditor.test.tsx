@@ -98,21 +98,39 @@ it.each([false, undefined])(
     expect(save).not.toHaveBeenCalled();
   },
 );
-it('preserves the draft and disables editing when permission is revoked before save', async () => {
-  const { read, save, register } = setup(true);
-  const node = await edit();
-  const readonly = {
-    filePath: 'report.md',
-    capabilities: { canRead: true, canWrite: false },
-  };
-  read.mockResolvedValue(readonly);
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Read only');
-  expect(node).toHaveTextContent('用户新增内容');
-  expect(node).toHaveAttribute('contenteditable', 'false');
-  expect(register.mock.lastCall?.[1].dirty).toBe(true);
-  expect(save).not.toHaveBeenCalled();
-});
+it.each([false, undefined])(
+  'preserves the draft and disables editing when write permission becomes %s before save',
+  async (canWrite) => {
+    const { read, download, save, register, onSaved } = setup(true);
+    const node = await edit();
+    const draft = node.textContent;
+    expect(node).toHaveAttribute('contenteditable', 'true');
+    read.mockResolvedValue({
+      filePath: 'report.md',
+      ...(canWrite === undefined
+        ? {}
+        : { capabilities: { canRead: true, canWrite } }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Read only');
+    // The alert can render before MarkdownEditor's effect updates Tiptap.
+    await waitFor(() =>
+      expect(node).toHaveAttribute('contenteditable', 'false'),
+    );
+    expect(screen.getByRole('textbox')).toBe(node);
+    expect(node).toHaveAttribute('aria-readonly', 'true');
+    expect(node.textContent).toBe(draft);
+    expect(node).toHaveTextContent('用户新增内容');
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('toolbar')).toBeNull();
+    expect(register.mock.lastCall?.[1].dirty).toBe(true);
+    fireEvent.keyDown(node, { key: 's', ctrlKey: true });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(download).toHaveBeenCalledOnce();
+    expect(save).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+  },
+);
 it('preserves the rich draft on a content conflict', async () => {
   const { download, save } = setup(true);
   const node = await edit();
