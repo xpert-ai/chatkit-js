@@ -39,6 +39,7 @@ import type { TodoListSnapshot } from '../../lib/todos';
 import type { ThreadHistoryState } from '../useThreadHistory';
 
 export type ChatKitAIMessage = Message & {
+  parentId?: string | null;
   historical?: boolean;
   branching?: ChatMessageBranching;
   rootExecutionIds?: string[];

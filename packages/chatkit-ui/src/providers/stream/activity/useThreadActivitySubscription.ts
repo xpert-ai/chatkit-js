@@ -8,6 +8,7 @@ import { normalizeConversationMessagesPage } from '../history/pagination';
 import { waitForAbortableDelay } from '../history/reconciliation';
 import { upsertMessages } from '../messages/reducer';
 import { hasLoadedRunMessages } from './message-baseline';
+import { reconcileInputMessages } from './input-messages';
 import type { useStreamMessages } from '../messages/useStreamMessages';
 import type { useStreamRunState } from '../runs/useStreamRunState';
 import type { useStreamTransport } from '../transport/useStreamTransport';
@@ -189,8 +190,32 @@ export function useThreadActivitySubscription(options: Options) {
         await waitForAbortableDelay(signal, 1000);
       }
     };
+    // Input rows have no executionId. Resolve explicit parent identities independently
+    // of the output stream so quotes/files also appear while an external run is live.
+    const projectInputs = async () => {
+      const checked = new Set<string>();
+      while (isCurrent() && !recovery.stopped) {
+        try {
+          await reconcileInputMessages({
+            client,
+            recovery,
+            conversationId,
+            threadId,
+            signal,
+            isCurrent,
+            checked,
+            getMessages: () => current.current.valuesRef.current.messages,
+            setValues: (update) => current.current.setValues(update),
+          });
+        } catch {
+          if (!isCurrent()) return;
+        }
+        await waitForAbortableDelay(signal, 1000);
+      }
+    };
     void receive();
     void projectCards();
+    void projectInputs();
     void reconcile();
     return () => controller.abort();
   }, [client, threadId, conversationId, enabled, scopeKey, recovery]);

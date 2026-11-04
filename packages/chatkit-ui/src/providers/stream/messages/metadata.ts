@@ -94,6 +94,7 @@ export function mapChatMessageToUiMessage(
 
   return {
     id: message.id ?? createMessageId(),
+    ...(message.parentId !== undefined ? { parentId: message.parentId } : {}),
     type,
     content,
     ...(typeof message.status === 'string' ? { status: message.status } : {}),
@@ -238,6 +239,9 @@ export function createMessageFromData(data: unknown): ChatKitAIMessage | null {
 
   return {
     id,
+    ...(typeof raw.parentId === 'string' || raw.parentId === null
+      ? { parentId: raw.parentId }
+      : {}),
     type,
     content,
     executionId,
@@ -282,6 +286,7 @@ export function extractMessageMeta(raw: MessageMetadataContainer) {
     agentRuns?: AgentRunInfo[];
     branching?: ChatMessageBranching;
     id?: string;
+    parentId?: string | null;
     type?: ChatKitAIMessage['type'];
     content?: ChatKitAIMessage['content'];
     references?: ChatKitReference[];
@@ -295,6 +300,8 @@ export function extractMessageMeta(raw: MessageMetadataContainer) {
   } = {};
 
   if (typeof raw.id === 'string') meta.id = raw.id;
+  if (typeof raw.parentId === 'string' || raw.parentId === null)
+    meta.parentId = raw.parentId;
   if (typeof raw.createdAt === 'string') meta.createdAt = raw.createdAt;
   if (typeof raw.updatedAt === 'string') meta.updatedAt = raw.updatedAt;
   if (typeof raw.status === 'string') meta.status = raw.status;
