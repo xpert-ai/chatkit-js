@@ -88,17 +88,29 @@ describe('pet launcher dismissal', () => {
     expect(pet(element)).toBeTruthy();
   });
 
+  it('accepts the boolean pet shorthand in launcher mode and keeps chat mode disabled without a restore button', () => {
+    const element = mount({ ...defaults, pet: false });
+    expect(pet(element)).toBeNull();
+    expect(reopenButton(element)).toBeDefined();
+    element.setOptions({ ...defaults, pet: true });
+    expect(pet(element)).toBeTruthy();
+    expect(reopenButton(element)).toBeUndefined();
+    element.setOptions({ ...defaults, pet: false, displayMode: 'chat' });
+    expect(pet(element)).toBeNull();
+    expect(reopenButton(element)).toBeUndefined();
+  });
+
   it('uses host visibility on mount and updates, and emits only explicit user requests', () => {
-    const options = (launcherVisible: boolean) => ({
+    const options = (enabled: boolean) => ({
       ...defaults,
-      pet: { launcherVisible },
+      pet: { enabled },
     });
     const element = mount(options(false));
     expect(pet(element)).toBeNull();
     const frameUrl = element.shadowRoot!.querySelector('iframe')!.src;
     expect(decodeBase64(new URL(frameUrl).hash.slice(1))).toHaveProperty(
       'options.pet',
-      {},
+      { enabled: false },
     );
     const changes = vi.fn();
     element.addEventListener('chatkit.pet.launcher.visibility.change', changes);

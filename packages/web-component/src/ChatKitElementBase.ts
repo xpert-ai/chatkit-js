@@ -372,21 +372,8 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     return options?.displayMode === 'pet' ? 'pet' : 'chat';
   }
 
-  #getConfiguredPetOptions(options = this.#opts): ChatKitOptions['pet'] | null {
-    if (!options) {
-      return null;
-    }
-
-    if (
-      this.#getDisplayMode(options) === 'pet' &&
-      !normalizePetOptions(options.pet ?? null)
-    ) {
-      return typeof options.pet === 'object'
-        ? { ...options.pet, enabled: true }
-        : true;
-    }
-
-    return options.pet ?? null;
+  #getConfiguredPetOptions() {
+    return this.#opts?.pet ?? (this.#getDisplayMode() === 'pet' ? true : null);
   }
 
   #mergeConfiguredPetPositionDefaults(
@@ -425,7 +412,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   #configuredLauncherVisibility() {
     const pet = this.#opts?.pet;
-    return typeof pet === 'object' ? pet?.launcherVisible : undefined;
+    return typeof pet === 'boolean' ? pet : pet?.enabled;
   }
 
   #isLauncherHidden() {
@@ -466,7 +453,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     }
 
     if (this.#getDisplayMode() === 'pet' && !normalizePetOptions(pet ?? null)) {
-      pet = true;
+      pet = this.#getConfiguredPetOptions();
     }
 
     return this.#resolveOverlayPetOptions(pet);
@@ -507,25 +494,6 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
       ariaLabel: normalized.ariaLabel,
       imageRendering: normalized.imageRendering,
     };
-  }
-
-  #getFrameOptions(options: ChatKitOptions): ChatKitOptions {
-    let pet = this.#getConfiguredPetOptions(options);
-    if (pet && typeof pet === 'object' && 'launcherVisible' in pet) {
-      pet = { ...pet };
-      delete pet.launcherVisible;
-    }
-    if (pet === (options.pet ?? null)) {
-      return options;
-    }
-
-    const nextOptions = { ...options };
-    if (pet === null) {
-      delete nextOptions.pet;
-    } else {
-      nextOptions.pet = pet;
-    }
-    return nextOptions;
   }
 
   #setLauncherOpen(open: boolean) {
@@ -948,7 +916,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     const frameURL = new URL(this.#getFrameUrl(), window.location.origin);
     this.#messenger.setTargetOrigin(frameURL.origin);
     frameURL.hash = encodeBase64({
-      options: getInnerOptions(this.#getFrameOptions(this.#opts)),
+      options: getInnerOptions(this.#opts),
       referrer: window.location.origin,
       profile: this.profile,
       ...(this.#channelId ? { channelId: this.#channelId } : {}),
@@ -990,9 +958,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     if (this.#initialized) {
       this.#setOptionsDataAttributes(this.#opts);
       this.#loaded.then(() => {
-        this.#messenger.commands.setOptions(
-          getInnerOptions(this.#getFrameOptions(newOptions)),
-        );
+        this.#messenger.commands.setOptions(getInnerOptions(newOptions));
       });
     } else {
       this.#maybeInit();

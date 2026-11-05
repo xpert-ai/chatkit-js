@@ -38,9 +38,9 @@ async function servePetHost(page: Page) {
       for (const [id, assetsBaseUrl] of [['offline', '/offline/pets'], ['remote', 'https://cdn.example.test/pets/v1'], ['required', '/required/pets']]) {
         const element = document.createElement('xpertai-chatkit');
         element.id = id;
-        const options = { frameUrl: 'http://localhost/frame', api, displayMode: id === 'required' ? 'pet' : 'chat', pet: { assetsBaseUrl, enabled: id !== 'required' } };
+        const options = { frameUrl: 'http://localhost/frame', api, displayMode: id === 'required' ? 'pet' : 'chat', pet: { assetsBaseUrl } };
         if (id === 'required') {
-          const render = () => element.setOptions({ ...options, pet: { ...options.pet, launcherVisible: localStorage.getItem('fixture:pet:hidden') !== '1' } });
+          const render = () => element.setOptions({ ...options, pet: { ...options.pet, enabled: localStorage.getItem('fixture:pet:hidden') !== '1' } });
           element.addEventListener('chatkit.pet.launcher.visibility.change', ({ detail }) => {
             if (detail.visible) localStorage.removeItem('fixture:pet:hidden');
             else localStorage.setItem('fixture:pet:hidden', '1');

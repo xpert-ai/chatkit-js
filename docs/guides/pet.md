@@ -18,7 +18,6 @@ type ChatKitOptions = {
 
 type ChatKitPetOptions = {
   enabled?: boolean;
-  launcherVisible?: boolean;
   character?: {
     type: 'sprite-atlas';
     src: string;
@@ -40,7 +39,7 @@ type ChatKitPetOptions = {
 
 Defaults are defined in `packages/chatkit/src/pet.ts`:
 
-- `pet` omitted: disabled
+- `pet` omitted: disabled in chat mode and visible by default in pet mode
 - `pet: true`: default included Boba atlas, bottom-right pin, draggable,
   persisted position, `scale: 0.25`, `behavior: 'auto'`
 - Default `boundsPadding` is `0` on all sides, so drag and pin constraints stop
@@ -54,11 +53,12 @@ Defaults are defined in `packages/chatkit/src/pet.ts`:
 In pet display mode, **Close pet** hides the character and **Show pet** restores
 it. By default each element remembers the choice through options updates in the
 current session. To remember it across page loads or logins, let the host own
-the preference. Pass `pet.launcherVisible` on mount and listen for
+the preference. Pass `pet.enabled` on mount and listen for
 `chatkit.pet.launcher.visibility.change` (framework handler
 `onPetLauncherVisibilityChange`). On a user action, save `detail.visible` for
-the active account and update `pet.launcherVisible` via `setOptions`. Applying
-options does not emit an event. A hidden launcher still offers **Show pet**.
+the active account and update `pet.enabled` via `setOptions`. Applying
+options does not emit an event. An explicit `false` (including the `pet: false`
+shorthand) shows only **Show pet** until the host enables the launcher again.
 
 ## Runtime Architecture
 
@@ -194,8 +194,8 @@ The `/pet` built-in slash command supports:
 /pet settings
 ```
 
-In `displayMode: 'pet'`, Pet is required and the settings UI prevents disabling
-it.
+In `displayMode: 'pet'`, use **Close pet** or **Show pet** to change visibility.
+The settings sheet configures the character and its appearance.
 
 ## Conversation Bubble
 

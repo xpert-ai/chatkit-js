@@ -289,17 +289,16 @@ export type ChatKitPetPositionOptions = {
 };
 
 export type ChatKitPetOptions = {
-  /** Controls the launcher in pet display mode. Handle
-   * `chatkit.pet.launcher.visibility.change` to apply a user's close or reopen request.
-   * When omitted, the element manages visibility for its current session.
-   */
-  launcherVisible?: boolean;
   /** Base URL of the built-in pet directory (containing catalog.json and pet IDs).
    * Defaults to /pets. Accepts HTTPS URLs or root-relative paths; custom character
    * URLs are unaffected. Also applies to Assistant appearance sprites when
    * enabled is false. Host offline assets separately from the UI npm package.
    */
   assetsBaseUrl?: string;
+  /** In pet display mode, false collapses the launcher to Show pet. Omit to
+   * start visible and let the element handle closing and reopening. When the
+   * host supplies a boolean, update it on `chatkit.pet.launcher.visibility.change`.
+   */
   enabled?: boolean;
   character?: ChatKitPetCharacter;
   position?: ChatKitPetPositionOptions;
@@ -728,7 +727,8 @@ export type ChatKitOptions = {
    * the host page viewport.
    * Passing `true` enables the default built-in pet.
    * Explicit `false` disables pets and local pet controls in chat mode,
-   * overriding saved user preferences. Pet display mode still requires a pet.
+   * overriding saved user preferences. In pet display mode, omitting pet shows
+   * the launcher by default and false collapses it to the Show pet button.
    *
    * @default false
    */
