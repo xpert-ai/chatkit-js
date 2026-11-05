@@ -51,14 +51,16 @@ Defaults are defined in `packages/chatkit/src/pet.ts`:
 ### Closing and reopening a pet launcher
 
 In pet display mode, **Close pet** hides the character and **Show pet** restores
-it. By default each element remembers the choice through options updates in the
-current session. To remember it across page loads or logins, let the host own
-the preference. Pass `pet.enabled` on mount and listen for
+it immediately, including when the host passes a fixed `pet: true` or
+`pet: false`. The initial default is visible. Changing `pet.enabled` to
+`false` also closes an open chat panel without discarding the conversation.
+The element keeps the last user action when the host resends the same setting
+in the same session.
+
+To remember the choice across page loads or logins, listen for
 `chatkit.pet.launcher.visibility.change` (framework handler
-`onPetLauncherVisibilityChange`). On a user action, save `detail.visible` for
-the active account and update `pet.enabled` via `setOptions`. Applying
-options does not emit an event. An explicit `false` (including the `pet: false`
-shorthand) shows only **Show pet** until the host enables the launcher again.
+`onPetLauncherVisibilityChange`), save `detail.visible` for the active account,
+and pass it back as `pet.enabled`. Applying options does not emit the event.
 
 ## Runtime Architecture
 

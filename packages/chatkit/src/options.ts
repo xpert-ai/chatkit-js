@@ -296,8 +296,8 @@ export type ChatKitPetOptions = {
    */
   assetsBaseUrl?: string;
   /** In pet display mode, false collapses the launcher to Show pet. Omit to
-   * start visible and let the element handle closing and reopening. When the
-   * host supplies a boolean, update it on `chatkit.pet.launcher.visibility.change`.
+   * start visible. Users can close and reopen the launcher. Hosts can persist
+   * those actions via `chatkit.pet.launcher.visibility.change`.
    */
   enabled?: boolean;
   character?: ChatKitPetCharacter;

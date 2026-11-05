@@ -4,11 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitElement, registerChatKitElement } from './ChatKitElement';
 
 const frame = vi.hoisted(() => ({
+  update: vi.fn(),
   sendPetOptions: (_payload: { pet: ChatKitOptions['pet'] | null }) => {},
 }));
 vi.mock('./ChatFrameMessenger', () => ({
   ChatFrameMessenger: class {
-    commands = { setOptions: vi.fn(), setPetEnabled: vi.fn() };
+    commands = { setOptions: frame.update, setPetEnabled: vi.fn() };
     on(event: string, handler: typeof frame.sendPetOptions) {
       if (event === 'pet_options_change') frame.sendPetOptions = handler;
     }
@@ -100,14 +101,44 @@ describe('pet launcher dismissal', () => {
     expect(reopenButton(element)).toBeUndefined();
   });
 
-  it('uses host visibility on mount and updates, and emits only explicit user requests', () => {
+  it.each([true, { enabled: true }])(
+    'closes and reopens a fixed %j launcher without a host listener',
+    (petOption) => {
+      const options = { ...defaults, pet: petOption };
+      const element = mount(options);
+      clickClose(element);
+      element.setOptions({ ...options, theme: 'dark' });
+      expect(pet(element)).toBeNull();
+      reopenButton(element)!.click();
+      expect(pet(element)).toBeTruthy();
+    },
+  );
+
+  it('closes the panel when the host hides the launcher and retains the same frame on reopen', () => {
+    const element = mount({ ...defaults, pet: true });
+    const iframe = element.shadowRoot!.querySelector('iframe');
+    pet(element)!.click();
+    expect(element.dataset.chatOpen).toBe('true');
+    element.setOptions({ ...defaults, pet: false });
+    expect(element.dataset.chatOpen).toBeUndefined();
+    expect(pet(element)).toBeNull();
+    reopenButton(element)!.click();
+    expect(element.dataset.chatOpen).toBeUndefined();
+    pet(element)!.click();
+    expect(element.dataset.chatOpen).toBe('true');
+    expect(element.shadowRoot!.querySelector('iframe')).toBe(iframe);
+  });
+
+  it('applies host visibility changes and sends user changes to both the frame and the host', async () => {
     const options = (enabled: boolean) => ({
       ...defaults,
       pet: { enabled },
     });
     const element = mount(options(false));
     expect(pet(element)).toBeNull();
-    const frameUrl = element.shadowRoot!.querySelector('iframe')!.src;
+    const iframe = element.shadowRoot!.querySelector('iframe')!;
+    iframe.dispatchEvent(new Event('load'));
+    const frameUrl = iframe.src;
     expect(decodeBase64(new URL(frameUrl).hash.slice(1))).toHaveProperty(
       'options.pet',
       { enabled: false },
@@ -117,13 +148,22 @@ describe('pet launcher dismissal', () => {
     frame.sendPetOptions({ pet: true });
     expect(pet(element)).toBeNull();
     reopenButton(element)!.click();
-    expect(pet(element)).toBeNull();
+    await Promise.resolve();
+    expect(frame.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pet: { enabled: true } }),
+    );
+    expect(pet(element)).toBeTruthy();
     expect(changes).toHaveBeenLastCalledWith(
       expect.objectContaining({ detail: { visible: true } }),
     );
     element.setOptions(options(true));
     expect(pet(element)).toBeTruthy();
     clickClose(element);
+    await Promise.resolve();
+    expect(pet(element)).toBeNull();
+    expect(frame.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pet: { enabled: false } }),
+    );
     expect(changes).toHaveBeenLastCalledWith(
       expect.objectContaining({ detail: { visible: false } }),
     );

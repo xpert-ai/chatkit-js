@@ -49,11 +49,6 @@ import {
   type ThreadSummary,
 } from './PetOverlay';
 
-// Compute inner options by removing methods (to make options serializable)
-function getInnerOptions(options: ChatKitOptions): ChatKitInnerOptions {
-  return removeMethods(options) as ChatKitInnerOptions;
-}
-
 // Decorator to assert that a command is available for the current capabilities profile
 export function requireCommandCapability<
   This extends ChatKitElementBase<unknown>,
@@ -112,7 +107,8 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #chatMinimizedToPet = false;
   #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
   #petClosedByContextMenu = false;
-  #localLauncherVisible = true;
+  #hostLauncherEnabled = true;
+  #launcherVisible = true;
 
   #shadow = this.attachShadow({ mode: 'open' });
   #petOverlay = new PetOverlay(this.#shadow, {
@@ -373,7 +369,11 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #getConfiguredPetOptions() {
-    return this.#opts?.pet ?? (this.#getDisplayMode() === 'pet' ? true : null);
+    if (!this.#opts) return null;
+    return (
+      this.#effectivePet(this.#opts) ??
+      (this.#getDisplayMode() === 'pet' ? true : null)
+    );
   }
 
   #mergeConfiguredPetPositionDefaults(
@@ -410,23 +410,41 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     };
   }
 
-  #configuredLauncherVisibility() {
-    const pet = this.#opts?.pet;
-    return typeof pet === 'boolean' ? pet : pet?.enabled;
+  #effectivePet(options: ChatKitOptions): ChatKitOptions['pet'] {
+    const pet = options.pet;
+    if (
+      options.displayMode !== 'pet' ||
+      this.#launcherVisible === this.#hostLauncherEnabled
+    ) {
+      return pet;
+    }
+    return typeof pet === 'object'
+      ? { ...pet, enabled: this.#launcherVisible }
+      : this.#launcherVisible;
+  }
+
+  #innerOptions(options: ChatKitOptions): ChatKitInnerOptions {
+    return removeMethods({
+      ...options,
+      pet: this.#effectivePet(options),
+    }) as ChatKitInnerOptions;
+  }
+
+  #updateFrameOptions() {
+    this.#loaded.then(() => {
+      if (this.#opts)
+        this.#messenger.commands.setOptions(this.#innerOptions(this.#opts));
+    });
   }
 
   #isLauncherHidden() {
-    return (
-      this.#getDisplayMode() === 'pet' &&
-      !(this.#configuredLauncherVisibility() ?? this.#localLauncherVisible)
-    );
+    return this.#getDisplayMode() === 'pet' && !this.#launcherVisible;
   }
 
   #requestLauncherVisibility(visible: boolean) {
-    if (this.#configuredLauncherVisibility() === undefined) {
-      this.#localLauncherVisible = visible;
-      this.#syncPetOverlayOptions();
-    }
+    this.#launcherVisible = visible;
+    this.#syncPetOverlayOptions();
+    this.#updateFrameOptions();
     this.dispatchEvent(
       new CustomEvent('chatkit.pet.launcher.visibility.change', {
         detail: { visible },
@@ -516,6 +534,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #syncPetOverlayOptions() {
+    if (this.#isLauncherHidden()) this.#setLauncherOpen(false);
     const overlayPetOptions = this.#getOverlayPetOptions();
     this.#petOverlay.setOptions(overlayPetOptions, this.#opts?.theme);
     this.#petOverlay.setReopenVisible(
@@ -916,7 +935,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     const frameURL = new URL(this.#getFrameUrl(), window.location.origin);
     this.#messenger.setTargetOrigin(frameURL.origin);
     frameURL.hash = encodeBase64({
-      options: getInnerOptions(this.#opts),
+      options: this.#innerOptions(this.#opts),
       referrer: window.location.origin,
       profile: this.profile,
       ...(this.#channelId ? { channelId: this.#channelId } : {}),
@@ -941,12 +960,18 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
-    if (
+    const sessionChanged =
       this.#opts?.sessionKey !== newOptions.sessionKey ||
       this.#opts?.api.xpertId !== newOptions.api.xpertId ||
-      this.#getDisplayMode() !== this.#getDisplayMode(newOptions)
-    ) {
-      this.#localLauncherVisible = true;
+      this.#getDisplayMode() !== this.#getDisplayMode(newOptions);
+    const pet = newOptions.pet;
+    const enabled = typeof pet === 'boolean' ? pet : (pet?.enabled ?? true);
+    // Re-sending the same options preserves the user's last click.
+    if (sessionChanged || enabled !== this.#hostLauncherEnabled) {
+      this.#launcherVisible = enabled;
+    }
+    this.#hostLauncherEnabled = enabled;
+    if (sessionChanged) {
       this.#framePetOptionsOverride = undefined;
       this.#setLauncherOpen(false);
     }
@@ -957,9 +982,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     this.#syncPetOverlayOptions();
     if (this.#initialized) {
       this.#setOptionsDataAttributes(this.#opts);
-      this.#loaded.then(() => {
-        this.#messenger.commands.setOptions(getInnerOptions(newOptions));
-      });
+      this.#updateFrameOptions();
     } else {
       this.#maybeInit();
     }
