@@ -1,5 +1,18 @@
 # @xpert-ai/chatkit-ui
 
+## 0.21.3
+
+### Patch Changes
+
+- 7f3ce71: Keep the wide-screen task output panel below the chat toolbar so its buttons remain accessible.
+- 44fa4e4: In pet display mode the launcher starts visible by default. Passing `pet.enabled: false` or `pet: false` now collapses it to Show pet. Hosts can remember the user's choice by handling the launcher visibility event and updating `pet.enabled`.
+- 5487926: Show the complete slash command menu at every supported position in a message, including after text and newlines, while preserving skill-only dollar selectors.
+
+  Preserve surrounding draft text and capability tokens when selecting mode commands from an inline slash menu.
+
+- Updated dependencies [44fa4e4]
+  - @xpert-ai/chatkit-types@0.20.2
+
 ## 0.21.2
 
 ### Patch Changes
