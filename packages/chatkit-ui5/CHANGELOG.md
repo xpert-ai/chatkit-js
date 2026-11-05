@@ -1,5 +1,14 @@
 # @xpert-ai/chatkit-ui5
 
+## 0.18.2
+
+### Patch Changes
+
+- 44fa4e4: In pet display mode the launcher starts visible by default. Passing `pet.enabled: false` or `pet: false` now collapses it to Show pet. Hosts can remember the user's choice by handling the launcher visibility event and updating `pet.enabled`.
+- Updated dependencies [44fa4e4]
+  - @xpert-ai/chatkit-types@0.20.2
+  - @xpert-ai/chatkit-web-component@0.19.2
+
 ## 0.18.1
 
 ### Patch Changes
