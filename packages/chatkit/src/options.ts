@@ -289,6 +289,11 @@ export type ChatKitPetPositionOptions = {
 };
 
 export type ChatKitPetOptions = {
+  /** Stable, non-secret user and integration key for remembering a closed pet
+   * launcher across browser sessions. Without it, a host sessionKey scopes
+   * dismissal to that browser tab and session.
+   */
+  dismissalKey?: string;
   /** Base URL of the built-in pet directory (containing catalog.json and pet IDs).
    * Defaults to /pets. Accepts HTTPS URLs or root-relative paths; custom character
    * URLs are unaffected. Also applies to Assistant appearance sprites when

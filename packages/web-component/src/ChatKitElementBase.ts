@@ -7,6 +7,7 @@ import {
 } from '@xpert-ai/chatkit-web-shared';
 
 import { WindowDragOverlay } from './WindowDragOverlay';
+import { PetLauncherDismissal } from './PetLauncherDismissal';
 import { ChatFrameMessenger } from './ChatFrameMessenger';
 import type {
   Card,
@@ -18,7 +19,10 @@ import type {
   ToolOutputAttachmentPreviewRequest,
   WorkspaceConnectorConnectRequest,
 } from '@xpert-ai/chatkit-types';
-import { getPetAssetsBaseUrl, normalizePetOptions } from '@xpert-ai/chatkit-types';
+import {
+  getPetAssetsBaseUrl,
+  normalizePetOptions,
+} from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import type { RuntimeCapabilitiesSelection } from '@xpert-ai/chatkit-types';
 import type { SendUserMessageParams } from '@xpert-ai/chatkit-types';
@@ -108,11 +112,16 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #chatMinimizedToPet = false;
   #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
   #petClosedByContextMenu = false;
+  #launcherDismissal = new PetLauncherDismissal();
 
   #shadow = this.attachShadow({ mode: 'open' });
   #petOverlay = new PetOverlay(this.#shadow, {
     onActivate: () => this.#handlePetActivate(),
     onClose: () => this.#handlePetClose(),
+    onReopen: () => {
+      this.#launcherDismissal.set(false);
+      this.#syncPetOverlayOptions();
+    },
     onReply: (text) => this.#handlePetReply(text),
     onThreadSummaryActivate: (threadId) =>
       void this.#handlePetThreadSummaryActivate(threadId),
@@ -419,6 +428,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
     if (
+      (this.#getDisplayMode() === 'pet' && this.#launcherDismissal.dismissed) ||
       this.#petClosedByContextMenu ||
       (this.#opts?.pet === false && this.#getDisplayMode() !== 'pet')
     ) {
@@ -479,7 +489,11 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #getFrameOptions(options: ChatKitOptions): ChatKitOptions {
-    const pet = this.#getConfiguredPetOptions(options);
+    let pet = this.#getConfiguredPetOptions(options);
+    if (pet && typeof pet === 'object' && 'dismissalKey' in pet) {
+      pet = { ...pet };
+      delete pet.dismissalKey;
+    }
     if (pet === (options.pet ?? null)) {
       return options;
     }
@@ -515,6 +529,12 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #syncPetOverlayOptions() {
     const overlayPetOptions = this.#getOverlayPetOptions();
     this.#petOverlay.setOptions(overlayPetOptions, this.#opts?.theme);
+    this.#petOverlay.setReopenVisible(
+      this.#getDisplayMode() === 'pet' && this.#launcherDismissal.dismissed,
+      typeof this.#opts?.pet === 'object'
+        ? this.#opts.pet.position?.zIndex
+        : undefined,
+    );
     if (!overlayPetOptions) {
       this.#setChatMinimizedToPet(false);
     }
@@ -539,16 +559,16 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #handlePetClose() {
-    this.#petClosedByContextMenu = true;
-    this.#framePetOptionsOverride = null;
-    this.#setChatMinimizedToPet(false);
     this.#setLauncherOpen(false);
-    this.#petOverlay.setOptions(null);
-
     if (this.#getDisplayMode() === 'pet') {
+      this.#launcherDismissal.set(true);
+      this.#syncPetOverlayOptions();
       return;
     }
 
+    this.#petClosedByContextMenu = true;
+    this.#framePetOptionsOverride = null;
+    this.#syncPetOverlayOptions();
     this.#loaded
       .then(() => this.#messenger.commands.setPetEnabled({ enabled: false }))
       .catch(() => undefined);
@@ -612,6 +632,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   connectedCallback() {
     this.#petOverlay.connect();
+    if (this.#opts) this.#syncPetOverlayOptions();
     const style = document.createElement('style');
     style.textContent = `
       :host {
@@ -932,6 +953,10 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
+    if (this.#launcherDismissal.bind(newOptions, this.id)) {
+      this.#framePetOptionsOverride = undefined;
+      this.#setLauncherOpen(false);
+    }
     this.#opts = newOptions;
     if (!newOptions.header?.windowDrag) this.#windowDrag?.clear();
     this.#petClosedByContextMenu = false;
