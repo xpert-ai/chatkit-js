@@ -28,6 +28,8 @@ Command filtering and expandable capability groups behave the same at every slas
 
 When a user types `$`, ChatKit opens the same runtime capability selector filtered to Skills only. Skill search also matches `$`-prefixed skill IDs and labels, so `$review` can select a skill whose ID or label is `review`.
 
+Selecting Plan, Pet, or the runtime Goal command from the palette removes only the active slash query and toggles that mode. Surrounding text and capability tokens stay in the draft, with the caret restored to the query's position. Sending a complete slash invocation still uses that command's normal submission behavior.
+
 The palette supports mouse selection plus keyboard navigation with Escape, ArrowUp, ArrowDown, Tab, and Enter. Active keyboard navigation keeps the selected item scrolled into view.
 
 ## Command Sources

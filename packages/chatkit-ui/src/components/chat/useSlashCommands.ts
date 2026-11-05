@@ -85,6 +85,7 @@ export function useSlashCommands({
   parentMessenger,
   getComposerEditingLength,
   setComposerText,
+  clearComposer,
   focusComposerAt,
   setPlanModeEnabled,
   setGoalPanelOpen,
@@ -113,6 +114,7 @@ export function useSlashCommands({
   parentMessenger?: ParentMessenger | null;
   getComposerEditingLength: () => number;
   setComposerText: (text: string, caretOffset?: number) => void;
+  clearComposer: (range?: ComposerReplaceRange) => void;
   focusComposerAt: (offset: number) => void;
   setPlanModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   setGoalPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -302,22 +304,26 @@ export function useSlashCommands({
           true,
         ),
       );
-      setComposerText('', 0);
+      clearComposer(range);
       setPalette(null);
-      focusComposerAt(0);
+      focusComposerAt(range?.start ?? 0);
     },
     [
       focusComposerAt,
       insertComposerCapabilityToken,
       runtimeCapabilityOptions,
-      setComposerText,
+      clearComposer,
       setPalette,
       setRunRuntimeCapabilities,
     ],
   );
 
   const executeSlashCommand = React.useCallback(
-    (command: ResolvedSlashCommand, args: string) => {
+    (
+      command: ResolvedSlashCommand,
+      args: string,
+      range?: ComposerReplaceRange,
+    ) => {
       if (onSelectPromptWorkflow?.(command, args)) {
         setPalette(null);
         return true;
@@ -335,20 +341,20 @@ export function useSlashCommands({
       if (effect.type === 'toggle_plan') {
         setPlanModeEnabled((enabled) => !enabled);
         if (effect.clearComposer) {
-          setComposerText('', 0);
+          clearComposer(range);
         }
         setPalette(null);
-        focusComposerAt(0);
+        focusComposerAt(range?.start ?? 0);
         return true;
       }
 
       if (effect.type === 'pet') {
         onPetCommand?.(effect.mode);
         if (effect.clearComposer) {
-          setComposerText('', 0);
+          clearComposer(range);
         }
         setPalette(null);
-        focusComposerAt(0);
+        focusComposerAt(range?.start ?? 0);
         return true;
       }
 
@@ -362,10 +368,13 @@ export function useSlashCommands({
       }
 
       if (effect.type === 'select_capability') {
-        selectCapabilityById(effect.capability, {
-          start: 0,
-          end: getComposerEditingLength(),
-        });
+        selectCapabilityById(
+          effect.capability,
+          range ?? {
+            start: 0,
+            end: getComposerEditingLength(),
+          },
+        );
         return true;
       }
 
@@ -390,9 +399,9 @@ export function useSlashCommands({
           commandSource: effect.commandSource,
           runtimeCapabilities: effect.runtimeCapabilities,
         });
-        setComposerText('', 0);
+        clearComposer(range);
         setPalette(null);
-        focusComposerAt(0);
+        focusComposerAt(range?.start ?? 0);
         return true;
       }
 
@@ -412,9 +421,9 @@ export function useSlashCommands({
               console.warn('[Chat] Failed to run slash command action:', error);
             });
         }
-        setComposerText('', 0);
+        clearComposer(range);
         setPalette(null);
-        focusComposerAt(0);
+        focusComposerAt(range?.start ?? 0);
         return true;
       }
 
@@ -422,6 +431,7 @@ export function useSlashCommands({
     },
     [
       addRunRuntimeCapabilities,
+      clearComposer,
       onSelectPromptWorkflow,
       focusComposerAt,
       getComposerEditingLength,
@@ -471,22 +481,25 @@ export function useSlashCommands({
         option.command.source === 'runtime'
       ) {
         setGoalPanelOpen((open) => !open);
-        setComposerText('', 0);
+        clearComposer({ start: palette.start, end: palette.end });
         setPalette(null);
-        focusComposerAt(0);
+        focusComposerAt(palette.start);
         return;
       }
 
-      executeSlashCommand(option.command, '');
+      executeSlashCommand(option.command, '', {
+        start: palette.start,
+        end: palette.end,
+      });
     },
     [
       executeSlashCommand,
+      clearComposer,
       focusComposerAt,
       insertComposerCapabilityToken,
       onSelectResourceCommand,
       palette,
       setGoalPanelOpen,
-      setComposerText,
       setPalette,
       toggleCapabilityGroup,
     ],
