@@ -350,6 +350,7 @@ export function applyStreamEvent(
         }
         const message: ChatKitAIMessage = {
           id: meta.id ?? createMessageId(),
+          ...(meta.parentId !== undefined ? { parentId: meta.parentId } : {}),
           type: meta.type ?? 'ai',
           content: meta.content ?? '',
           executionId,

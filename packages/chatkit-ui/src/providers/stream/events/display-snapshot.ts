@@ -69,6 +69,7 @@ export function parseDisplaySnapshot(payload: unknown): DisplaySnapshot | null {
     // Select display fields instead of accepting tool calls, command metadata or execution context.
     const message = createMessageFromData({
       id: raw.id,
+      parentId: 'parentId' in raw ? raw.parentId : undefined,
       role: 'ai',
       executionId: raw.executionId,
       content: 'content' in raw ? raw.content : '',

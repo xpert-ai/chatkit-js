@@ -24,6 +24,7 @@ function payload() {
           id: 'first',
           role: 'ai',
           executionId: 'run',
+          parentId: 'external-input',
           content: 'finished',
           agentRuns: [{ id: 'agent', status: 'success' }],
         },
@@ -62,6 +63,7 @@ describe('display hydration boundary', () => {
       'second',
     ]);
     expect(result.messages[1].content).toBe('finished');
+    expect(result.messages[1].parentId).toBe('external-input');
     expect(result.messages[2]).toMatchObject({
       reasoning: [{ text: 'analysis', executionId: 'child' }],
     });

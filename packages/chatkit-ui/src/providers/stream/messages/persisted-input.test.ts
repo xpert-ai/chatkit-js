@@ -145,6 +145,34 @@ describe('persisted input identity', () => {
       { ...state.messages[0], executionId: 'new-run', type: 'ai' },
     ]);
   });
+  it('retains the canonical parent id from a live assistant message', () => {
+    let state: StateType = { messages: [] };
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.EVENT,
+          event: ChatMessageEventTypeEnum.ON_MESSAGE_START,
+          data: {
+            id: 'reply',
+            role: 'ai',
+            executionId: 'run',
+            parentId: 'external-input',
+            content: '',
+          },
+        }),
+      },
+      (next) => {
+        state = typeof next === 'function' ? next(state) : next;
+      },
+      vi.fn(),
+      vi.fn(),
+      [],
+      createLangGraphEventState(),
+    );
+    expect(state.messages[0].parentId).toBe('external-input');
+  });
+
   it('matches only the acknowledged optimistic input, preserving its attachments and other messages', () => {
     const state = {
       messages: [
