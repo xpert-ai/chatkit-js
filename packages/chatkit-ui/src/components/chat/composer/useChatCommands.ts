@@ -3,6 +3,7 @@ import * as React from 'react';
 import type { RuntimeResourceCommand } from '@xpert-ai/xpert-sdk';
 import {
   getComposerEditingLength,
+  replaceComposerRange,
   setComposerSelectionOffset,
 } from '../../../lib/composer-parts';
 import { normalizeReferences } from '../../../lib/references';
@@ -40,6 +41,7 @@ type ChatCommandsOptions = Pick<
     ReturnType<typeof useChatDraft>,
     | 'draft'
     | 'composerPartsRef'
+    | 'commitComposerParts'
     | 'setComposerText'
     | 'focusComposerAt'
     | 'composerInputRef'
@@ -80,6 +82,7 @@ export function useChatCommands({
   setRuntimeCapabilityPalette,
   parentMessenger,
   composerPartsRef,
+  commitComposerParts,
   setComposerText,
   focusComposerAt,
   setPlanModeEnabled,
@@ -106,6 +109,24 @@ export function useChatCommands({
     [],
   );
 
+  const clearComposer = React.useCallback(
+    (range?: { start: number; end: number }) => {
+      const parts = composerPartsRef.current;
+      const start = range?.start ?? 0;
+      // Palette offsets count each token as one editing position.
+      commitComposerParts(
+        replaceComposerRange(
+          parts,
+          start,
+          range?.end ?? getComposerEditingLength(parts),
+          [],
+        ),
+        { caretOffset: start, resetDom: true },
+      );
+    },
+    [commitComposerParts, composerPartsRef],
+  );
+
   const {
     slashPaletteOptions,
     executeSlashCommandFromDraft: executeGlobalSlashCommand,
@@ -123,6 +144,7 @@ export function useChatCommands({
     getComposerEditingLength: () =>
       getComposerEditingLength(composerPartsRef.current),
     setComposerText,
+    clearComposer,
     focusComposerAt,
     setPlanModeEnabled,
     setGoalPanelOpen: setIsGoalPanelOpen,

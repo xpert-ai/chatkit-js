@@ -209,7 +209,7 @@ export function createSlashPaletteOptions({
     ...(parentType ? { parentType, depth: 1 } : {}),
   });
 
-  if (palette.atMessageStart && !capabilityTypesOnly) {
+  if (!capabilityTypesOnly) {
     const options: SlashPaletteOption[] = [];
     for (const command of resolvedCommands.filter((item) =>
       isCommandAvailable(item, runtimeCapabilities, selection),

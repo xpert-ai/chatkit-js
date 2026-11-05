@@ -51,7 +51,7 @@ const runtimeCapabilityOptions: RuntimeCapabilityOption[] = [
 ];
 
 function getPaletteOptions(
-  palette: RuntimeCapabilityPaletteState,
+  palette: RuntimeCapabilityPaletteState | null,
   selectedRuntimeCapabilities: RuntimeCapabilitiesSelection = {
     mode: 'allowlist',
     skills: { workspaceId: 'workspace-1', ids: [] },
@@ -60,6 +60,7 @@ function getPaletteOptions(
   },
   language?: string | null,
 ) {
+  if (!palette) throw new Error('Expected the slash palette to open');
   return createSlashPaletteOptions({
     palette,
     resolvedCommands: resolveSlashCommands(
@@ -300,7 +301,7 @@ describe('slash command palette', () => {
       capabilityTypes: ['skill'],
     });
 
-    const options = getPaletteOptions(resolveRuntimeCapabilityPalette('$', 1)!);
+    const options = getPaletteOptions(resolveRuntimeCapabilityPalette('$', 1));
 
     expect(options.map((option) => option.kind)).toEqual(['capability']);
     expect(options.map((option) => option.label)).toEqual(['Review Skill']);
@@ -367,18 +368,58 @@ describe('slash command palette', () => {
     });
   });
 
-  it('shows only capabilities for a slash typed after whitespace', () => {
-    const options = getPaletteOptions({
-      query: 'review',
-      start: 6,
-      end: 13,
-      activeIndex: 0,
-      atMessageStart: false,
-    });
+  it.each(['', 'hello ', 'hello\n', '/\n已有正文\n'])(
+    'shows the same complete slash menu after %j',
+    (prefix) => {
+      for (const query of ['', 'review']) {
+        const invocation = `/${query}`;
+        const text = `${prefix}${invocation} remaining text`;
+        const palette = resolveRuntimeCapabilityPalette(
+          text,
+          prefix.length + invocation.length,
+        );
+        expect(palette).toMatchObject({
+          trigger: '/',
+          start: prefix.length,
+          end: prefix.length + invocation.length,
+          query,
+        });
+        const options = getPaletteOptions(palette);
+        expect(options).toEqual(
+          getPaletteOptions(
+            resolveRuntimeCapabilityPalette(invocation, invocation.length),
+          ),
+        );
+        expect(options).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ kind: 'command', label: 'Review' }),
+          ]),
+        );
+        if (!query) {
+          expect(options).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ id: 'builtin:plan' }),
+              expect.objectContaining({ capabilityType: 'skill' }),
+              expect.objectContaining({ capabilityType: 'plugin' }),
+              expect.objectContaining({ capabilityType: 'subAgent' }),
+              expect.objectContaining({ label: 'Runtime Only' }),
+            ]),
+          );
+        }
+      }
+    },
+  );
 
-    expect(options.map((option) => option.kind)).toEqual(['capability']);
-    expect(options[0]).toMatchObject({ label: 'Review Skill' });
-  });
+  it.each(['$', 'hello $', 'hello\n$'])(
+    'keeps %j limited to skills',
+    (text) => {
+      const options = getPaletteOptions(
+        resolveRuntimeCapabilityPalette(text, text.length),
+      );
+      expect(options.map((option) => option.kind)).toEqual(['capability']);
+      expect(options.map((option) => option.label)).toEqual(['Review Skill']);
+    },
+  );
 
   it('can open capability-type panels', () => {
     const skillOptions = getPaletteOptions({
