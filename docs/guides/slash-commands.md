@@ -10,14 +10,14 @@ Command execution does not bypass the normal ChatKit and Xpert request flow. Sub
 
 ## User Experience
 
-When a user types `/` at the beginning of the composer, ChatKit opens the slash palette and shows:
+When a user types `/` at the beginning of the composer or after whitespace anywhere in a message, including after a newline, ChatKit opens the same complete slash palette and shows:
 
 - built-in ChatKit commands
 - host-provided static commands from `composer.slashCommands`
 - Xpert runtime commands from `runtimeCapabilities.commands`
 - expandable Skills, Plugins, and Sub-agents groups for selecting runtime capabilities
 
-When a user types `/` after whitespace in the middle of a message, ChatKit only shows runtime capabilities. Selecting a skill, plugin, or sub-agent inserts an atomic token into the contenteditable composer. The token:
+Command filtering and expandable capability groups behave the same at every slash trigger position. Selecting a skill, plugin, or sub-agent replaces the active slash query with an atomic token in the contenteditable composer, preserving the surrounding content. The token:
 
 - renders with the capability icon or avatar
 - cannot be partially edited
@@ -337,8 +337,9 @@ For details on runtime skills and plugin selection, see [Runtime Skills and Plug
 
 Recommended coverage:
 
-- `/` at message start shows commands plus capabilities.
-- `/` after whitespace shows capabilities only.
+- `/` at message start, after whitespace, and after a newline shows the same commands and capability groups.
+- Selecting a capability from an inline slash menu preserves the surrounding message.
+- `$` and explicit capability-type panels remain limited to the requested capability types.
 - built-in names cannot be overridden.
 - host commands win over runtime command name conflicts.
 - `{{args}}` renders correctly for `insert_text`, `insert_invocation`, and `submit_prompt`.
