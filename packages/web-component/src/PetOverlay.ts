@@ -24,6 +24,7 @@ type TransientAnimation = {
 
 type PetOverlayCopy = {
   closePetMenuItem: string;
+  reopenPet: string;
   hideMessage: string;
   expandMessage: string;
   collapseMessage: string;
@@ -60,6 +61,7 @@ const PET_SUMMARY_FONT_FAMILY =
 const PET_OVERLAY_COPY = {
   'en-US': {
     closePetMenuItem: 'Close pet',
+    reopenPet: 'Show pet',
     hideMessage: 'Hide message',
     expandMessage: 'Expand message',
     collapseMessage: 'Collapse message',
@@ -72,6 +74,7 @@ const PET_OVERLAY_COPY = {
   },
   'zh-CN': {
     closePetMenuItem: '关闭宠物',
+    reopenPet: '显示宠物',
     hideMessage: '隐藏消息',
     expandMessage: '展开消息',
     collapseMessage: '收起消息',
@@ -94,6 +97,7 @@ type DragAnimationName = Extract<
 type PetOverlayOptions = {
   onActivate?: () => void;
   onClose?: () => void;
+  onReopen?: () => void;
   onReply?: (text: string) => Promise<void>;
   onThreadSummaryActivate?: (threadId: string) => void;
 };
@@ -409,6 +413,8 @@ export class PetOverlay {
   private readonly root: ShadowRoot;
   private readonly onActivate?: () => void;
   private readonly onClose?: () => void;
+  private readonly onReopen?: () => void;
+  private reopenButton: HTMLButtonElement | null = null;
   private readonly onReply?: (text: string) => Promise<void>;
   private readonly onThreadSummaryActivate?: (threadId: string) => void;
   private overlayElement: HTMLDivElement | null = null;
@@ -460,6 +466,7 @@ export class PetOverlay {
     this.root = root;
     this.onActivate = options?.onActivate;
     this.onClose = options?.onClose;
+    this.onReopen = options?.onReopen;
     this.onReply = options?.onReply;
     this.onThreadSummaryActivate = options?.onThreadSummaryActivate;
     this.connect();
@@ -511,6 +518,44 @@ export class PetOverlay {
 
     this.resolveCharacter();
     this.render();
+  }
+
+  setReopenVisible(visible: boolean, zIndex?: number): void {
+    if (!visible) {
+      this.reopenButton?.remove();
+      this.reopenButton = null;
+      return;
+    }
+    if (!this.reopenButton) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.addEventListener('click', () => this.onReopen?.());
+      this.root.append(button);
+      this.reopenButton = button;
+    }
+    const button = this.reopenButton;
+    const theme = typeof this.theme === 'object' ? this.theme : null;
+    const metrics = getSummaryThemeMetrics(this.theme);
+    button.textContent = this.copy.reopenPet;
+    Object.assign(button.style, {
+      position: 'fixed',
+      insetInlineEnd: `${PET_SUMMARY_MARGIN}px`,
+      bottom: `${PET_SUMMARY_MARGIN}px`,
+      zIndex: String(zIndex ?? normalizePetOptions(true)?.position.zIndex),
+      pointerEvents: 'auto',
+      cursor: 'pointer',
+      colorScheme:
+        typeof this.theme === 'string'
+          ? this.theme
+          : (theme?.colorScheme ?? 'light'),
+      color: theme?.color?.surface?.foreground ?? 'ButtonText',
+      background: theme?.color?.surface?.background ?? 'ButtonFace',
+      border: '1px solid ButtonBorder',
+      borderRadius: `${metrics.radius}px`,
+      padding: metrics.padding,
+      fontFamily: metrics.fontFamily,
+      fontSize: `${metrics.bodySize}px`,
+    });
   }
 
   setState(state: ChatKitPetAnimationName): void {
@@ -591,6 +636,7 @@ export class PetOverlay {
       return;
     }
     this.connected = false;
+    this.setReopenVisible(false);
     this.clearRestingDelayTimer();
     this.clearTimers();
     this.removeDragListeners();

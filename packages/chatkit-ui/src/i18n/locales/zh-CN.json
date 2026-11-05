@@ -846,7 +846,7 @@
             "title": "Pet",
             "description": "仅保存在当前浏览器。",
             "enabled": "启用 Pet",
-            "requiredHint": "Pet launcher 模式下必须开启。",
+            "requiredHint": "在宠物菜单中选择「关闭宠物」即可收起。",
             "characterType": "形象",
             "characterTypes": {
                 "builtin": "内置",

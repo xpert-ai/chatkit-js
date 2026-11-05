@@ -18,7 +18,10 @@ import type {
   ToolOutputAttachmentPreviewRequest,
   WorkspaceConnectorConnectRequest,
 } from '@xpert-ai/chatkit-types';
-import { getPetAssetsBaseUrl, normalizePetOptions } from '@xpert-ai/chatkit-types';
+import {
+  getPetAssetsBaseUrl,
+  normalizePetOptions,
+} from '@xpert-ai/chatkit-types';
 import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import type { RuntimeCapabilitiesSelection } from '@xpert-ai/chatkit-types';
 import type { SendUserMessageParams } from '@xpert-ai/chatkit-types';
@@ -45,11 +48,6 @@ import {
   parseThreadSummaryLogPayload,
   type ThreadSummary,
 } from './PetOverlay';
-
-// Compute inner options by removing methods (to make options serializable)
-function getInnerOptions(options: ChatKitOptions): ChatKitInnerOptions {
-  return removeMethods(options) as ChatKitInnerOptions;
-}
 
 // Decorator to assert that a command is available for the current capabilities profile
 export function requireCommandCapability<
@@ -82,6 +80,7 @@ interface ChatKitBaseElementEventMap {
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
   'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
+  'chatkit.pet.launcher.visibility.change': CustomEvent<{ visible: boolean }>;
   'chatkit.log': CustomEvent<{ name: string; data?: Record<string, unknown> }>;
   'chatkit.deeplink': CustomEvent<{
     name: string;
@@ -108,11 +107,14 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #chatMinimizedToPet = false;
   #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
   #petClosedByContextMenu = false;
+  #hostLauncherEnabled = true;
+  #launcherVisible = true;
 
   #shadow = this.attachShadow({ mode: 'open' });
   #petOverlay = new PetOverlay(this.#shadow, {
     onActivate: () => this.#handlePetActivate(),
     onClose: () => this.#handlePetClose(),
+    onReopen: () => this.#requestLauncherVisibility(true),
     onReply: (text) => this.#handlePetReply(text),
     onThreadSummaryActivate: (threadId) =>
       void this.#handlePetThreadSummaryActivate(threadId),
@@ -366,21 +368,12 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     return options?.displayMode === 'pet' ? 'pet' : 'chat';
   }
 
-  #getConfiguredPetOptions(options = this.#opts): ChatKitOptions['pet'] | null {
-    if (!options) {
-      return null;
-    }
-
-    if (
-      this.#getDisplayMode(options) === 'pet' &&
-      !normalizePetOptions(options.pet ?? null)
-    ) {
-      return typeof options.pet === 'object'
-        ? { ...options.pet, enabled: true }
-        : true;
-    }
-
-    return options.pet ?? null;
+  #getConfiguredPetOptions() {
+    if (!this.#opts) return null;
+    return (
+      this.#effectivePet(this.#opts) ??
+      (this.#getDisplayMode() === 'pet' ? true : null)
+    );
   }
 
   #mergeConfiguredPetPositionDefaults(
@@ -417,8 +410,51 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     };
   }
 
+  #effectivePet(options: ChatKitOptions): ChatKitOptions['pet'] {
+    const pet = options.pet;
+    if (
+      options.displayMode !== 'pet' ||
+      this.#launcherVisible === this.#hostLauncherEnabled
+    ) {
+      return pet;
+    }
+    return typeof pet === 'object'
+      ? { ...pet, enabled: this.#launcherVisible }
+      : this.#launcherVisible;
+  }
+
+  #innerOptions(options: ChatKitOptions): ChatKitInnerOptions {
+    return removeMethods({
+      ...options,
+      pet: this.#effectivePet(options),
+    }) as ChatKitInnerOptions;
+  }
+
+  #updateFrameOptions() {
+    this.#loaded.then(() => {
+      if (this.#opts)
+        this.#messenger.commands.setOptions(this.#innerOptions(this.#opts));
+    });
+  }
+
+  #isLauncherHidden() {
+    return this.#getDisplayMode() === 'pet' && !this.#launcherVisible;
+  }
+
+  #requestLauncherVisibility(visible: boolean) {
+    this.#launcherVisible = visible;
+    this.#syncPetOverlayOptions();
+    this.#updateFrameOptions();
+    this.dispatchEvent(
+      new CustomEvent('chatkit.pet.launcher.visibility.change', {
+        detail: { visible },
+      }),
+    );
+  }
+
   #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
     if (
+      this.#isLauncherHidden() ||
       this.#petClosedByContextMenu ||
       (this.#opts?.pet === false && this.#getDisplayMode() !== 'pet')
     ) {
@@ -435,7 +471,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     }
 
     if (this.#getDisplayMode() === 'pet' && !normalizePetOptions(pet ?? null)) {
-      pet = true;
+      pet = this.#getConfiguredPetOptions();
     }
 
     return this.#resolveOverlayPetOptions(pet);
@@ -478,21 +514,6 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     };
   }
 
-  #getFrameOptions(options: ChatKitOptions): ChatKitOptions {
-    const pet = this.#getConfiguredPetOptions(options);
-    if (pet === (options.pet ?? null)) {
-      return options;
-    }
-
-    const nextOptions = { ...options };
-    if (pet === null) {
-      delete nextOptions.pet;
-    } else {
-      nextOptions.pet = pet;
-    }
-    return nextOptions;
-  }
-
   #setLauncherOpen(open: boolean) {
     this.#launcherOpen = open;
     if (open) {
@@ -513,8 +534,15 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #syncPetOverlayOptions() {
+    if (this.#isLauncherHidden()) this.#setLauncherOpen(false);
     const overlayPetOptions = this.#getOverlayPetOptions();
     this.#petOverlay.setOptions(overlayPetOptions, this.#opts?.theme);
+    this.#petOverlay.setReopenVisible(
+      this.#isLauncherHidden(),
+      typeof this.#opts?.pet === 'object'
+        ? this.#opts.pet.position?.zIndex
+        : undefined,
+    );
     if (!overlayPetOptions) {
       this.#setChatMinimizedToPet(false);
     }
@@ -539,16 +567,15 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   #handlePetClose() {
-    this.#petClosedByContextMenu = true;
-    this.#framePetOptionsOverride = null;
-    this.#setChatMinimizedToPet(false);
     this.#setLauncherOpen(false);
-    this.#petOverlay.setOptions(null);
-
     if (this.#getDisplayMode() === 'pet') {
+      this.#requestLauncherVisibility(false);
       return;
     }
 
+    this.#petClosedByContextMenu = true;
+    this.#framePetOptionsOverride = null;
+    this.#syncPetOverlayOptions();
     this.#loaded
       .then(() => this.#messenger.commands.setPetEnabled({ enabled: false }))
       .catch(() => undefined);
@@ -612,6 +639,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   connectedCallback() {
     this.#petOverlay.connect();
+    if (this.#opts) this.#syncPetOverlayOptions();
     const style = document.createElement('style');
     style.textContent = `
       :host {
@@ -907,7 +935,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     const frameURL = new URL(this.#getFrameUrl(), window.location.origin);
     this.#messenger.setTargetOrigin(frameURL.origin);
     frameURL.hash = encodeBase64({
-      options: getInnerOptions(this.#getFrameOptions(this.#opts)),
+      options: this.#innerOptions(this.#opts),
       referrer: window.location.origin,
       profile: this.profile,
       ...(this.#channelId ? { channelId: this.#channelId } : {}),
@@ -932,6 +960,21 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
+    const sessionChanged =
+      this.#opts?.sessionKey !== newOptions.sessionKey ||
+      this.#opts?.api.xpertId !== newOptions.api.xpertId ||
+      this.#getDisplayMode() !== this.#getDisplayMode(newOptions);
+    const pet = newOptions.pet;
+    const enabled = typeof pet === 'boolean' ? pet : (pet?.enabled ?? true);
+    // Re-sending the same options preserves the user's last click.
+    if (sessionChanged || enabled !== this.#hostLauncherEnabled) {
+      this.#launcherVisible = enabled;
+    }
+    this.#hostLauncherEnabled = enabled;
+    if (sessionChanged) {
+      this.#framePetOptionsOverride = undefined;
+      this.#setLauncherOpen(false);
+    }
     this.#opts = newOptions;
     if (!newOptions.header?.windowDrag) this.#windowDrag?.clear();
     this.#petClosedByContextMenu = false;
@@ -939,11 +982,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     this.#syncPetOverlayOptions();
     if (this.#initialized) {
       this.#setOptionsDataAttributes(this.#opts);
-      this.#loaded.then(() => {
-        this.#messenger.commands.setOptions(
-          getInnerOptions(this.#getFrameOptions(newOptions)),
-        );
-      });
+      this.#updateFrameOptions();
     } else {
       this.#maybeInit();
     }
