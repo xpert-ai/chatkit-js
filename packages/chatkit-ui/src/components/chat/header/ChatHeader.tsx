@@ -43,12 +43,12 @@ export function ChatHeader({
           characterPresentation && 'col-start-1 row-start-1 self-start',
         )}
       >
-        {/* Summary docking measures the transcript column, not the full-width toolbar. */}
+        {/* This anchor gives the summary both the transcript width and the toolbar height. */}
         <div
           ref={columnRef}
           data-slot="chatkit-chat-column-anchor"
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 mx-auto h-0 w-full"
+          className="pointer-events-none absolute inset-0 mx-auto w-full"
           style={style}
         />
         <div
