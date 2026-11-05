@@ -1,5 +1,5 @@
 ---
-'@xpert-ai/chatkit-types': minor
+'@xpert-ai/chatkit-types': patch
 '@xpert-ai/chatkit-web-component': patch
 ---
 
