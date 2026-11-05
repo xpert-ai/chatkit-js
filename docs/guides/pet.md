@@ -18,7 +18,7 @@ type ChatKitOptions = {
 
 type ChatKitPetOptions = {
   enabled?: boolean;
-  dismissalKey?: string;
+  launcherVisible?: boolean;
   character?: {
     type: 'sprite-atlas';
     src: string;
@@ -51,20 +51,14 @@ Defaults are defined in `packages/chatkit/src/pet.ts`:
 
 ### Closing and reopening a pet launcher
 
-In pet display mode, **Close pet** hides the character. **Show pet** restores
-it. Refreshing the page, remounting the element, or changing the theme keeps
-the choice for the same scope.
-
-With a host `sessionKey`, the launcher remembers dismissal in the current
-browser tab. Change the session key when switching users. For a preference
-that survives a new tab or login, pass a stable, non-secret
-`pet.dismissalKey` for the current user and tenant. The API endpoint, assistant,
-project, group and element ID further separate launchers. Give independent
-launchers with otherwise identical options distinct, stable element IDs.
-Without a host key, browsers that expose a history entry key can remember the
-choice for reloads of that entry. Without an identifiable scope or accessible
-storage, the current element still supports closing and reopening. Pet position
-persistence is independent.
+In pet display mode, **Close pet** hides the character and **Show pet** restores
+it. By default each element remembers the choice through options updates in the
+current session. To remember it across page loads or logins, let the host own
+the preference. Pass `pet.launcherVisible` on mount and listen for
+`chatkit.pet.launcher.visibility.change` (framework handler
+`onPetLauncherVisibilityChange`). On a user action, save `detail.visible` for
+the active account and update `pet.launcherVisible` via `setOptions`. Applying
+options does not emit an event. A hidden launcher still offers **Show pet**.
 
 ## Runtime Architecture
 

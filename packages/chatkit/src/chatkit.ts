@@ -264,6 +264,8 @@ export type ChatKitEvents = {
 
   /** Emitted when the user changes the Connector bindings selected for the conversation. */
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
+  /** Emitted when the user closes or reopens the pet launcher. */
+  'chatkit.pet.launcher.visibility.change': CustomEvent<{ visible: boolean }>;
 
   /** Emitted when ChatKit starts loading a thread (initial load or selected from history). */
   'chatkit.thread.load.start': CustomEvent<{ threadId: string }>;

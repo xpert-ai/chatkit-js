@@ -7,7 +7,6 @@ import {
 } from '@xpert-ai/chatkit-web-shared';
 
 import { WindowDragOverlay } from './WindowDragOverlay';
-import { PetLauncherDismissal } from './PetLauncherDismissal';
 import { ChatFrameMessenger } from './ChatFrameMessenger';
 import type {
   Card,
@@ -86,6 +85,7 @@ interface ChatKitBaseElementEventMap {
   'chatkit.thread.change': CustomEvent<{ threadId: string | null }>;
   'chatkit.project.change': CustomEvent<{ projectId: string | null }>;
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
+  'chatkit.pet.launcher.visibility.change': CustomEvent<{ visible: boolean }>;
   'chatkit.log': CustomEvent<{ name: string; data?: Record<string, unknown> }>;
   'chatkit.deeplink': CustomEvent<{
     name: string;
@@ -112,16 +112,13 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #chatMinimizedToPet = false;
   #framePetOptionsOverride: ChatKitOptions['pet'] | null | undefined;
   #petClosedByContextMenu = false;
-  #launcherDismissal = new PetLauncherDismissal();
+  #localLauncherVisible = true;
 
   #shadow = this.attachShadow({ mode: 'open' });
   #petOverlay = new PetOverlay(this.#shadow, {
     onActivate: () => this.#handlePetActivate(),
     onClose: () => this.#handlePetClose(),
-    onReopen: () => {
-      this.#launcherDismissal.set(false);
-      this.#syncPetOverlayOptions();
-    },
+    onReopen: () => this.#requestLauncherVisibility(true),
     onReply: (text) => this.#handlePetReply(text),
     onThreadSummaryActivate: (threadId) =>
       void this.#handlePetThreadSummaryActivate(threadId),
@@ -426,9 +423,33 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     };
   }
 
+  #configuredLauncherVisibility() {
+    const pet = this.#opts?.pet;
+    return typeof pet === 'object' ? pet?.launcherVisible : undefined;
+  }
+
+  #isLauncherHidden() {
+    return (
+      this.#getDisplayMode() === 'pet' &&
+      !(this.#configuredLauncherVisibility() ?? this.#localLauncherVisible)
+    );
+  }
+
+  #requestLauncherVisibility(visible: boolean) {
+    if (this.#configuredLauncherVisibility() === undefined) {
+      this.#localLauncherVisible = visible;
+      this.#syncPetOverlayOptions();
+    }
+    this.dispatchEvent(
+      new CustomEvent('chatkit.pet.launcher.visibility.change', {
+        detail: { visible },
+      }),
+    );
+  }
+
   #getOverlayPetOptions(): ChatKitOptions['pet'] | null {
     if (
-      (this.#getDisplayMode() === 'pet' && this.#launcherDismissal.dismissed) ||
+      this.#isLauncherHidden() ||
       this.#petClosedByContextMenu ||
       (this.#opts?.pet === false && this.#getDisplayMode() !== 'pet')
     ) {
@@ -490,9 +511,9 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
 
   #getFrameOptions(options: ChatKitOptions): ChatKitOptions {
     let pet = this.#getConfiguredPetOptions(options);
-    if (pet && typeof pet === 'object' && 'dismissalKey' in pet) {
+    if (pet && typeof pet === 'object' && 'launcherVisible' in pet) {
       pet = { ...pet };
-      delete pet.dismissalKey;
+      delete pet.launcherVisible;
     }
     if (pet === (options.pet ?? null)) {
       return options;
@@ -530,7 +551,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
     const overlayPetOptions = this.#getOverlayPetOptions();
     this.#petOverlay.setOptions(overlayPetOptions, this.#opts?.theme);
     this.#petOverlay.setReopenVisible(
-      this.#getDisplayMode() === 'pet' && this.#launcherDismissal.dismissed,
+      this.#isLauncherHidden(),
       typeof this.#opts?.pet === 'object'
         ? this.#opts.pet.position?.zIndex
         : undefined,
@@ -561,8 +582,7 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   #handlePetClose() {
     this.#setLauncherOpen(false);
     if (this.#getDisplayMode() === 'pet') {
-      this.#launcherDismissal.set(true);
-      this.#syncPetOverlayOptions();
+      this.#requestLauncherVisibility(false);
       return;
     }
 
@@ -953,7 +973,12 @@ export abstract class ChatKitElementBase<TRawOptions> extends HTMLElement {
   }
 
   protected applySanitizedOptions(newOptions: ChatKitOptions) {
-    if (this.#launcherDismissal.bind(newOptions, this.id)) {
+    if (
+      this.#opts?.sessionKey !== newOptions.sessionKey ||
+      this.#opts?.api.xpertId !== newOptions.api.xpertId ||
+      this.#getDisplayMode() !== this.#getDisplayMode(newOptions)
+    ) {
+      this.#localLauncherVisible = true;
       this.#framePetOptionsOverride = undefined;
       this.#setLauncherOpen(false);
     }

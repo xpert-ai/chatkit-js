@@ -40,12 +40,11 @@ function pet(element: ChatKitElement) {
     '[data-chatkit-host-pet]',
   );
 }
-function close(element: ChatKitElement) {
+function clickClose(element: ChatKitElement) {
   pet(element)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
   element
     .shadowRoot!.querySelector<HTMLButtonElement>('[role="menuitem"]')!
     .click();
-  expect(pet(element)).toBeNull();
 }
 function reopenButton(element: ChatKitElement) {
   return Array.from(element.shadowRoot!.querySelectorAll('button')).find(
@@ -65,95 +64,59 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  localStorage.clear();
-  sessionStorage.clear();
 });
 
 describe('pet launcher dismissal', () => {
-  it('survives option updates, passive frame events and recreation until explicitly reopened', () => {
-    let element = mount();
-    close(element);
-    element.setOptions({
-      ...defaults,
-      theme: 'dark',
-      locale: 'zh-CN',
-      request: { context: { workspace: 'updated' } },
-    });
-    frame.sendPetOptions({ pet: null });
+  it('keeps an uncontrolled dismissal on the element through options and frame updates', () => {
+    const element = mount();
+    const changes = vi.fn();
+    element.addEventListener('chatkit.pet.launcher.visibility.change', changes);
+    clickClose(element);
+    element.setOptions({ ...defaults, locale: 'zh-CN', theme: 'dark' });
     frame.sendPetOptions({ pet: true });
     expect(pet(element)).toBeNull();
     expect(reopenButton(element)?.textContent).toBe('显示宠物');
-    element.remove();
-
-    element = mount();
-    expect(pet(element)).toBeNull();
     reopenButton(element)!.click();
     expect(pet(element)).toBeTruthy();
-    expect(reopenButton(element)).toBeUndefined();
-    element.remove();
+    expect(changes.mock.calls.map(([event]) => event.detail)).toEqual([
+      { visible: false },
+      { visible: true },
+    ]);
+    clickClose(element);
     expect(pet(mount())).toBeTruthy();
-  });
-
-  it('isolates host sessions, assistants and named instances', () => {
-    const element = mount(defaults, 'sidebar');
-    close(element);
-    expect(
-      pet(mount({ ...defaults, sessionKey: 'other-login' }, 'sidebar')),
-    ).toBeTruthy();
-    expect(pet(mount(defaults, 'second-launcher'))).toBeTruthy();
-    element.setOptions({
-      ...defaults,
-      api: { ...defaults.api, xpertId: 'other' },
-    });
+    element.setOptions({ ...defaults, sessionKey: 'another-session' });
     expect(pet(element)).toBeTruthy();
-    element.setOptions(defaults);
-    expect(pet(element)).toBeNull();
   });
 
-  it('keeps durable user keys separate even when host session keys repeat', () => {
-    const options = { ...defaults, pet: { dismissalKey: 'account-a' } };
-    const element = mount(options);
+  it('uses host visibility on mount and updates, and emits only explicit user requests', () => {
+    const options = (launcherVisible: boolean) => ({
+      ...defaults,
+      pet: { launcherVisible },
+    });
+    const element = mount(options(false));
+    expect(pet(element)).toBeNull();
     const frameUrl = element.shadowRoot!.querySelector('iframe')!.src;
     expect(decodeBase64(new URL(frameUrl).hash.slice(1))).toHaveProperty(
       'options.pet',
       {},
     );
-    close(element);
-    element.remove();
-    sessionStorage.clear();
-    expect(
-      pet(mount({ ...defaults, pet: { dismissalKey: 'account-b' } })),
-    ).toBeTruthy();
-    const restored = mount({ ...options, sessionKey: 'next-visit' });
-    expect(pet(restored)).toBeNull();
-    reopenButton(restored)!.click();
-    restored.remove();
-    expect(pet(mount(options))).toBeTruthy();
-  });
-
-  it('continues to close and reopen with blocked storage', () => {
-    vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() => {
-      throw new DOMException('Blocked', 'SecurityError');
-    });
-    const element = mount();
-    close(element);
-    element.setOptions({ ...defaults, locale: 'en' });
+    const changes = vi.fn();
+    element.addEventListener('chatkit.pet.launcher.visibility.change', changes);
+    frame.sendPetOptions({ pet: true });
     expect(pet(element)).toBeNull();
     reopenButton(element)!.click();
+    expect(pet(element)).toBeNull();
+    expect(changes).toHaveBeenLastCalledWith(
+      expect.objectContaining({ detail: { visible: true } }),
+    );
+    element.setOptions(options(true));
     expect(pet(element)).toBeTruthy();
-  });
-
-  it('limits unkeyed embeds to the current browser history entry', () => {
-    const options = { ...defaults, sessionKey: undefined };
-    const navigation = { currentEntry: { key: 'workspace-entry' } };
-    vi.stubGlobal('navigation', navigation);
-    const element = mount(options);
-    close(element);
-    element.remove();
-    const reloaded = mount(options);
-    expect(pet(reloaded)).toBeNull();
-    reloaded.remove();
-    navigation.currentEntry = { key: 'different-entry' };
-    expect(pet(mount(options))).toBeTruthy();
+    clickClose(element);
+    expect(changes).toHaveBeenLastCalledWith(
+      expect.objectContaining({ detail: { visible: false } }),
+    );
+    element.setOptions(options(false));
+    expect(pet(element)).toBeNull();
+    expect(changes).toHaveBeenCalledTimes(2);
   });
 });

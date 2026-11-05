@@ -1,6 +1,12 @@
 ---
 '@xpert-ai/chatkit-types': patch
 '@xpert-ai/chatkit-web-component': patch
+'@xpert-ai/chatkit-angular': patch
+'@xpert-ai/chatkit-js': patch
+'@xpert-ai/chatkit-react': patch
+'@xpert-ai/chatkit-ui5': patch
+'@xpert-ai/chatkit-vue': patch
+'@xpert-ai/chatkit-vue2': patch
 ---
 
-Remember a closed pet launcher across reloads in the same host session. A Show pet button restores it. Hosts can supply a user-specific dismissal key to remember the choice across browser sessions.
+Let hosts control pet launcher visibility and remember close and reopen actions across logins. A Show pet button restores the hidden launcher.

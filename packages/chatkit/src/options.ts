@@ -289,11 +289,11 @@ export type ChatKitPetPositionOptions = {
 };
 
 export type ChatKitPetOptions = {
-  /** Stable, non-secret user and integration key for remembering a closed pet
-   * launcher across browser sessions. Without it, a host sessionKey scopes
-   * dismissal to that browser tab and session.
+  /** Controls the launcher in pet display mode. Handle
+   * `chatkit.pet.launcher.visibility.change` to apply a user's close or reopen request.
+   * When omitted, the element manages visibility for its current session.
    */
-  dismissalKey?: string;
+  launcherVisible?: boolean;
   /** Base URL of the built-in pet directory (containing catalog.json and pet IDs).
    * Defaults to /pets. Accepts HTTPS URLs or root-relative paths; custom character
    * URLs are unaffected. Also applies to Assistant appearance sprites when
@@ -1169,6 +1169,7 @@ export interface ChatKitElementEventMap {
     selection?: import('./project-selection').ProjectSelection;
   }>;
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
+  'chatkit.pet.launcher.visibility.change': CustomEvent<{ visible: boolean }>;
   'chatkit.log': CustomEvent<{
     name: string;
     data?: Record<string, unknown>;

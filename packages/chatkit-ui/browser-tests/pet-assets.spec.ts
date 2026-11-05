@@ -38,7 +38,18 @@ async function servePetHost(page: Page) {
       for (const [id, assetsBaseUrl] of [['offline', '/offline/pets'], ['remote', 'https://cdn.example.test/pets/v1'], ['required', '/required/pets']]) {
         const element = document.createElement('xpertai-chatkit');
         element.id = id;
-        element.setOptions({ frameUrl: 'http://localhost/frame', api, displayMode: id === 'required' ? 'pet' : 'chat', pet: { assetsBaseUrl, enabled: id !== 'required' } });
+        const options = { frameUrl: 'http://localhost/frame', api, displayMode: id === 'required' ? 'pet' : 'chat', pet: { assetsBaseUrl, enabled: id !== 'required' } };
+        if (id === 'required') {
+          const render = () => element.setOptions({ ...options, pet: { ...options.pet, launcherVisible: localStorage.getItem('fixture:pet:hidden') !== '1' } });
+          element.addEventListener('chatkit.pet.launcher.visibility.change', ({ detail }) => {
+            if (detail.visible) localStorage.removeItem('fixture:pet:hidden');
+            else localStorage.setItem('fixture:pet:hidden', '1');
+            render();
+          });
+          render();
+        } else {
+          element.setOptions(options);
+        }
         document.body.append(element);
       }
       window.updatePet = (assetsBaseUrl) => document.querySelector('#remote').setOptions({ frameUrl: 'http://localhost/frame', api, pet: { assetsBaseUrl } });
@@ -89,7 +100,7 @@ test('host overlays load offline and remote assets and update independently', as
   );
 });
 
-test('closing and reopening a launcher survives a real page reload', async ({
+test('a host can remember launcher visibility across page reloads', async ({
   page,
 }) => {
   await servePetHost(page);
