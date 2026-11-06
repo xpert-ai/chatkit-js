@@ -685,6 +685,7 @@ describe('group conversation UI', () => {
     fireEvent.click(screen.getByLabelText('group.send'));
     await waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
     expect(mocks.send.mock.calls[0][0]).toEqual({
+      supportsUserInput: true,
       clientMessageId: expect.any(String),
       mentions: [{ participantId: 'a', start: 0, end: 2 }],
       replyToMessageId: 'm1',

@@ -267,6 +267,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       return;
     }
     const base = {
+      supportsUserInput: true,
       ...(composer.input ? { composer: composer.input } : {}),
       text,
       mentions: boundMentions,

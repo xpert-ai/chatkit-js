@@ -101,11 +101,11 @@ export function retainResumeStreamOptions(
 export function mergeStreamRequestContext(
   base: Record<string, unknown> | undefined,
   additional: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-  if (!additional || Object.keys(additional).length === 0) return base;
+): Record<string, unknown> {
+  const merged = { ...base, ...additional, supportsUserInput: true };
+  if (!additional || Object.keys(additional).length === 0) return merged;
   const baseEnv = readStringFields(base?.env);
   const additionalEnv = readStringFields(additional.env);
-  const merged = { ...(base ?? {}), ...additional };
   const env = { ...baseEnv, ...additionalEnv };
   return Object.keys(env).length > 0 ? { ...merged, env } : merged;
 }

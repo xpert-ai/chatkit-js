@@ -97,6 +97,7 @@ describe('run admission and recovery', () => {
       ).rejects.toMatchObject({ status: 400 });
     });
     expect(http).toHaveBeenCalledOnce();
+    expect(mocks.runStream.mock.calls[0]?.[2]?.context).toMatchObject({ supportsUserInput: true });
     expect(stream.error).toHaveProperty(
       'message',
       expect.stringContaining(rejected.message),

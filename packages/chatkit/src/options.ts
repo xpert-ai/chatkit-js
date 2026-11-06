@@ -435,6 +435,8 @@ export type ChatKitClientSecretObject = {
 export type ChatKitClientSecretResult = string | ChatKitClientSecretObject;
 
 export type ChatKitRequestContext = {
+  /** The initiating client handles structured user-input requests. */
+  supportsUserInput?: boolean;
   /**
    * Request-scoped runtime env overrides.
    * ChatKit forwards this field to LangGraph as `context.env`.
