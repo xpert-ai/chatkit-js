@@ -620,6 +620,7 @@ export function useAssistantConversation({
       ...conversation,
       ...summary,
       ...host,
+      ...runControl,
       surface: surface,
       options: options,
       chatColumnRef: chatColumnRef,
@@ -707,6 +708,9 @@ export function useAssistantConversation({
         onProjectTypeCreate: onProjectTypeCreate,
         runtimeResources: runtimeResources,
         compact: compactComposer,
+        // Headerless embeds and side chats still need an execution control entry.
+        showTerminateAction:
+          surface === 'side' || options?.header?.enabled === false,
       }),
       overlay: compactComposer && (
         <div

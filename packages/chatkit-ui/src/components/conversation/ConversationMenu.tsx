@@ -44,7 +44,7 @@ import type {
 import { visibleMessageText } from './conversation-transcript';
 import { useConversationMenu } from './useConversationMenu';
 
-const itemClass =
+export const conversationMenuItemClassName =
   'min-h-[calc(2.25rem*var(--chat-density-scale,1))] gap-[calc(0.5rem*var(--chat-density-scale,1))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.375rem*var(--chat-density-scale,1))]';
 
 export type ConversationMenuProps = {
@@ -96,7 +96,7 @@ function ConversationMenuSession({
     availability.visible ? (
       <DropdownMenuItem
         key={name}
-        className={itemClass}
+        className={conversationMenuItemClassName}
         variant={destructive ? 'destructive' : 'default'}
         disabled={availability.disabled}
         textValue={t(name)}
@@ -124,7 +124,8 @@ function ConversationMenuSession({
               else if (moreButtonRef) moreButtonRef.current = node;
             }}
             type="button"
-            disabled={!context.ready}
+            // Extra items manage their own availability (e.g. terminate during reconnect).
+            disabled={!context.ready && !extraItems}
             aria-label={label}
             className={cn(
               placement === 'history' &&
@@ -164,7 +165,7 @@ function ConversationMenuSession({
           {!narrow && actions.branch.visible && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger
-                className={itemClass}
+                className={conversationMenuItemClassName}
                 disabled={actions.branch.disabled}
               >
                 <GitBranch />
@@ -173,7 +174,7 @@ function ConversationMenuSession({
               <DropdownMenuPortal>
                 <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
                   <DropdownMenuItem
-                    className={itemClass}
+                    className={conversationMenuItemClassName}
                     onSelect={() => {
                       const latest = actions.replies.at(-1);
                       if (latest?.id) void menu.branch(latest.id);
@@ -182,7 +183,7 @@ function ConversationMenuSession({
                     {t('conversationMenu.branchLatest')}
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className={itemClass}
+                    className={conversationMenuItemClassName}
                     onSelect={() => menu.openDialog('branch')}
                   >
                     {t('conversationMenu.branchChoose')}
@@ -207,7 +208,7 @@ function ConversationMenuSession({
           {!narrow && actions.export.visible && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger
-                className={itemClass}
+                className={conversationMenuItemClassName}
                 disabled={actions.export.disabled}
               >
                 <Copy />
@@ -224,7 +225,7 @@ function ConversationMenuSession({
                 <DropdownMenuSubContent className="max-w-[calc(100vw-2rem)]">
                   {(['markdown', 'text', 'download'] as const).map((format) => (
                     <DropdownMenuItem
-                      className={itemClass}
+                      className={conversationMenuItemClassName}
                       key={format}
                       disabled={menu.busy}
                       onSelect={(event) => {
