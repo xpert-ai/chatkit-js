@@ -93,7 +93,7 @@ export function AssistantCharacter({
           <ChatkitAvatar
             avatar={avatar}
             label={name}
-            className="size-full overflow-visible bg-transparent"
+            className="size-full bg-transparent"
             imageClassName="object-contain"
             fallbackClassName="bg-transparent"
           />
