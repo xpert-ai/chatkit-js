@@ -1,5 +1,31 @@
 # @xpert-ai/chatkit-ui
 
+## 0.22.0
+
+### Minor Changes
+
+- 05b3dae: Support the `assistant.composer.insert` View command to append task prompts, workspace files, and available skills to the current draft without sending a message. Preserve existing draft content and reject invalid inputs or responses from a stale conversation scope.
+
+  Restore the Chat tab when no on-demand View is open, while preserving explicitly selected or pending restored Views.
+
+### Patch Changes
+
+- 545591f: Clip assistant avatar images to the active theme's corner radius in the chat header and assistant details panel, including when the theme changes while they are visible.
+- 74d67aa: Upgrade `@xpert-ai/xpert-sdk` to `^0.21.0` and use its shared composer insertion command and payload type instead of temporary local definitions. Preserve input validation, file and skill scope checks, and draft-only insertion behavior.
+
+  The composer insertion contract remains beta and may change incompatibly during beta.
+
+- 72673af: Align runtime service and task panels with the composer using shared theme-aware corners, borders, controls, and density-based spacing. Remove separate panel shadows and tuck attached panels behind the rounded input without obscuring list items.
+- ba1d984: Align Settings and Message history with the other More menu items using shared theme-aware spacing. Move End run into the More menu while preserving termination during reconnects and the composer fallback for side chats and embeds without a header.
+- aac3952: Display externally submitted human messages alongside live and recovered assistant replies. Resolve input messages through their persisted parent identity, preserving quotes and files without duplicating local inputs or reloading paginated history.
+- 3e450ce: Recover group sends that require a Project by preserving the draft, guiding project creation or selection using the primary Assistant's project capabilities, and resuming the original send after binding succeeds. Keep group projects independent by default, require explicit consent for reuse, and fix scrolling in the group member picker.
+
+  Export the typed `GROUP_PROJECT_REQUIRED` error contract and update ChatKit UI to `@xpert-ai/xpert-sdk` 0.20.3 for published project type and reuse discovery support.
+
+- a28dfa3: Use the shadcn Select in the project creation form and adapt its name input, buttons, and spacing to the active theme density. Preserve theme updates in the nested dropdown and keep the project name when switching types.
+- Updated dependencies [3e450ce]
+  - @xpert-ai/chatkit-types@0.20.3
+
 ## 0.21.3
 
 ### Patch Changes
