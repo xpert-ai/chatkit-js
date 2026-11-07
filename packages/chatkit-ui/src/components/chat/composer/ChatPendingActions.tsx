@@ -40,13 +40,19 @@ export function ChatPendingActions({
           }
           attachToComposer={!hasPendingTodos && !hasPendingFollowUps}
           className={
-            hasPendingTodos || hasPendingFollowUps ? 'mb-2' : undefined
+            hasPendingTodos || hasPendingFollowUps
+              ? 'mb-[calc(0.5rem*var(--chat-density-scale,1))]'
+              : undefined
           }
         />
         <PendingTodos
           snapshot={stream.todos}
           attachToComposer={!hasPendingFollowUps}
-          className={hasPendingFollowUps ? 'mb-2' : undefined}
+          className={
+            hasPendingFollowUps
+              ? 'mb-[calc(0.5rem*var(--chat-density-scale,1))]'
+              : undefined
+          }
         />
         <PendingFollowUps
           items={pendingFollowUps}

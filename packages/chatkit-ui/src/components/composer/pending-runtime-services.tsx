@@ -1,10 +1,5 @@
 import * as React from 'react';
-import {
-  ChevronDown,
-  Loader2,
-  Server,
-  Square,
-} from 'lucide-react';
+import { Loader2, Server, Square } from 'lucide-react';
 
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import {
@@ -12,8 +7,7 @@ import {
   type SandboxManagedService,
   type SandboxServicesActivityState,
 } from '../../lib/runtime-activity';
-import { cn, getRoundedClass } from '../../lib/utils';
-import { useTheme } from '../../providers/Theme';
+import { PendingActivityPanel } from './pending-activity-panel';
 
 export type PendingRuntimeServicesProps = {
   state: SandboxServicesActivityState;
@@ -21,22 +15,6 @@ export type PendingRuntimeServicesProps = {
   attachToComposer?: boolean;
   className?: string;
 };
-
-function useRoundedClasses() {
-  const { theme } = useTheme();
-
-  return {
-    top: theme.radius
-      ? {
-          pill: 'rounded-t-full',
-          round: 'rounded-t-xl',
-          soft: 'rounded-t-lg',
-          sharp: 'rounded-t-none',
-        }[theme.radius]
-      : 'rounded-t-lg',
-    panel: getRoundedClass(theme.radius, 'rounded-lg'),
-  };
-}
 
 function getServicePortLabel(service: SandboxManagedService): string | null {
   const port = service.actualPort ?? service.requestedPort;
@@ -60,7 +38,6 @@ export function PendingRuntimeServices({
   className,
 }: PendingRuntimeServicesProps) {
   const { t } = useChatkitTranslation();
-  const rounded = useRoundedClasses();
   const listId = React.useId();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [stoppingServiceIds, setStoppingServiceIds] = React.useState<string[]>(
@@ -92,95 +69,75 @@ export function PendingRuntimeServices({
   };
 
   return (
-    <div
-      aria-live="polite"
-      className={cn(
-        'mx-2 border border-border bg-background/95 px-3 py-3 shadow-sm',
-        attachToComposer ? 'border-b-0' : null,
-        attachToComposer ? rounded.top : rounded.panel,
-        className,
-      )}
+    <PendingActivityPanel
+      icon={
+        <Server className="shrink-0 text-muted-foreground" aria-hidden="true" />
+      }
+      summary={t('chat.runtimeServices.summary', {
+        count: state.services.length,
+      })}
+      accessory={
+        state.isRefreshing ? (
+          <Loader2 className="animate-spin" aria-hidden="true" />
+        ) : null
+      }
+      listId={listId}
+      isCollapsed={isCollapsed}
+      onToggle={() => setIsCollapsed((prev) => !prev)}
+      attachToComposer={attachToComposer}
+      className={className}
     >
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 text-left"
-        aria-expanded={!isCollapsed}
-        aria-controls={listId}
-        onClick={() => setIsCollapsed((prev) => !prev)}
-      >
-        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-          <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            {t('chat.runtimeServices.summary', {
-              count: state.services.length,
-            })}
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {state.isRefreshing ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-          ) : null}
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform',
-              isCollapsed ? null : 'rotate-180',
-            )}
-          />
-        </div>
-      </button>
+      <ul id={listId} data-slot="pending-activity-list">
+        {state.services.map((service) => {
+          const serviceId = service.id ?? '';
+          const isStopping = stoppingServiceIds.includes(serviceId);
 
-      {!isCollapsed && (
-        <ul id={listId} className="mt-3 space-y-2.5">
-          {state.services.map((service) => {
-            const serviceId = service.id ?? '';
-            const isStopping = stoppingServiceIds.includes(serviceId);
-
-            return (
-              <li
-                key={service.id ?? `${service.name}:${service.command}`}
-                className="grid min-w-0 grid-cols-[minmax(0,1fr)_28px] items-center gap-2"
-              >
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      title={service.name}
-                      className="min-w-0 truncate text-sm font-medium leading-5 text-foreground"
-                    >
-                      {service.name}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {getServiceMetaLabel(service)}
-                    </span>
-                  </div>
-                  <div
-                    title={service.command}
-                    className="min-w-0 truncate font-mono text-xs leading-5 text-muted-foreground"
+          return (
+            <li
+              key={service.id ?? `${service.name}:${service.command}`}
+              className="flex min-w-0 items-center gap-[calc(0.5rem*var(--chat-density-scale,1))]"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-[calc(0.5rem*var(--chat-density-scale,1))]">
+                  <span
+                    title={service.name}
+                    className="min-w-0 truncate text-sm font-medium leading-5 text-foreground"
                   >
-                    {service.command}
-                  </div>
+                    {service.name}
+                  </span>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {getServiceMetaLabel(service)}
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                  aria-label={t('chat.runtimeServices.stop')}
-                  title={t('chat.runtimeServices.stop')}
-                  disabled={!serviceId || isStopping}
-                  onClick={() => {
-                    void stopService(serviceId);
-                  }}
+                <div
+                  title={service.command}
+                  className="min-w-0 truncate font-mono text-xs leading-5 text-muted-foreground"
                 >
-                  {isStopping ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Square className="h-3.5 w-3.5 fill-current" />
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+                  {service.command}
+                </div>
+              </div>
+              <button
+                type="button"
+                data-slot="pending-activity-action"
+                className="inline-flex shrink-0 items-center justify-center rounded-chat-item text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                aria-label={t('chat.runtimeServices.stop')}
+                title={t('chat.runtimeServices.stop')}
+                disabled={!serviceId || isStopping}
+                onClick={() => {
+                  void stopService(serviceId);
+                }}
+              >
+                {isStopping ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Square className="fill-current" aria-hidden="true" />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </PendingActivityPanel>
   );
 }
 

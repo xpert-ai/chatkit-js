@@ -25,6 +25,9 @@ export function GroupProjectForm(props: GroupProjectFormOptions) {
     save,
     retry,
     selectMember,
+    reusing,
+    reuseConfirmed,
+    setReuseConfirmed,
   } = useGroupProjectForm(props);
   if (loading)
     return (
@@ -51,6 +54,18 @@ export function GroupProjectForm(props: GroupProjectFormOptions) {
       className="grid gap-[calc(1rem*var(--chat-density-scale,1))]"
     >
       <p className="font-medium">{projectName || t('group.project.none')}</p>
+      {reusing && (
+        <label className="flex items-start gap-[calc(.5rem*var(--chat-density-scale,1))] text-sm">
+          <input
+            type="checkbox"
+            className="accent-primary"
+            checked={reuseConfirmed}
+            disabled={saving}
+            onChange={(event) => setReuseConfirmed(event.target.checked)}
+          />
+          {t('group.project.reuseConfirm')}
+        </label>
+      )}
       <fieldset
         disabled={!owner || saving}
         className="grid gap-[calc(.5rem*var(--chat-density-scale,1))]"
@@ -69,7 +84,8 @@ export function GroupProjectForm(props: GroupProjectFormOptions) {
               checked={selected.includes(member.id)}
               disabled={
                 member.id === primary?.id ||
-                project?.participantIds.includes(member.id)
+                project?.participantIds.includes(member.id) ||
+                props.requiredParticipantIds?.includes(member.id)
               }
               onChange={(event) =>
                 selectMember(member.id, event.target.checked)
@@ -85,9 +101,23 @@ export function GroupProjectForm(props: GroupProjectFormOptions) {
         </p>
       )}
       {owner && (project || intent.mode !== 'manage') && (
-        <Button type="submit" disabled={saving || !selected.length || !changed}>
+        <Button
+          type="submit"
+          disabled={
+            saving ||
+            !selected.length ||
+            !changed ||
+            (reusing && !reuseConfirmed)
+          }
+        >
           {saving && <Loader2 className="size-4 animate-spin" />}
-          {t(project ? 'group.project.bind' : 'group.project.enable')}
+          {t(
+            reusing
+              ? 'group.project.reuseBind'
+              : project
+                ? 'group.project.bind'
+                : 'group.project.enable',
+          )}
         </Button>
       )}
     </form>

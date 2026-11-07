@@ -107,6 +107,54 @@
   padding: calc(0.75rem * var(--chat-density-scale, 1))
     calc(1rem * var(--chat-density-scale, 1));
 }
+/* Activity panels use the same inset and quiet border as the composer context. */
+[data-slot='pending-activity-panel'] {
+  margin-inline: calc(0.75rem * var(--chat-density-scale, 1));
+  padding: calc(0.5rem * var(--chat-density-scale, 1));
+}
+[data-slot='pending-activity-panel'][data-attached] {
+  /* Tuck the lower edge behind the rounded editor without covering any rows. */
+  margin-bottom: calc(-1rem * var(--chat-density-scale, 1));
+  padding-bottom: calc(1.5rem * var(--chat-density-scale, 1));
+  border-bottom: 0;
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+[data-slot='pending-activity-toggle'] {
+  min-height: max(1.75rem, calc(2rem * var(--chat-density-scale, 1)));
+  padding: calc(0.25rem * var(--chat-density-scale, 1));
+  gap: calc(0.75rem * var(--chat-density-scale, 1));
+}
+[data-slot='pending-activity-panel'] svg {
+  width: max(0.875rem, calc(1rem * var(--chat-density-scale, 1)));
+  height: max(0.875rem, calc(1rem * var(--chat-density-scale, 1)));
+}
+[data-slot='pending-activity-list'] {
+  display: grid;
+  gap: calc(0.25rem * var(--chat-density-scale, 1));
+  margin-top: calc(0.25rem * var(--chat-density-scale, 1));
+  padding-inline: calc(0.25rem * var(--chat-density-scale, 1));
+}
+[data-slot='pending-activity-list'] > li {
+  padding-block: calc(0.125rem * var(--chat-density-scale, 1));
+}
+[data-slot='pending-activity-action'] {
+  width: max(1.75rem, calc(2rem * var(--chat-density-scale, 1)));
+  height: max(1.75rem, calc(2rem * var(--chat-density-scale, 1)));
+}
+[data-slot='pending-activity-action'] svg {
+  width: max(0.75rem, calc(0.875rem * var(--chat-density-scale, 1)));
+  height: max(0.75rem, calc(0.875rem * var(--chat-density-scale, 1)));
+}
+@media (pointer: coarse) {
+  [data-slot='pending-activity-toggle'],
+  [data-slot='pending-activity-action'] {
+    min-height: 2.75rem;
+  }
+  [data-slot='pending-activity-action'] {
+    min-width: 2.75rem;
+  }
+}
 [data-slot='composer-input-shell'] {
   /* At a 16px root: controls are 28/32/36px with 4/6/8px vertical padding. */
   --composer-control-height: calc(1rem + 1rem * var(--chat-density-scale, 1));

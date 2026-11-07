@@ -12,6 +12,8 @@ import {
 } from '../../workbench/floating-chat/context';
 import { useGroupComposer } from './useGroupComposer';
 import { useGroupProject } from './useGroupProject';
+import { useGroupProjectContinuation } from './useGroupProjectContinuation';
+import { getGroupProjectRequiredError } from '../../lib/group-project-error';
 import { useGroupHeaderActions } from './useGroupHeaderActions';
 import {
   Dialog,
@@ -96,6 +98,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     setMembersOpen(open);
   };
   const pending = useRef<ChatGroupSendInput | null>(null);
+  const sendInFlight = useRef(false);
   const viewport = useRef<HTMLDivElement>(null);
   const nearEnd = useRef(true);
   const readingPosition = useRef(0);
@@ -178,14 +181,26 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     activityKey: `${group?.revision ?? ''}:${group?.runs.map((run) => `${run.participantId}:${run.status}`).join(',') ?? ''}`,
   });
   const composerKey = JSON.stringify(composer.input);
-  const groupProject = useGroupProject({
-    client,
-    group,
-    onSaved: composer.refreshProject,
-  });
   useEffect(() => {
     pending.current = null;
   }, [composerKey]);
+  const continuation = useGroupProjectContinuation({
+    groupId,
+    draftKey: JSON.stringify([text, boundMentions, reply?.id, recipients]),
+    composer: composer.input,
+    blocked: composer.blocked,
+    sending,
+    onSend: sendInput,
+  });
+  const groupProject = useGroupProject({
+    client,
+    group,
+    onSaved: (project, resumeSend) => {
+      composer.refreshProject();
+      if (resumeSend) continuation.ready(project);
+    },
+    onCancel: continuation.cancel,
+  });
   const candidates = members.filter(
     (member) =>
       member.active &&
@@ -276,6 +291,12 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       ...base,
       ...(reply ? { replyToMessageId: reply.id } : {}),
     };
+    continuation.cancel();
+    await sendInput(input);
+  }
+  async function sendInput(input: ChatGroupSendInput) {
+    if (!group || sendInFlight.current) return;
+    sendInFlight.current = true;
     pending.current = input;
     setSending(true);
     const cancelSendTransition = sendTransition?.prepare(input.clientMessageId);
@@ -289,8 +310,16 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
       nearEnd.current = true;
     } catch (reason) {
       cancelSendTransition?.();
-      fail(reason);
+      const required = getGroupProjectRequiredError(reason);
+      if (required?.groupId === group.id) {
+        setError(null);
+        continuation.remember(input);
+        groupProject.request(required.participantIds);
+      } else {
+        fail(reason);
+      }
     } finally {
+      sendInFlight.current = false;
       setSending(false);
     }
   }

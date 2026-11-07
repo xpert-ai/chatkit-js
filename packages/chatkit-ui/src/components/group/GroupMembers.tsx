@@ -201,7 +201,7 @@ export function GroupMembers({
             onSubmit={(event) => void invite(event)}
             className="mt-5 flex min-w-0 items-center gap-2 border-t pt-4"
           >
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover modal open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -230,10 +230,14 @@ export function GroupMembers({
                 </Button>
               </PopoverTrigger>
               <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] p-0"
+                className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] flex-col overflow-hidden p-0"
                 align="start"
               >
-                <Command shouldFilter={false} label={t('group.searchMembers')}>
+                <Command
+                  className="h-auto min-h-0"
+                  shouldFilter={false}
+                  label={t('group.searchMembers')}
+                >
                   <CommandInput
                     aria-label={t('group.searchMembers')}
                     placeholder={t('group.searchMembers')}
@@ -241,6 +245,7 @@ export function GroupMembers({
                     onValueChange={setSearch}
                   />
                   <CommandList
+                    className="min-h-0 overscroll-contain"
                     id={`${id}-candidates`}
                     aria-busy={loading || loadingMore}
                   >

@@ -111,6 +111,7 @@ type AssistantComposerProps = Pick<
     'handleProjectSelectionChange'
   > & {
     compact: boolean;
+    showTerminateAction: boolean;
     isProjectSelectorVisible: boolean;
     isFileSelectorVisible: boolean;
     isPromptEditDisabled: boolean;
@@ -141,6 +142,7 @@ type AssistantComposerProps = Pick<
 import type { ChatComposerFormProps } from './ChatComposerForm';
 export function getAssistantComposerProps({
   compact,
+  showTerminateAction,
   handleSubmit,
   theme,
   isProjectSelectorVisible,
@@ -302,7 +304,7 @@ export function getAssistantComposerProps({
           }}
         />
 
-        {canStopRun && (
+        {showTerminateAction && canStopRun && (
           <Button
             type="button"
             variant="ghost"

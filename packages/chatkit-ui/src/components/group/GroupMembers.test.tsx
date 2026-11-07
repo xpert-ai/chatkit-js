@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Client, type ChatGroupSnapshot } from '@xpert-ai/xpert-sdk';
 import { GroupMembers } from './GroupMembers';
 import { ThemeProvider } from '../../providers/Theme';
+import { Dialog, DialogContent, DialogTitle } from '../ui/dialog';
 
 vi.mock('../../i18n/useChatkitTranslation', () => ({
   useChatkitTranslation: () => ({ t: (key: string) => key }),
@@ -71,7 +72,7 @@ const group: ChatGroupSnapshot = {
     },
   ],
 };
-function setup(snapshot = group) {
+function setup(snapshot = group, inDialog = false) {
   const client = new Client({ apiUrl: 'https://example.test' });
   const candidates = vi.spyOn(client.groups, 'candidates').mockResolvedValue([
     {
@@ -97,9 +98,24 @@ function setup(snapshot = group) {
     .spyOn(client.groups, 'removeMember')
     .mockResolvedValue({ removed: true });
   const onError = vi.fn();
-  render(<GroupMembers client={client} group={snapshot} onError={onError} />, {
-    wrapper: ThemeProvider,
-  });
+  const members = (
+    <GroupMembers client={client} group={snapshot} onError={onError} />
+  );
+  render(
+    inDialog ? (
+      <Dialog open>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle>Group members</DialogTitle>
+          {members}
+        </DialogContent>
+      </Dialog>
+    ) : (
+      members
+    ),
+    {
+      wrapper: ThemeProvider,
+    },
+  );
   return { candidates, add, remove, onError };
 }
 describe('group member management', () => {
@@ -222,6 +238,35 @@ describe('group member management', () => {
     ).not.toHaveTextContent('Assistant F');
     expect(screen.getByRole('button', { name: 'group.invite' })).toBeDisabled();
     expect(add).not.toHaveBeenCalled();
+  });
+  it('allows wheel scrolling in the portaled candidate list inside a modal dialog', async () => {
+    setup(group, true);
+    fireEvent.click(screen.getByRole('tab', { name: 'group.assistant 2' }));
+    fireEvent.click(
+      screen.getByRole('combobox', { name: 'group.selectMember' }),
+    );
+    const option = await screen.findByRole('option', { name: 'Assistant F' });
+    const list = screen.getByRole('listbox');
+    // jsdom has no layout; supply only the overflowing list's measured geometry.
+    Object.defineProperties(list, {
+      scrollHeight: { value: 600, configurable: true },
+      clientHeight: { value: 200, configurable: true },
+    });
+    list.style.overflowY = 'auto';
+    const wheel = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 80,
+    });
+    fireEvent(option, wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+    const outsideWheel = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 80,
+    });
+    fireEvent(document.body, outsideWheel);
+    expect(outsideWheel.defaultPrevented).toBe(true);
   });
   it('keeps the member list read-only for a non-owner', () => {
     const { candidates } = setup({ ...group, viewerParticipantId: 'b' });

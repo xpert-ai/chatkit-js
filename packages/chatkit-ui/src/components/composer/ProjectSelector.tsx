@@ -26,6 +26,7 @@ import {
 } from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
 import { Input } from '../ui/input';
+import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Separator } from '../ui/separator';
 import { groupProjects } from './project-groups';
@@ -34,6 +35,8 @@ import { ProjectListViewport } from './ProjectListViewport';
 import { ProjectManagementMenu } from './ProjectManagementMenu';
 
 export type ProjectSelectorProps = {
+  /** Contain focus and scrolling when the selector is inside a modal dialog. */
+  modal?: boolean;
   client: Client | null;
   xpertId?: string;
   activeProjectId?: string | null;
@@ -57,6 +60,8 @@ export type ProjectSelectorProps = {
   createProjectTypes?: readonly XpertProjectTypeRef[];
   /** Fixed discovery and creation scope for a View that requires a particular Project type. */
   projectType?: XpertProjectTypeRef;
+  groupProjectUsage?: 'independent' | 'reuse';
+  discoveryAction?: { label: string; onSelect: () => void };
   management?: { label: string; onSelect: () => void; lockedReason?: string };
   triggerRef?: React.Ref<HTMLButtonElement>;
   onCloseAutoFocus?: React.ComponentProps<
@@ -67,6 +72,7 @@ export type ProjectSelectorProps = {
 const PROJECT_PAGE_SIZE = 20;
 
 export function ProjectSelector({
+  modal = false,
   client,
   xpertId,
   activeProjectId,
@@ -85,6 +91,8 @@ export function ProjectSelector({
   onProjectTypeCreate,
   createProjectTypes,
   projectType,
+  groupProjectUsage,
+  discoveryAction,
   management,
   triggerRef,
   onCloseAutoFocus,
@@ -272,6 +280,7 @@ export function ProjectSelector({
         projectsClient
           .list({
             xpertId,
+            ...(groupProjectUsage ? { groupProjectUsage } : {}),
             status: 'active',
             skip,
             take: PROJECT_PAGE_SIZE,
@@ -333,6 +342,7 @@ export function ProjectSelector({
     query,
     applicationKey,
     projectTypeKey,
+    groupProjectUsage,
     skip,
     retry,
   ]);
@@ -488,6 +498,7 @@ export function ProjectSelector({
       className="flex h-10 min-w-0 items-center px-1"
     >
       <Popover
+        modal={modal}
         open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
@@ -910,7 +921,7 @@ export function ProjectSelector({
                       data-slot="composer-project-create"
                       disabled={!canCreate}
                       className={cn(
-                        'flex w-full shrink-0 items-center gap-3 px-1.5 py-1 text-left text-sm font-normal outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+                        'flex w-full shrink-0 items-center gap-3 px-1.5 py-1 text-left text-sm font-normal outline-none enabled:hover:bg-accent enabled:hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50',
                         menuItemRoundedClass,
                       )}
                       onClick={() => {
@@ -936,6 +947,22 @@ export function ProjectSelector({
                     </button>
                   </>
                 ) : null}
+                {discoveryAction && (
+                  <>
+                    <Separator className="mt-1" />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setOpen(false);
+                        discoveryAction.onSelect();
+                      }}
+                    >
+                      {discoveryAction.label}
+                    </Button>
+                  </>
+                )}
               </>
             )}
           </div>

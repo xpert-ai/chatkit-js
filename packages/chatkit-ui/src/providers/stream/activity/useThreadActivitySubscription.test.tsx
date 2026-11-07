@@ -194,6 +194,85 @@ describe('background answer discovery', () => {
     view.unmount();
     expect(f.watchActivity.mock.calls[0][1]?.signal?.aborted).toBe(true);
   });
+  it('projects an external input while the run stream is still active', async () => {
+    const f = fixture();
+    f.valuesRef.current.messages = [
+      {
+        id: 'reply',
+        type: 'ai',
+        content: 'partial',
+        parentId: 'external-input',
+      },
+    ];
+    f.options.isLoadingRef.current = true;
+    f.searchMessages.mockResolvedValue({
+      items: [
+        {
+          id: 'external-input',
+          role: 'human',
+          content: 'hello',
+          executionId: null,
+          references: [
+            {
+              type: 'quote',
+              text: 'history',
+              label: 'History',
+              source: 'feishu',
+            },
+          ],
+        },
+      ],
+      total: 1,
+    });
+    const view = renderHook(() => useThreadActivitySubscription(f.options));
+    await f.publish([run('background', 'running')]);
+    await f.tick();
+    expect(f.valuesRef.current.messages.map((message) => message.id)).toEqual([
+      'external-input',
+      'reply',
+    ]);
+    expect(f.valuesRef.current.messages[0].references?.[0].type).toBe('quote');
+    expect(f.options.runStream).not.toHaveBeenCalled();
+    view.unmount();
+  });
+  it('recovers both sides of a turn that completed before discovery', async () => {
+    const f = fixture();
+    f.searchMessages.mockImplementation(async (_id, query) =>
+      query.where.role === 'human'
+        ? {
+            items: [
+              {
+                id: 'external-input',
+                role: 'human',
+                content: 'hello',
+                executionId: null,
+              },
+            ],
+            total: 1,
+          }
+        : {
+            items: [
+              {
+                id: 'reply',
+                role: 'ai',
+                parentId: 'external-input',
+                executionId: 'fast',
+                content: 'finished',
+              },
+            ],
+            total: 1,
+          },
+    );
+    const view = renderHook(() => useThreadActivitySubscription(f.options));
+    await f.publish([run('fast', 'success')]);
+    await f.tick(3000);
+    expect(f.valuesRef.current.messages.map((message) => message.id)).toEqual([
+      'external-input',
+      'reply',
+    ]);
+    expect(f.searchMessages).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
   it('does not steal a local stream or resume a paused run', async () => {
     const f = fixture();
     f.options.isLoadingRef.current = true;

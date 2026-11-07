@@ -4,10 +4,11 @@ import {
   type ConversationActionContext,
 } from '../../conversation/conversation-actions';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import { History, Settings } from 'lucide-react';
+import { History, Settings, Square } from 'lucide-react';
 import type * as React from 'react';
 import { ChatHeaderActions } from './ChatHeaderActions';
 import { ConversationTitle } from '../../history/ConversationTitle';
+import { conversationMenuItemClassName } from '../../conversation/ConversationMenu';
 import { HistorySidebar } from '../../history/HistorySidebar';
 import { TaskSummaryTrigger } from '../../task-summary/TaskSummary';
 import { ChatkitAvatar } from '../../ui/chatkit-avatar';
@@ -19,6 +20,7 @@ import type { useChatAssistant } from '../session/useChatAssistant';
 import type { useChatBranchState } from '../session/useChatBranchState';
 import type { useChatConversationActions } from '../session/useChatConversationActions';
 import type { useChatEnvironment } from '../session/useChatEnvironment';
+import type { useChatRunControl } from '../session/useChatRunControl';
 import type { useChatTaskSummary } from '../summary/useChatTaskSummary';
 
 type AssistantHeaderProps = Pick<
@@ -50,6 +52,13 @@ type AssistantHeaderProps = Pick<
     | 'setHistoryProjectFilter'
   > &
   Pick<ReturnType<typeof useChatBranchState>, 'isChangingBranch'> &
+  Pick<
+    ReturnType<typeof useChatRunControl>,
+    | 'canStopRun'
+    | 'isResumingRun'
+    | 'isStoppingRun'
+    | 'handleComposerRunControl'
+  > &
   Pick<
     ReturnType<typeof useChatPetSettings>,
     'petDisabled' | 'petSettingsOpen' | 'setPetSettingsOpen'
@@ -96,6 +105,10 @@ export function getAssistantHeaderProps({
   currentThread,
   isHistoryLoading,
   isChangingBranch,
+  canStopRun,
+  isResumingRun,
+  isStoppingRun,
+  handleComposerRunControl,
   updateThread,
   petDisabled,
   history,
@@ -246,21 +259,37 @@ export function getAssistantHeaderProps({
             if (petSettingsOpen || historyOpen) event.preventDefault();
           }}
           menu={
-            !petDisabled || history?.enabled !== false ? (
+            !petDisabled || history?.enabled !== false || canStopRun ? (
               <>
                 {!petDisabled && (
-                  <DropdownMenuItem onSelect={() => setPetSettingsOpen(true)}>
-                    <Settings size={16} />
+                  <DropdownMenuItem
+                    className={conversationMenuItemClassName}
+                    onSelect={() => setPetSettingsOpen(true)}
+                  >
+                    <Settings />
                     {t('settings.open')}
                   </DropdownMenuItem>
                 )}
                 {history?.enabled !== false && (
                   <DropdownMenuItem
+                    className={conversationMenuItemClassName}
                     onSelect={() => setHistoryOpen(true)}
                     disabled={missingConfig || isHistoryLoading}
                   >
-                    <History size={16} />
+                    <History />
                     {t('history.threadHistory')}
+                  </DropdownMenuItem>
+                )}
+                {canStopRun && (
+                  <DropdownMenuItem
+                    className={conversationMenuItemClassName}
+                    disabled={
+                      isChangingBranch || isResumingRun || isStoppingRun
+                    }
+                    onSelect={() => void handleComposerRunControl('stop')}
+                  >
+                    <Square />
+                    {t('threadControl.terminate')}
                   </DropdownMenuItem>
                 )}
               </>

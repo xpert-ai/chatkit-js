@@ -77,9 +77,13 @@ describe('Space Project creation and discovery', () => {
         name: 'composer.projects.new · general',
       }),
     );
-    fireEvent.change(
+    fireEvent.keyDown(
       screen.getByRole('combobox', { name: 'composer.projects.type' }),
-      { target: { value: JSON.stringify(['platform', 'space']) } },
+      { key: 'ArrowDown' },
+    );
+    fireEvent.keyDown(
+      await screen.findByRole('option', { name: 'Platform / space' }),
+      { key: 'Enter' },
     );
     fireEvent.change(
       screen.getByRole('textbox', {
@@ -138,9 +142,14 @@ describe('Space Project creation and discovery', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'composer.projects.new · space' }),
     );
+    const typeSelect = screen.getByRole('combobox', {
+      name: 'composer.projects.type',
+    });
+    expect(typeSelect).toHaveTextContent('Platform / space');
+    fireEvent.keyDown(typeSelect, { key: 'ArrowDown' });
     expect(
-      screen.getByRole('combobox', { name: 'composer.projects.type' }),
-    ).toHaveValue(JSON.stringify(['platform', 'space']));
+      await screen.findByRole('option', { name: 'Platform / space' }),
+    ).toHaveAttribute('aria-selected', 'true');
     expect(
       screen.queryByRole('option', { name: 'Platform / general' }),
     ).not.toBeInTheDocument();

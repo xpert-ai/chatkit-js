@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -97,8 +98,10 @@ function setup() {
     .spyOn(client.projects, 'get')
     .mockRejectedValue(new Error('Group scope required'));
   const read = vi.spyOn(client.groups, 'project').mockResolvedValue(null);
-  vi.spyOn(scoped.projects, 'types').mockResolvedValue({ items: [] });
-  vi.spyOn(scoped.projects, 'list').mockResolvedValue({
+  const types = vi
+    .spyOn(scoped.projects, 'types')
+    .mockResolvedValue({ items: [] });
+  const list = vi.spyOn(scoped.projects, 'list').mockResolvedValue({
     items: [{ id: 'existing', name: 'Existing project', status: 'active' }],
     total: 1,
   });
@@ -120,7 +123,18 @@ function setup() {
         <Harness client={client} snapshot={snapshot} done={done} />
       </ThemeProvider>,
     );
-  return { client, read, create, save, done, show, scopedGet, unscopedGet };
+  return {
+    client,
+    read,
+    create,
+    save,
+    done,
+    show,
+    scopedGet,
+    unscopedGet,
+    types,
+    list,
+  };
 }
 async function openMenu() {
   await waitFor(() =>
@@ -153,6 +167,48 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe('unified group Project menu', () => {
+  it('discovers independent Projects by default and requires explicit confirmation before reuse', async () => {
+    const f = setup();
+    f.show();
+    await openMenu();
+    await screen.findByRole('button', { name: 'Existing project' });
+    expect(f.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ groupProjectUsage: 'independent' }),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'group.project.reuse' }),
+    );
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'group.project.reuseDescription',
+    );
+    const selector = within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'composer.projects.select',
+    });
+    fireEvent.click(selector);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Existing project' }),
+    );
+    expect(f.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ groupProjectUsage: 'reuse' }),
+    );
+    await screen.findByRole('checkbox', { name: 'Coordinator' });
+    const confirm = screen.getByRole('checkbox', {
+      name: 'group.project.reuseConfirm',
+    });
+    const bind = screen.getByRole('button', {
+      name: 'group.project.reuseBind',
+    });
+    expect(confirm).not.toBeChecked();
+    expect(bind).toBeDisabled();
+    expect(f.save).not.toHaveBeenCalled();
+    fireEvent.click(confirm);
+    fireEvent.click(bind);
+    await waitFor(() => expect(f.done).toHaveBeenCalledOnce());
+    expect(f.save).toHaveBeenCalledWith('group', {
+      project: { mode: 'existing', projectId: 'existing', reuse: true },
+      participantIds: ['coordinator-member', 'worker-member'],
+    });
+  });
   it('creates only after participant confirmation and updates the same menu', async () => {
     const f = setup();
     f.show();
@@ -186,6 +242,57 @@ describe('unified group Project menu', () => {
       screen.queryByRole('button', { name: 'composer.projects.new' }),
     ).toBeNull();
     expect(screen.queryByText('composer.projects.none')).toBeNull();
+  });
+  it('creates the Assistant default application Project only after participant confirmation', async () => {
+    const f = setup();
+    const projectType = {
+      applicationKey: 'test:dashboard',
+      projectTypeKey: 'dashboard',
+    };
+    f.types.mockResolvedValue({
+      defaultProjectType: projectType,
+      items: [
+        {
+          ...projectType,
+          applicationTitle: 'Dashboards',
+          title: 'Dashboard project',
+          binding: { kind: 'project' },
+          available: true,
+        },
+      ],
+    });
+    f.show();
+    await openMenu();
+    const create = await screen.findByRole('button', {
+      name: 'composer.projects.new · Dashboard project',
+    });
+    expect(create).toBeEnabled();
+    fireEvent.click(create);
+    fireEvent.change(
+      screen.getByRole('textbox', {
+        name: 'composer.projects.namePlaceholder',
+      }),
+      { target: { value: 'October review' } },
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'composer.projects.create' }),
+    );
+    await screen.findByRole('checkbox', { name: 'Worker' });
+    expect(f.save).not.toHaveBeenCalled();
+    expect(f.create).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'group.project.enable' }),
+    );
+    await waitFor(() => expect(f.done).toHaveBeenCalledOnce());
+    expect(f.save).toHaveBeenCalledWith('group', {
+      project: {
+        mode: 'create',
+        id: expect.any(String),
+        name: 'October review',
+        projectType,
+      },
+      participantIds: ['coordinator-member', 'worker-member'],
+    });
   });
   it('cancels without creating, binding or selecting a Project', async () => {
     const f = setup();

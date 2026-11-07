@@ -1,3 +1,7 @@
+import {
+  createComposerTextParts,
+  getComposerEditingLength,
+} from '../../../lib/composer-parts';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
 import { useParentMessenger } from '../../../hooks/useParentMessenger';
@@ -20,9 +24,16 @@ import type { useChatEnvironment } from '../session/useChatEnvironment';
 
 type ChatHostOptions = Pick<
   ReturnType<typeof useChatDraft>,
-  'setComposerText' | 'setSelectedTool' | 'composerInputRef'
+  | 'setComposerText'
+  | 'setSelectedTool'
+  | 'composerInputRef'
+  | 'composerPartsRef'
+  | 'commitComposerParts'
 > &
-  Pick<ReturnType<typeof useChatFiles>, 'setReferences'> &
+  Pick<
+    ReturnType<typeof useChatFiles>,
+    'setReferences' | 'setReferencedWorkspaceFiles'
+  > &
   Pick<ReturnType<typeof useChatEnvironment>, 'composer' | 'stream'> &
   Pick<
     ReturnType<typeof useChatModelState>,
@@ -48,7 +59,10 @@ type ChatHostOptions = Pick<
 export function useChatHost({
   canRespond,
   setComposerText,
+  composerPartsRef,
+  commitComposerParts,
   setReferences,
+  setReferencedWorkspaceFiles,
   composer,
   setSelectedTool,
   requestedModelIdRef,
@@ -70,7 +84,39 @@ export function useChatHost({
         typeof payload.text === 'string' &&
         payload.insertRuntimeCapabilities === true;
 
-      if (typeof payload.text === 'string') setComposerText(payload.text);
+      if (typeof payload.text === 'string') {
+        if (payload.appendText) {
+          const previous = composerPartsRef.current;
+          const parts = [
+            ...previous,
+            ...createComposerTextParts(
+              `${previous.length ? '\n\n' : ''}${payload.text}`,
+            ),
+          ];
+          commitComposerParts(parts, {
+            caretOffset: getComposerEditingLength(parts),
+            resetDom: true,
+            syncRemovedCapabilityTokens: false,
+          });
+        } else setComposerText(payload.text);
+      }
+      if (payload.workspaceFiles) {
+        setReferencedWorkspaceFiles((previous) => {
+          const merged = new Map(
+            previous.map((file) => [file.workspacePath ?? file.filePath, file]),
+          );
+          for (const file of payload.workspaceFiles ?? [])
+            merged.set(file.path, {
+              workspacePath: file.path,
+              filePath: file.path,
+              originalName: file.name,
+              mimeType: file.mimeType,
+              size: file.size,
+              purpose: 'workspace',
+            });
+          return [...merged.values()];
+        });
+      }
       if (Array.isArray(payload.references)) {
         const nextReferences = normalizeReferences(payload.references);
         setReferences((previous) =>

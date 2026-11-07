@@ -1,20 +1,14 @@
 import * as React from 'react';
-import {
-  CheckCircle2,
-  ChevronDown,
-  Circle,
-  CircleDashed,
-  ListTodo,
-} from 'lucide-react';
+import { CheckCircle2, Circle, CircleDashed, ListTodo } from 'lucide-react';
 
 import {
   countCompletedTodos,
   type TodoItemStatus,
   type TodoListSnapshot,
 } from '../../lib/todos';
-import { cn, getPanelRoundedClass } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
-import { useTheme } from '../../providers/Theme';
+import { PendingActivityPanel } from './pending-activity-panel';
 
 export type PendingTodosProps = {
   snapshot: TodoListSnapshot | null;
@@ -25,17 +19,22 @@ export type PendingTodosProps = {
 function TodoStatusIcon({ status }: { status: TodoItemStatus }) {
   if (status === 'completed') {
     return (
-      <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />
+      <CheckCircle2
+        className="shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
     );
   }
 
   if (status === 'in_progress') {
     return (
-      <CircleDashed className="mt-1 h-4 w-4 shrink-0 text-foreground/70" />
+      <CircleDashed className="shrink-0 text-primary" aria-hidden="true" />
     );
   }
 
-  return <Circle className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />;
+  return (
+    <Circle className="shrink-0 text-muted-foreground" aria-hidden="true" />
+  );
 }
 
 export function PendingTodos({
@@ -44,9 +43,6 @@ export function PendingTodos({
   className,
 }: PendingTodosProps) {
   const { t } = useChatkitTranslation();
-  const { theme } = useTheme();
-  // Multi-row panels use bounded corners, even when controls use the pill preset.
-  const rounded = getPanelRoundedClass(theme.radius);
   const listId = React.useId();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
 
@@ -61,74 +57,54 @@ export function PendingTodos({
   const completedCount = countCompletedTodos(snapshot.items);
 
   return (
-    <div
-      aria-live="polite"
-      className={cn(
-        'mx-2 border border-border bg-background/95 px-3 py-3 shadow-sm',
-        rounded,
-        attachToComposer ? 'rounded-b-none border-b-0' : null,
-        className,
-      )}
+    <PendingActivityPanel
+      icon={
+        <ListTodo
+          className="shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+      }
+      summary={t('chat.todos.summary', {
+        total: snapshot.items.length,
+        completed: completedCount,
+      })}
+      listId={listId}
+      isCollapsed={isCollapsed}
+      onToggle={() => setIsCollapsed((prev) => !prev)}
+      attachToComposer={attachToComposer}
+      className={className}
     >
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 text-left"
-        aria-expanded={!isCollapsed}
-        aria-controls={listId}
-        onClick={() => setIsCollapsed((prev) => !prev)}
-      >
-        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground">
-          <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            {t('chat.todos.summary', {
-              total: snapshot.items.length,
-              completed: completedCount,
-            })}
-          </span>
-        </div>
-        <div className="flex items-center shrink-0">
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform',
-              isCollapsed ? null : 'rotate-180',
-            )}
-          />
-        </div>
-      </button>
-
-      {!isCollapsed && (
-        <ol id={listId} className="mt-3 space-y-2.5">
-          {snapshot.items.map((item, index) => (
-            <li
-              key={item.id}
-              className="grid min-w-0 grid-cols-[16px_24px_minmax(0,1fr)] items-start gap-2 overflow-hidden"
+      <ol id={listId} data-slot="pending-activity-list">
+        {snapshot.items.map((item, index) => (
+          <li
+            key={item.id}
+            className="grid min-w-0 grid-cols-[auto_1.25rem_minmax(0,1fr)] items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] overflow-hidden"
+          >
+            <TodoStatusIcon status={item.status} />
+            <span
+              className={cn(
+                'text-sm leading-6 text-foreground',
+                item.status === 'completed' ? 'text-muted-foreground' : null,
+              )}
             >
-              <TodoStatusIcon status={item.status} />
-              <span
-                className={cn(
-                  'text-sm leading-6 text-foreground',
-                  item.status === 'completed' ? 'text-muted-foreground' : null,
-                )}
-              >
-                {index + 1}.
-              </span>
-              <span
-                title={item.content}
-                className={cn(
-                  'block min-w-0 truncate text-sm leading-6 text-foreground',
-                  item.status === 'completed'
-                    ? 'text-muted-foreground line-through'
-                    : item.status === 'in_progress'
-                      ? 'font-medium'
-                      : null,
-                )}
-              >
-                {item.content}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
+              {index + 1}.
+            </span>
+            <span
+              title={item.content}
+              className={cn(
+                'block min-w-0 truncate text-sm leading-6 text-foreground',
+                item.status === 'completed'
+                  ? 'text-muted-foreground line-through'
+                  : item.status === 'in_progress'
+                    ? 'font-medium'
+                    : null,
+              )}
+            >
+              {item.content}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </PendingActivityPanel>
   );
 }
