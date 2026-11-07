@@ -1,3 +1,8 @@
+import {
+  ASSISTANT_COMPOSER_INSERT_COMMAND,
+  parseComposerInsert,
+  composerInsertPayload,
+} from '../../composer-insert';
 import { contentTabKey, contentViewKey } from '../../content/tab-identity';
 import {
   executeContentCommand,
@@ -105,6 +110,7 @@ export function useWorkbenchClientCommands({
     stream.assistantId,
     stream.projectId,
     stream.conversationId,
+    stream.threadId,
   ]);
   const assistantScope = JSON.stringify([
     stream.apiUrl,
@@ -205,6 +211,28 @@ export function useWorkbenchClientCommands({
           status: parsed.clear ? 'cleared' : 'updated',
           key: parsed.key,
         };
+      }
+
+      if (commandKey === ASSISTANT_COMPOSER_INSERT_COMMAND) {
+        if (
+          stream.group ||
+          stream.runtimeScopeReady === false ||
+          !parentMessenger?.updateComposer
+        )
+          return unsupportedCommand(commandKey);
+        const input = parseComposerInsert(payload);
+        const catalog = input.skillNames?.length
+          ? await stream.client.assistants.getRuntimeCapabilities(
+              stream.assistantId,
+              { ...(stream.projectId ? { projectId: stream.projectId } : {}) },
+            )
+          : undefined;
+        const draft = composerInsertPayload(input, catalog);
+        if (currentContext.current !== context)
+          return { success: false, code: 'stale_context' };
+        await parentMessenger.updateComposer(draft);
+        await parentMessenger.focusComposer();
+        return { success: true, status: 'inserted' };
       }
 
       if (commandKey === ASSISTANT_CHAT_SEND_MESSAGE_COMMAND) {

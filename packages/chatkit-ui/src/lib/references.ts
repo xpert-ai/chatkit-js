@@ -14,6 +14,8 @@ import type { RuntimeCapabilitiesSelection } from './runtime-capabilities';
 
 export type ComposerValuePayload = {
   text?: string;
+  appendText?: boolean;
+  workspaceFiles?: { path: string; name: string; mimeType?: string; size?: number }[];
   reply?: string;
   attachments?: Attachment[];
   references?: ChatKitReference[];
