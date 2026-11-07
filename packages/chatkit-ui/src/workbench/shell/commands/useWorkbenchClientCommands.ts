@@ -1,5 +1,4 @@
 import {
-  ASSISTANT_COMPOSER_INSERT_COMMAND,
   parseComposerInsert,
   composerInsertPayload,
 } from '../../composer-insert';
@@ -13,6 +12,7 @@ import { ContentReview } from '../../content/ContentReview';
 import type { EditorLifecycle } from '../../editors/editor-lifecycle';
 import {
   ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
+  ASSISTANT_COMPOSER_INSERT_COMMAND,
   ASSISTANT_CONTEXT_SET_COMMAND,
   type XpertExtensionViewManifest,
   type XpertViewQuery,

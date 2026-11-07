@@ -1,20 +1,12 @@
-import type { RuntimeCapabilitiesResponse } from '@xpert-ai/xpert-sdk';
+import type {
+  AssistantComposerInsertPayload,
+  RuntimeCapabilitiesResponse,
+} from '@xpert-ai/xpert-sdk';
 import type { ComposerValuePayload } from '../lib/references';
 
-/** Shared View SDK command. Kept literal until the next SDK package release. */
-export const ASSISTANT_COMPOSER_INSERT_COMMAND = 'assistant.composer.insert';
-
-type Input = {
-  text: string;
-  workspaceFiles?: {
-    path: string;
-    name: string;
-    mimeType?: string;
-    size?: number;
-  }[];
-  skillNames?: string[];
-};
-export function parseComposerInsert(value: unknown): Input {
+export function parseComposerInsert(
+  value: unknown,
+): AssistantComposerInsertPayload {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -24,7 +16,7 @@ export function parseComposerInsert(value: unknown): Input {
     value.text.length > 32000
   )
     throw new Error('COMPOSER_INVALID_TEXT');
-  const result: Input = { text: value.text };
+  const result: AssistantComposerInsertPayload = { text: value.text };
   if ('skillNames' in value) {
     if (
       !Array.isArray(value.skillNames) ||
@@ -76,7 +68,7 @@ export function parseComposerInsert(value: unknown): Input {
   return result;
 }
 export function composerInsertPayload(
-  input: Input,
+  input: AssistantComposerInsertPayload,
   catalog?: RuntimeCapabilitiesResponse,
 ): ComposerValuePayload {
   const skills = (input.skillNames ?? []).map((name) => {
