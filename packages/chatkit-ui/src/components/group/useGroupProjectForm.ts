@@ -15,6 +15,7 @@ export type GroupProjectFormOptions = {
   projectClient: Pick<Client, 'projects'>;
   group: ChatGroupSnapshot;
   intent: GroupProjectIntent;
+  requiredParticipantIds?: string[];
   onSaved: (project: ChatGroupProject) => void;
 };
 
@@ -24,6 +25,7 @@ export function useGroupProjectForm({
   projectClient,
   group,
   intent,
+  requiredParticipantIds,
   onSaved,
 }: GroupProjectFormOptions) {
   const mounted = useRef(false);
@@ -44,6 +46,7 @@ export function useGroupProjectForm({
   const initialParticipantIds = useRef(
     owner ? members.map((member) => member.id) : [],
   );
+  const required = useRef(requiredParticipantIds ?? []);
   const [project, setProject] = useState<ChatGroupProject | null>(null);
   const [projectName, setProjectName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -52,6 +55,8 @@ export function useGroupProjectForm({
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [retry, setRetry] = useState(0);
+  const [reuseConfirmed, setReuseConfirmed] = useState(false);
+  const reusing = intent.mode === 'existing' && intent.reuse === true;
   useEffect(() => {
     const abort = new AbortController();
     setLoading(true);
@@ -75,7 +80,12 @@ export function useGroupProjectForm({
       if (abort.signal.aborted) return;
       setProject(bound);
       setProjectName(name);
-      setSelected(bound?.participantIds ?? initialParticipantIds.current);
+      setSelected([
+        ...new Set([
+          ...(bound?.participantIds ?? initialParticipantIds.current),
+          ...required.current,
+        ]),
+      ]);
       setReady(true);
     })()
       .catch((reason: unknown) => {
@@ -90,7 +100,15 @@ export function useGroupProjectForm({
   const changed =
     !project || selected.some((id) => !project.participantIds.includes(id));
   async function save() {
-    if (saving || loading || !ready || !owner || !selected.length || !changed)
+    if (
+      saving ||
+      loading ||
+      !ready ||
+      !owner ||
+      !selected.length ||
+      !changed ||
+      (reusing && !reuseConfirmed)
+    )
       return;
     const requestProject = project
       ? { mode: 'existing' as const, projectId: project.projectId }
@@ -125,6 +143,9 @@ export function useGroupProjectForm({
     error,
     selected,
     changed,
+    reusing,
+    reuseConfirmed,
+    setReuseConfirmed,
     save,
     retry: () => setRetry((value) => value + 1),
     selectMember: (id: string, checked: boolean) =>
