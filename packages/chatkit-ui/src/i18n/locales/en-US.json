@@ -385,6 +385,12 @@
             "redo": "Redo",
             "richText": "Rich text",
             "source": "Source"
+        },
+        "presentation": {
+            "operationDenied": "This action is unavailable in a shared resource.",
+            "unavailable": "This version or your access has changed. Reopen to check again.",
+            "retry": "Try again",
+            "loading": "Checking access…"
         }
     },
     "chat": {
@@ -1279,6 +1285,34 @@
         "commandFailed": "Could not complete the call action. Please retry."
     },
     "group": {
+        "artifacts": {
+            "title": "Shared resources",
+            "hint": "Fixed versions · Read only",
+            "loading": "Checking access…",
+            "retry": "Try again",
+            "failed": "Could not update shared resources. Refresh to try again.",
+            "unavailable": "This version or your access has changed. Reopen to check again.",
+            "operationDenied": "This action is unavailable in a shared resource.",
+            "empty": "No shared resources yet. An author can authorize this group from a published dashboard’s Share menu.",
+            "refresh": "Refresh",
+            "back": "Back to resources",
+            "version": "Version {{number}}",
+            "open": "Open",
+            "remove": "Remove reference",
+            "removeHint": "Remove “{{title}}” from this group? The source stays unchanged. A new authorization is required to add it again.",
+            "cancel": "Cancel",
+            "pending": "Awaiting acceptance",
+            "accept": "Accept reference",
+            "more": "Load more",
+            "untitled": "Published resource",
+            "analysisExplore": "Analysis within approved datasets",
+            "analysisBindings": "Query approved datasets",
+            "analysisAudience": "Results can be posted to all group members. The requester still needs source data permissions.",
+            "analysisLimits": "Up to {{rows}} rows per query",
+            "detailsAllowed": "Dataset detail rows allowed",
+            "aggregatesOnly": "Aggregated results only",
+            "acceptAnalysis": "Accept data analysis permissions (leave unchecked for view only)"
+        },
         "loadingMembers": "Loading members…",
         "details": "Group details",
         "closeDetails": "Close group details",

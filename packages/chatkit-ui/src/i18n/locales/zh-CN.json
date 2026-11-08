@@ -385,6 +385,12 @@
             "redo": "重做",
             "richText": "所见即所得",
             "source": "源码"
+        },
+        "presentation": {
+            "operationDenied": "共享资源不支持此操作。",
+            "unavailable": "版本或访问权限已变化，请重新打开检查。",
+            "retry": "重试",
+            "loading": "正在检查权限…"
         }
     },
     "chat": {
@@ -1279,6 +1285,34 @@
         "commandFailed": "通话操作未完成，请重试。"
     },
     "group": {
+        "artifacts": {
+            "title": "共享资源",
+            "hint": "固定版本 · 只读",
+            "loading": "正在检查权限…",
+            "retry": "重试",
+            "failed": "无法更新共享资源，请刷新后重试。",
+            "unavailable": "版本或访问权限已变化，请重新打开检查。",
+            "operationDenied": "共享资源不支持此操作。",
+            "empty": "暂无共享资源。创作者可在已发布看板的分享菜单中授权给本群。",
+            "refresh": "刷新",
+            "back": "返回资源列表",
+            "version": "正式版 v{{number}}",
+            "open": "打开",
+            "remove": "移除引用",
+            "removeHint": "从本群移除“{{title}}”？源看板保持不变，再次添加需要重新授权。",
+            "cancel": "取消",
+            "pending": "待接受授权",
+            "accept": "接受引用",
+            "more": "加载更多",
+            "untitled": "已发布资源",
+            "analysisExplore": "可在授权数据集内分析",
+            "analysisBindings": "可查询授权数据集",
+            "analysisAudience": "结果可发送给群内所有成员，发起成员仍需具备数据源权限。",
+            "analysisLimits": "每次查询最多 {{rows}} 行",
+            "detailsAllowed": "允许数据集明细行",
+            "aggregatesOnly": "仅允许汇总结果",
+            "acceptAnalysis": "接受数据分析权限（不勾选则仅接受查看权限）"
+        },
         "loadingMembers": "正在加载成员…",
         "details": "群组详情",
         "closeDetails": "关闭群组详情",
