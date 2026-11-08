@@ -72,7 +72,7 @@ function ResourceCard({
           fallback={<Box className="h-5 w-5 shrink-0 text-muted-foreground" />}
         />
         <div className="min-w-0 flex-1">
-          <div className="break-words font-medium text-foreground">
+          <div className="line-clamp-2 break-words font-medium text-foreground">
             {card.data.title}
           </div>
           {card.data.description && (
