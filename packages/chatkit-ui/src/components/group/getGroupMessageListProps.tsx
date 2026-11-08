@@ -1,5 +1,6 @@
 import type {
   ChatGroupMessage,
+  ChatGroupResourceLink,
   ChatGroupSnapshot,
   Client,
 } from '@xpert-ai/xpert-sdk';
@@ -21,6 +22,7 @@ export function getGroupMessageListProps({
   onReply,
   onError,
   onOpenRuntime,
+  onOpenResource,
 }: {
   t: ReturnType<typeof useChatkitTranslation>['t'];
   group: ChatGroupSnapshot;
@@ -28,6 +30,7 @@ export function getGroupMessageListProps({
   client: Client;
   onReply: (message: ChatGroupMessage) => void;
   onError: (error: unknown) => void;
+  onOpenResource?: (link: ChatGroupResourceLink) => void;
   onOpenRuntime?: (messageId: string, participantId: string) => void;
 }) {
   const member = (id: string) => group.members.find((item) => item.id === id);
@@ -80,10 +83,24 @@ export function getGroupMessageListProps({
           : undefined,
       isSelf: self,
       sendTransitionId: self ? message.clientMessageId : undefined,
-      after: (showTime || visibleDeliveries.length > 0 || canReply) && (
+      after: (showTime ||
+        visibleDeliveries.length > 0 ||
+        canReply ||
+        !!message.communication.resourceLinks?.length) && (
         <div
           className={`mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground ${self ? 'justify-end' : ''}`}
         >
+          {message.communication.resourceLinks?.map((link) => (
+            <Button
+              key={link.referenceId}
+              variant="outline"
+              className="w-full justify-start"
+              disabled={!onOpenResource}
+              onClick={() => onOpenResource?.(link)}
+            >
+              <span className="truncate">{link.title}</span>
+            </Button>
+          ))}
           {showTime && (
             <time dateTime={message.createdAt} className="w-full text-center">
               {new Date(message.createdAt).toLocaleTimeString([], {

@@ -21,6 +21,7 @@ export function applyGroupEvent(
   state: GroupState,
   event: ChatGroupEvent,
 ): GroupState {
+  if (event.type === 'resource_open') return state;
   if (event.type === 'resync') return { ...state, live: {} };
   if (event.type === 'text') {
     const previous = state.live[event.messageId];

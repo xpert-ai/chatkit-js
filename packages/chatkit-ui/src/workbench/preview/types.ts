@@ -3,6 +3,20 @@ import type { WorkbenchOpenFile } from '@xpert-ai/xpert-sdk';
 import type { FilePreviewSource } from '../../components/file-preview/types';
 import type { FileChangeReviewOptions } from '../file-review/types';
 
+import type { PresentationSource } from '../presentation/source';
+
+/** A resource presentation rendered through its authorized source in a Workbench tab. */
+export type PresentationWorkbenchPreview = {
+  /** Selects the generic presentation renderer; it conveys no resource permissions. */
+  kind: 'presentation';
+  /** Stable tab identity including its authorization scope, not just a resource ID. */
+  key: string;
+  /** Display label only; never used to resolve a resource or infer its type. */
+  title: string;
+  /** Owns credential binding and permission checks for every read and query. */
+  source: PresentationSource;
+};
+
 type PreviewIdentity = { key: string; title: string; edit?: () => void };
 
 export type UrlWorkbenchPreview = PreviewIdentity & {
@@ -34,6 +48,7 @@ export type HtmlWorkbenchPreview = PreviewIdentity & {
 
 /** Each source selects exactly one renderer; no optional-field precedence. */
 export type WorkbenchPreview =
+  | PresentationWorkbenchPreview
   | UrlWorkbenchPreview
   | ResourceFileWorkbenchPreview
   | SnapshotWorkbenchPreview

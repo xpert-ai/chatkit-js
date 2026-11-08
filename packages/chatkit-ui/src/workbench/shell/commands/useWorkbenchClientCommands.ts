@@ -449,13 +449,18 @@ export function useWorkbenchClientCommands({
         openExecution,
         openMessage,
         forward: async (request) => {
+          // Tab identities belong to local editor state; hosts authorize the registered View.
+          const hostRequest = {
+            ...request,
+            viewKey: contentViewKey(request.viewKey),
+          };
           const onClientCommand = options?.workbench?.onClientCommand;
           if (typeof onClientCommand === 'function')
-            return onClientCommand(request);
+            return onClientCommand(hostRequest);
           if (parentMessenger.isParentAvailable)
             return parentMessenger.sendCommand(
               'onWorkbenchClientCommand',
-              request,
+              hostRequest,
             );
           return unsupportedCommand(request.commandKey);
         },

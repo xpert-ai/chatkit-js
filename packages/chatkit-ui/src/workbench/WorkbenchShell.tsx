@@ -1,4 +1,8 @@
-import { workbenchAvailable, workbenchDisabledReason } from './shell/availability';
+import { isNativeView } from './shell/native-view';
+import {
+  workbenchAvailable,
+  workbenchDisabledReason,
+} from './shell/availability';
 import { EditorLifecycleContext, useEditorLifecycle } from './editors/context';
 import { useEditorTabClose } from './editors/useEditorTabClose';
 import { useWorkbenchFeedback } from './shell/useWorkbenchFeedback';
@@ -7,10 +11,12 @@ import { useGroupExecutionRecord } from './group/useGroupExecutionRecord';
 import { useWorkbenchEntryNavigation } from './shell/useWorkbenchEntryNavigation';
 import { useWorkbenchScopeReset } from './shell/useWorkbenchScopeReset';
 import { ResourceCardContext } from '../resource-cards/context';
-import { useWorkbenchResourceCardActions } from './resource-cards/useResourceCardActions';
-import type { ResourceCardOpenTarget } from '@xpert-ai/chatkit-types';
+import {
+  useResourceCardNavigation,
+  useWorkbenchResourceCardActions,
+} from './resource-cards/useResourceCardActions';
 import { useMessageFocus } from './useMessageFocus';
-import { createFileChangeReview } from './file-review/file-change-review';
+import { workbenchPreviewActions } from './shell/preview-actions';
 import type {
   XpertRemoteViewHostEventMessage,
   XpertViewQuery,
@@ -33,7 +39,7 @@ import {
   normalizeChatKitHostEvent,
 } from './host-events';
 import { workbenchLayoutKey } from './layout-storage';
-import { NATIVE_PREFIX, useNativeWorkbench } from './native/useNativeWorkbench';
+import { useNativeWorkbench } from './native/useNativeWorkbench';
 import { getErrorMessage } from './shell/commands/request-context';
 import {
   type WorkbenchAssistantContext,
@@ -63,11 +69,6 @@ export { useWorkbench, WorkbenchToggleButton } from './context';
 export { buildWorkbenchRequestContext } from './shell/commands/request-context';
 export { type WorkbenchAssistantContext } from './shell/types';
 
-const isNativeView = (key: string | null) =>
-  key === MAIN_CHAT_VIEW_KEY ||
-  key === SIDE_CHAT_VIEW_KEY ||
-  key === EXTERNAL_ASSISTANTS_VIEW_KEY ||
-  Boolean(key?.startsWith(NATIVE_PREFIX));
 const NARROW_BREAKPOINT = WORKBENCH_NARROW_BREAKPOINT;
 
 export function WorkbenchShell(props: WorkbenchShellProps) {
@@ -181,6 +182,7 @@ function WorkbenchContent({
     layoutKey,
     runtimeScope.projectId,
     runtimeScope.conversationId,
+    stream.group?.id,
   ]);
 
   const startPageScope = JSON.stringify([
@@ -262,8 +264,12 @@ function WorkbenchContent({
   } = useWorkbenchLayout(layoutKey, containerWidth, isNarrow);
 
   const { scopedViews, selectView, closeView } = useWorkbenchViewTabs({
-    views, queries: viewQueries, contentApi: stream.client.content,
-    contentScope: stream.projectId ? { assistantId: stream.assistantId, projectId: stream.projectId } : undefined,
+    views,
+    queries: viewQueries,
+    contentApi: stream.client.content,
+    contentScope: stream.projectId
+      ? { assistantId: stream.assistantId, projectId: stream.projectId }
+      : undefined,
     scope: layoutKey ?? '',
     enabled: remoteViewsEnabled && authenticated,
     projectId: stream.projectId,
@@ -578,7 +584,9 @@ function WorkbenchContent({
   useWorkbenchEntryNavigation({
     editors,
     contentApi: stream.client.content,
-    contentScope: stream.projectId ? { assistantId: stream.assistantId, projectId: stream.projectId } : undefined,
+    contentScope: stream.projectId
+      ? { assistantId: stream.assistantId, projectId: stream.projectId }
+      : undefined,
     initialNavigation,
     projectCreation,
     ready: !loading && viewsScope === viewScopeKey,
@@ -594,15 +602,27 @@ function WorkbenchContent({
   });
 
   const available = workbenchAvailable({
-    groupReady: Boolean(stream.group && stream.runtimeScopeReady), authenticated,
-    external: hasExternalRuns, enabled, assistantId: stream.assistantId,
-    sideChat: Boolean(sideChat), remoteViewsEnabled,
-    scopeReady: viewsScope === viewScopeKey, loading, count: views.length,
+    groupReady: Boolean(stream.group && stream.runtimeScopeReady),
+    authenticated,
+    external: hasExternalRuns,
+    enabled,
+    assistantId: stream.assistantId,
+    sideChat: Boolean(sideChat),
+    remoteViewsEnabled,
+    scopeReady: viewsScope === viewScopeKey,
+    loading,
+    count: views.length,
   });
 
   const disabledReason = workbenchDisabledReason({
-    external: hasExternalRuns, assistantId: stream.assistantId, authenticated,
-    loading, count: views.length, error, sideChatEnabled, t,
+    external: hasExternalRuns,
+    assistantId: stream.assistantId,
+    authenticated,
+    loading,
+    count: views.length,
+    error,
+    sideChatEnabled,
+    t,
   });
 
   const { askInSideChat, requestCloseSideChat, confirmCloseSideChat } =
@@ -622,19 +642,7 @@ function WorkbenchContent({
       setSideChatCloseConfirmationDisabled,
     });
 
-  const navigateResourceCard = React.useCallback(
-    (
-      target: ResourceCardOpenTarget,
-      origin: { messageId: string; id: string },
-    ) =>
-      executeClientCommand(
-        'workbench.navigation.open',
-        target,
-        { key: target.viewKey },
-        origin,
-      ),
-    [executeClientCommand],
-  );
+  const navigateResourceCard = useResourceCardNavigation(executeClientCommand);
   const resourceCardActions = useWorkbenchResourceCardActions({
     client: viewHosts,
     assistantId: stream.assistantId,
@@ -698,19 +706,16 @@ function WorkbenchContent({
           }
         : undefined,
       ...artifactActions,
-      openFileReview: (resource) => {
-        if (!enabled || !authenticated || !stream.conversationId) return false;
-        openPreview(
-          createFileChangeReview(
-            stream.client,
-            stream.conversationId,
-            resource,
-            t('fileActivity.review'),
-            openPreview,
-          ),
-        );
-        return true;
-      },
+      ...workbenchPreviewActions({
+        enabled,
+        authenticated,
+        stream,
+        openPreview,
+        removePreview,
+        activeViewKey,
+        setActiveViewKey,
+        reviewTitle: t('fileActivity.review'),
+      }),
       openProject: (projectId, viewKey) =>
         executeClientCommand(
           'workbench.navigation.open',
@@ -734,6 +739,7 @@ function WorkbenchContent({
     }),
     [
       artifactActions,
+      removePreview,
       stream.group,
       groupRecord.select,
       executeClientCommand,
@@ -792,11 +798,13 @@ function WorkbenchContent({
 
   const panel = (
     <WorkbenchPanel
-      onOpenProject={(projectId, viewKey) => executeClientCommand(
-        'workbench.navigation.open',
-        { target: 'assistant.project', projectId, viewKey },
-        { key: viewKey ?? 'chatkit.project-recovery' },
-      )}
+      onOpenProject={(projectId, viewKey) =>
+        executeClientCommand(
+          'workbench.navigation.open',
+          { target: 'assistant.project', projectId, viewKey },
+          { key: viewKey ?? 'chatkit.project-recovery' },
+        )
+      }
       tabOrder={tabKeys}
       mainChatHost={mainChatInWorkbench ? chatHost.attach : undefined}
       native={native}

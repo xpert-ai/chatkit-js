@@ -17,6 +17,12 @@ export function useWorkbenchOpenRequest(options: {
     null,
   );
   const { enabled, projectId, conversationId, ready, open } = options;
+  const mountedAt = React.useRef(Date.now());
+  const seen = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    mountedAt.current = Date.now();
+    setPending(null);
+  }, [projectId, conversationId, enabled]);
   React.useEffect(() => {
     if (!enabled) return;
     const receive = (event: Event) => {
@@ -34,7 +40,22 @@ export function useWorkbenchOpenRequest(options: {
       const [type, payload] = detail.data;
       if (type !== 'log' || payload?.name !== 'lg.chat.event') return;
       const request = parseWorkbenchViewOpenEvent(payload.data);
-      if (request) setPending(request);
+      if (!request) return;
+      if (request.requestId) {
+        if (
+          seen.current.has(request.requestId) ||
+          request.issuedAt === undefined ||
+          request.issuedAt < mountedAt.current ||
+          request.issuedAt > Date.now() + 5000
+        )
+          return;
+        seen.current.add(request.requestId);
+        if (seen.current.size > 1000) {
+          const oldest = seen.current.values().next();
+          if (!oldest.done) seen.current.delete(oldest.value);
+        }
+      }
+      setPending(request);
     };
     window.addEventListener(CHATKIT_INTERNAL_PARENT_EVENT, receive);
     return () =>

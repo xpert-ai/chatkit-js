@@ -133,3 +133,24 @@ export function useWorkbenchResourceCardActions(
     remember,
   ]);
 }
+
+/** Keep card navigation identity stable while the Workbench updates tab state. */
+export function useResourceCardNavigation(
+  execute: (
+    command: string,
+    target: ResourceCardOpenTarget,
+    manifest: { key: string },
+    origin: { messageId: string; id: string },
+  ) => Promise<unknown>,
+) {
+  return React.useCallback(
+    (target: NavigationTarget, origin: { messageId: string; id: string }) =>
+      execute(
+        'workbench.navigation.open',
+        target,
+        { key: target.viewKey },
+        origin,
+      ),
+    [execute],
+  );
+}

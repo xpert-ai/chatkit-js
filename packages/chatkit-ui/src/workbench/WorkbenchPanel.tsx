@@ -35,7 +35,6 @@ import type {
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type { WorkbenchRuntime } from './WorkbenchRuntime';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
-import { cn } from '../lib/utils';
 import { ExternalAssistantView } from './external-assistant/ExternalAssistantView';
 import {
   EXTERNAL_ASSISTANTS_VIEW_KEY,
@@ -364,7 +363,12 @@ export function WorkbenchPanel({
                   key={view.key}
                   view={view}
                   resourceId={viewQueries[view.key]?.selectionId}
-                  resourceTitle={typeof viewQueries[view.key]?.parameters?.contentTitle === 'string' ? String(viewQueries[view.key]?.parameters?.contentTitle) : undefined}
+                  resourceTitle={
+                    typeof viewQueries[view.key]?.parameters?.contentTitle ===
+                    'string'
+                      ? String(viewQueries[view.key]?.parameters?.contentTitle)
+                      : undefined
+                  }
                   locale={locale}
                   selected={selected}
                   onSelect={() => onSelect(view.key)}
@@ -405,7 +409,9 @@ export function WorkbenchPanel({
             role="alert"
             className="flex items-center gap-2 border-b px-3 py-2 text-sm text-destructive"
           >
-            <span className="flex-1">{t('workbench.projectRecovery.unavailable')}</span>
+            <span className="flex-1">
+              {t('workbench.projectRecovery.unavailable')}
+            </span>
             <button
               type="button"
               onClick={onReload}
@@ -574,7 +580,10 @@ export function WorkbenchPanel({
                 onNavigate={(next) => onNavigateBrowser?.(preview.key, next)}
               />
             ) : (
-              <WorkbenchPreviewContent preview={preview} />
+              <WorkbenchPreviewContent
+                preview={preview}
+                visible={activeViewKey === preview.key}
+              />
             )}
           </div>
         ))}
@@ -598,18 +607,47 @@ export function WorkbenchPanel({
               className="h-full min-h-0"
             >
               <RemoteViewFrame
-                renderProjectRecovery={view.clientCommands?.some(command => command.key === 'workbench.navigation.open') ? denied => (
-                  <ProjectViewRecovery
-                    key={JSON.stringify([hostId, runtimeScope.projectId, view.key])}
-                    client={stream.client} hostId={hostId} manifest={view} denied={denied}
-                    createEnabled={options?.composer?.projects?.createEnabled !== false}
-                    onRetry={onReload}
-                    onSelect={projectId => onClientCommand('workbench.navigation.open',
-                      { target: 'assistant.project', projectId, viewKey: contentViewKey(view.key) }, view)} />
-                ) : undefined}
+                renderProjectRecovery={
+                  view.clientCommands?.some(
+                    (command) => command.key === 'workbench.navigation.open',
+                  )
+                    ? (denied) => (
+                        <ProjectViewRecovery
+                          key={JSON.stringify([
+                            hostId,
+                            runtimeScope.projectId,
+                            view.key,
+                          ])}
+                          client={stream.client}
+                          hostId={hostId}
+                          manifest={view}
+                          denied={denied}
+                          createEnabled={
+                            options?.composer?.projects?.createEnabled !== false
+                          }
+                          onRetry={onReload}
+                          onSelect={(projectId) =>
+                            onClientCommand(
+                              'workbench.navigation.open',
+                              {
+                                target: 'assistant.project',
+                                projectId,
+                                viewKey: contentViewKey(view.key),
+                              },
+                              view,
+                            )
+                          }
+                        />
+                      )
+                    : undefined
+                }
                 visible={view.key === activeViewKey && visible}
                 instanceKey={view.key}
-                manifest={contentViewKey(view.key) === view.key ? view : { ...view, key: contentViewKey(view.key) }}
+                manifest={
+                  contentViewKey(view.key) === view.key
+                    ? view
+                    : { ...view, key: contentViewKey(view.key) }
+                }
                 hostId={hostId}
                 runtimeScope={runtimeScope}
                 contextReady={contextReady}
@@ -618,7 +656,12 @@ export function WorkbenchPanel({
                 hostEvent={hostEvent}
                 viewHosts={viewHosts}
                 onNotify={onNotify}
-                onClientCommand={(command, payload, manifest) => onClientCommand(command, payload, { ...manifest, key: view.key })}
+                onClientCommand={(command, payload, manifest) =>
+                  onClientCommand(command, payload, {
+                    ...manifest,
+                    key: view.key,
+                  })
+                }
                 initialQuery={viewQueries[view.key]}
               />
             </div>
@@ -643,9 +686,13 @@ export function WorkbenchPanel({
         ) : error && onOpenProject ? (
           <ProjectViewRecovery
             key={JSON.stringify([hostId, runtimeScope.projectId])}
-            client={stream.client} hostId={hostId} denied onRetry={onReload}
+            client={stream.client}
+            hostId={hostId}
+            denied
+            onRetry={onReload}
             createEnabled={options?.composer?.projects?.createEnabled !== false}
-            onSelect={projectId => onOpenProject(projectId)} />
+            onSelect={(projectId) => onOpenProject(projectId)}
+          />
         ) : error ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
             <p className="text-sm text-destructive">{error}</p>
