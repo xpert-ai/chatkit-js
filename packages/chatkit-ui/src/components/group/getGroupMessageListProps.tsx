@@ -1,3 +1,5 @@
+import { GroupMessageDisplay } from './GroupMessageDisplay';
+import { groupDisplays } from './group-display';
 import type {
   ChatGroupMessage,
   ChatGroupResourceLink,
@@ -11,6 +13,7 @@ import type { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { MessageListProps } from '../thread/MessageList';
 import { Button } from '../ui/button';
 import type { GroupState } from './group-state';
+import type { ResourceCardActions } from '../../resource-cards/types';
 
 const MESSAGE_TIME_GAP_MS = 5 * 60 * 1000;
 
@@ -23,6 +26,7 @@ export function getGroupMessageListProps({
   onError,
   onOpenRuntime,
   onOpenResource,
+  onOpenResourceCard,
 }: {
   t: ReturnType<typeof useChatkitTranslation>['t'];
   group: ChatGroupSnapshot;
@@ -31,6 +35,7 @@ export function getGroupMessageListProps({
   onReply: (message: ChatGroupMessage) => void;
   onError: (error: unknown) => void;
   onOpenResource?: (link: ChatGroupResourceLink) => void;
+  onOpenResourceCard?: ResourceCardActions['openResourceCard'];
   onOpenRuntime?: (messageId: string, participantId: string) => void;
 }) {
   const member = (id: string) => group.members.find((item) => item.id === id);
@@ -42,6 +47,7 @@ export function getGroupMessageListProps({
   const context: NonNullable<MessageListProps['messageContext']> = {};
   const messages: ChatkitMessage[] = group.messages.map((message, index) => {
     const author = member(message.communication.senderId);
+    const display = author?.kind === 'assistant' ? groupDisplays(message) : [];
     const self = author?.id === group.viewerParticipantId;
     const next = group.messages[index + 1];
     const gap = next
@@ -66,6 +72,7 @@ export function getGroupMessageListProps({
           item.communication.senderId === group.viewerParticipantId,
       );
     context[message.id] = {
+      hasRenderableContent: display.length > 0,
       actor: {
         id: message.communication.senderId,
         kind: author?.kind ?? 'unknown',
@@ -83,6 +90,13 @@ export function getGroupMessageListProps({
           : undefined,
       isSelf: self,
       sendTransitionId: self ? message.clientMessageId : undefined,
+      contentAfter: display.length > 0 && (
+        <GroupMessageDisplay
+          messageId={message.id}
+          blocks={display}
+          onOpenResourceCard={onOpenResourceCard}
+        />
+      ),
       after: (showTime ||
         visibleDeliveries.length > 0 ||
         canReply ||

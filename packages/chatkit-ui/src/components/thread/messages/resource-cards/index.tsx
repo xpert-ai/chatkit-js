@@ -28,16 +28,20 @@ export function messageResourceCards(
 function ResourceCard({
   card,
   messageId,
+  disabledReason,
+  openLabel: customOpenLabel,
 }: {
   card: TMessageContentResourceCard;
   messageId: string;
+  disabledReason?: string;
+  openLabel?: string;
 }) {
   const actions = useResourceCardActions();
   const { t } = useChatkitTranslation();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const available = !!actions.openResourceCard;
-  const openLabel = t('resourceCard.open');
+  const openLabel = customOpenLabel ?? t('resourceCard.open');
   const open = async () => {
     if (!available || busy) return;
     setBusy(true);
@@ -47,11 +51,12 @@ function ResourceCard({
       if (!result.success) {
         const code = result.code;
         setError(
-          t(
-            code === 'forbidden'
-              ? 'resourceCard.forbidden'
-              : 'resourceCard.unavailable',
-          ),
+          result.message ??
+            t(
+              code === 'forbidden'
+                ? 'resourceCard.forbidden'
+                : 'resourceCard.unavailable',
+            ),
         );
       }
     } catch {
@@ -102,7 +107,7 @@ function ResourceCard({
       )}
       {!available && (
         <p className="mt-2 text-sm text-muted-foreground">
-          {t('resourceCard.disabled')}
+          {disabledReason ?? t('resourceCard.disabled')}
         </p>
       )}
       {error && (
@@ -116,8 +121,14 @@ function ResourceCard({
 
 export function MessageResourceCards({
   message,
+  disabledReason,
+  openLabel,
 }: {
   message: ChatkitMessage;
+  /** Context-specific explanation when this card has no opening action. */
+  disabledReason?: string;
+  /** Describes the actual destination, e.g. a group's authorized published version. */
+  openLabel?: string;
   mode?: MessagePresentationMode;
   isStreaming?: boolean;
 }) {
@@ -128,6 +139,8 @@ export function MessageResourceCards({
       {cards.map((card) => (
         <ResourceCard
           key={card.id}
+          disabledReason={disabledReason}
+          openLabel={openLabel}
           card={card}
           messageId={card.messageId ?? message.id}
         />

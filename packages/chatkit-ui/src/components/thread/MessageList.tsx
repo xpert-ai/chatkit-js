@@ -126,7 +126,17 @@ export type MessageListProps = {
       sendTransitionId?: string;
       streaming?: boolean;
       before?: ReactNode;
+      /** Substantive results aligned with the message body, before its actions. */
+      contentAfter?: ReactNode;
+      /** Full-width timeline metadata such as delivery status and timestamps. */
       after?: ReactNode;
+      /**
+       * Trusted context supplies visible message content through its slots, even
+       * when message.content is empty. Set only for substantive content such as
+       * validated result cards, never for timestamps or delivery metadata alone.
+       * Keeps that Assistant row through empty-message filtering.
+       */
+      hasRenderableContent?: boolean;
     }
   >;
   approval?: ReactNode;
@@ -327,6 +337,7 @@ export function MessageList({
           if (
             isAssistantMessage &&
             !hasRenderableAssistantMessage(message as ChatkitMessage) &&
+            !context?.hasRenderableContent &&
             !(message as AssistantMessageWithAgentRuns).agentRuns?.length &&
             !streamingStatus &&
             !(bubbles && getBubbleCompletionStatus(message.status)) &&
@@ -654,6 +665,7 @@ export function MessageList({
                         </SendTransitionContent>
                       )}
                     </div>
+                    {context?.contentAfter}
                     {/* Message actions - hidden during streaming, retry only for last AI message */}
                     {showActions && (
                       <MessageActions

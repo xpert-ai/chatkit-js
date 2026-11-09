@@ -394,6 +394,7 @@
         }
     },
     "chat": {
+        "widgetDetails": "查看详情",
         "title": "聊天",
         "placeholder": "今天帮你做些什么？ @ 引用对话，/ 调用技能与指令",
         "statusOnline": "在线",
@@ -1285,6 +1286,15 @@
         "commandFailed": "通话操作未完成，请重试。"
     },
     "group": {
+        "resultSnapshotLabel": "结果快照",
+        "resultSnapshot": "此内容为结果快照。打开资源时会校验你的群聊访问权限，并展示本群获授权的版本。",
+        "snapshotResource": {
+            "open": "打开授权版本",
+            "disabled": "此卡片为结果快照，暂不支持从这里打开原资源。",
+            "unavailable": "本群没有该资源的可用授权。请在“共享资源”中确认已接受授权，且授权仍有效。",
+            "ambiguous": "本群有该资源的多个授权版本，请在“共享资源”中选择要打开的版本。",
+            "failed": "未能打开授权资源。请刷新“共享资源”确认访问权限后重试。"
+        },
         "artifacts": {
             "title": "共享资源",
             "hint": "固定版本 · 只读",

@@ -1,4 +1,5 @@
 import { useGroupResourceNavigation } from './artifacts/useGroupResourceNavigation';
+import { useGroupResourceCardActions } from './artifacts/useGroupResourceCardActions';
 import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import {
   editMentions,
@@ -267,6 +268,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     consume: consumeResourceRequest,
     onError: () => fail(t('group.artifacts.unavailable')),
   });
+  const openResourceCard = useGroupResourceCardActions(client, groupId);
   const headerActions = useGroupHeaderActions({
     options: props.options,
     group,
@@ -481,6 +483,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
             live: state.live,
             client: client,
             onError: fail,
+            onOpenResourceCard: openResourceCard,
             onOpenResource: workbench.openPresentation
               ? (link) => {
                   void openResource(link);
