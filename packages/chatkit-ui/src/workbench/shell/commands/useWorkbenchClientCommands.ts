@@ -424,6 +424,9 @@ export function useWorkbenchClientCommands({
         },
         prepareLeave: () => editors.prepare(),
         apiUrl: stream.apiUrl,
+        group: stream.group
+          ? { id: stream.group.id, threadId: stream.threadId }
+          : undefined,
         resolveFile: (resource) =>
           filePreviews.open(resource, {
             hostId: stream.assistantId,

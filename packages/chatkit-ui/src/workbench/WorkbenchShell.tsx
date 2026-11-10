@@ -496,8 +496,12 @@ function WorkbenchContent({
 
   const openMessage = useMessageFocus({
     ...executionFocusOptions,
-    conversationId: stream.conversationId,
-    scope: JSON.stringify([stream.apiUrl, stream.organizationId]),
+    conversationId: stream.group?.id ?? stream.conversationId,
+    scope: JSON.stringify([
+      stream.apiUrl,
+      stream.organizationId,
+      stream.group?.id,
+    ]),
     unavailableMessage: t('workbench.messageUnavailable'),
     historyError:
       stream.historyLoad?.status === 'error'
