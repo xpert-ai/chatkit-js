@@ -706,6 +706,14 @@ function WorkbenchContent({
           }
         : undefined,
       ...artifactActions,
+      openResource: (resource, options) =>
+        executeClientCommand(
+          'workbench.resource.open',
+          resource,
+          { key: 'chatkit.resource' },
+          undefined,
+          options?.signal,
+        ),
       ...workbenchPreviewActions({
         enabled,
         authenticated,

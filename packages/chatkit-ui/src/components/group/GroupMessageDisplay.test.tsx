@@ -10,7 +10,7 @@ import { ThemeProvider } from '../../providers/Theme';
 import type { ChatGroupSnapshot, Client } from '@xpert-ai/xpert-sdk';
 
 const app = {
-  type: 'component',
+  type: 'component' as const,
   id: 'app',
   data: {
     type: 'McpApp',
@@ -20,7 +20,7 @@ const app = {
   },
 };
 const card = {
-  type: 'resource_card',
+  type: 'resource_card' as const,
   id: 'card',
   messageId: 'private-message',
   data: {
@@ -31,7 +31,7 @@ const card = {
 };
 const widget = {
   id: 'widget',
-  type: 'component',
+  type: 'component' as const,
   data: {
     type: 'Widget',
     widgets: [
@@ -146,7 +146,7 @@ describe('group result snapshots', () => {
         widget,
         { type: 'reasoning', text: 'private' },
         {
-          type: 'component',
+          type: 'component' as const,
           id: 'tool',
           data: { category: 'Tool', output: 'private' },
         },

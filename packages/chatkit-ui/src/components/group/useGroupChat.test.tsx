@@ -16,7 +16,25 @@ it('accepts navigation only for a message sent from this client and deduplicates
     'fetch',
     vi.fn<typeof fetch>().mockImplementation(async (_url, init) =>
       init?.method === 'POST'
-        ? new Response(JSON.stringify({ id: 'message' }), { status: 200 })
+        ? new Response(
+            JSON.stringify({
+              id: 'message',
+              clientMessageId: 'client',
+              sequence: 1,
+              text: 'Open Inventory',
+              createdAt: '2026-11-10T00:00:00Z',
+              deliveries: [],
+              communication: {
+                intent: 'request',
+                senderId: 'viewer',
+                recipientIds: [],
+                rootMessageId: 'message',
+                rootUserId: 'viewer',
+                hop: 0,
+              },
+            }),
+            { status: 200 },
+          )
         : new Response(stream, {
             headers: { 'content-type': 'text/event-stream' },
           }),
@@ -32,7 +50,7 @@ it('accepts navigation only for a message sent from this client and deduplicates
   const request = {
     requestId: crypto.randomUUID(),
     clientMessageId: crypto.randomUUID(),
-    referenceId: crypto.randomUUID(),
+    resource: { kind: 'group-reference' as const, id: crypto.randomUUID() },
     projectId: crypto.randomUUID(),
     title: 'Inventory',
   };

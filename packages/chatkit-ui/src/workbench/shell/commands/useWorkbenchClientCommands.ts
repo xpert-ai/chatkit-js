@@ -45,6 +45,7 @@ import {
   buildWorkbenchRequestContext,
   getErrorMessage,
 } from './request-context';
+import { resolveWorkbenchResource } from '../../resources/resolve-resource';
 
 type WorkbenchClientCommandsOptions = {
   editors: EditorLifecycle;
@@ -111,6 +112,7 @@ export function useWorkbenchClientCommands({
     stream.projectId,
     stream.conversationId,
     stream.threadId,
+    stream.group?.id,
   ]);
   const assistantScope = JSON.stringify([
     stream.apiUrl,
@@ -152,15 +154,58 @@ export function useWorkbenchClientCommands({
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
   }, [onRequestContextChange, contextsRef]);
 
+  const mounted = React.useRef(true);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const executeClientCommand = React.useCallback(
     async (
       commandKey: string,
       payload: unknown,
       manifest: Pick<XpertExtensionViewManifest, 'key'>,
       resourceCard?: { messageId: string; id: string },
+      signal?: AbortSignal,
     ): Promise<unknown> => {
       const context = currentContext.current;
       const userActivated = navigator.userActivation?.isActive === true;
+      if (commandKey === 'workbench.resource.open') {
+        if (stream.runtimeScopeReady === false || !stream.projectId)
+          return { success: false, code: 'resource_unavailable' };
+        try {
+          const resolved = await resolveWorkbenchResource(payload, {
+            client: stream.client,
+            assistantId: stream.assistantId,
+            projectId: stream.projectId,
+            groupId: stream.group?.id,
+            signal,
+            isCurrent: () =>
+              mounted.current &&
+              currentContext.current === context &&
+              fileScopeReady.current,
+          });
+          if (resolved.kind === 'content')
+            return executeClientCommand(
+              'workbench.navigation.open',
+              resolved.navigation,
+              manifest,
+            );
+          openPreview(resolved.preview);
+          setOpen(true);
+          return { success: true, status: 'opened' };
+        } catch {
+          return {
+            success: false,
+            code:
+              currentContext.current === context
+                ? 'resource_unavailable'
+                : 'stale_context',
+          };
+        }
+      }
       if (isContentCommand(commandKey)) {
         if (
           stream.runtimeScopeReady === false ||

@@ -25,10 +25,7 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 import { GroupMembers } from './GroupMembers';
-import {
-  groupArtifactPreview,
-  groupArtifactTabKey,
-} from './artifacts/group-artifact-presentation';
+import { groupArtifactTabKey } from './artifacts/group-artifact-presentation';
 import { GroupArtifacts } from './artifacts/GroupArtifacts';
 import { ToolbarButton } from '../ui/toolbar-button';
 import { GroupAvatar } from './GroupAvatar';
@@ -484,7 +481,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
             client: client,
             onError: fail,
             onOpenResourceCard: openResourceCard,
-            onOpenResource: workbench.openPresentation
+            onOpenResource: workbench.openResource
               ? (link) => {
                   void openResource(link);
                 }
@@ -754,9 +751,11 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
             client={client}
             group={group}
             onOpen={(reference) => {
-              workbench.openPresentation?.(
-                groupArtifactPreview(client, group.id, reference),
-              );
+              void openResource({
+                resource: { kind: 'group-reference', id: reference.id },
+                projectId: reference.runtimeProjectId,
+                title: reference.title,
+              });
               setArtifactsOpen(false);
             }}
             onRemove={(reference) =>

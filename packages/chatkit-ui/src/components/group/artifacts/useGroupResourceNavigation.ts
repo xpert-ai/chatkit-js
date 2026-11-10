@@ -6,9 +6,8 @@ import type {
 } from '@xpert-ai/xpert-sdk';
 import { useWorkbenchRuntime } from '../../../workbench/WorkbenchRuntime';
 import { useWorkbench } from '../../../workbench/context';
-import { groupArtifactPreview } from './group-artifact-presentation';
 
-/** Group credentials and reference resolution stay outside the generic Workbench presentation layer. */
+/** Group messages only coordinate live delivery and cancellation; Workbench owns resource resolution. */
 export function useGroupResourceNavigation({
   client,
   groupId,
@@ -22,55 +21,70 @@ export function useGroupResourceNavigation({
   consume?: (requestId: string) => void;
   onError: (error: unknown) => void;
 }) {
-  const { openPresentation } = useWorkbench();
+  const { openResource } = useWorkbench();
   const runtime = useWorkbenchRuntime();
   const consumed = useRef(new Set<string>());
   const pending = useRef<AbortController | null>(null);
-  useEffect(() => () => pending.current?.abort(), [client, groupId]);
-  const active = useRef({ client, groupId });
-  active.current = { client, groupId };
+  useEffect(
+    () => () => pending.current?.abort(),
+    [client, groupId, runtime?.projectId],
+  );
+  const active = useRef({ client, groupId, projectId: runtime?.projectId });
+  active.current = { client, groupId, projectId: runtime?.projectId };
   const open = useCallback(
     async (link: ChatGroupResourceLink) => {
       const scope = active.current;
-      if (!openPresentation) return;
+      if (
+        !runtime?.runtimeScopeReady ||
+        runtime.projectId !== link.projectId ||
+        !openResource
+      )
+        return;
       pending.current?.abort();
       const controller = new AbortController();
       pending.current = controller;
       try {
-        const view = await client.groups.artifacts.read(
-          groupId,
-          link.referenceId,
-          { signal: controller.signal },
-        );
-        if (controller.signal.aborted) return;
+        const result = await openResource(link.resource, {
+          signal: controller.signal,
+        });
         if (
+          controller.signal.aborted ||
           active.current.client !== scope.client ||
-          active.current.groupId !== scope.groupId
+          active.current.groupId !== scope.groupId ||
+          active.current.projectId !== scope.projectId
         )
           return;
         if (
-          view.reference.groupId !== groupId ||
-          view.reference.id !== link.referenceId ||
-          view.reference.runtimeProjectId !== link.projectId
+          !result ||
+          typeof result !== 'object' ||
+          !('success' in result) ||
+          result.success !== true
         )
-          throw new Error('Resource reference changed');
-        openPresentation(groupArtifactPreview(client, groupId, view.reference));
+          throw new Error('Resource could not be opened');
       } catch (error) {
         if (
           !controller.signal.aborted &&
           active.current.client === scope.client &&
-          active.current.groupId === scope.groupId
+          active.current.groupId === scope.groupId &&
+          active.current.projectId === scope.projectId
         )
           onError(error);
       }
     },
-    [client, groupId, openPresentation, onError],
+    [
+      client,
+      groupId,
+      openResource,
+      runtime?.runtimeScopeReady,
+      runtime?.projectId,
+      onError,
+    ],
   );
   useEffect(() => {
     if (
       !request ||
       !consume ||
-      !openPresentation ||
+      !openResource ||
       !runtime?.runtimeScopeReady ||
       consumed.current.has(request.requestId)
     )
@@ -82,7 +96,7 @@ export function useGroupResourceNavigation({
     request,
     consume,
     open,
-    openPresentation,
+    openResource,
     runtime?.runtimeScopeReady,
     runtime?.projectId,
   ]);

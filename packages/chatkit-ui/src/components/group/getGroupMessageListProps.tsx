@@ -106,7 +106,7 @@ export function getGroupMessageListProps({
         >
           {message.communication.resourceLinks?.map((link) => (
             <Button
-              key={link.referenceId}
+              key={`${link.resource.kind}:${link.resource.id}`}
               variant="outline"
               className="w-full justify-start"
               disabled={!onOpenResource}
