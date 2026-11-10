@@ -1286,6 +1286,10 @@
         "commandFailed": "Could not complete the call action. Please retry."
     },
     "group": {
+        "resourceCard": {
+            "project": "Project resource",
+            "shared": "Shared resource · Fixed version · Read only"
+        },
         "resultSnapshotLabel": "Result snapshot",
         "resultSnapshot": "This is a result snapshot. Opening a resource checks your group access and shows the version authorized for this group.",
         "snapshotResource": {

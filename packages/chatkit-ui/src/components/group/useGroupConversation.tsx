@@ -481,11 +481,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
             client: client,
             onError: fail,
             onOpenResourceCard: openResourceCard,
-            onOpenResource: workbench.openResource
-              ? (link) => {
-                  void openResource(link);
-                }
-              : undefined,
+            onOpenResource: workbench.openResource ? openResource : undefined,
             onOpenRuntime: workbench.openGroupAssistant
               ? (messageId, participantId) =>
                   workbench.openGroupAssistant?.({ messageId, participantId })

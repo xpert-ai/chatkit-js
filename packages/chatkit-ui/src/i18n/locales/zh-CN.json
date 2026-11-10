@@ -1286,6 +1286,10 @@
         "commandFailed": "通话操作未完成，请重试。"
     },
     "group": {
+        "resourceCard": {
+            "project": "项目资源",
+            "shared": "共享资源 · 固定版本 · 只读"
+        },
         "resultSnapshotLabel": "结果快照",
         "resultSnapshot": "此内容为结果快照。打开资源时会校验你的群聊访问权限，并展示本群获授权的版本。",
         "snapshotResource": {

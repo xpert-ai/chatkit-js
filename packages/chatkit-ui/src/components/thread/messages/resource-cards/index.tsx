@@ -11,6 +11,7 @@ import { useResourceCardActions } from '../../../../resource-cards/context';
 import { useChatkitTranslation } from '../../../../i18n/useChatkitTranslation';
 import { IconDefinitionRenderer } from '../../../ui/icon-definition';
 import { ResourceCardBlocks } from './content';
+import { ResourceCardLayout } from './layout';
 
 export function messageResourceCards(
   message: Pick<ChatkitMessage, 'content'>,
@@ -66,26 +67,17 @@ function ResourceCard({
     }
   };
   return (
-    <div
-      className="rounded-chat-panel border border-border bg-card px-4 py-3"
-      data-testid="resource-card"
-    >
-      <div className="flex items-center gap-3">
+    <ResourceCardLayout
+      title={card.data.title}
+      description={card.data.description}
+      icon={
         <IconDefinitionRenderer
           icon={card.data.icon}
           size={22}
           fallback={<Box className="h-5 w-5 shrink-0 text-muted-foreground" />}
         />
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 break-words font-medium text-foreground">
-            {card.data.title}
-          </div>
-          {card.data.description && (
-            <div className="mt-1 whitespace-pre-line break-words text-sm text-muted-foreground">
-              {card.data.description}
-            </div>
-          )}
-        </div>
+      }
+      action={
         <button
           type="button"
           onClick={open}
@@ -98,7 +90,8 @@ function ResourceCard({
           )}
           {openLabel}
         </button>
-      </div>
+      }
+    >
       {!!card.data.content?.length && (
         <ResourceCardBlocks
           content={card.data.content}
@@ -115,7 +108,7 @@ function ResourceCard({
           {error}
         </p>
       )}
-    </div>
+    </ResourceCardLayout>
   );
 }
 
