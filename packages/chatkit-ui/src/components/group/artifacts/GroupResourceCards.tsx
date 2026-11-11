@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ChatGroupResourceLink } from '@xpert-ai/xpert-sdk';
+import type { ChatGroupResourceLink, IconDefinition } from '@xpert-ai/xpert-sdk';
 import { Box, Loader2, Share2 } from 'lucide-react';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { Button } from '../../ui/button';
@@ -10,11 +10,14 @@ export type OpenGroupResource = (
   link: ChatGroupResourceLink,
 ) => void | Promise<void>;
 
+// The host can include a display icon on links returned with SDK 0.23.
+type GroupResourceCardLink = ChatGroupResourceLink & { icon?: IconDefinition };
+
 function GroupResourceCard({
   link,
   onOpen,
 }: {
-  link: ChatGroupResourceLink;
+  link: GroupResourceCardLink;
   onOpen?: OpenGroupResource;
 }) {
   const { t } = useChatkitTranslation();
@@ -92,7 +95,7 @@ export function GroupResourceCards({
   links,
   onOpen,
 }: {
-  links: ChatGroupResourceLink[];
+  links: GroupResourceCardLink[];
   onOpen?: OpenGroupResource;
 }) {
   return (
