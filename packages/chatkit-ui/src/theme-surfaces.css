@@ -155,28 +155,44 @@
     min-width: 2.75rem;
   }
 }
+[data-slot='composer-primary-panel'],
+[data-slot='composer-secondary-panel'],
 [data-slot='composer-input-shell'] {
-  /* At a 16px root: controls are 28/32/36px with 4/6/8px vertical padding. */
+  /* At a 16px root: controls are 28/32/36px across the three densities. */
   --composer-control-height: calc(1rem + 1rem * var(--chat-density-scale, 1));
-  --composer-context-padding: calc(
-    0.5rem * var(--chat-density-scale, 1) - 0.125rem
-  );
   --composer-control-padding-inline: calc(
     0.125rem + 0.5rem * var(--chat-density-scale, 1)
   );
   --composer-control-gap: calc(
     0.125rem + 0.25rem * var(--chat-density-scale, 1)
   );
+}
+[data-slot='composer-secondary-panel'] {
+  --composer-row-padding: calc(0.375rem * var(--chat-density-scale, 1));
+}
+[data-slot='composer-input-shell'] {
+  --composer-context-padding: calc(
+    0.5rem * var(--chat-density-scale, 1) - 0.125rem
+  );
   --composer-action-size: calc(var(--composer-control-height) + 0.25rem);
   --composer-action-inset: calc(0.75rem * var(--chat-density-scale, 1));
 }
-[data-slot='composer-input-shell'] [data-slot='composer-editor-surface'] {
-  /* Both layers derive their shape and colors from the existing ChatKit theme. */
+[data-slot='composer-primary-panel'] > [role='menuitem'],
+[data-slot='composer-secondary-panel'] [role='switch'],
+[data-slot='composer-panel-back'] {
+  min-height: max(24px, var(--composer-control-height));
+  gap: var(--composer-control-gap);
+  padding: calc(0.25rem * var(--chat-density-scale, 1))
+    var(--composer-control-padding-inline);
+}
+[data-slot='composer-input-shell'] :is([data-slot='composer-editor-surface'], [data-slot='slash-palette']) {
   border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
   border-radius: min(
     calc(var(--chat-panel-radius, var(--radius)) * 2),
     calc(var(--chat-panel-radius, var(--radius)) + var(--radius))
   );
+}
+[data-slot='composer-input-shell'] [data-slot='composer-editor-surface'] {
   min-height: calc(8rem * var(--chat-density-scale, 1));
   padding: calc(0.625rem * var(--chat-density-scale, 1));
   /* Reserve the action row and its spacing below the text. */

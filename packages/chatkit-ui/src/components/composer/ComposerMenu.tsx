@@ -1,23 +1,18 @@
 import * as React from 'react';
 import {
   ArrowLeft,
-  Bot,
-  ChevronRight,
   FileText,
   Globe,
   Images,
   Info,
   Lightbulb,
   ListChecks,
-  Paperclip,
   Pencil,
-  Plug,
   Plus,
   Search,
   SlidersHorizontal,
   Sparkles,
   Target,
-  WandSparkles,
   X,
 } from 'lucide-react';
 import type {
@@ -41,7 +36,6 @@ import {
 } from '../../lib/runtime-capabilities';
 import {
   cn,
-  getMenuItemRoundedClass,
   getPanelRoundedClass,
 } from '../../lib/utils';
 import { useTheme } from '../../providers/Theme';
@@ -59,8 +53,11 @@ import {
 import { Input } from '../ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ConnectorMenuPanel } from './ConnectorMenuPanel';
-
-type ComposerPanel = 'targets' | 'experts' | 'skills' | 'connectors';
+import {
+  ComposerMenuPrimaryPanel,
+  type ComposerPanel,
+  type PanelActivation,
+} from './ComposerMenuPrimaryPanel';
 
 const COMPOSER_MENU_EXPANDED_WIDTH_REM = 33;
 const COMPOSER_MENU_COLLISION_PADDING = 12;
@@ -114,14 +111,14 @@ function Toggle({ checked }: { checked: boolean }) {
     <span
       aria-hidden="true"
       className={cn(
-        'relative inline-flex h-6 w-10 shrink-0 items-center rounded-chat-item transition-colors',
+        'grid w-[calc(1.25rem+1rem*var(--chat-density-scale,1))] shrink-0 grid-cols-2 rounded-chat-item p-0.5 transition-colors',
         checked ? 'bg-primary' : 'bg-muted-foreground/20',
       )}
     >
       <span
         className={cn(
-          'inline-block h-5 w-5 rounded-chat-item bg-background shadow-sm transition-transform',
-          checked ? 'translate-x-[18px]' : 'translate-x-0.5',
+          'aspect-square w-full rounded-chat-item bg-background shadow-sm transition-transform',
+          checked && 'translate-x-full',
         )}
       />
     </span>
@@ -164,9 +161,15 @@ export function ComposerMenu({
     React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
 
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const focusSearchOnOpen = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (focusSearchOnOpen.current) searchInputRef.current?.focus();
+    focusSearchOnOpen.current = false;
+  }, [activePanel]);
+
   const roundedClass = 'rounded-chat-item';
   const panelRoundedClass = getPanelRoundedClass(theme.radius);
-  const menuItemRoundedClass = getMenuItemRoundedClass(theme.radius);
   const attachmentsEnabled = composer?.attachments?.enabled ?? false;
   const tools = composer?.tools ?? [];
   const skills = runtimeCapabilities?.skills ?? [];
@@ -190,7 +193,12 @@ export function ComposerMenu({
     setOpen(nextOpen);
   };
 
-  const choosePanel = (panel: ComposerPanel) => {
+  const choosePanel = (panel: ComposerPanel, activation: PanelActivation) => {
+    if (panel === activePanel) {
+      if (activation === 'select') searchInputRef.current?.focus();
+      return;
+    }
+    focusSearchOnOpen.current = activation === 'select';
     setActivePanel(panel);
     setQuery('');
   };
@@ -408,20 +416,20 @@ export function ComposerMenu({
         <DropdownMenuCheckboxItem
           key={skill.id}
           checked={selected}
+          indicator="check"
           onCheckedChange={(checked) =>
             onRuntimeCapabilityToggle?.('skill', skill.id, checked === true)
           }
           onSelect={(event) => event.preventDefault()}
           className={cn(
-            'gap-3 p-1.5 pr-9',
+            'gap-(--composer-control-gap) py-(--composer-row-padding) pr-7',
             skillDescription ? 'items-start' : 'items-center',
-            menuItemRoundedClass,
             selected && 'bg-muted',
           )}
         >
           <span
             className={cn(
-              'flex size-7 shrink-0 items-center justify-center text-muted-foreground',
+              'flex size-5 shrink-0 items-center justify-center text-muted-foreground',
               skillDescription && 'mt-0.5',
             )}
           >
@@ -476,6 +484,7 @@ export function ComposerMenu({
               <DropdownMenuCheckboxItem
                 key={subAgent.nodeKey}
                 checked={selected}
+                indicator="check"
                 onCheckedChange={(checked) =>
                   onRuntimeCapabilityToggle?.(
                     'subAgent',
@@ -485,12 +494,11 @@ export function ComposerMenu({
                 }
                 onSelect={(event) => event.preventDefault()}
                 className={cn(
-                  'items-start gap-3 p-1.5 pr-9',
-                  menuItemRoundedClass,
+                  'items-start gap-(--composer-control-gap) py-(--composer-row-padding) pr-7',
                   selected && 'bg-muted',
                 )}
               >
-                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center text-muted-foreground">
+                <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-muted-foreground">
                   <RuntimeCapabilityIcon
                     option={{
                       type: 'subAgent',
@@ -523,15 +531,15 @@ export function ComposerMenu({
               key={tool.id}
               type="button"
               className={cn(
-                'flex w-full items-center gap-3 rounded-chat-item p-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted',
+                'flex w-full items-center gap-(--composer-control-gap) rounded-chat-item px-1.5 py-(--composer-row-padding) text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted',
                 selectedTool?.id === tool.id && 'bg-muted',
               )}
               onClick={() => {
                 onToolSelect?.(tool);
-                setOpen(false);
+                handleOpenChange(false);
               }}
             >
-              <span className="flex size-7 shrink-0 items-center justify-center text-muted-foreground">
+              <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
                 {getIconComponent(tool.icon)}
               </span>
               <span className="truncate">{tool.label}</span>
@@ -542,6 +550,7 @@ export function ComposerMenu({
     return (
       <>
         <PanelSearch
+          inputRef={searchInputRef}
           value={query}
           onChange={setQuery}
           placeholder={t(
@@ -591,58 +600,6 @@ export function ComposerMenu({
     );
   };
 
-  const primaryPanel = (
-    <div
-      data-slot="composer-primary-panel"
-      className={cn(
-        'w-64 max-w-full shrink-0 overflow-hidden bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10',
-        panelRoundedClass,
-      )}
-    >
-      <DropdownMenuItem
-        disabled={!attachmentsEnabled}
-        onSelect={onAttachmentClick}
-        className={cn('gap-3 p-1.5 font-normal', menuItemRoundedClass)}
-      >
-        <Paperclip className="size-5" />
-        <span className="flex-1 text-base">{t('composer.addAttachment')}</span>
-      </DropdownMenuItem>
-      <DropdownMenuSeparator className="my-2" />
-      <PrimaryPanelItem
-        icon={<Target />}
-        label={t('composer.workbuddy.targets')}
-        active={activePanel === 'targets'}
-        onSelect={() => choosePanel('targets')}
-        className={menuItemRoundedClass}
-      />
-      <PrimaryPanelItem
-        icon={<Bot />}
-        label={t('composer.workbuddy.experts')}
-        count={selectedSubAgentCount}
-        active={activePanel === 'experts'}
-        onSelect={() => choosePanel('experts')}
-        className={menuItemRoundedClass}
-      />
-      <PrimaryPanelItem
-        icon={<WandSparkles />}
-        label={t('composer.capabilities.skills')}
-        count={selectedSkillCount}
-        active={activePanel === 'skills'}
-        onSelect={() => choosePanel('skills')}
-        className={menuItemRoundedClass}
-      />
-      {!unifiedResourcesEnabled && <PrimaryPanelItem
-        icon={<Plug />}
-        label={t('composer.workbuddy.connectors')}
-        count={selectedConnectorBindingIds?.length ?? 0}
-        active={activePanel === 'connectors'}
-        disabled={!connectorsEnabled}
-        onSelect={() => choosePanel('connectors')}
-        className={menuItemRoundedClass}
-      />}
-    </div>
-  );
-
   const secondaryPanelExpandsRight = Boolean(
     activePanel && activePanelLabel && canExpandSecondaryPanel,
   );
@@ -680,10 +637,9 @@ export function ComposerMenu({
         collisionPadding={COMPOSER_MENU_COLLISION_PADDING}
         data-layout={canExpandSecondaryPanel ? 'wide' : 'narrow'}
         className={cn(
-          'max-w-(--radix-dropdown-menu-content-available-width) bg-transparent p-1 shadow-none ring-0',
-          secondaryPanelExpandsRight
-            ? 'w-[33rem] overflow-visible'
-            : 'w-[16.5rem] overflow-hidden',
+          'max-w-(--radix-dropdown-menu-content-available-width) overflow-hidden bg-transparent p-1 shadow-none ring-0',
+          canExpandSecondaryPanel ? 'w-fit' : 'w-[16.5rem]',
+          secondaryPanelExpandsRight && 'w-[33rem] overflow-visible',
         )}
       >
         <div
@@ -693,18 +649,30 @@ export function ComposerMenu({
             secondaryPanelExpandsRight && 'w-full min-w-0 gap-2',
           )}
         >
-          {secondaryPanelExpandsRight ? primaryPanel : null}
-          {activePanel && activePanelLabel ? (
-            <SecondaryPanel panelRoundedClass={panelRoundedClass}>
+          {(!activePanel || secondaryPanelExpandsRight) && (
+            <ComposerMenuPrimaryPanel
+              activePanel={activePanel}
+              canPreview={canExpandSecondaryPanel}
+              onOpenPanel={choosePanel}
+              attachmentsEnabled={attachmentsEnabled}
+              onAttachmentClick={onAttachmentClick}
+              expertCount={selectedSubAgentCount}
+              skillCount={selectedSkillCount}
+              connectorCount={selectedConnectorBindingIds?.length ?? 0}
+              connectorsEnabled={connectorsEnabled}
+              unifiedResourcesEnabled={unifiedResourcesEnabled}
+            />
+          )}
+          {activePanel && activePanelLabel && (
+            <SecondaryPanel>
               {!secondaryPanelExpandsRight ? (
                 <PanelHeader
                   label={activePanelLabel}
                   onBack={returnToPrimaryPanel}
-                  className={menuItemRoundedClass}
                 />
               ) : null}
               {activePanel === 'targets' ? (
-                <div className="space-y-1 p-1">
+                <div className="space-y-(--composer-row-padding) p-(--composer-row-padding)">
                   <DropdownMenuItem
                     role="switch"
                     aria-checked={goalPanelOpen}
@@ -713,14 +681,10 @@ export function ComposerMenu({
                       event.preventDefault();
                       onGoalPanelOpenChange?.(!goalPanelOpen);
                     }}
-                    className={cn(
-                      'gap-3 p-1.5',
-                      menuItemRoundedClass,
-                      goalPanelOpen && 'bg-muted',
-                    )}
+                    className={cn(goalPanelOpen && 'bg-muted')}
                   >
-                    <Target className="size-5" />
-                    <span className="min-w-0 flex-1 text-base">
+                    <Target className="size-4 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">
                       {t('chat.goal.label')}
                     </span>
                     <Toggle checked={goalPanelOpen} />
@@ -733,14 +697,10 @@ export function ComposerMenu({
                       event.preventDefault();
                       onPlanModeChange?.(!planModeEnabled);
                     }}
-                    className={cn(
-                      'gap-3 p-1.5',
-                      menuItemRoundedClass,
-                      planModeEnabled && 'bg-muted',
-                    )}
+                    className={cn(planModeEnabled && 'bg-muted')}
                   >
-                    <ListChecks className="size-5" />
-                    <span className="min-w-0 flex-1 text-base">
+                    <ListChecks className="size-4 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">
                       {t('composer.planMode')}
                     </span>
                     <Toggle checked={planModeEnabled} />
@@ -759,8 +719,6 @@ export function ComposerMenu({
                 />
               )}
             </SecondaryPanel>
-          ) : (
-            primaryPanel
           )}
         </div>
       </DropdownMenuContent>
@@ -792,11 +750,9 @@ export function ComposerMenu({
 function PanelHeader({
   label,
   onBack,
-  className,
 }: {
   label: string;
   onBack: () => void;
-  className: string;
 }) {
   return (
     <>
@@ -805,68 +761,22 @@ function PanelHeader({
           event.preventDefault();
           onBack();
         }}
-        className={cn('gap-3 p-1.5 font-normal', className)}
+        data-slot="composer-panel-back"
+        className="font-normal"
       >
-        <ArrowLeft className="size-5" />
-        <span className="min-w-0 flex-1 text-base">{label}</span>
+        <ArrowLeft className="size-4 text-muted-foreground" />
+        <span className="min-w-0 flex-1">{label}</span>
       </DropdownMenuItem>
       <DropdownMenuSeparator className="my-0" />
     </>
   );
 }
 
-function PrimaryPanelItem({
-  icon,
-  label,
-  count = 0,
-  active,
-  disabled,
-  onSelect,
-  className,
-}: {
-  icon: React.ReactElement<{ className?: string }>;
-  label: string;
-  count?: number;
-  active: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
-  className: string;
-}) {
-  return (
-    <DropdownMenuItem
-      disabled={disabled}
-      onSelect={(event) => {
-        event.preventDefault();
-        onSelect();
-      }}
-      className={cn('gap-3 p-1.5 font-normal', className, active && 'bg-muted')}
-    >
-      {React.cloneElement(icon, { className: 'size-5' })}
-      <span className="min-w-0 flex-1 text-base">{label}</span>
-      {count > 0 ? (
-        <span className="rounded-chat-item bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary">
-          {count}
-        </span>
-      ) : null}
-      <ChevronRight className="size-4" />
-    </DropdownMenuItem>
-  );
-}
-
-function SecondaryPanel({
-  panelRoundedClass,
-  children,
-}: {
-  panelRoundedClass: string;
-  children: React.ReactNode;
-}) {
+function SecondaryPanel({ children }: { children: React.ReactNode }) {
   return (
     <div
       data-slot="composer-secondary-panel"
-      className={cn(
-        'w-64 min-w-0 max-w-full overflow-hidden bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10',
-        panelRoundedClass,
-      )}
+      className="min-w-0 max-w-full flex-1 overflow-hidden rounded-chat-panel bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10"
     >
       <div
         data-slot="composer-secondary-scroll"
@@ -879,24 +789,29 @@ function SecondaryPanel({
 }
 
 function PanelSearch({
+  inputRef,
   value,
   onChange,
   placeholder,
 }: {
+  inputRef: React.RefObject<HTMLInputElement | null>;
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
 }) {
   return (
-    <div data-slot="composer-panel-search" className="px-2 pt-1 pb-2">
+    <div data-slot="composer-panel-search" className="p-(--composer-control-padding-inline)">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          autoFocus
+          ref={inputRef}
+          onKeyDown={(event) => {
+            if (event.key.length === 1) event.stopPropagation();
+          }}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="h-8 border-0 bg-muted pl-10 text-base shadow-none focus-visible:ring-1"
+          className="h-(--composer-control-height) border-0 bg-muted py-0 pl-8 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-offset-0"
         />
       </div>
     </div>

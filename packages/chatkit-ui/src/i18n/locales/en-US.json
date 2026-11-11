@@ -666,6 +666,9 @@
             "knowledge": "Knowledge"
         },
         "slashCommands": {
+            "sectionTitle": "Commands",
+            "expertSource": "Expert · {{name}}",
+            "projectSource": "Project · {{name}}",
             "commands": {
                 "plan": {
                     "label": "Plan",

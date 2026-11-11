@@ -26,7 +26,7 @@ export type RuntimeCapabilityPaletteState = {
   activeIndex: number;
   atMessageStart: boolean;
   capabilityTypes?: RuntimeCapabilityOption['type'][];
-  expandedCapabilityTypes?: RuntimeCapabilityOption['type'][];
+  groupExpansion?: Partial<Record<RuntimeCapabilityOption['type'], boolean>>;
 };
 
 export type SlashCommandSource = 'builtin' | 'host' | 'runtime';

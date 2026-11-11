@@ -241,7 +241,7 @@ export function useSlashCommands({
         end: text.length,
         activeIndex: 0,
         atMessageStart: true,
-        expandedCapabilityTypes: [capabilityType],
+        groupExpansion: { [capabilityType]: true },
       });
       focusComposerAt(text.length);
     },
@@ -249,7 +249,7 @@ export function useSlashCommands({
   );
 
   const toggleCapabilityGroup = React.useCallback(
-    (capabilityType: RuntimeCapabilityOption['type']) => {
+    (capabilityType: RuntimeCapabilityOption['type'], isExpanded: boolean) => {
       if (!palette) {
         return;
       }
@@ -259,18 +259,12 @@ export function useSlashCommands({
           return previous;
         }
 
-        const expandedCapabilityTypes = new Set(
-          previous.expandedCapabilityTypes ?? [],
-        );
-        if (expandedCapabilityTypes.has(capabilityType)) {
-          expandedCapabilityTypes.delete(capabilityType);
-        } else {
-          expandedCapabilityTypes.add(capabilityType);
-        }
-
         return {
           ...previous,
-          expandedCapabilityTypes: Array.from(expandedCapabilityTypes),
+          groupExpansion: {
+            ...previous.groupExpansion,
+            [capabilityType]: !isExpanded,
+          },
         };
       });
       focusComposerAt(palette.end);
@@ -462,7 +456,7 @@ export function useSlashCommands({
       }
 
       if (option.capabilityType) {
-        toggleCapabilityGroup(option.capabilityType);
+        toggleCapabilityGroup(option.capabilityType, option.expanded === true);
         return;
       }
 

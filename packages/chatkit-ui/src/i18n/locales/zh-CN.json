@@ -666,6 +666,9 @@
             "knowledge": "知识库"
         },
         "slashCommands": {
+            "sectionTitle": "指令",
+            "expertSource": "专家 · {{name}}",
+            "projectSource": "项目 · {{name}}",
             "commands": {
                 "plan": {
                     "label": "计划",
