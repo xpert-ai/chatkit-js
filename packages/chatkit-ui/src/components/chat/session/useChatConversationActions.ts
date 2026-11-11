@@ -23,8 +23,6 @@ type ChatConversationActionsOptions = Pick<
   | 'setThreadMention'
   | 'setSelectedTool'
   | 'composerInputRef'
-  | 'setComposerText'
-  | 'focusComposerAt'
 > &
   Pick<
     ReturnType<typeof useChatFiles>,
@@ -58,7 +56,6 @@ type ChatConversationActionsOptions = Pick<
   > & {
     onConnectorsChange: ((connectorBindingIds: string[]) => void) | undefined;
     onProjectChange: ChatProps['onProjectChange'];
-    isPromptEditDisabled: boolean;
     configuredProjectId: string | undefined;
     options: ChatKitOptions | null | undefined;
   };
@@ -80,10 +77,7 @@ export function useChatConversationActions({
   setEditingMessageId,
   composerInputRef,
   refreshThreads,
-  isPromptEditDisabled,
-  setComposerText,
   setRuntimeCapabilityPalette,
-  focusComposerAt,
   missingConfig,
   setHistoryError,
   missingConfigShortMessage,
@@ -222,21 +216,6 @@ export function useChatConversationActions({
     },
     refresh: refreshThreads,
   });
-
-  const handlePromptEdit = React.useCallback(
-    (prompt: string) => {
-      if (isPromptEditDisabled) return;
-      setComposerText(prompt, prompt.length);
-      setRuntimeCapabilityPalette(null);
-      focusComposerAt(prompt.length);
-    },
-    [
-      focusComposerAt,
-      isPromptEditDisabled,
-      setComposerText,
-      setRuntimeCapabilityPalette,
-    ],
-  );
 
   const loadThreadHistory = React.useCallback(
     async (threadId: string) => {
@@ -412,7 +391,6 @@ export function useChatConversationActions({
     handleDeleteThread,
     isCurrentConversationView,
     loadThreadHistory,
-    handlePromptEdit,
     saveEditedMessage,
     handleProjectSelectionChange,
   };

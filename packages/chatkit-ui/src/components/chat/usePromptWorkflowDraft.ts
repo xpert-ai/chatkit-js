@@ -1,9 +1,9 @@
 import * as React from 'react';
-import type {
-  ChatKitCommandSource,
-  ChatKitSlashCommand,
-} from '@xpert-ai/chatkit-types';
+import type { ChatKitSlashCommand } from '@xpert-ai/chatkit-types';
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import {
+  getSlashCommandSource,
+  parseSlashCommandInvocation,
   resolveSlashCommands,
   type ResolvedSlashCommand,
 } from '../../lib/slash-commands';
@@ -14,6 +14,7 @@ import {
   type PromptDraft,
 } from '../../lib/prompt-draft';
 import {
+  hasRuntimeCapabilitySelection,
   toggleRuntimeCapabilitySelection,
   type RuntimeCapabilitiesSelection,
   type RuntimeCapabilityOption,
@@ -42,13 +43,12 @@ export function usePromptWorkflowDraft({
   setText: (text: string, offset?: number) => void;
   focus: (offset: number) => void;
 }) {
+  const { i18n } = useChatkitTranslation();
   const commands = React.useMemo(
     () =>
       resolveSlashCommands(hostCommands, runtimeCommands).filter(
         (command) =>
-          command.kind === 'prompt_workflow' &&
-          command.action.type === 'insert_text' &&
-          !command.availability?.disabled,
+          command.kind === 'prompt_workflow' && !command.availability?.disabled,
       ),
     [hostCommands, runtimeCommands],
   );
@@ -56,37 +56,39 @@ export function usePromptWorkflowDraft({
   const [browsingPrompts, setBrowsingPrompts] = React.useState(false);
   const selected =
     selection?.scope === scope &&
-    commands.some((command) => command.id === selection.command.id)
+    (draft !== '' || selection.draft.text === '') &&
+    commands.some((command) => command.id === selection.command.id) &&
+    (selection.command.action.type !== 'insert_invocation' ||
+      parseSlashCommandInvocation(draft)?.name === selection.command.name)
       ? selection
       : null;
-  const current = selected
-    ? { ...selected, draft: updatePromptDraft(selected.draft, draft) }
-    : null;
+  const updatedDraft = selected && updatePromptDraft(selected.draft, draft);
+  const current =
+    selected && updatedDraft ? { ...selected, draft: updatedDraft } : null;
   React.useEffect(() => {
-    setSelection((previous) => {
-      if (!previous) return previous;
-      if (
-        previous.scope !== scope ||
-        !draft ||
-        !commands.some((command) => command.id === previous.command.id)
-      )
-        return null;
-      const updated = updatePromptDraft(previous.draft, draft);
-      return updated === previous.draft
-        ? previous
-        : { ...previous, draft: updated };
-    });
-  }, [draft, scope, commands]);
+    if (!selected) {
+      if (selection) setSelection(null);
+    } else if (updatedDraft && updatedDraft !== selected.draft) {
+      setSelection({ ...selected, draft: updatedDraft });
+    }
+  }, [selected, selection, updatedDraft]);
 
   const select = React.useCallback(
     (command: ResolvedSlashCommand, args: string) => {
       if (
         command.kind !== 'prompt_workflow' ||
-        command.action.type !== 'insert_text' ||
+        !('template' in command.action) ||
         command.availability?.disabled
       )
         return false;
-      const next = createPromptDraft(command.action.template, args);
+      const action = command.action;
+      // Invocation templates contain the command prefix. The server expands it on send.
+      const template =
+        action.type === 'insert_invocation' &&
+        !/\{\{\s*args\s*\}\}/.test(action.template)
+          ? action.template.trimEnd() + ' {{args}}'
+          : action.template;
+      const next = createPromptDraft(template, args);
       setBrowsingPrompts(false);
       setSelection({
         command,
@@ -139,22 +141,24 @@ export function usePromptWorkflowDraft({
     [],
   );
   const command = current?.command;
-  const commandSource: ChatKitCommandSource | undefined = command
-    ? {
-        type: 'slash_command',
-        name: command.name,
-        source: command.source,
-        executionType: 'insert_text',
-        kind: 'prompt_workflow',
-        workflow: {
-          type: 'prompt_workflow',
-          name: command.name,
-          label: command.label,
-        },
-      }
-    : undefined;
+  function selectStarter(prompt: string) {
+    const invocation = parseSlashCommandInvocation(prompt);
+    const workflow =
+      invocation && commands.find((item) => item.name === invocation.name);
+    if (workflow && select(workflow, invocation.args)) return;
+
+    setSelection(null);
+    setBrowsingPrompts(false);
+    setText(prompt);
+    focus(prompt.length);
+  }
+
   return {
-    commands,
+    commands: commands.filter(({ action }) =>
+      action.type === 'insert_text' ||
+      ('template' in action && hasRuntimeCapabilitySelection(getActionRuntimeCapabilities(action))),
+    ),
+    selectStarter,
     selected: current,
     shortcutCommand:
       !browsingPrompts && current?.command.workflow?.scenarios?.length
@@ -164,7 +168,9 @@ export function usePromptWorkflowDraft({
     selectShortcut,
     showPrompts: () => setBrowsingPrompts(true),
     chooseScenario,
-    commandSource,
+    commandSource: command
+      ? getSlashCommandSource(command, i18n.language)
+      : undefined,
     runtimeCapabilities: current?.runtimeCapabilities ?? null,
     removeCapability,
     clear: () => setSelection(null),

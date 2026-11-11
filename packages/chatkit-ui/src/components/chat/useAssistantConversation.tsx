@@ -230,6 +230,13 @@ export function useAssistantConversation({
     session.missingConfig ||
     session.isHistoryLoading;
 
+  function selectStarterPrompt(prompt: string) {
+    if (isPromptEditDisabled) return;
+    runtime.setRuntimeCapabilityPalette(null);
+    draft.setThreadMention(null);
+    capabilities.promptWorkflow.selectStarter(prompt);
+  }
+
   const conversation = useChatConversationActions({
     ...draft,
     ...files,
@@ -239,7 +246,6 @@ export function useAssistantConversation({
     ...historyState,
     onConnectorsChange,
     onProjectChange,
-    isPromptEditDisabled,
     configuredProjectId,
     options,
   });
@@ -660,7 +666,7 @@ export function useAssistantConversation({
       chatColumnStyle: chatColumnStyle,
       errorMessage: errorMessage,
       messages: messages,
-      isSubmissionBlocked: isSubmissionBlocked,
+      selectStarterPrompt,
       isPromptEditDisabled: isPromptEditDisabled,
       options: options,
       currentThreadIsRunning: currentThreadIsRunning,
@@ -831,10 +837,8 @@ export function useAssistantConversation({
         {isInitialComposer && session.startScreen?.promptsLayout === 'list' && (
           <StarterPromptSuggestions
             prompts={session.startScreen.prompts ?? []}
-            onPromptClick={input.handlePromptClick}
-            onPromptEdit={conversation.handlePromptEdit}
-            promptSendDisabled={isSubmissionBlocked}
-            promptEditDisabled={isPromptEditDisabled}
+            onSelect={selectStarterPrompt}
+            disabled={isPromptEditDisabled}
           />
         )}
         {/* Disclaimer */}

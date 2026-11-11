@@ -9,7 +9,6 @@ vi.mock('../../i18n/useChatkitTranslation', () => ({
     t: (key: string) =>
       ({
         'startScreen.greeting': 'What can I help with today?',
-        'startScreen.editPrompt': 'Edit prompt',
       })[key] ?? key,
   }),
 }));
@@ -48,37 +47,20 @@ describe('StartScreen', () => {
     expect(screen.getByText('Analyze notice')).toBeInTheDocument();
   });
 
-  it('keeps prompt send and edit actions separate', () => {
-    const onPromptClick = vi.fn();
-    const onPromptEdit = vi.fn();
-
-    render(
-      <StartScreen
-        startScreen={startScreen}
-        onPromptClick={onPromptClick}
-        onPromptEdit={onPromptEdit}
-      />,
+  it('selects the configured prompt text from a single card', () => {
+    const onSelect = vi.fn();
+    const { rerender } = render(
+      <StartScreen startScreen={startScreen} onSelect={onSelect} />,
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze notice' }));
+    expect(onSelect).toHaveBeenCalledWith('Analyze this technical notice');
 
-    fireEvent.click(screen.getByText('Analyze notice'));
-    expect(onPromptClick).toHaveBeenCalledWith('Analyze this technical notice');
-    expect(onPromptEdit).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByLabelText('Edit prompt'));
-    expect(onPromptEdit).toHaveBeenCalledWith('Analyze this technical notice');
-    expect(onPromptClick).toHaveBeenCalledTimes(1);
-  });
-
-  it('disables prompt send and edit buttons independently', () => {
-    render(
-      <StartScreen
-        startScreen={startScreen}
-        promptSendDisabled
-        promptEditDisabled
-      />,
+    rerender(
+      <StartScreen startScreen={startScreen} onSelect={onSelect} disabled />,
     );
-
-    expect(screen.getByText('Analyze notice').closest('button')).toBeDisabled();
-    expect(screen.getByLabelText('Edit prompt')).toBeDisabled();
+    const button = screen.getByRole('button', { name: 'Analyze notice' });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });

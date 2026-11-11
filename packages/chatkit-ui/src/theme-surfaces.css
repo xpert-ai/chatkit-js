@@ -157,6 +157,7 @@
 }
 [data-slot='composer-primary-panel'],
 [data-slot='composer-secondary-panel'],
+[data-slot='starter-prompt-suggestions'],
 [data-slot='composer-input-shell'] {
   /* At a 16px root: controls are 28/32/36px across the three densities. */
   --composer-control-height: calc(1rem + 1rem * var(--chat-density-scale, 1));

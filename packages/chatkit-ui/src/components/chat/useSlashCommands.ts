@@ -312,7 +312,10 @@ export function useSlashCommands({
 
   const executeSlashCommand = React.useCallback(
     (command: ResolvedSlashCommand, args: string) => {
-      if (onSelectPromptWorkflow?.(command, args)) {
+      if (
+        command.action.type === 'insert_text' &&
+        onSelectPromptWorkflow?.(command, args)
+      ) {
         setPalette(null);
         return true;
       }
@@ -471,12 +474,17 @@ export function useSlashCommands({
         return;
       }
 
+      if (option.command.kind === 'prompt_workflow') {
+        if (onSelectPromptWorkflow?.(option.command, '')) setPalette(null);
+        return;
+      }
       executeSlashCommand(option.command, '');
     },
     [
       executeSlashCommand,
       focusComposerAt,
       insertComposerCapabilityToken,
+      onSelectPromptWorkflow,
       onSelectResourceCommand,
       palette,
       setGoalPanelOpen,
