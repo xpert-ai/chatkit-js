@@ -1474,6 +1474,7 @@
         "AskPrompt": "请先读取文档 {{resourceId}}（{{path}}）的最新内容，再提出需要人类确认的修改提案。要求：{{instruction}}"
     },
     "conversationMenu": {
+        "addSchedule": "添加计划任务…",
         "actionsFor": "{{title}} 的会话操作",
         "rename": "重命名",
         "sideChat": "新建侧边聊天",

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Clock,
   Copy,
   Download,
   GitBranch,
@@ -10,6 +11,7 @@ import {
   Share,
   Trash2,
 } from 'lucide-react';
+import { useWorkbench } from '../../workbench/context';
 import type { ThreadItem } from '../../hooks/useThreads';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { cn } from '../../lib/utils';
@@ -74,6 +76,12 @@ function ConversationMenuSession({
   moreButtonRef,
   onMenuCloseAutoFocus,
 }: ConversationMenuProps) {
+  const workbench = useWorkbench();
+  const schedule =
+    target.recordId === context.activeConversationId &&
+    target.id === context.activeThreadId
+      ? workbench.openScheduleForm
+      : undefined;
   const menu = useConversationMenu(context, target);
   const narrow = useMediaQuery('(max-width: 639px)');
   const { t, actions } = menu;
@@ -85,7 +93,7 @@ function ConversationMenuSession({
   const hasActions = Object.values(actions).some(
     (action) => !Array.isArray(action) && action.visible,
   );
-  if (!hasActions && !extraItems) return null;
+  if (!hasActions && !extraItems && !schedule) return null;
   const action = (
     name: string,
     availability: ConversationActionAvailability,
@@ -125,7 +133,7 @@ function ConversationMenuSession({
             }}
             type="button"
             // Extra items manage their own availability (e.g. terminate during reconnect).
-            disabled={!context.ready && !extraItems}
+            disabled={!context.ready && !extraItems && !schedule}
             aria-label={label}
             className={cn(
               placement === 'history' &&
@@ -192,7 +200,14 @@ function ConversationMenuSession({
               </DropdownMenuPortal>
             </DropdownMenuSub>
           )}
-          {(actions.rename.visible || exploration) && reuse && (
+          {schedule &&
+            action(
+              'conversationMenu.addSchedule',
+              { visible: true, disabled: false },
+              <Clock />,
+              () => schedule(target.id, target.title),
+            )}
+          {(actions.rename.visible || exploration || schedule) && reuse && (
             <DropdownMenuSeparator />
           )}
           {action('conversationMenu.share', actions.share, <Share />, () =>

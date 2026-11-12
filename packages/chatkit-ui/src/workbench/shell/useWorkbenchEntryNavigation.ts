@@ -22,6 +22,8 @@ type EntryNavigationOptions = Pick<
   editors?: EditorLifecycle;
   ready: boolean;
   runtimeScopeReady: boolean;
+  scheduleEnabled: boolean;
+  threadId?: string | null;
   runtimeScope: XpertViewRuntimeScopeInput;
   views: XpertExtensionViewManifest[];
   setViewQueries: React.Dispatch<
@@ -45,6 +47,8 @@ export function useWorkbenchEntryNavigation({
   projectCreation,
   ready,
   runtimeScopeReady,
+  scheduleEnabled,
+  threadId,
   runtimeScope,
   views,
   setViewQueries,
@@ -100,27 +104,39 @@ export function useWorkbenchEntryNavigation({
     setViewQueries,
   ]);
 
+  const openForm = React.useCallback(
+    (key: string, query: XpertViewQuery) => {
+      setViewQueries((current) => ({ ...current, [key]: query }));
+      // Remount the form so a cached iframe cannot reuse the previous draft.
+      setViewResetKeys((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
+      selectView(key);
+      setExpanded(false);
+      setOpen(true);
+    },
+    [setViewQueries, setViewResetKeys, selectView, setExpanded, setOpen],
+  );
   useProjectCreationEntry({
     request: projectCreation,
     ready: ready && runtimeScopeReady,
     projectId: runtimeScope.projectId,
     conversationId: runtimeScope.conversationId,
     views,
-    openView: (key, query) => {
-      setViewQueries((current) => ({ ...current, [key]: query }));
-      // A cached iframe may still own the previous project's form state.
-      setViewResetKeys((current) => ({
-        ...current,
-        [key]: (current[key] ?? 0) + 1,
-      }));
-      selectView(key);
-      setExpanded(false);
-      setOpen(true);
-    },
+    openView: openForm,
     onUnavailable: () =>
       setNotification({
         level: 'error',
         message: t('composer.projects.creationViewUnavailable'),
       }),
   });
+
+  const key = 'platform.scheduler__create';
+  const openScheduleForm = React.useCallback(
+    (targetThreadId: string, title: string) => {
+      if (targetThreadId === threadId)
+        openForm(key, { selectionId: targetThreadId, parameters: { title } });
+    },
+    [openForm, threadId],
+  );
+  return scheduleEnabled && runtimeScopeReady && runtimeScope.conversationId &&
+    threadId && views.some((view) => view.key === key) ? openScheduleForm : undefined;
 }

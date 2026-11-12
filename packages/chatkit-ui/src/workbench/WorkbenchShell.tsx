@@ -41,10 +41,7 @@ import {
 import { workbenchLayoutKey } from './layout-storage';
 import { useNativeWorkbench } from './native/useNativeWorkbench';
 import { getErrorMessage } from './shell/commands/request-context';
-import {
-  type WorkbenchAssistantContext,
-  type WorkbenchShellProps,
-} from './shell/types';
+import type { WorkbenchAssistantContext, WorkbenchShellProps } from './shell/types';
 import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDialog';
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
@@ -62,14 +59,12 @@ import { WorkbenchChatProvider } from './floating-chat/context';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
-import { WORKBENCH_NARROW_BREAKPOINT } from './shell/layout/WorkbenchFrame';
+import { WORKBENCH_NARROW_BREAKPOINT as NARROW_BREAKPOINT } from './shell/layout/WorkbenchFrame';
 import { useWorkbenchSideChat } from './shell/side-chat/useWorkbenchSideChat';
 import { useWorkbenchShellTabs } from './shell/tabs/useWorkbenchShellTabs';
 export { useWorkbench, WorkbenchToggleButton } from './context';
 export { buildWorkbenchRequestContext } from './shell/commands/request-context';
 export { type WorkbenchAssistantContext } from './shell/types';
-
-const NARROW_BREAKPOINT = WORKBENCH_NARROW_BREAKPOINT;
 
 export function WorkbenchShell(props: WorkbenchShellProps) {
   const runtime = useWorkbenchRuntime();
@@ -218,7 +213,7 @@ function WorkbenchContent({
     visitPreview,
   } = useWorkbenchPages(startPageScope, requestScope);
 
-  const { views, viewsScope, loading, showLoading, error } = useWorkbenchViews({
+  const { views, menuViews, viewsScope, loading, showLoading, error } = useWorkbenchViews({
     client: viewHosts,
     hostId: stream.assistantId,
     scopeKey: viewScopeKey,
@@ -230,11 +225,6 @@ function WorkbenchContent({
     locale,
     revision: reloadVersion,
   });
-
-  const menuViews = React.useMemo(
-    () => views.filter((view) => view.workbench?.menu?.enabled !== false),
-    [views],
-  );
 
   const initialLoading = useInitialLoading(
     layoutKey,
@@ -585,7 +575,9 @@ function WorkbenchContent({
     openMessage,
   });
 
-  useWorkbenchEntryNavigation({
+  const openScheduleForm = useWorkbenchEntryNavigation({
+    scheduleEnabled: authenticated && remoteViewsEnabled && viewsScope === viewScopeKey,
+    threadId: stream.threadId,
     editors,
     contentApi: stream.client.content,
     contentScope: stream.projectId
@@ -686,6 +678,7 @@ function WorkbenchContent({
       loading,
       available,
       disabledReason,
+      openScheduleForm,
       viewMenu: {
         views: menuViews,
         locale,
@@ -750,6 +743,7 @@ function WorkbenchContent({
       },
     }),
     [
+      openScheduleForm,
       artifactActions,
       removePreview,
       stream.group,
