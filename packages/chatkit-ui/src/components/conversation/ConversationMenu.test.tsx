@@ -15,6 +15,10 @@ import { setLanguage } from '../../i18n';
 import { ThemeProvider } from '../../providers/Theme';
 import { HistorySidebar } from '../history/HistorySidebar';
 import { ChatHeaderActions } from '../chat/header/ChatHeaderActions';
+import {
+  WorkbenchContext,
+  disabledWorkbenchContext,
+} from '../../workbench/context';
 import { ConversationMenu } from './ConversationMenu';
 import type { ConversationActionContext } from './conversation-actions';
 
@@ -121,6 +125,29 @@ async function open(placement: 'header' | 'history' = 'header') {
 }
 
 describe('shared conversation menu', () => {
+  it.each([false, true])(
+    'opens the schedule form for the active branch (running = %s)',
+    async (running) => {
+      const f = fixture();
+      const openScheduleForm = vi.fn();
+      if (running) f.get.mockResolvedValue({ ...f.detail, status: 'busy' });
+      render(
+        <WorkbenchContext.Provider
+          value={{ ...disabledWorkbenchContext, openScheduleForm }}
+        >
+          <ConversationMenu context={{ ...f.context, running }} target={f.target} />
+        </WorkbenchContext.Provider>,
+      );
+      fireEvent.keyDown(screen.getByRole('button', { name: 'More actions' }), {
+        key: 'Enter',
+      });
+      fireEvent.click(
+        await screen.findByRole('menuitem', { name: 'Add scheduled task…' }),
+      );
+      expect(openScheduleForm).toHaveBeenCalledWith(f.target.id, f.target.title);
+    },
+  );
+
   it('clears cached access and closes a menu when the runtime client changes', async () => {
     const f = fixture();
     const { rerender } = render(

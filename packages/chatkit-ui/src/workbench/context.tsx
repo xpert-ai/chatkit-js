@@ -26,6 +26,7 @@ import {
 import type { PresentationWorkbenchPreview } from './preview/types';
 
 export type WorkbenchContextValue = {
+  openScheduleForm?: (threadId: string, title: string) => void;
   /** Resolve a conversation-scoped resource afresh; metadata never bypasses its native authorization. */
   openResource?: (
     resource: ConversationResourceTarget,
