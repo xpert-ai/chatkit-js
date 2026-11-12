@@ -1,5 +1,37 @@
 # @xpert-ai/chatkit-ui
 
+## 0.23.0
+
+### Minor Changes
+
+- f6a53cd: Resolve generic conversation resource navigation through current host context. Open Project content in its native editor and accepted group references in their fixed-version presentation, with scope checks and stale-response protection.
+
+  Route group message links and the shared-resource menu through the same Workbench resolver. Preserve requester-only automatic navigation, replay suppression, and cancellation when a caller or host scope changes.
+
+  Require @xpert-ai/xpert-sdk ^0.23.0 for the published conversation resource contracts and legacy group-link normalization.
+
+- 0b4a728: Render server-filtered group tool-result snapshots with the existing Widget, resource card and historical MCP result components. Isolate copied results from the active Assistant's actions, resource scope and App bridge; tolerate older SDK and server versions.
+
+### Patch Changes
+
+- a5121dd: Upgrade @xpert-ai/xpert-sdk to ^0.24.0 so group resource cards and navigation retain provider-declared icons and use the published message navigation contract.
+- 1d547d0: Align composer menus with theme density, preview submenus on wide screens with a mouse, and place skills last in the slash palette with clearer descriptions and source labels.
+- 4b90001: Locate public group messages from Workbench views, loading older history as needed without navigating into a private Assistant runtime.
+- 903b547: Show group resource navigation as a single card with a title, resource context and an explicit Open action. Reuse the resource-card layout, remove the exact generated title fallback, and keep additional message text, history replay behavior and current-group authorization unchanged.
+
+  Render provider-declared resource type icons through the shared icon renderer, with a generic fallback for older links.
+
+- 0b4a728: Open group snapshot resource cards through accepted group Artifact references with fresh viewer authorization. Keep source navigation and actions isolated, clarify snapshot-only cards, and report missing or ambiguous grants inline.
+- f6d337c: Prepare an editable draft when selecting a starter prompt or prompt workflow. Include the workflow's requested skills and plugins and send the edited text and attachments when the user submits.
+
+  Show workflows with bound capabilities in the shortcuts above the composer.
+
+- 0b4a728: Add optional passive Widget presentation metadata and render group results as aligned, themed cards with expandable details and viewer-local timestamps. Improve responsive A2UI metric typography while keeping source actions disabled in group snapshots.
+- 1bb7fa3: Allow remote View OAuth popups to use their normal browser context without inheriting iframe sandbox restrictions. Keep the embedded View origin isolated and retain its existing scoped message bridge.
+- Updated dependencies [0b4a728]
+  - @xpert-ai/chatkit-types@0.21.0
+  - @xpert-ai/chatkit-web-shared@0.18.3
+
 ## 0.22.0
 
 ### Minor Changes
