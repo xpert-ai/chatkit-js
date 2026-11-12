@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   Client,
   XpertExtensionViewManifest,
@@ -133,8 +133,13 @@ export function useWorkbenchViews({
     enabled && state.retentionKey === retentionKey ? state : emptyState;
   const loading =
     enabled && (!ready || state.scope !== scopeKey || current.loading);
+  const menuViews = useMemo(
+    () => current.views.filter((view) => view.workbench?.menu?.enabled !== false),
+    [current.views],
+  );
   return {
     views: current.views,
+    menuViews,
     viewsScope: current.loaded ? current.scope : null,
     loading,
     // Keep authorization pending without making retained discovery content jump.

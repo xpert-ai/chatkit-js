@@ -1474,6 +1474,7 @@
         "AskPrompt": "Read the latest content of document {{resourceId}} ({{path}}), then propose changes for human approval. Instructions: {{instruction}}"
     },
     "conversationMenu": {
+        "addSchedule": "Add scheduled task…",
         "actionsFor": "Actions for {{title}}",
         "rename": "Rename",
         "sideChat": "New side chat",
