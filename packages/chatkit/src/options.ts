@@ -295,6 +295,10 @@ export type ChatKitPetOptions = {
    * enabled is false. Host offline assets separately from the UI npm package.
    */
   assetsBaseUrl?: string;
+  /** In pet display mode, false collapses the launcher to Show pet. Omit to
+   * start visible. Users can close and reopen the launcher. Hosts can persist
+   * those actions via `chatkit.pet.launcher.visibility.change`.
+   */
   enabled?: boolean;
   character?: ChatKitPetCharacter;
   position?: ChatKitPetPositionOptions;
@@ -723,7 +727,8 @@ export type ChatKitOptions = {
    * the host page viewport.
    * Passing `true` enables the default built-in pet.
    * Explicit `false` disables pets and local pet controls in chat mode,
-   * overriding saved user preferences. Pet display mode still requires a pet.
+   * overriding saved user preferences. In pet display mode, omitting pet shows
+   * the launcher by default and false collapses it to the Show pet button.
    *
    * @default false
    */
@@ -1164,6 +1169,7 @@ export interface ChatKitElementEventMap {
     selection?: import('./project-selection').ProjectSelection;
   }>;
   'chatkit.connectors.change': CustomEvent<{ connectorBindingIds: string[] }>;
+  'chatkit.pet.launcher.visibility.change': CustomEvent<{ visible: boolean }>;
   'chatkit.log': CustomEvent<{
     name: string;
     data?: Record<string, unknown>;

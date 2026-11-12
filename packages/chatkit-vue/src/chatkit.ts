@@ -18,6 +18,7 @@ const EVENT_HANDLER_MAP: {
   'chatkit.response.start': 'onResponseStart',
   'chatkit.log': 'onLog',
   'chatkit.thread.change': 'onThreadChange',
+  'chatkit.pet.launcher.visibility.change': 'onPetLauncherVisibilityChange',
   'chatkit.project.change': 'onProjectChange',
   'chatkit.connectors.change': 'onConnectorsChange',
   'chatkit.thread.load.start': 'onThreadLoadStart',

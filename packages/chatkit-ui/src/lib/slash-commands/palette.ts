@@ -209,7 +209,7 @@ export function createSlashPaletteOptions({
   const commands: SlashPaletteOption[] = [];
   const capabilities: SlashPaletteOption[] = [];
   const skills: SlashPaletteOption[] = [];
-  if (palette.atMessageStart && !capabilityTypesOnly) {
+  if (!capabilityTypesOnly) {
     for (const command of resolvedCommands.filter((item) =>
       isCommandAvailable(item, runtimeCapabilities, selection),
     )) {

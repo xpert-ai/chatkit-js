@@ -39,7 +39,7 @@ type ChatKitPetOptions = {
 
 Defaults are defined in `packages/chatkit/src/pet.ts`:
 
-- `pet` omitted: disabled
+- `pet` omitted: disabled in chat mode and visible by default in pet mode
 - `pet: true`: default included Boba atlas, bottom-right pin, draggable,
   persisted position, `scale: 0.25`, `behavior: 'auto'`
 - Default `boundsPadding` is `0` on all sides, so drag and pin constraints stop
@@ -47,6 +47,20 @@ Defaults are defined in `packages/chatkit/src/pet.ts`:
 - `displayMode: 'chat'`: normal iframe is shown; Pet is optional
 - `displayMode: 'pet'`: the web component starts as a Pet launcher and opens
   the iframe when Pet is clicked
+
+### Closing and reopening a pet launcher
+
+In pet display mode, **Close pet** hides the character and **Show pet** restores
+it immediately, including when the host passes a fixed `pet: true` or
+`pet: false`. The initial default is visible. Changing `pet.enabled` to
+`false` also closes an open chat panel without discarding the conversation.
+The element keeps the last user action when the host resends the same setting
+in the same session.
+
+To remember the choice across page loads or logins, listen for
+`chatkit.pet.launcher.visibility.change` (framework handler
+`onPetLauncherVisibilityChange`), save `detail.visible` for the active account,
+and pass it back as `pet.enabled`. Applying options does not emit the event.
 
 ## Runtime Architecture
 
@@ -182,8 +196,8 @@ The `/pet` built-in slash command supports:
 /pet settings
 ```
 
-In `displayMode: 'pet'`, Pet is required and the settings UI prevents disabling
-it.
+In `displayMode: 'pet'`, use **Close pet** or **Show pet** to change visibility.
+The settings sheet configures the character and its appearance.
 
 ## Conversation Bubble
 

@@ -162,6 +162,10 @@ for (const width of [1500, 760]) {
     ).toContainText('authoring');
     expect(await page.locator('xpertai-chatkit').count()).toBe(1);
     await bid.getByRole('button', { name: 'Create project A' }).click();
+    // Creating a project replaces the previous project's iframe. Start editing
+    // only after the new project and its View have finished navigation.
+    await expect(page).toHaveURL(/project=workspace-created/);
+    await expect(bid.locator('#selection')).toContainText('"selectionId":"created"');
     await bid.getByRole('textbox', { name: 'Draft' }).fill('Keep this draft');
     await bid.getByRole('button', { name: 'Review', exact: true }).click();
     await expect(page).toHaveURL(/section=review/);

@@ -1,5 +1,60 @@
 # @xpert-ai/chatkit-ui
 
+## 0.22.0
+
+### Minor Changes
+
+- 722d242: Open authorized resources from Assistant requests in Workbench, with requester-only group navigation, clickable choices, replay suppression and scoped reference revalidation.
+- 722d242: Add Shared resources to group conversations, including owner acceptance/removal and an isolated fixed-version viewer. Revalidate grant access, preserve group authentication and theme, and allow only declared read-only query operations.
+- 722d242: Open authorized group resources in isolated Workbench presentation tabs. Keep group authorization in an SDK adapter, reuse one renderer per reference, and dispose scoped viewers on navigation or removal.
+- 722d242: Display generic shared-resource analysis scope and require separate group-owner consent, while preserving view-only acceptance.
+- 05b3dae: Support the `assistant.composer.insert` View command to append task prompts, workspace files, and available skills to the current draft without sending a message. Preserve existing draft content and reject invalid inputs or responses from a stale conversation scope.
+
+  Restore the Chat tab when no on-demand View is open, while preserving explicitly selected or pending restored Views.
+
+### Patch Changes
+
+- 722d242: Use the SDK's common Artifact presentation protocol in Workbench sources and rendering, removing their dependency on group-specific types without changing authorization or runtime behavior.
+
+  Upgrade to the published `@xpert-ai/xpert-sdk@0.22.0` for resource navigation, group artifact references, and governed analysis contracts.
+
+- 545591f: Clip assistant avatar images to the active theme's corner radius in the chat header and assistant details panel, including when the theme changes while they are visible.
+- 74d67aa: Upgrade `@xpert-ai/xpert-sdk` to `^0.21.0` and use its shared composer insertion command and payload type instead of temporary local definitions. Preserve input validation, file and skill scope checks, and draft-only insertion behavior.
+
+  The composer insertion contract remains beta and may change incompatibly during beta.
+
+- 72673af: Align runtime service and task panels with the composer using shared theme-aware corners, borders, controls, and density-based spacing. Remove separate panel shadows and tuck attached panels behind the rounded input without obscuring list items.
+- ba1d984: Align Settings and Message history with the other More menu items using shared theme-aware spacing. Move End run into the More menu while preserving termination during reconnects and the composer fallback for side chats and embeds without a header.
+- 722d242: Forward the registered View key to embedding hosts for document tab commands while preserving independent local tab identities. This fixes source authorization management from individual dashboard tabs.
+- aac3952: Display externally submitted human messages alongside live and recovered assistant replies. Resolve input messages through their persisted parent identity, preserving quotes and files without duplicating local inputs or reloading paginated history.
+- 3e450ce: Recover group sends that require a Project by preserving the draft, guiding project creation or selection using the primary Assistant's project capabilities, and resuming the original send after binding succeeds. Keep group projects independent by default, require explicit consent for reuse, and fix scrolling in the group member picker.
+
+  Export the typed `GROUP_PROJECT_REQUIRED` error contract and update ChatKit UI to `@xpert-ai/xpert-sdk` 0.20.3 for published project type and reuse discovery support.
+
+- a28dfa3: Use the shadcn Select in the project creation form and adapt its name input, buttons, and spacing to the active theme density. Preserve theme updates in the nested dropdown and keep the project name when switching types.
+- 74d7e9f: Limit resource card titles to two lines and show an ellipsis when they overflow.
+- Updated dependencies [3e450ce]
+  - @xpert-ai/chatkit-types@0.20.3
+
+## 0.21.3
+
+### Patch Changes
+
+- 7f3ce71: Keep the wide-screen task output panel below the chat toolbar so its buttons remain accessible.
+- 44fa4e4: In pet display mode the launcher starts visible by default. Passing `pet.enabled: false` or `pet: false` now collapses it to Show pet. Hosts can remember the user's choice by handling the launcher visibility event and updating `pet.enabled`.
+- 5487926: Show the complete slash command menu at every supported position in a message, including after text and newlines, while preserving skill-only dollar selectors.
+
+  Preserve surrounding draft text and capability tokens when selecting mode commands from an inline slash menu.
+
+- Updated dependencies [44fa4e4]
+  - @xpert-ai/chatkit-types@0.20.2
+
+## 0.21.2
+
+### Patch Changes
+
+- 42a63c1: Keep task and error panels attached to the input in compact and expanded composer layouts while preserving scroll stabilization.
+
 ## 0.21.1
 
 ### Patch Changes

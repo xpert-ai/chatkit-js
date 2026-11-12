@@ -263,6 +263,7 @@ const baseOptions: ChatKitOptions = {
 const taskSummaryGeometry = {
   viewportRight: 0,
   chatColumnRight: 0,
+  headerHeight: 60,
 };
 
 const defaultGetBoundingClientRect =
@@ -276,7 +277,10 @@ vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
       return domRect(taskSummaryGeometry.viewportRight);
     }
     if (this.dataset.slot === 'chatkit-chat-column-anchor') {
-      return domRect(taskSummaryGeometry.chatColumnRight);
+      return domRect(
+        taskSummaryGeometry.chatColumnRight,
+        taskSummaryGeometry.headerHeight,
+      );
     }
     return defaultGetBoundingClientRect.call(this);
   },
@@ -342,6 +346,7 @@ describe('Chat start screen prompts', () => {
     mocks.stream.submit.mockResolvedValue(undefined);
     taskSummaryGeometry.viewportRight = 0;
     taskSummaryGeometry.chatColumnRight = 0;
+    taskSummaryGeometry.headerHeight = 60;
   });
 
   it('does not render the powered-by footer', async () => {
@@ -667,11 +672,12 @@ describe('Chat start screen prompts', () => {
       expect(value).toBeInTheDocument();
       return value;
     });
-    expect(panel?.parentElement).toHaveClass(
-      'absolute',
-      'right-5',
-      'top-3',
-      'w-80',
+    expect(panel?.parentElement).toHaveStyle({ top: '60px' });
+
+    taskSummaryGeometry.headerHeight = 84;
+    fireEvent(window, new Event('resize'));
+    await waitFor(() =>
+      expect(panel?.parentElement).toHaveStyle({ top: '84px' }),
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Open task summary' }));
@@ -928,15 +934,15 @@ function emptyTaskSummary(conversationId: string) {
   };
 }
 
-function domRect(right: number): DOMRect {
+function domRect(right: number, height = 0): DOMRect {
   return {
     x: 0,
     y: 0,
     width: right,
-    height: 0,
+    height,
     top: 0,
     right,
-    bottom: 0,
+    bottom: height,
     left: 0,
     toJSON: () => ({}),
   };

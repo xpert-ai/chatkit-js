@@ -24,8 +24,12 @@ export function useChatPetSettings({ options }: ChatPetSettingsOptions) {
     React.useState<PetLocalSettings | null>(() => readPetLocalSettings());
 
   const assetsBaseUrl = getPetAssetsBaseUrl(options?.pet);
-  const petRequired = options?.displayMode === 'pet';
-  const petDisabled = options?.pet === false && !petRequired;
+  const launcherMode = options?.displayMode === 'pet';
+  const pet = options?.pet;
+  const petDisabled =
+    pet === false ||
+    (launcherMode && typeof pet === 'object' && pet?.enabled === false);
+  const petRequired = launcherMode && !petDisabled;
   const basePetSettings = React.useMemo(
     () => derivePetLocalSettings(options?.pet, assetsBaseUrl),
     [options?.pet, assetsBaseUrl],

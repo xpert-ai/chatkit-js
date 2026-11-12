@@ -856,7 +856,7 @@
             "title": "Pet",
             "description": "Stored in this browser.",
             "enabled": "Enable pet",
-            "requiredHint": "Required in pet launcher mode.",
+            "requiredHint": "To hide the pet, choose Close pet in its menu.",
             "characterType": "Character",
             "characterTypes": {
                 "builtin": "Built-in",

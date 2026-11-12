@@ -593,11 +593,12 @@ export function useAssistantConversation({
           )}
           {!characterPresentation &&
             summary.taskSummaryAvailable &&
-            summary.taskSummaryDocked &&
+            summary.dockedHeaderHeight !== null &&
             summary.taskSummaryOpen && (
               <div
                 data-chat-auxiliary=""
-                className="pointer-events-none absolute right-5 top-3 z-20 max-h-[calc(100%-1.5rem)] w-80"
+                className="pointer-events-none absolute right-5 bottom-3 z-20 mt-3 w-80"
+                style={{ top: summary.dockedHeaderHeight }}
               >
                 <TaskSummaryPanel
                   {...summary.taskSummaryProps}

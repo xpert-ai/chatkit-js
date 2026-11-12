@@ -68,7 +68,11 @@ export function useChatTaskSummary({
 }: ChatTaskSummaryOptions) {
   const taskSummaryEnabled = options?.taskSummary?.enabled === true;
   const taskSummaryConversationId = stream.conversationId ?? null;
-  const [taskSummaryDocked, setTaskSummaryDocked] = React.useState(false);
+  const [dockedHeaderHeight, setDockedHeaderHeight] = React.useState<
+    number | null
+  >(null);
+  const taskSummaryDocked =
+    characterPresentation || dockedHeaderHeight !== null;
   const [taskSummaryOpen, setTaskSummaryOpen] = React.useState(false);
   const manuallyClosedTaskSummaryConversationIdsRef = React.useRef(
     new Set<string>(),
@@ -238,19 +242,15 @@ export function useChatTaskSummary({
   );
 
   React.useLayoutEffect(() => {
-    if (characterPresentation) {
-      setTaskSummaryDocked(true);
-      return;
-    }
-    if (!taskSummaryEnabled) {
-      setTaskSummaryDocked(false);
-      return;
-    }
-
     const viewport = viewportRef.current;
     const chatColumn = chatColumnRef.current;
-    if (!viewport || !chatColumn) {
-      setTaskSummaryDocked(false);
+    if (
+      characterPresentation ||
+      !taskSummaryEnabled ||
+      !viewport ||
+      !chatColumn
+    ) {
+      setDockedHeaderHeight(null);
       return;
     }
 
@@ -267,7 +267,9 @@ export function useChatTaskSummary({
           TASK_SUMMARY_PANEL_SAFE_GAP_REM) *
         remInPixels;
       const availableSideSpace = viewportRect.right - chatColumnRect.right;
-      setTaskSummaryDocked(availableSideSpace >= requiredSideSpace);
+      setDockedHeaderHeight(
+        availableSideSpace >= requiredSideSpace ? chatColumnRect.height : null,
+      );
     };
 
     updateDockedState();
@@ -283,7 +285,14 @@ export function useChatTaskSummary({
       window.removeEventListener('resize', updateDockedState);
       resizeObserver?.disconnect();
     };
-  }, [layoutMaxWidth, taskSummaryEnabled, characterPresentation]);
+  }, [
+    layoutMaxWidth,
+    taskSummaryEnabled,
+    characterPresentation,
+    options?.header?.enabled,
+    viewportRef,
+    chatColumnRef,
+  ]);
 
   const taskSummaryAvailable = Boolean(
     taskSummaryEnabled &&
@@ -352,6 +361,7 @@ export function useChatTaskSummary({
     onOpenResource: openTaskSummaryResource,
   };
   return {
+    dockedHeaderHeight,
     taskSummaryDocked,
     taskSummaryAvailable,
     taskSummaryProps,

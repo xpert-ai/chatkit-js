@@ -1,13 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-test('host overlays load offline and remote assets and update independently', async ({
-  page,
-}) => {
+async function servePetHost(page: Page) {
   const requests: string[] = [];
   const sprite = await readFile(
     resolve(root, '../chatkit-assets/pets/boba/spritesheet.webp'),
@@ -40,7 +38,18 @@ test('host overlays load offline and remote assets and update independently', as
       for (const [id, assetsBaseUrl] of [['offline', '/offline/pets'], ['remote', 'https://cdn.example.test/pets/v1'], ['required', '/required/pets']]) {
         const element = document.createElement('xpertai-chatkit');
         element.id = id;
-        element.setOptions({ frameUrl: 'http://localhost/frame', api, displayMode: id === 'required' ? 'pet' : 'chat', pet: { assetsBaseUrl, enabled: id !== 'required' } });
+        const options = { frameUrl: 'http://localhost/frame', api, displayMode: id === 'required' ? 'pet' : 'chat', pet: { assetsBaseUrl } };
+        if (id === 'required') {
+          const render = () => element.setOptions({ ...options, pet: { ...options.pet, enabled: localStorage.getItem('fixture:pet:hidden') !== '1' } });
+          element.addEventListener('chatkit.pet.launcher.visibility.change', ({ detail }) => {
+            if (detail.visible) localStorage.removeItem('fixture:pet:hidden');
+            else localStorage.setItem('fixture:pet:hidden', '1');
+            render();
+          });
+          render();
+        } else {
+          element.setOptions(options);
+        }
         document.body.append(element);
       }
       window.updatePet = (assetsBaseUrl) => document.querySelector('#remote').setOptions({ frameUrl: 'http://localhost/frame', api, pet: { assetsBaseUrl } });
@@ -48,6 +57,13 @@ test('host overlays load offline and remote assets and update independently', as
       });
     return route.abort();
   });
+  return requests;
+}
+
+test('host overlays load offline and remote assets and update independently', async ({
+  page,
+}) => {
+  const requests = await servePetHost(page);
   await page.goto('http://localhost');
   await expect
     .poll(() => requests)
@@ -82,4 +98,26 @@ test('host overlays load offline and remote assets and update independently', as
       'url("https://cdn.example.test/pets/v2/boba/spritesheet.webp")',
     ]),
   );
+});
+
+test('a host can remember launcher visibility across page reloads', async ({
+  page,
+}) => {
+  await servePetHost(page);
+  await page.goto('http://localhost');
+  const launcher = page.locator('#required');
+  const pet = launcher.locator('[data-chatkit-host-pet]');
+  const reopen = launcher.getByRole('button', { name: 'Show pet' });
+  await pet.click({ button: 'right' });
+  await launcher.getByRole('menuitem', { name: 'Close pet' }).click();
+  await expect(reopen).toBeVisible();
+  await page.reload();
+  await expect(reopen).toBeVisible();
+  await expect(pet).toHaveCount(0);
+  await expect(page.locator('#offline [data-chatkit-host-pet]')).toBeVisible();
+  await reopen.click();
+  await expect(pet).toBeVisible();
+  await page.reload();
+  await expect(pet).toBeVisible();
+  await expect(reopen).toHaveCount(0);
 });

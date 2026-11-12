@@ -65,12 +65,16 @@ describe('independent pet asset locations', () => {
       useChatPetSettings({ options: { api, pet } }),
     );
     expect(result.current.effectivePet).toBeNull();
-    const required = renderHook(() =>
-      useChatPetSettings({
-        options: { api, pet, displayMode: 'pet' },
-      }),
+    const launcher = renderHook(
+      ({ enabled }: { enabled?: boolean }) =>
+        useChatPetSettings({
+          options: { api, pet: { ...pet, enabled }, displayMode: 'pet' },
+        }),
+      { initialProps: { enabled: false } },
     );
-    expect(required.result.current.effectivePet).toMatchObject({
+    expect(launcher.result.current.effectivePet).toBe(false);
+    launcher.rerender({ enabled: true });
+    expect(launcher.result.current.effectivePet).toMatchObject({
       character: { src: `${remote}/boba/spritesheet.webp` },
     });
   });
