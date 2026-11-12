@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.21.0
+
+### Minor Changes
+
+- 0b4a728: Add optional passive Widget presentation metadata and render group results as aligned, themed cards with expandable details and viewer-local timestamps. Improve responsive A2UI metric typography while keeping source actions disabled in group snapshots.
+
 ## 0.20.3
 
 ### Patch Changes

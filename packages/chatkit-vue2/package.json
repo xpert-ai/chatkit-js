@@ -1,6 +1,6 @@
 {
   "name": "@xpert-ai/chatkit-vue2",
-  "version": "0.17.4",
+  "version": "0.17.5",
   "description": "Vue 2 bindings for Xpert Chatkit",
   "type": "module",
   "sideEffects": false,
