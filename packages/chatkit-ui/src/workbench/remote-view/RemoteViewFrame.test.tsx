@@ -248,7 +248,7 @@ describe('RemoteViewFrame', () => {
     const iframe = await screen.findByTitle('Documents');
     expect(iframe).toHaveAttribute(
       'sandbox',
-      'allow-downloads allow-forms allow-modals allow-popups allow-scripts',
+      'allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts',
     );
     expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin');
     expect(iframe).toHaveAttribute('referrerpolicy', 'no-referrer');
