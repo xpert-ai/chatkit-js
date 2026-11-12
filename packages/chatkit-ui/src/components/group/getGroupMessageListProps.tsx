@@ -1,6 +1,7 @@
+import { GroupMessageDisplay } from './GroupMessageDisplay';
+import { groupDisplays } from './group-display';
 import type {
   ChatGroupMessage,
-  ChatGroupResourceLink,
   ChatGroupSnapshot,
   Client,
 } from '@xpert-ai/xpert-sdk';
@@ -11,6 +12,11 @@ import type { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import type { MessageListProps } from '../thread/MessageList';
 import { Button } from '../ui/button';
 import type { GroupState } from './group-state';
+import type { ResourceCardActions } from '../../resource-cards/types';
+import {
+  GroupResourceCards,
+  type OpenGroupResource,
+} from './artifacts/GroupResourceCards';
 
 const MESSAGE_TIME_GAP_MS = 5 * 60 * 1000;
 
@@ -23,6 +29,7 @@ export function getGroupMessageListProps({
   onError,
   onOpenRuntime,
   onOpenResource,
+  onOpenResourceCard,
 }: {
   t: ReturnType<typeof useChatkitTranslation>['t'];
   group: ChatGroupSnapshot;
@@ -30,7 +37,8 @@ export function getGroupMessageListProps({
   client: Client;
   onReply: (message: ChatGroupMessage) => void;
   onError: (error: unknown) => void;
-  onOpenResource?: (link: ChatGroupResourceLink) => void;
+  onOpenResource?: OpenGroupResource;
+  onOpenResourceCard?: ResourceCardActions['openResourceCard'];
   onOpenRuntime?: (messageId: string, participantId: string) => void;
 }) {
   const member = (id: string) => group.members.find((item) => item.id === id);
@@ -42,6 +50,15 @@ export function getGroupMessageListProps({
   const context: NonNullable<MessageListProps['messageContext']> = {};
   const messages: ChatkitMessage[] = group.messages.map((message, index) => {
     const author = member(message.communication.senderId);
+    const display = author?.kind === 'assistant' ? groupDisplays(message) : [];
+    const resourceLinks = message.communication.resourceLinks ?? [];
+    // The navigation tool persists joined titles as a text fallback. Suppress
+    // only that exact duplicate; keep any independent caption or explanation.
+    const text =
+      resourceLinks.length > 0 &&
+      message.text === resourceLinks.map((link) => link.title).join('\n')
+        ? ''
+        : message.text;
     const self = author?.id === group.viewerParticipantId;
     const next = group.messages[index + 1];
     const gap = next
@@ -66,6 +83,7 @@ export function getGroupMessageListProps({
           item.communication.senderId === group.viewerParticipantId,
       );
     context[message.id] = {
+      hasRenderableContent: display.length > 0 || resourceLinks.length > 0,
       actor: {
         id: message.communication.senderId,
         kind: author?.kind ?? 'unknown',
@@ -83,24 +101,24 @@ export function getGroupMessageListProps({
           : undefined,
       isSelf: self,
       sendTransitionId: self ? message.clientMessageId : undefined,
-      after: (showTime ||
-        visibleDeliveries.length > 0 ||
-        canReply ||
-        !!message.communication.resourceLinks?.length) && (
+      contentAfter: (display.length > 0 || resourceLinks.length > 0) && (
+        <div className="w-full min-w-0 space-y-[var(--density-gap,0.5rem)]">
+          {resourceLinks.length > 0 && (
+            <GroupResourceCards links={resourceLinks} onOpen={onOpenResource} />
+          )}
+          {display.length > 0 && (
+            <GroupMessageDisplay
+              messageId={message.id}
+              blocks={display}
+              onOpenResourceCard={onOpenResourceCard}
+            />
+          )}
+        </div>
+      ),
+      after: (showTime || visibleDeliveries.length > 0 || canReply) && (
         <div
           className={`mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground ${self ? 'justify-end' : ''}`}
         >
-          {message.communication.resourceLinks?.map((link) => (
-            <Button
-              key={link.referenceId}
-              variant="outline"
-              className="w-full justify-start"
-              disabled={!onOpenResource}
-              onClick={() => onOpenResource?.(link)}
-            >
-              <span className="truncate">{link.title}</span>
-            </Button>
-          ))}
           {showTime && (
             <time dateTime={message.createdAt} className="w-full text-center">
               {new Date(message.createdAt).toLocaleTimeString([], {
@@ -176,7 +194,7 @@ export function getGroupMessageListProps({
     return {
       id: message.id,
       type: author?.kind === 'assistant' ? 'assistant' : 'user',
-      content: message.text,
+      content: text,
     };
   });
   Object.entries(live).forEach(([id, message]) => {

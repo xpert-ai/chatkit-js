@@ -176,9 +176,6 @@ export function createSlashPaletteOptions({
 
   const query = palette.query.trim().toLowerCase();
   const capabilityTypesOnly = Boolean(palette.capabilityTypes?.length);
-  const expandedCapabilityTypes = new Set(
-    palette.expandedCapabilityTypes ?? [],
-  );
   const selection =
     recommendedRuntimeCapabilities ??
     createEmptyRuntimeCapabilitiesSelection(runtimeCapabilities);
@@ -209,47 +206,56 @@ export function createSlashPaletteOptions({
     ...(parentType ? { parentType, depth: 1 } : {}),
   });
 
+  const commands: SlashPaletteOption[] = [];
+  const capabilities: SlashPaletteOption[] = [];
+  const skills: SlashPaletteOption[] = [];
   if (!capabilityTypesOnly) {
-    const options: SlashPaletteOption[] = [];
     for (const command of resolvedCommands.filter((item) =>
       isCommandAvailable(item, runtimeCapabilities, selection),
     )) {
       const capabilityType = CAPABILITY_GROUP_COMMANDS[command.name];
       if (!capabilityType) {
         if (matchesCommand(command, query, language)) {
-          options.push(getCommandPaletteOption(command, language));
+          commands.push(getCommandPaletteOption(command, language));
         }
         continue;
       }
 
-      const expanded = expandedCapabilityTypes.has(capabilityType);
-      const childQuery = expanded ? '' : query;
+      const explicitExpansion = palette.groupExpansion?.[capabilityType];
+      const childQuery = explicitExpansion ? '' : query;
       const children = getCapabilityOptions([capabilityType], childQuery);
       const commandMatches = matchesCommand(command, query, language);
-      const autoExpanded = !expanded && Boolean(query) && children.length > 0;
-      if (!commandMatches && !expanded && !autoExpanded) {
+      if (!commandMatches && !explicitExpansion && children.length === 0) {
         continue;
       }
+      // After an explicit group choice, only explicitly open groups show children.
+      const expanded =
+        explicitExpansion ??
+        (palette.groupExpansion === undefined &&
+          children.length > 0 &&
+          (Boolean(query) || capabilityType === 'skill'));
 
-      options.push({
+      const group = capabilityType === 'skill' ? skills : capabilities;
+      group.push({
         ...getCommandPaletteOption(command, language),
-        expanded: expanded || autoExpanded,
+        expanded,
         childCount: children.length,
       });
 
-      if (expanded || autoExpanded) {
-        options.push(
+      if (expanded) {
+        group.push(
           ...children.map((capability) =>
             toCapabilityPaletteOption(capability, capabilityType),
           ),
         );
       }
     }
-
-    return options;
+  } else {
+    for (const capability of getCapabilityOptions(palette.capabilityTypes)) {
+      const group = capability.type === 'skill' ? skills : capabilities;
+      group.push(toCapabilityPaletteOption(capability));
+    }
   }
 
-  return getCapabilityOptions(palette.capabilityTypes).map((capability) =>
-    toCapabilityPaletteOption(capability),
-  );
+  return [...commands, ...capabilities, ...skills];
 }

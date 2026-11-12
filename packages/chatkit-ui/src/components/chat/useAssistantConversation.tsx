@@ -18,11 +18,7 @@ import * as React from 'react';
 import type { RuntimeResourceCommand } from '@xpert-ai/xpert-sdk';
 import { getComposerThreadReferences } from '../../lib/composer-parts';
 import { sortVisiblePendingFollowUps } from '../../lib/follow-ups';
-import {
-  cn,
-  getMenuItemRoundedClass,
-  getPanelRoundedClass,
-} from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { useRuntimeCapabilitiesState } from './runtime-capabilities';
 import { type ChatProps } from './types';
 import { useConversationSummaryEvent } from './useConversationSummaryEvent';
@@ -234,6 +230,13 @@ export function useAssistantConversation({
     session.missingConfig ||
     session.isHistoryLoading;
 
+  function selectStarterPrompt(prompt: string) {
+    if (isPromptEditDisabled) return;
+    runtime.setRuntimeCapabilityPalette(null);
+    draft.setThreadMention(null);
+    capabilities.promptWorkflow.selectStarter(prompt);
+  }
+
   const conversation = useChatConversationActions({
     ...draft,
     ...files,
@@ -243,7 +246,6 @@ export function useAssistantConversation({
     ...historyState,
     onConnectorsChange,
     onProjectChange,
-    isPromptEditDisabled,
     configuredProjectId,
     options,
   });
@@ -665,7 +667,7 @@ export function useAssistantConversation({
       chatColumnStyle: chatColumnStyle,
       errorMessage: errorMessage,
       messages: messages,
-      isSubmissionBlocked: isSubmissionBlocked,
+      selectStarterPrompt,
       isPromptEditDisabled: isPromptEditDisabled,
       options: options,
       currentThreadIsRunning: currentThreadIsRunning,
@@ -817,8 +819,13 @@ export function useAssistantConversation({
             options={commands.slashPaletteOptions}
             paletteRef={commands.slashPaletteRef}
             optionRefs={commands.slashPaletteOptionRefs}
-            panelRoundedClass={getPanelRoundedClass(session.theme.radius)}
-            itemRoundedClass={getMenuItemRoundedClass(session.theme.radius)}
+            onActiveChange={(activeIndex) =>
+              runtime.setRuntimeCapabilityPalette((previous) =>
+                previous && previous.activeIndex !== activeIndex
+                  ? { ...previous, activeIndex }
+                  : previous,
+              )
+            }
             emptyLabel={commands.slashPaletteEmptyLabel}
             capabilityEmptyLabels={commands.slashPaletteCapabilityEmptyLabels}
             onSelect={commands.selectSlashPaletteOption}
@@ -831,10 +838,8 @@ export function useAssistantConversation({
         {isInitialComposer && session.startScreen?.promptsLayout === 'list' && (
           <StarterPromptSuggestions
             prompts={session.startScreen.prompts ?? []}
-            onPromptClick={input.handlePromptClick}
-            onPromptEdit={conversation.handlePromptEdit}
-            promptSendDisabled={isSubmissionBlocked}
-            promptEditDisabled={isPromptEditDisabled}
+            onSelect={selectStarterPrompt}
+            disabled={isPromptEditDisabled}
           />
         )}
         {/* Disclaimer */}

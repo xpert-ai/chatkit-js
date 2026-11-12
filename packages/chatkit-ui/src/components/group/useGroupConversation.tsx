@@ -1,4 +1,5 @@
 import { useGroupResourceNavigation } from './artifacts/useGroupResourceNavigation';
+import { useGroupResourceCardActions } from './artifacts/useGroupResourceCardActions';
 import { safeRandomUUID } from '@xpert-ai/chatkit-web-shared';
 import {
   editMentions,
@@ -24,10 +25,7 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 import { GroupMembers } from './GroupMembers';
-import {
-  groupArtifactPreview,
-  groupArtifactTabKey,
-} from './artifacts/group-artifact-presentation';
+import { groupArtifactTabKey } from './artifacts/group-artifact-presentation';
 import { GroupArtifacts } from './artifacts/GroupArtifacts';
 import { ToolbarButton } from '../ui/toolbar-button';
 import { GroupAvatar } from './GroupAvatar';
@@ -267,6 +265,7 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
     consume: consumeResourceRequest,
     onError: () => fail(t('group.artifacts.unavailable')),
   });
+  const openResourceCard = useGroupResourceCardActions(client, groupId);
   const headerActions = useGroupHeaderActions({
     options: props.options,
     group,
@@ -481,11 +480,8 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
             live: state.live,
             client: client,
             onError: fail,
-            onOpenResource: workbench.openPresentation
-              ? (link) => {
-                  void openResource(link);
-                }
-              : undefined,
+            onOpenResourceCard: openResourceCard,
+            onOpenResource: workbench.openResource ? openResource : undefined,
             onOpenRuntime: workbench.openGroupAssistant
               ? (messageId, participantId) =>
                   workbench.openGroupAssistant?.({ messageId, participantId })
@@ -751,9 +747,11 @@ export function useGroupConversation(props: ChatProps): ChatViewModel {
             client={client}
             group={group}
             onOpen={(reference) => {
-              workbench.openPresentation?.(
-                groupArtifactPreview(client, group.id, reference),
-              );
+              void openResource({
+                resource: { kind: 'group-reference', id: reference.id },
+                projectId: reference.runtimeProjectId,
+                title: reference.title,
+              });
               setArtifactsOpen(false);
             }}
             onRemove={(reference) =>

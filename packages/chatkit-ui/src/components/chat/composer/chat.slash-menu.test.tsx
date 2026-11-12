@@ -54,6 +54,12 @@ describe('Chat slash menu positions', () => {
       expect(menu.getByText('Localized Plugins')).toBeInTheDocument();
       expect(menu.getByText('Create HTML dashboard')).toBeInTheDocument();
 
+      // Skills are expanded by default; collapsing and reopening the group must
+      // preserve the surrounding draft at every slash-menu position.
+      const skills = menu.getByText('Skills').closest('button');
+      expect(skills).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.mouseDown(menu.getByText('Skills'));
+      expect(menu.queryByText('Live Dashboard')).not.toBeInTheDocument();
       fireEvent.mouseDown(menu.getByText('Skills'));
       expect(screen.getByRole('textbox').textContent).toBe(text);
       fireEvent.mouseDown(await menu.findByText('Live Dashboard'));

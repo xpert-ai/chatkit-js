@@ -30,6 +30,53 @@ function fixture(result: unknown = { success: false, code: 'unsupported' }) {
   return { host, execute };
 }
 describe('Workbench built-in commands', () => {
+  it('locates public group history without resolving or leaving the private Assistant runtime', async () => {
+    const { host, execute } = fixture();
+    host.group = { id: 'group', threadId: 'public-thread' };
+    host.prepareLeave = vi.fn();
+    host.openMessage = vi
+      .fn()
+      .mockResolvedValue({ success: true, status: 'opened' });
+    expect(
+      await execute('workbench.navigation.open', {
+        target: 'group.message',
+        conversationId: 'group',
+        threadId: 'public-thread',
+        messageId: 'old-message',
+      }),
+    ).toEqual({ success: true, status: 'opened' });
+    expect(host.openMessage).toHaveBeenCalledWith({
+      conversationId: 'group',
+      threadId: 'public-thread',
+      messageId: 'old-message',
+    });
+    expect(host.forward).not.toHaveBeenCalled();
+    expect(host.prepareLeave).not.toHaveBeenCalled();
+  });
+  it.each([
+    { conversationId: 'other-group' },
+    { threadId: 'private-runtime' },
+    { messageId: undefined },
+    { executionId: 'private-execution' },
+  ])(
+    'rejects foreign or private group message navigation: %j',
+    async (patch) => {
+      const { host, execute } = fixture();
+      host.group = { id: 'group', threadId: 'public-thread' };
+      host.openMessage = vi.fn();
+      expect(
+        await execute('workbench.navigation.open', {
+          target: 'group.message',
+          conversationId: 'group',
+          threadId: 'public-thread',
+          messageId: 'message',
+          ...patch,
+        }),
+      ).toMatchObject({ success: false, code: 'bad_request' });
+      expect(host.openMessage).not.toHaveBeenCalled();
+      expect(host.forward).not.toHaveBeenCalled();
+    },
+  );
   it('opens authenticated pages externally only through an explicit host target', async () => {
     const { host, execute } = fixture();
     host.openExternal = vi.fn().mockReturnValue(true);

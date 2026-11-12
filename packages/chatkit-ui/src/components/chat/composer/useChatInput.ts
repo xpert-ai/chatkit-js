@@ -479,14 +479,7 @@ export function useChatInput({
     setSelectedTool((prev) => (prev?.id === tool.id ? null : tool));
   };
 
-  const handlePromptClick = React.useCallback(
-    (prompt: string) => {
-      submitDraft({ inputText: prompt, displayText: prompt });
-    },
-    [submitDraft],
-  );
   return {
-    handlePromptClick,
     handleComposerInput,
     handleComposerCompositionStart,
     handleComposerCompositionEnd,

@@ -177,7 +177,9 @@ Renders a template and submits it as a user message. `{{args}}` is replaced by t
 }
 ```
 
-Submitting `/review src/app.ts` sends `Review src/app.ts`.
+Submitting a typed `/review src/app.ts` sends `Review src/app.ts`. Selecting a `prompt_workflow` from the slash palette first prepares an editable draft with its configured skills and plugins. The user can edit the text and attach files before sending.
+
+A start-screen suggestion can open the same draft with `{ label: 'Review source', prompt: '/review src/app.ts' }`. A plain-text suggestion fills the composer with its configured prompt.
 
 If `runtimeCapabilities` is present on the action, ChatKit merges it into the current run-only capability selection for that submit.
 
@@ -232,6 +234,8 @@ When the capability is available in the current runtime capability response, Cha
 ## Prompt Workflow Commands
 
 Prompt workflows are slash commands that turn a short command invocation into a structured prompt. They are the ChatKit and Xpert equivalent of commands such as `/review`, `/explain`, `/test`, and `/debug`.
+
+On a new conversation, the shortcuts above the composer show available `insert_text` workflows and workflows with bound runtime capabilities. Selecting a shortcut prepares an editable draft with its skills or other capabilities. To show ordinary questions below the composer, set `startScreen.promptsLayout` to `list` and give each starter a plain-text `prompt`. Users can edit either draft before sending.
 
 A prompt workflow command should use:
 

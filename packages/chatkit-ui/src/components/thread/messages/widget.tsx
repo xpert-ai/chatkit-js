@@ -5,54 +5,76 @@ import {
   SurfaceRenderer,
   Types,
   useA2UI,
+  ThemeProvider,
 } from '@xpert-ai/a2ui-react';
+import { WidgetPresentation } from './widget-presentation';
+import { widgetTheme } from './widget-theme';
 
 type RowData = Record<string, unknown>;
 
 export type WidgetMessageProps = {
   messageId: string;
   data: TMessageComponentWidgetData;
+  /** Disable source actions while keeping passive presentation disclosures usable. */
+  readOnly?: boolean;
 };
 
-export function WidgetMessage({ messageId, data }: WidgetMessageProps) {
+export function WidgetMessage({
+  messageId,
+  data,
+  readOnly = false,
+}: WidgetMessageProps) {
   const widgets = Array.isArray(data.widgets) ? data.widgets : [];
   if (widgets.length === 0) return null;
 
   const baseSurfaceId = `widget-${messageId}`;
 
   return (
-    <div className="space-y-3">
-      {widgets.map((widget, index) => {
-        const config = widget?.config;
-        const messages = Array.isArray(widget?.messages)
-          ? widget.messages
-          : [];
-        const surfaceId =
-          widgets.length > 1 ? `${baseSurfaceId}-${index}` : baseSurfaceId;
+    <ThemeProvider theme={widgetTheme}>
+      <div className="min-w-0 space-y-3 overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-start [&_th]:font-medium [&_td]:border-b [&_td]:border-border/50 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:tabular-nums">
+        {widgets.map((widget, index) => {
+          const config = widget?.config;
+          const messages = Array.isArray(widget?.messages)
+            ? widget.messages
+            : [];
+          const surfaceId =
+            widgets.length > 1 ? `${baseSurfaceId}-${index}` : baseSurfaceId;
 
-        if (messages.length > 0) {
+          const surface =
+            messages.length > 0 ? (
+              <FlatWidgetSurface messages={messages} surfaceId={surfaceId} />
+            ) : hasLegacySurface(config) ? (
+              <SurfaceRenderer
+                surfaceId={surfaceId}
+                surface={config as Types.Surface}
+              />
+            ) : null;
+          if (!surface) return null;
           return (
-            <FlatWidgetSurface
-              key={widget?.name ?? surfaceId}
-              messages={messages}
-              surfaceId={surfaceId}
-            />
+            <div key={surfaceId} className="min-w-0">
+              {readOnly ? (
+                <fieldset
+                  disabled
+                  className="min-w-0"
+                  onClickCapture={(event) => {
+                    if (
+                      event.target instanceof Element &&
+                      event.target.closest('a')
+                    )
+                      event.preventDefault();
+                  }}
+                >
+                  {surface}
+                </fieldset>
+              ) : (
+                surface
+              )}
+              <WidgetPresentation value={widget.presentation} />
+            </div>
           );
-        }
-
-        if (!hasLegacySurface(config)) {
-          return null;
-        }
-
-        return (
-          <SurfaceRenderer
-            key={widget?.name ?? surfaceId}
-            surfaceId={surfaceId}
-            surface={config as Types.Surface}
-          />
-        );
-      })}
-    </div>
+        })}
+      </div>
+    </ThemeProvider>
   );
 }
 
@@ -240,9 +262,7 @@ function collectIndexedRowsByPath(
       continue;
     }
 
-    const indexedRows = convertIndexedValueMapsToRows(
-      dataModelUpdate.contents,
-    );
+    const indexedRows = convertIndexedValueMapsToRows(dataModelUpdate.contents);
 
     if (indexedRows) {
       indexedRowsByPath.set(path, indexedRows);
@@ -460,10 +480,7 @@ function getComponentProperties(
   return getObjectProperty(component.component, componentType);
 }
 
-function getObjectProperty(
-  value: unknown,
-  key: string,
-): RowData | undefined {
+function getObjectProperty(value: unknown, key: string): RowData | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -472,10 +489,7 @@ function getObjectProperty(
   return isPlainObject(property) ? property : undefined;
 }
 
-function getStringProperty(
-  value: unknown,
-  key: string,
-): string | undefined {
+function getStringProperty(value: unknown, key: string): string | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }

@@ -9,6 +9,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn } from '../../lib/utils';
 import type {
   ResolvedSlashCommand,
@@ -16,7 +17,10 @@ import type {
   SlashPaletteOption,
 } from '../../lib/slash-commands';
 import type { RuntimeCapabilityOption } from '../../lib/runtime-capabilities';
-import { getRuntimeCapabilityColor } from '../../lib/runtime-capabilities';
+import {
+  getRuntimeCapabilityColor,
+  getRuntimeSkillSource,
+} from '../../lib/runtime-capabilities';
 import { RuntimeCapabilityIcon } from '../runtime-capability-icon';
 import { IconDefinitionRenderer } from '../ui/icon-definition';
 
@@ -51,6 +55,21 @@ function SlashCommandIcon({ command }: { command: ResolvedSlashCommand }) {
   }
 }
 
+const capabilityHeading = {
+  skill: 'composer.capabilities.skills',
+  plugin: 'composer.capabilities.plugins',
+  subAgent: 'composer.capabilities.subAgents',
+} as const;
+
+function sectionKey(option: SlashPaletteOption) {
+  if (option.kind === 'capability')
+    return option.parentType
+      ? undefined
+      : capabilityHeading[option.capability.type];
+  if (option.kind === 'command' && option.capabilityType) return undefined;
+  return 'composer.slashCommands.sectionTitle';
+}
+
 export function SlashPalette({
   palette,
   options,
@@ -61,6 +80,7 @@ export function SlashPalette({
   emptyLabel,
   capabilityEmptyLabels,
   onSelect,
+  onActiveChange,
 }: {
   palette: RuntimeCapabilityPaletteState;
   options: SlashPaletteOption[];
@@ -73,24 +93,49 @@ export function SlashPalette({
     Record<RuntimeCapabilityOption['type'], string>
   >;
   onSelect: (option: SlashPaletteOption) => void;
+  onActiveChange?: (index: number) => void;
 }) {
+  const { t } = useChatkitTranslation();
   return (
     <div
       ref={paletteRef}
       data-slot="slash-palette"
       className={cn(
-        'mb-[calc(var(--chat-density-scale,1)*0.5rem)] max-h-56 overflow-y-auto rounded-chat-panel border border-border bg-popover text-popover-foreground p-[calc(var(--chat-density-scale,1)*0.25rem)] shadow-md',
+        'mb-[calc(0.5rem*var(--chat-density-scale,1))] max-h-[min(22rem,42dvh)] overflow-y-auto overscroll-contain rounded-chat-panel border border-border bg-popover [--slash-inset:calc(0.375rem+0.25rem*var(--chat-density-scale,1))] [--slash-padding:calc(0.375rem*var(--chat-density-scale,1))] p-(--slash-padding) text-popover-foreground shadow-sm',
         panelRoundedClass,
       )}
     >
       {options.length > 0 ? (
         options.map((option, index) => {
+          const group = option.kind === 'command' && option.capabilityType;
+          const section = sectionKey(option);
+          const showHeading =
+            section && (!index || section !== sectionKey(options[index - 1]));
+          const capability =
+            option.kind === 'capability' ? option.capability : undefined;
           const capabilityColor =
-            option.kind === 'capability' && option.capability.type !== 'skill'
-              ? getRuntimeCapabilityColor(option.capability)
+            capability && capability.type !== 'skill'
+              ? getRuntimeCapabilityColor(capability)
               : undefined;
+          const skill =
+            capability?.type === 'skill' ? capability.capability : undefined;
+          const source = skill && getRuntimeSkillSource(skill);
+          const sourceLabel = source
+            ? t(
+                source.type === 'project'
+                  ? 'composer.slashCommands.projectSource'
+                  : 'composer.slashCommands.expertSource',
+                { name: source.label },
+              )
+            : skill?.repositoryName;
+          const active = index === palette.activeIndex;
           return (
             <React.Fragment key={option.id}>
+              {showHeading && (
+                <div className="px-(--slash-inset) pt-(--slash-padding) pb-[calc(0.25rem*var(--chat-density-scale,1))] text-xs text-muted-foreground">
+                  {t(section)}
+                </div>
+              )}
               <button
                 ref={(element) => {
                   optionRefs.current[index] = element;
@@ -99,98 +144,102 @@ export function SlashPalette({
                 data-kind={option.kind}
                 data-depth={option.kind === 'capability' ? option.depth : 0}
                 type="button"
-                aria-expanded={
-                  option.kind === 'command' && option.capabilityType
-                    ? option.expanded === true
-                    : undefined
-                }
+                aria-current={active || undefined}
+                aria-expanded={group ? option.expanded === true : undefined}
+                onPointerMove={(event) => {
+                  if (event.pointerType === 'mouse' && !active)
+                    onActiveChange?.(index);
+                }}
                 onMouseDown={(event) => {
+                  if (event.button !== 0) return;
                   event.preventDefault();
                   onSelect(option);
                 }}
+                onClick={(event) => {
+                  // Keyboard and assistive technology can activate a button without a mouse down.
+                  if (event.detail === 0) onSelect(option);
+                }}
                 className={cn(
-                  'flex h-[calc(var(--chat-density-scale,1)*2rem)] w-full items-center gap-[calc(var(--chat-density-scale,1)*0.25rem)] rounded-chat-item px-[calc(var(--chat-density-scale,1)*0.5rem)] text-left text-sm hover:bg-accent hover:text-accent-foreground',
+                  'flex min-h-[calc(1.25rem+0.75rem*var(--chat-density-scale,1))] w-full min-w-0 items-center gap-(--slash-inset) rounded-chat-item px-(--slash-inset) text-left text-sm font-normal focus-visible:outline-1 focus-visible:outline-ring',
                   itemRoundedClass,
-                  option.kind === 'capability' && option.depth === 1 && 'pl-9',
-                  index === palette.activeIndex &&
-                    'bg-accent text-accent-foreground',
+                  group && 'text-xs text-muted-foreground',
+                  active && 'bg-muted text-foreground',
                 )}
               >
-                <span
-                  className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground',
-                    option.kind === 'capability' &&
-                      option.depth === 1 &&
-                      'h-5 w-5',
-                  )}
-                  style={
-                    capabilityColor ? { color: capabilityColor } : undefined
-                  }
-                >
-                  {option.kind === 'resource_command' ? (
-                    <Sparkles size={16} />
-                  ) : option.kind === 'command' ? (
-                    <SlashCommandIcon command={option.command} />
-                  ) : (
-                    <RuntimeCapabilityIcon
-                      option={option.capability}
-                      variant="list"
-                    />
-                  )}
-                </span>
-                <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                  <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
-                    <span
-                      className="truncate font-medium"
-                      style={
-                        capabilityColor ? { color: capabilityColor } : undefined
-                      }
-                    >
-                      {option.label}
-                    </span>
-                    {option.kind === 'command' &&
-                    option.capabilityType &&
-                    typeof option.childCount === 'number' ? (
-                      <span
-                        data-slot="slash-palette-child-count"
-                        className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-medium leading-none text-muted-foreground"
-                      >
-                        {option.childCount}
-                      </span>
-                    ) : null}
+                {!group && (
+                  <span
+                    className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&_svg]:max-h-full [&_svg]:max-w-full"
+                    style={
+                      capabilityColor ? { color: capabilityColor } : undefined
+                    }
+                  >
+                    {option.kind === 'resource_command' ? (
+                      <Sparkles size={16} />
+                    ) : option.kind === 'command' ? (
+                      <SlashCommandIcon command={option.command} />
+                    ) : (
+                      <RuntimeCapabilityIcon
+                        option={option.capability}
+                        variant="list"
+                      />
+                    )}
                   </span>
-                  {option.description && (
-                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                )}
+                <span className="flex min-w-0 flex-1 items-baseline gap-(--slash-inset)">
+                  <span
+                    className={cn(
+                      'truncate',
+                      !group && option.description && 'max-w-[65%] shrink-0',
+                    )}
+                    title={option.label}
+                  >
+                    {option.label}
+                  </span>
+                  {group && typeof option.childCount === 'number' && (
+                    <span
+                      data-slot="slash-palette-child-count"
+                      className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                    >
+                      {option.childCount}
+                    </span>
+                  )}
+                  {!group && option.description && (
+                    <span
+                      className="min-w-0 truncate text-muted-foreground"
+                      title={option.description}
+                    >
                       {option.description}
                     </span>
                   )}
                 </span>
-                {option.kind === 'command' && option.capabilityType ? (
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
-                    {option.expanded ? (
-                      <ChevronDown size={14} />
-                    ) : (
-                      <ChevronRight size={14} />
-                    )}
+                {sourceLabel && (
+                  <span
+                    className="max-w-[30%] shrink-0 truncate text-xs text-muted-foreground"
+                    title={sourceLabel}
+                  >
+                    {sourceLabel}
                   </span>
-                ) : null}
+                )}
+                {group &&
+                  (option.expanded ? (
+                    <ChevronDown className="size-3.5 shrink-0" />
+                  ) : (
+                    <ChevronRight className="size-3.5 shrink-0" />
+                  ))}
               </button>
-              {option.kind === 'command' &&
-              option.capabilityType &&
-              option.expanded &&
-              option.childCount === 0 ? (
+              {group && option.expanded && option.childCount === 0 && (
                 <div
                   data-slot="slash-palette-group-empty"
-                  className="px-3 py-1.5 pl-12 text-xs text-muted-foreground"
+                  className="px-(--slash-inset) py-(--slash-padding) text-sm text-muted-foreground"
                 >
-                  {capabilityEmptyLabels?.[option.capabilityType] ?? emptyLabel}
+                  {capabilityEmptyLabels?.[group] ?? emptyLabel}
                 </div>
-              ) : null}
+              )}
             </React.Fragment>
           );
         })
       ) : (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
+        <div className="px-(--slash-inset) py-(--slash-padding) text-sm text-muted-foreground">
           {emptyLabel}
         </div>
       )}

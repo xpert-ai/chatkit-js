@@ -361,8 +361,9 @@ describe('slash command palette', () => {
       atMessageStart: true,
     });
 
-    expect(options.map((option) => option.label)).toContain('Review');
-    expect(options.map((option) => option.label)).toContain('Review Skill');
+    expect(options.map((option) => option.label)).toEqual([
+      'Review', 'Skills', 'Review Skill',
+    ]);
     expect(options.find((option) => option.label === 'Review')).toMatchObject({
       description: '<path>',
     });
@@ -520,6 +521,33 @@ describe('slash command palette', () => {
     ).toEqual(['Goal']);
   });
 
+  it('shows available skills on bare slash until their group is collapsed', () => {
+    const palette = resolveRuntimeCapabilityPalette('/', 1)!;
+    expect(getPaletteOptions(palette).map((option) => option.label)).toEqual([
+      'Plan', 'Pet', 'Review', 'Runtime Only',
+      'Plugins', 'Sub-agents', 'Skills', 'Review Skill',
+    ]);
+    const collapsed = getPaletteOptions({
+      ...palette,
+      groupExpansion: { skill: false },
+    });
+    expect(collapsed.at(-1)?.label).toBe('Skills');
+    expect(collapsed.map((option) => option.label)).not.toContain('Review Skill');
+    expect(collapsed.find((option) => option.label === 'Skills')).toMatchObject({
+      expanded: false, childCount: 1,
+    });
+  });
+
+  it('keeps a collapsed group visible when only its children match the search', () => {
+    const palette = resolveRuntimeCapabilityPalette('/review', 7)!;
+    const options = getPaletteOptions({
+      ...palette,
+      groupExpansion: { skill: false },
+    });
+    expect(options.map((option) => option.label)).toEqual(['Review', 'Skills']);
+    expect(options.at(-1)).toMatchObject({ expanded: false, childCount: 1 });
+  });
+
   it('nests runtime capabilities under expanded built-in groups', () => {
     const options = getPaletteOptions({
       query: '',
@@ -527,13 +555,15 @@ describe('slash command palette', () => {
       end: 1,
       activeIndex: 0,
       atMessageStart: true,
-      expandedCapabilityTypes: ['skill'],
+      groupExpansion: { skill: true, plugin: true },
     });
 
     const skillGroupIndex = options.findIndex(
       (option) => option.kind === 'command' && option.command.name === 'skills',
     );
-    expect(skillGroupIndex).toBeGreaterThan(-1);
+    expect(options.slice(-5).map((option) => option.label)).toEqual([
+      'Plugins', 'Search Plugin', 'Sub-agents', 'Skills', 'Review Skill',
+    ]);
     expect(options[skillGroupIndex]).toMatchObject({
       kind: 'command',
       capabilityType: 'skill',
@@ -546,6 +576,14 @@ describe('slash command palette', () => {
       depth: 1,
       label: 'Review Skill',
     });
+  });
+
+  it('keeps the full inline command list and places skills last', () => {
+    const palette = resolveRuntimeCapabilityPalette('add /', 5)!;
+    expect(getPaletteOptions(palette).map((option) => option.label)).toEqual([
+      'Plan', 'Pet', 'Review', 'Runtime Only',
+      'Plugins', 'Sub-agents', 'Skills', 'Review Skill',
+    ]);
   });
 });
 

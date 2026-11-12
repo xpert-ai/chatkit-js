@@ -394,6 +394,7 @@
         }
     },
     "chat": {
+        "widgetDetails": "View details",
         "title": "Chat",
         "placeholder": "What can I help you with today? @ reference conversations, / use skills and commands",
         "statusOnline": "Online",
@@ -665,6 +666,9 @@
             "knowledge": "Knowledge"
         },
         "slashCommands": {
+            "sectionTitle": "Commands",
+            "expertSource": "Expert · {{name}}",
+            "projectSource": "Project · {{name}}",
             "commands": {
                 "plan": {
                     "label": "Plan",
@@ -1285,6 +1289,19 @@
         "commandFailed": "Could not complete the call action. Please retry."
     },
     "group": {
+        "resourceCard": {
+            "project": "Project resource",
+            "shared": "Shared resource · Fixed version · Read only"
+        },
+        "resultSnapshotLabel": "Result snapshot",
+        "resultSnapshot": "This is a result snapshot. Opening a resource checks your group access and shows the version authorized for this group.",
+        "snapshotResource": {
+            "open": "Open authorized version",
+            "disabled": "This card is a result snapshot. Opening the original resource from here is not supported yet.",
+            "unavailable": "This group has no accessible authorization for this resource. Check Shared resources for an accepted, active grant.",
+            "ambiguous": "This group has multiple authorized versions of this resource. Choose a version in Shared resources.",
+            "failed": "Could not open the authorized resource. Refresh Shared resources to check access, then retry."
+        },
         "artifacts": {
             "title": "Shared resources",
             "hint": "Fixed versions · Read only",

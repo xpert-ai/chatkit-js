@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -143,7 +144,7 @@ describe('ComposerMenu', () => {
     expect(screen.queryByText('Plugins')).not.toBeInTheDocument();
   });
 
-  it('uses the legacy panel border and gutter with compact item padding', () => {
+  it('uses a shared small label and icon scale for primary actions', () => {
     render(<ComposerMenu goalCommandAvailable />);
     openMenu();
 
@@ -158,16 +159,18 @@ describe('ComposerMenu', () => {
     expect(primaryPanel).not.toHaveClass('p-0', 'p-3', 'ring-0');
     expect(
       primaryPanel?.querySelector('[data-slot="dropdown-menu-separator"]'),
-    ).toHaveClass('my-2');
+    ).toHaveClass('my-1');
     for (const item of screen.getAllByRole('menuitem')) {
-      expect(item).toHaveClass('p-1.5');
+      expect(item).toHaveClass('text-sm', 'rounded-chat-item');
+      expect(item.querySelector('span')).not.toHaveClass('text-base');
+      expect(item.querySelector('svg')).toHaveClass('size-4');
     }
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Goals' }));
     const targetItems = screen.getAllByRole('switch');
-    expect(targetItems[0]?.parentElement).toHaveClass('p-1');
+    expect(targetItems[0]?.parentElement).toHaveClass('p-(--composer-row-padding)');
     for (const item of targetItems) {
-      expect(item).toHaveClass('p-1.5');
+      expect(item).toHaveClass('text-sm', 'rounded-chat-item');
     }
   });
 
@@ -178,7 +181,10 @@ describe('ComposerMenu', () => {
 
     expect(
       document.querySelector('[data-slot="composer-primary-panel"]'),
-    ).toHaveClass('rounded-3xl');
+    ).toHaveClass('rounded-chat-panel');
+    expect(
+      screen.getByRole('menu').style.getPropertyValue('--chat-panel-radius'),
+    ).toContain('+ 12px');
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(
       'rounded-chat-item',
     );
@@ -216,7 +222,7 @@ describe('ComposerMenu', () => {
       document.querySelector('[data-slot="composer-primary-panel"]'),
     ).not.toBeInTheDocument();
     expect(secondaryPanel).toHaveClass(
-      'w-64',
+      'flex-1',
       'max-w-full',
       'overflow-hidden',
       'ring-1',
@@ -263,13 +269,15 @@ describe('ComposerMenu', () => {
       expect(menuContent).toHaveAttribute('data-layout', 'wide'),
     );
 
+    const primary = document.querySelector('[data-slot="composer-primary-panel"]');
+    expect(primary).toHaveClass('w-44');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Goals' }));
     expect(
       document.querySelector('[data-slot="composer-primary-panel"]'),
-    ).toBeInTheDocument();
+    ).toBe(primary);
     expect(
       document.querySelector('[data-slot="composer-secondary-panel"]'),
-    ).toBeInTheDocument();
+    ).toHaveClass('flex-1');
     expect(menuContent).toHaveClass('w-[33rem]', 'overflow-visible');
     expect(
       document.querySelector(
@@ -291,6 +299,84 @@ describe('ComposerMenu', () => {
         '[data-slot="composer-secondary-panel"] .lucide-arrow-left',
       ),
     ).toBeInTheDocument();
+  });
+
+  describe('submenu hover', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      return () => vi.useRealTimers();
+    });
+
+    // jsdom 25 does not implement PointerEvent.
+    function pointAt(item: HTMLElement, pointerType = 'mouse') {
+      fireEvent(
+        item,
+        Object.assign(new MouseEvent('pointerover', { bubbles: true }), {
+          pointerType,
+        }),
+      );
+    }
+
+    function settleHover() {
+      act(() => vi.advanceTimersByTime(200));
+    }
+
+    it('previews and switches panels, retaining the search query and focus on explicit activation', () => {
+      renderInChatkit(<ComposerMenu />, 800);
+      openMenu();
+      const skills = screen.getByRole('menuitem', { name: 'Skills' });
+      const experts = screen.getByRole('menuitem', { name: 'Experts' });
+      pointAt(skills);
+      settleHover();
+      const search = screen.getByPlaceholderText('Search skills');
+      expect(skills).toHaveAttribute('aria-expanded', 'true');
+      expect(search).not.toHaveFocus();
+      fireEvent.pointerOut(skills, { relatedTarget: search });
+      fireEvent.click(skills);
+      expect(search).toHaveFocus();
+      fireEvent.change(search, { target: { value: 'draft' } });
+      pointAt(skills);
+      settleHover();
+      expect(search).toHaveValue('draft');
+
+      pointAt(experts);
+      settleHover();
+      const expertSearch = screen.getByPlaceholderText('Search experts');
+      expect(expertSearch).toHaveValue('');
+      fireEvent.keyDown(experts, { key: 'Enter' });
+      expect(expertSearch).toHaveFocus();
+    });
+
+    it('ignores touch, disabled items and brief pass-throughs, and cancels preview on resize', () => {
+      const view = renderInChatkit(<ComposerMenu />, 800);
+      openMenu();
+      const skills = screen.getByRole('menuitem', { name: 'Skills' });
+      const expectClosed = () =>
+        expect(skills).toHaveAttribute('aria-expanded', 'false');
+      pointAt(skills, 'touch');
+      settleHover();
+      expectClosed();
+      pointAt(screen.getByRole('menuitem', { name: 'Connectors' }));
+      settleHover();
+      expect(
+        screen.queryByText('composer.connectors.scopeUnavailable'),
+      ).not.toBeInTheDocument();
+
+      pointAt(skills);
+      fireEvent.pointerOut(skills);
+      settleHover();
+      expectClosed();
+      pointAt(skills);
+      view.setWidth(480);
+      settleHover();
+      expectClosed();
+      pointAt(skills);
+      settleHover();
+      expectClosed();
+      fireEvent.click(skills);
+      expect(screen.getByPlaceholderText('Search skills')).toHaveFocus();
+      expect(skills).not.toBeInTheDocument();
+    });
   });
 
   it('searches and selects skills in the secondary panel', () => {
@@ -341,7 +427,10 @@ describe('ComposerMenu', () => {
     expect(
       document.querySelector('[data-slot="composer-primary-panel"]'),
     ).not.toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search skills')).toHaveClass('h-8');
+    expect(screen.getByPlaceholderText('Search skills')).toHaveClass(
+      'text-sm',
+      'focus-visible:ring-offset-0',
+    );
     expect(
       document.querySelector('[data-slot="composer-capability-list"]'),
     ).not.toHaveClass('pr-3');
@@ -365,7 +454,7 @@ describe('ComposerMenu', () => {
     );
   });
 
-  it('keeps the gap above search smaller than its horizontal inset', () => {
+  it('insets the search field from the panel edge using the control spacing', () => {
     render(
       <ComposerMenu
         runtimeCapabilities={{ skills: [], plugins: [], subAgents: [] }}
@@ -385,8 +474,7 @@ describe('ComposerMenu', () => {
       '[data-slot="composer-panel-search"]',
     );
     expect(panelSearch).not.toBeNull();
-    expect(panelSearch).toHaveClass('px-2', 'pt-1', 'pb-2');
-    expect(panelSearch).not.toHaveClass('p-2', 'pt-2');
+    expect(panelSearch).toHaveClass('p-(--composer-control-padding-inline)');
   });
 
   it('groups same-name Xpert and Project skills without overwriting either source', () => {
@@ -496,7 +584,10 @@ describe('ComposerMenu', () => {
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Experts' }));
 
-    expect(screen.getByPlaceholderText('Search experts')).toHaveClass('h-8');
+    expect(screen.getByPlaceholderText('Search experts')).toHaveClass(
+      'h-(--composer-control-height)',
+      'text-sm',
+    );
     expect(screen.getByText('No matching experts')).toBeInTheDocument();
   });
 
@@ -521,7 +612,7 @@ describe('ComposerMenu', () => {
     ).toHaveClass('w-full', 'min-w-0', 'overflow-x-hidden');
     expect(
       document.querySelector('[data-slot="composer-secondary-panel"]'),
-    ).toHaveClass('w-64', 'min-w-0', 'max-w-full', 'overflow-hidden');
+    ).toHaveClass('flex-1', 'min-w-0', 'max-w-full', 'overflow-hidden');
     expect(
       document.querySelector('[data-slot="composer-secondary-scroll"]')
         ?.firstElementChild,

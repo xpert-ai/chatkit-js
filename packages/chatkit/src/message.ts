@@ -71,8 +71,27 @@ export type TMessageComponent<T extends object = object> = T & {
   created_date?: Date | string;
 };
 
+/**
+ * Passive provenance shown beside a Widget. Producers supply public, localized
+ * copy only; never include credentials, query bindings or private execution IDs.
+ * Renderers may collapse details and format the timestamp in the viewer's locale.
+ * These fields neither grant access nor request an action or a fresh query.
+ */
+export type TWidgetPresentation = {
+  /** Short result qualification, for example completeness or freshness. */
+  summary?: string;
+  /** ISO 8601 instant with timezone; retained unchanged, displayed in local time. */
+  timestamp?: string;
+  /** Producer-localized label explaining what the timestamp represents. */
+  timestampLabel?: string;
+  /** Public supplementary facts rendered as plain text in an optional disclosure. */
+  details?: Array<{ label: string; value: string }>;
+};
+
 export type TMessageComponentWidgetItem = {
   name: string;
+  /** Optional display-only provenance. Older clients may omit this footer. */
+  presentation?: TWidgetPresentation;
   /**
    * Standard A2UI server-to-client messages. New widget messages should use
    * this flat protocol shape so the UI can build and isolate surfaces at render time.

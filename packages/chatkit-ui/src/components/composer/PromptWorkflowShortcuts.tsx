@@ -20,7 +20,7 @@ export function PromptWorkflowShortcuts({
   onBack: () => void;
 }) {
   const { t, i18n } = useChatkitTranslation();
-  if (!commands.length) return null;
+  if (!commands.length && !selected) return null;
   return (
     <div
       data-slot="prompt-workflow-shortcuts"

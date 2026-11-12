@@ -833,7 +833,8 @@ export function RemoteViewFrame({
         inert={blocked}
         srcDoc={html}
         referrerPolicy="no-referrer"
-        sandbox="allow-downloads allow-forms allow-modals allow-popups allow-scripts"
+        // OAuth popups need their normal browser context; the embedded View keeps its opaque origin.
+        sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts"
         onLoad={sendInit}
       />
       {blocked && <div className="absolute inset-0" />}

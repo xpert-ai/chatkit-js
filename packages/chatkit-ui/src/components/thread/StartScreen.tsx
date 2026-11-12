@@ -18,10 +18,8 @@ type StartScreenOption = NonNullable<ChatKitOptions['startScreen']>;
 
 export type StartScreenProps = {
   startScreen?: StartScreenOption;
-  onPromptClick?: (prompt: string) => void;
-  onPromptEdit?: (prompt: string) => void;
-  promptSendDisabled?: boolean;
-  promptEditDisabled?: boolean;
+  onSelect?: (prompt: string) => void;
+  disabled?: boolean;
   className?: string;
 };
 
@@ -44,17 +42,15 @@ function getIconComponent(icon?: IconName): React.ReactNode {
 
 export function StartScreen({
   startScreen,
-  onPromptClick,
-  onPromptEdit,
-  promptSendDisabled = false,
-  promptEditDisabled = false,
+  onSelect,
+  disabled = false,
   className,
 }: StartScreenProps) {
   const { t } = useChatkitTranslation();
   const greeting = startScreen?.greeting ?? t('startScreen.greeting');
   const prompts = startScreen?.prompts ?? [];
-  const hasPrompts = startScreen?.promptsLayout !== 'list' && prompts.length > 0;
-  const editPromptLabel = t('startScreen.editPrompt');
+  const hasPrompts =
+    startScreen?.promptsLayout !== 'list' && prompts.length > 0;
 
   return (
     <div
@@ -75,48 +71,29 @@ export function StartScreen({
         <div className="w-full max-w-2xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {prompts.map((item, index) => (
-              <div
-                key={`prompt-${index}`}
+              <button
+                key={index}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect?.(item.prompt)}
                 className={cn(
-                  'flex items-stretch rounded-xl border bg-card text-left',
-                  'transition-colors hover:border-primary/20 hover:bg-muted/50',
-                  'focus-within:ring-2 focus-within:ring-primary/20',
+                  'flex min-w-0 items-center gap-[calc(0.75rem*var(--chat-density-scale,1))] rounded-chat-panel border bg-card p-[calc(1rem*var(--chat-density-scale,1))] text-left text-card-foreground',
+                  'hover:border-primary/20 hover:bg-muted/50 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
-                <button
-                  type="button"
-                  disabled={promptSendDisabled}
-                  onClick={() => onPromptClick?.(item.prompt)}
-                  className={cn(
-                    'flex min-w-0 flex-1 items-center gap-3 p-4 text-left overflow-hidden',
-                    'focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-                  )}
+                <span
+                  className="flex size-10 shrink-0 items-center justify-center rounded-chat-item bg-primary/10 text-primary"
+                  aria-hidden="true"
                 >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    {getIconComponent(item.icon)}
-                  </span>
-                  <div
-                    className="text-sm font-medium text-foreground line-clamp-3 overflow-hidden"
-                    title={item.label}
-                  >
-                    {item.label}
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  disabled={promptEditDisabled}
-                  onClick={() => onPromptEdit?.(item.prompt)}
-                  aria-label={editPromptLabel}
-                  title={editPromptLabel}
-                  className={cn(
-                    'flex w-12 shrink-0 items-center justify-center border-l text-muted-foreground',
-                    'rounded-r-xl transition-colors hover:bg-muted hover:text-foreground',
-                    'focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
-                  )}
+                  {getIconComponent(item.icon)}
+                </span>
+                <span
+                  className="line-clamp-3 text-sm font-medium"
+                  title={item.label}
                 >
-                  <Pencil size={16} />
-                </button>
-              </div>
+                  {item.label}
+                </span>
+              </button>
             ))}
           </div>
         </div>

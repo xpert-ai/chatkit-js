@@ -145,7 +145,6 @@ vi.mock('../i18n/useChatkitTranslation', () => ({
         'chat.attachmentStatus.ready': 'Ready',
         'chat.referencedContentOnly': 'Referenced content',
         'composer.removeReference': 'Remove reference',
-        'startScreen.editPrompt': 'Edit prompt',
         'startScreen.greeting': 'What can I help with today?',
         'chat.scrollToBottom': 'Scroll to bottom',
         'taskSummary.open': 'Open task summary',
@@ -420,7 +419,7 @@ describe('Chat start screen prompts', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('places compact suggestions below the composer and preserves send and edit actions', async () => {
+  it('fills the composer from a compact suggestion and sends the edited prompt on confirmation', async () => {
     const { container } = renderChat({
       ...baseOptions,
       startScreen: { ...baseOptions.startScreen, promptsLayout: 'list' },
@@ -438,12 +437,14 @@ describe('Chat start screen prompts', () => {
     expect(content).not.toContainElement(suggestion);
     expect(screen.getAllByText('Analyze notice')).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit prompt' }));
+    fireEvent.click(suggestion);
     expect(screen.getByRole('textbox')).toHaveTextContent('Analyze this technical notice');
     expect(mocks.stream.submit).not.toHaveBeenCalled();
 
-    fireEvent.click(suggestion);
+    setComposerText(screen.getByRole('textbox'), 'Review the attached financial notice');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input.input).toBe('Review the attached financial notice');
   });
 
   it('keeps attachment cards below shortcuts and the slash menu next to the input', async () => {
@@ -499,6 +500,8 @@ describe('Chat start screen prompts', () => {
     };
     const { rerender } = renderChat(options);
     fireEvent.click(await screen.findByRole('button', { name: 'Analyze notice' }));
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
 
     mocks.stream.isLoading = true;
@@ -773,12 +776,16 @@ describe('Chat start screen prompts', () => {
     );
   });
 
-  it('submits a start-screen prompt with existing attachments and references', async () => {
+  it('lets the user attach a file after choosing a starter and sends both on confirmation', async () => {
     const { container } = renderChat();
     const fileInput = container.querySelector('input[type="file"]');
     const file = new File(['content'], 'notice.pdf', {
       type: 'application/pdf',
     });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze notice' }));
+    expect(screen.getByRole('textbox')).toHaveTextContent('Analyze this technical notice');
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
 
     fireEvent.change(fileInput as HTMLInputElement, {
       target: { files: [file] },
@@ -791,7 +798,8 @@ describe('Chat start screen prompts', () => {
     pasteLongReference(textbox, 'quoted '.repeat(900));
     expect(screen.getByText('Pasted text')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Analyze notice'));
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
 
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
     expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
@@ -898,7 +906,7 @@ describe('Chat start screen prompts', () => {
     pasteLongReference(textbox, 'quoted '.repeat(900));
     expect(screen.getByText('Pasted text')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText('Edit prompt'));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze notice' }));
 
     expect(mocks.stream.submit).not.toHaveBeenCalled();
     await waitFor(() =>

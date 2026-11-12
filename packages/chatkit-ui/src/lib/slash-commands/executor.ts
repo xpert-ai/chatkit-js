@@ -104,21 +104,28 @@ function resolveCommandSourceWorkflow(
   };
 }
 
+export function getSlashCommandSource(
+  command: ResolvedSlashCommand,
+  language?: string | null,
+): ChatKitCommandSource {
+  const workflow = resolveCommandSourceWorkflow(command, language);
+  return {
+    type: 'slash_command' as const,
+    name: command.name,
+    source: command.source,
+    executionType: command.action.type,
+    ...(command.kind === 'prompt_workflow' ? { kind: command.kind } : {}),
+    ...(workflow ? { workflow } : {}),
+  };
+}
+
 export function createSlashCommandExecutionEffect(
   command: ResolvedSlashCommand,
   args: string,
   language?: string | null,
 ): CommandExecutionEffect {
   const action = command.action;
-  const workflow = resolveCommandSourceWorkflow(command, language);
-  const commandSource: ChatKitCommandSource = {
-    type: 'slash_command' as const,
-    name: command.name,
-    source: command.source,
-    executionType: action.type,
-    ...(command.kind === 'prompt_workflow' ? { kind: command.kind } : {}),
-    ...(workflow ? { workflow } : {}),
-  };
+  const commandSource = getSlashCommandSource(command, language);
 
   if (command.name === 'goal' && command.source === 'runtime') {
     return {
