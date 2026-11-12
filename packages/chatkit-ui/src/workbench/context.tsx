@@ -3,6 +3,7 @@ import type {
   ArtifactIdentity,
   ArtifactOpenOptions,
 } from './artifact-preview/artifact-preview';
+import type { ConversationResourceTarget } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitReference,
   FileChangeResource,
@@ -22,7 +23,16 @@ import {
   TooltipTrigger,
 } from '../components/ui/tooltip';
 
+import type { PresentationWorkbenchPreview } from './preview/types';
+
 export type WorkbenchContextValue = {
+  /** Resolve a conversation-scoped resource afresh; metadata never bypasses its native authorization. */
+  openResource?: (
+    resource: ConversationResourceTarget,
+    options?: { signal?: AbortSignal },
+  ) => Promise<unknown>;
+  openPresentation?: (preview: PresentationWorkbenchPreview) => void;
+  closePresentation?: (key: string) => void;
   openGroupAssistant?: (target: {
     messageId: string;
     participantId: string;

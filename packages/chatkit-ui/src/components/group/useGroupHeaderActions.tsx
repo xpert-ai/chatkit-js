@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react';
-import { History, Settings, Users } from 'lucide-react';
+import { History, Settings, Users, PanelsTopLeft } from 'lucide-react';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import type { ChatGroupSnapshot } from '@xpert-ai/xpert-sdk';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
@@ -25,6 +25,8 @@ export function useGroupHeaderActions({
   membersButton,
   onMembers,
   membersOpen,
+  onArtifacts,
+  artifactsOpen,
   onLoadMore,
   onNavigateMessage,
   onFocusComposer,
@@ -34,6 +36,8 @@ export function useGroupHeaderActions({
   membersButton: ReactNode;
   onMembers: () => void;
   membersOpen: boolean;
+  onArtifacts?: () => void;
+  artifactsOpen?: boolean;
   onLoadMore: () => void;
   onNavigateMessage: (id: string) => void;
   onFocusComposer: () => void;
@@ -87,7 +91,8 @@ export function useGroupHeaderActions({
       <ChatHeaderActions
         moreButtonRef={moreButtonRef}
         onMenuCloseAutoFocus={(event) => {
-          if (pet.petSettingsOpen || membersOpen) event.preventDefault();
+          if (pet.petSettingsOpen || membersOpen || artifactsOpen)
+            event.preventDefault();
         }}
         menu={
           <>
@@ -101,6 +106,12 @@ export function useGroupHeaderActions({
               <Users size={16} />
               {t('group.membersTitle')}
             </DropdownMenuItem>
+            {onArtifacts && (
+              <DropdownMenuItem onSelect={onArtifacts}>
+                <PanelsTopLeft size={16} />
+                {t('group.artifacts.title')}
+              </DropdownMenuItem>
+            )}
             {group?.hasMore && (
               <DropdownMenuItem onSelect={onLoadMore}>
                 <History size={16} />

@@ -5,7 +5,7 @@ import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 export function HistoricalMcpAppResult({
   data,
 }: {
-  data: TMessageComponentMcpAppData;
+  data: Pick<TMessageComponentMcpAppData, 'toolResult'>;
 }) {
   const { t } = useChatkitTranslation();
   return (

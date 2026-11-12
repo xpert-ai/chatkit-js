@@ -88,9 +88,11 @@ function DropdownMenuCheckboxItem({
   className,
   children,
   checked,
+  indicator = "boxed",
   inset,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem> & {
+  indicator?: "boxed" | "check"
   inset?: boolean
 }) {
   return (
@@ -105,11 +107,19 @@ function DropdownMenuCheckboxItem({
       {...props}
     >
       <span
-        className="pointer-events-none absolute right-2 flex h-5 w-5 items-center justify-center"
+        className={cn(
+          "pointer-events-none absolute right-2 flex items-center justify-center",
+          indicator === "check" ? "top-1/2 size-4 -translate-y-1/2" : "size-5",
+        )}
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
-        <DropdownMenuPrimitive.ItemIndicator className="flex h-5 w-5 items-center justify-center rounded-chat-item shadow-sm ring-1 ring-primary/25">
-          <CheckIcon className="size-3.5 stroke-[3]" />
+        <DropdownMenuPrimitive.ItemIndicator
+          className={cn(
+            "flex items-center justify-center",
+            indicator === "boxed" && "size-5 rounded-chat-item shadow-sm ring-1 ring-primary/25",
+          )}
+        >
+          <CheckIcon className={indicator === "check" ? "size-4" : "size-3.5 stroke-[3]"} />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

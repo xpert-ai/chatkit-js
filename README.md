@@ -131,12 +131,28 @@ pnpm excel-echarts-chatkit:dev
 # Dev UI components
 pnpm dev:ui
 
+# After changing the lockfile or SDK patches, validate the SDK and rebuild Vite's cache
+pnpm dev:ui:fresh
+
 # Run tests
 pnpm test
 
 # Lint code
 pnpm lint
 ```
+
+If a local host loads but the embedded ChatKit page stays blank, first confirm
+that the host's `frameUrl` points to the running UI port. After pulling changes,
+run `corepack pnpm install --frozen-lockfile`, stop the previous UI process, and
+start `corepack pnpm dev:ui:fresh`. Its strict port check prevents accidentally
+starting a second server on a different port.
+
+When reproducing through browser automation, distinguish a UI startup error from
+a paused browser document response. If the browser tooling reports a paused
+document response and the child frame remains `about:blank`, end that tab's
+stalled debugging session and reload it normally. Confirm that the embedded UI
+loads before attaching the debugger again. An HTTP 200 from the dev server alone
+does not prove that the browser loaded or initialized the iframe.
 
 ## Publish
 

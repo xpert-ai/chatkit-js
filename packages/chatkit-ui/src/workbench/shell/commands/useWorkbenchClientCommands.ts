@@ -1,3 +1,7 @@
+import {
+  parseComposerInsert,
+  composerInsertPayload,
+} from '../../composer-insert';
 import { contentTabKey, contentViewKey } from '../../content/tab-identity';
 import {
   executeContentCommand,
@@ -8,6 +12,7 @@ import { ContentReview } from '../../content/ContentReview';
 import type { EditorLifecycle } from '../../editors/editor-lifecycle';
 import {
   ASSISTANT_CHAT_SEND_MESSAGE_COMMAND,
+  ASSISTANT_COMPOSER_INSERT_COMMAND,
   ASSISTANT_CONTEXT_SET_COMMAND,
   type XpertExtensionViewManifest,
   type XpertViewQuery,
@@ -40,6 +45,7 @@ import {
   buildWorkbenchRequestContext,
   getErrorMessage,
 } from './request-context';
+import { resolveWorkbenchResource } from '../../resources/resolve-resource';
 
 type WorkbenchClientCommandsOptions = {
   editors: EditorLifecycle;
@@ -105,6 +111,8 @@ export function useWorkbenchClientCommands({
     stream.assistantId,
     stream.projectId,
     stream.conversationId,
+    stream.threadId,
+    stream.group?.id,
   ]);
   const assistantScope = JSON.stringify([
     stream.apiUrl,
@@ -146,15 +154,58 @@ export function useWorkbenchClientCommands({
     onRequestContextChange(buildWorkbenchRequestContext(contextsRef.current));
   }, [onRequestContextChange, contextsRef]);
 
+  const mounted = React.useRef(true);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const executeClientCommand = React.useCallback(
     async (
       commandKey: string,
       payload: unknown,
       manifest: Pick<XpertExtensionViewManifest, 'key'>,
       resourceCard?: { messageId: string; id: string },
+      signal?: AbortSignal,
     ): Promise<unknown> => {
       const context = currentContext.current;
       const userActivated = navigator.userActivation?.isActive === true;
+      if (commandKey === 'workbench.resource.open') {
+        if (stream.runtimeScopeReady === false || !stream.projectId)
+          return { success: false, code: 'resource_unavailable' };
+        try {
+          const resolved = await resolveWorkbenchResource(payload, {
+            client: stream.client,
+            assistantId: stream.assistantId,
+            projectId: stream.projectId,
+            groupId: stream.group?.id,
+            signal,
+            isCurrent: () =>
+              mounted.current &&
+              currentContext.current === context &&
+              fileScopeReady.current,
+          });
+          if (resolved.kind === 'content')
+            return executeClientCommand(
+              'workbench.navigation.open',
+              resolved.navigation,
+              manifest,
+            );
+          openPreview(resolved.preview);
+          setOpen(true);
+          return { success: true, status: 'opened' };
+        } catch {
+          return {
+            success: false,
+            code:
+              currentContext.current === context
+                ? 'resource_unavailable'
+                : 'stale_context',
+          };
+        }
+      }
       if (isContentCommand(commandKey)) {
         if (
           stream.runtimeScopeReady === false ||
@@ -205,6 +256,28 @@ export function useWorkbenchClientCommands({
           status: parsed.clear ? 'cleared' : 'updated',
           key: parsed.key,
         };
+      }
+
+      if (commandKey === ASSISTANT_COMPOSER_INSERT_COMMAND) {
+        if (
+          stream.group ||
+          stream.runtimeScopeReady === false ||
+          !parentMessenger?.updateComposer
+        )
+          return unsupportedCommand(commandKey);
+        const input = parseComposerInsert(payload);
+        const catalog = input.skillNames?.length
+          ? await stream.client.assistants.getRuntimeCapabilities(
+              stream.assistantId,
+              { ...(stream.projectId ? { projectId: stream.projectId } : {}) },
+            )
+          : undefined;
+        const draft = composerInsertPayload(input, catalog);
+        if (currentContext.current !== context)
+          return { success: false, code: 'stale_context' };
+        await parentMessenger.updateComposer(draft);
+        await parentMessenger.focusComposer();
+        return { success: true, status: 'inserted' };
       }
 
       if (commandKey === ASSISTANT_CHAT_SEND_MESSAGE_COMMAND) {
@@ -351,6 +424,9 @@ export function useWorkbenchClientCommands({
         },
         prepareLeave: () => editors.prepare(),
         apiUrl: stream.apiUrl,
+        group: stream.group
+          ? { id: stream.group.id, threadId: stream.threadId }
+          : undefined,
         resolveFile: (resource) =>
           filePreviews.open(resource, {
             hostId: stream.assistantId,
@@ -421,13 +497,18 @@ export function useWorkbenchClientCommands({
         openExecution,
         openMessage,
         forward: async (request) => {
+          // Tab identities belong to local editor state; hosts authorize the registered View.
+          const hostRequest = {
+            ...request,
+            viewKey: contentViewKey(request.viewKey),
+          };
           const onClientCommand = options?.workbench?.onClientCommand;
           if (typeof onClientCommand === 'function')
-            return onClientCommand(request);
+            return onClientCommand(hostRequest);
           if (parentMessenger.isParentAvailable)
             return parentMessenger.sendCommand(
               'onWorkbenchClientCommand',
-              request,
+              hostRequest,
             );
           return unsupportedCommand(request.commandKey);
         },

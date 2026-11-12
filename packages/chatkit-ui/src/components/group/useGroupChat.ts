@@ -6,7 +6,11 @@ import {
 import { createFetchWithClientSecretRefresh } from '../../providers/stream/auth/client-secret';
 import { throwIfAborted } from '../../lib/request-abort';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Client, type ChatGroupSendInput } from '@xpert-ai/xpert-sdk';
+import {
+  Client,
+  type ChatGroupResourceOpenRequest,
+  type ChatGroupSendInput,
+} from '@xpert-ai/xpert-sdk';
 import type { ChatProps } from '../chat/types';
 import type { StateType } from '../../providers/stream/types';
 import {
@@ -22,12 +26,16 @@ export function useGroupChat({
   refreshClientSecret,
 }: ChatProps & { groupId: string }) {
   const [state, setState] = useState(initialGroupState);
+  const [resourceRequest, setResourceRequest] =
+    useState<ChatGroupResourceOpenRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   // Each audience owns its credential and abort scope. A late refresh from the
   // previous conversation cannot change the active conversation's credentials.
   const scope = useMemo(
     () => ({
+      sent: new Set<string>(),
+      opened: new Set<string>(),
       credential: { secret: clientSecret } as ResolvedClientSecret,
       controller: new AbortController(),
       refresh: refreshClientSecret,
@@ -79,6 +87,7 @@ export function useGroupChat({
   useEffect(() => {
     const controller = new AbortController();
     scope.controller = controller;
+    setResourceRequest(null);
     let cursor: string | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
@@ -93,7 +102,16 @@ export function useGroupChat({
           setConnected(true);
           setError(null);
           failures = 0;
-          setState((previous) => applyGroupEvent(previous, event.data));
+          if (event.data.type === 'resource_open') {
+            const request = event.data.request;
+            if (
+              scope.sent.has(request.clientMessageId) &&
+              !scope.opened.has(request.requestId)
+            ) {
+              scope.opened.add(request.requestId);
+              setResourceRequest(request);
+            }
+          } else setState((previous) => applyGroupEvent(previous, event.data));
         }
       } catch (reason) {
         if (controller.signal.aborted) return;
@@ -125,6 +143,11 @@ export function useGroupChat({
   }, [client, groupId, scope]);
   const send = useCallback(
     async (input: ChatGroupSendInput) => {
+      scope.sent.add(input.clientMessageId);
+      if (scope.sent.size > 100) {
+        const oldest = scope.sent.values().next();
+        if (!oldest.done) scope.sent.delete(oldest.value);
+      }
       const message = await client.groups.send(groupId, input);
       setState((previous) =>
         previous.snapshot
@@ -140,7 +163,7 @@ export function useGroupChat({
           : previous,
       );
     },
-    [client, groupId],
+    [client, groupId, scope],
   );
   const loadMore = useCallback(async () => {
     if (!state.snapshot?.hasMore) return [];
@@ -164,5 +187,20 @@ export function useGroupChat({
     );
     return page.messages;
   }, [client, groupId, state.snapshot]);
-  return { state, connected, error, setError, client, send, loadMore };
+  const consumeResourceRequest = useCallback((requestId: string) => {
+    setResourceRequest((current) =>
+      current?.requestId === requestId ? null : current,
+    );
+  }, []);
+  return {
+    state,
+    connected,
+    error,
+    setError,
+    client,
+    send,
+    loadMore,
+    resourceRequest,
+    consumeResourceRequest,
+  };
 }

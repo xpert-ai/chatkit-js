@@ -27,6 +27,8 @@ import {
 
 export type WorkbenchCommandHost = {
   apiUrl: string;
+  /** Public group identity and thread, independent of the main Assistant's private runtime. */
+  group?: { id: string; threadId: string | null | undefined };
   /** Project bound to the current, resolved runtime, never supplied by the command payload. */
   projectId?: string;
   isCurrent?: (navigation?: NavigationPayload) => boolean;
@@ -148,6 +150,22 @@ export async function executeWorkbenchCommand(
   if (commandKey === 'workbench.navigation.open') {
     const navigation = parseNavigation(payload);
     if (!navigation.target) return invalid();
+    if (navigation.target === 'group.message') {
+      if (
+        !host.group?.threadId ||
+        navigation.conversationId !== host.group.id ||
+        navigation.threadId !== host.group.threadId ||
+        !navigation.messageId ||
+        navigation.executionId
+      )
+        return invalid();
+      if (!host.openMessage) return unsupportedCommand(commandKey);
+      return host.openMessage({
+        conversationId: host.group.id,
+        threadId: host.group.threadId,
+        messageId: navigation.messageId,
+      });
+    }
     // Opening a view of the current Project must not replace the active conversation.
     const currentProjectView =
       navigation.target === 'assistant.project' &&

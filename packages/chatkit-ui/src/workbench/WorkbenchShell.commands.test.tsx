@@ -20,6 +20,46 @@ const {
 
 describe('WorkbenchShell', () => {
   setupWorkbenchTests();
+  it('inserts an editable task into the composer without submitting or changing threads', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    render(
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={vi.fn()}
+      >
+        <WorkbenchToggleButton />
+      </WorkbenchShell>,
+    );
+    setObservedWidth(1200);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Open views')).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByLabelText('Open views'));
+    await waitFor(() => expect(mocks.remoteViewProps).not.toBeNull());
+    let result: unknown;
+    await act(async () => {
+      result = await mocks.remoteViewProps!.onClientCommand(
+        'assistant.composer.insert',
+        {
+          text: 'Hotel example',
+          workspaceFiles: [{ path: '/workspace/demo.json', name: 'Demo.json' }],
+        },
+        manifest,
+      );
+    });
+    expect(result).toEqual({ success: true, status: 'inserted' });
+    expect(mocks.updateComposer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Hotel example',
+        appendText: true,
+        workspaceFiles: [{ path: '/workspace/demo.json', name: 'Demo.json' }],
+      }),
+    );
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    expect(mocks.stream.reset).not.toHaveBeenCalled();
+  });
+
   it.each(['assistant.execution', 'assistant.conversation'])(
     'opens %s records from remote views without host navigation or resetting the chat',
     async (target) => {

@@ -1,3 +1,4 @@
+import { ArtifactPresentationView } from '../presentation/ArtifactPresentationView';
 import * as React from 'react';
 import { ReviewFileContent } from '../file-review/ReviewFileContent';
 import { HtmlArtifactPreview } from '../html-preview/HtmlArtifactPreview';
@@ -53,8 +54,16 @@ export function WorkbenchPreviewContent(props: {
   preview: WorkbenchPreview;
   toolbar?: React.ReactNode;
   reloadKey?: number;
+  visible?: boolean;
 }) {
   const { t } = useChatkitTranslation();
+  if (props.preview.kind === 'presentation')
+    return (
+      <ArtifactPresentationView
+        source={props.preview.source}
+        visible={props.visible}
+      />
+    );
   if (props.preview.kind === 'resource-file')
     return (
       <FilePreview

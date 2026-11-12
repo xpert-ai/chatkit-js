@@ -385,9 +385,16 @@
             "redo": "Redo",
             "richText": "Rich text",
             "source": "Source"
+        },
+        "presentation": {
+            "operationDenied": "This action is unavailable in a shared resource.",
+            "unavailable": "This version or your access has changed. Reopen to check again.",
+            "retry": "Try again",
+            "loading": "Checking access…"
         }
     },
     "chat": {
+        "widgetDetails": "View details",
         "title": "Chat",
         "placeholder": "What can I help you with today? @ reference conversations, / use skills and commands",
         "statusOnline": "Online",
@@ -659,6 +666,9 @@
             "knowledge": "Knowledge"
         },
         "slashCommands": {
+            "sectionTitle": "Commands",
+            "expertSource": "Expert · {{name}}",
+            "projectSource": "Project · {{name}}",
             "commands": {
                 "plan": {
                     "label": "Plan",
@@ -1279,6 +1289,47 @@
         "commandFailed": "Could not complete the call action. Please retry."
     },
     "group": {
+        "resourceCard": {
+            "project": "Project resource",
+            "shared": "Shared resource · Fixed version · Read only"
+        },
+        "resultSnapshotLabel": "Result snapshot",
+        "resultSnapshot": "This is a result snapshot. Opening a resource checks your group access and shows the version authorized for this group.",
+        "snapshotResource": {
+            "open": "Open authorized version",
+            "disabled": "This card is a result snapshot. Opening the original resource from here is not supported yet.",
+            "unavailable": "This group has no accessible authorization for this resource. Check Shared resources for an accepted, active grant.",
+            "ambiguous": "This group has multiple authorized versions of this resource. Choose a version in Shared resources.",
+            "failed": "Could not open the authorized resource. Refresh Shared resources to check access, then retry."
+        },
+        "artifacts": {
+            "title": "Shared resources",
+            "hint": "Fixed versions · Read only",
+            "loading": "Checking access…",
+            "retry": "Try again",
+            "failed": "Could not update shared resources. Refresh to try again.",
+            "unavailable": "This version or your access has changed. Reopen to check again.",
+            "operationDenied": "This action is unavailable in a shared resource.",
+            "empty": "No shared resources yet. An author can authorize this group from a published dashboard’s Share menu.",
+            "refresh": "Refresh",
+            "back": "Back to resources",
+            "version": "Version {{number}}",
+            "open": "Open",
+            "remove": "Remove reference",
+            "removeHint": "Remove “{{title}}” from this group? The source stays unchanged. A new authorization is required to add it again.",
+            "cancel": "Cancel",
+            "pending": "Awaiting acceptance",
+            "accept": "Accept reference",
+            "more": "Load more",
+            "untitled": "Published resource",
+            "analysisExplore": "Analysis within approved datasets",
+            "analysisBindings": "Query approved datasets",
+            "analysisAudience": "Results can be posted to all group members. The requester still needs source data permissions.",
+            "analysisLimits": "Up to {{rows}} rows per query",
+            "detailsAllowed": "Dataset detail rows allowed",
+            "aggregatesOnly": "Aggregated results only",
+            "acceptAnalysis": "Accept data analysis permissions (leave unchecked for view only)"
+        },
         "loadingMembers": "Loading members…",
         "details": "Group details",
         "closeDetails": "Close group details",

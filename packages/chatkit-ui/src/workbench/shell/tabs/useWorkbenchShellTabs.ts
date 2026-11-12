@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { createMessageId } from '../../../lib/utils';
 import { EXTERNAL_ASSISTANTS_VIEW_KEY } from '../../external-assistant/external-assistant-runs';
+import { contentViewKey } from '../../content/tab-identity';
 import type { useNativeWorkbench } from '../../native/useNativeWorkbench';
 import {
   NEW_TAB_PREFIX,
@@ -117,11 +118,15 @@ export function useWorkbenchShellTabs({
           : (viewTabKeys[0] ?? null),
       );
     } else if (mainChatInWorkbench && !tabKeys.includes(activeViewKey ?? '')) {
-      // Restored view tabs can arrive one render after their manifests.
-      // Keep that selection instead of treating the pending list as empty.
+      // Available on-demand manifests are not open tabs. Preserve a pending
+      // restored selection, but fall back to Chat once an empty workspace is ready.
+      const pendingView = Boolean(
+        activeViewKey &&
+        views.some((view) => view.key === contentViewKey(activeViewKey)),
+      );
       const next =
         viewTabKeys[0] ??
-        (!loading && views.length === 0 ? MAIN_CHAT_VIEW_KEY : null);
+        (fallbackReady && !loading && !pendingView ? MAIN_CHAT_VIEW_KEY : null);
       if (next) setActiveViewKey(next);
     }
   }, [
@@ -131,7 +136,8 @@ export function useWorkbenchShellTabs({
     viewTabKeys,
     tabKeys,
     loading,
-    views.length,
+    views,
+    fallbackReady,
   ]);
 
   const replaceNewTab = (from: string | undefined, to: string) => {

@@ -166,7 +166,12 @@ export function useWorkbenchPages(scope: string, contentScope = scope) {
           newTabs: pages.newTabs.filter((key) => key !== preview.key),
           previews: pages.previews.some((item) => item.key === preview.key)
             ? pages.previews.map((item) =>
-                item.key === preview.key ? preview : item,
+                item.key === preview.key
+                  ? item.kind === 'presentation' &&
+                    preview.kind === 'presentation'
+                    ? { ...item, title: preview.title }
+                    : preview
+                  : item,
               )
             : [...pages.previews, preview],
           recent: remember(pages, preview),

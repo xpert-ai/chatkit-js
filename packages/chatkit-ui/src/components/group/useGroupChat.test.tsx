@@ -5,6 +5,85 @@ import { useGroupChat } from './useGroupChat';
 const apiUrl = 'https://example.test/api/ai';
 afterEach(() => vi.unstubAllGlobals());
 
+it('accepts navigation only for a message sent from this client and deduplicates replay', async () => {
+  let events!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      events = controller;
+    },
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>().mockImplementation(async (_url, init) =>
+      init?.method === 'POST'
+        ? new Response(
+            JSON.stringify({
+              id: 'message',
+              clientMessageId: 'client',
+              sequence: 1,
+              text: 'Open Inventory',
+              createdAt: '2026-11-10T00:00:00Z',
+              deliveries: [],
+              communication: {
+                intent: 'request',
+                senderId: 'viewer',
+                recipientIds: [],
+                rootMessageId: 'message',
+                rootUserId: 'viewer',
+                hop: 0,
+              },
+            }),
+            { status: 200 },
+          )
+        : new Response(stream, {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+    ),
+  );
+  const { result, unmount } = renderHook(() =>
+    useGroupChat({
+      groupId: 'g',
+      clientSecret: 'secret',
+      options: { api: { apiUrl, getClientSecret: vi.fn() } },
+    }),
+  );
+  const request = {
+    requestId: crypto.randomUUID(),
+    clientMessageId: crypto.randomUUID(),
+    resource: { kind: 'group-reference' as const, id: crypto.randomUUID() },
+    projectId: crypto.randomUUID(),
+    title: 'Inventory',
+  };
+  const emit = () =>
+    events.enqueue(
+      new TextEncoder().encode(
+        `event: group\ndata: ${JSON.stringify({ type: 'resource_open', request })}\n\n`,
+      ),
+    );
+  await act(async () => {
+    emit();
+  });
+  await waitFor(() => expect(result.current.connected).toBe(true));
+  expect(result.current.resourceRequest).toBeNull();
+  await act(async () =>
+    result.current.send({
+      clientMessageId: request.clientMessageId,
+      text: 'Open Inventory',
+    }),
+  );
+  await act(async () => {
+    emit();
+  });
+  await waitFor(() => expect(result.current.resourceRequest).toEqual(request));
+  act(() => result.current.consumeResourceRequest(request.requestId));
+  await act(async () => {
+    emit();
+  });
+  expect(result.current.resourceRequest).toBeNull();
+  unmount();
+  events.close();
+});
+
 it('uses Bearer auth for the group SDK and stops rather than refreshing on forbidden streams', async () => {
   const transport = vi
     .fn<typeof fetch>()

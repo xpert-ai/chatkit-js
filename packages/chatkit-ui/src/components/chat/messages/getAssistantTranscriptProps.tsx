@@ -3,7 +3,6 @@ import type * as React from 'react';
 import type { useStreamContext } from '../../../providers/Stream';
 import { ThreadHistoryStatus } from '../../history/ThreadHistoryStatus';
 import { StartScreen } from '../../thread/StartScreen';
-import type { useChatInput } from '../composer/useChatInput';
 import type { useChatSubmission } from '../composer/useChatSubmission';
 import type { useChatHost } from '../host/useChatHost';
 import type { useChatPetSettings } from '../pet/useChatPetSettings';
@@ -30,7 +29,6 @@ type AssistantTranscriptProps = Pick<
     | 'canRetry'
     | 'conversationBranch'
     | 'loadThreadHistory'
-    | 'handlePromptEdit'
     | 'saveEditedMessage'
   > &
   Pick<
@@ -41,7 +39,6 @@ type AssistantTranscriptProps = Pick<
     | 'disableAutoFollow'
     | 'setMessageNavigationAnchor'
   > &
-  Pick<ReturnType<typeof useChatInput>, 'handlePromptClick'> &
   Pick<ReturnType<typeof useChatHost>, 'inlineApproval'> &
   Pick<
     ReturnType<typeof useChatAssistant>,
@@ -70,7 +67,7 @@ type AssistantTranscriptProps = Pick<
     chatColumnStyle: React.CSSProperties | undefined;
     errorMessage: string | undefined;
     messages: ReturnType<typeof useStreamContext>['messages'];
-    isSubmissionBlocked: boolean;
+    selectStarterPrompt: (prompt: string) => void;
     isPromptEditDisabled: boolean;
     options: ChatKitOptions | null | undefined;
     messagePresentation?: ChatKitOptions['messagePresentation'];
@@ -93,9 +90,7 @@ export function getAssistantTranscriptProps({
   loadThreadHistory,
   canLoadMoreMessages,
   startScreen,
-  handlePromptClick,
-  handlePromptEdit,
-  isSubmissionBlocked,
+  selectStarterPrompt,
   isPromptEditDisabled,
   inlineApproval,
   options,
@@ -178,10 +173,8 @@ export function getAssistantTranscriptProps({
       !stream.threadId && messages.length === 0 && !canLoadMoreMessages ? (
         <StartScreen
           startScreen={startScreen}
-          onPromptClick={handlePromptClick}
-          onPromptEdit={handlePromptEdit}
-          promptSendDisabled={isSubmissionBlocked}
-          promptEditDisabled={isPromptEditDisabled}
+          onSelect={selectStarterPrompt}
+          disabled={isPromptEditDisabled}
           className="px-4 pb-4 pt-2"
         />
       ) : undefined,

@@ -42,6 +42,121 @@ describe('Chat slash commands and shortcuts', () => {
     expect(mocks.stream.submit.mock.calls[0][0].input.input).toBe('/bid-technical-outline 只编制目录');
   });
 
+  it('shows a bound invocation above the composer and replaces it with a plain question from below', async () => {
+    mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+      skills: [{ id: 'skill-review', label: 'Review skill' }], plugins: [], subAgents: [],
+      commands: [
+        {
+          name: 'review', label: 'Review tender', kind: 'prompt_workflow',
+          action: {
+            type: 'insert_invocation', template: '/review ',
+            runtimeCapabilities: { mode: 'allowlist', skills: { ids: ['skill-review'] }, plugins: { nodeKeys: [] } },
+          },
+        },
+        {
+          name: 'outline', label: 'Draft outline', kind: 'prompt_workflow',
+          action: { type: 'insert_invocation', template: '/outline ' },
+        },
+      ],
+    });
+    const { container } = renderChat({
+      startScreen: { promptsLayout: 'list', prompts: [{ label: 'When is the deadline?', prompt: 'When is the deadline?' }] },
+    });
+    const workflow = await screen.findByRole('button', { name: 'Review tender' });
+    expect(workflow.closest('[data-slot="prompt-workflow-shortcuts"]')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Draft outline' })).toBeNull();
+    fireEvent.click(workflow);
+    const body = container.querySelector('[data-slot="composer-body"]');
+    expect(screen.getByRole('textbox').textContent?.trim()).toBe('/review');
+    expect(body).toHaveTextContent('Review skill');
+
+    const question = screen.getByRole('button', { name: 'When is the deadline?' });
+    expect(question.closest('[data-slot="starter-prompt-suggestions"]')).toBeTruthy();
+    fireEvent.click(question);
+    expect(screen.getByRole('textbox').textContent).toBe('When is the deadline?');
+    expect(body).not.toHaveTextContent('Review skill');
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+  });
+
+  it('drops the previous invocation when the user writes a different command before sending', async () => {
+    renderChat({
+      composer: { slashCommands: [{
+        name: 'tender', label: 'Prepare tender', kind: 'prompt_workflow',
+        action: { type: 'insert_invocation', template: '/tender ' },
+      }] },
+      startScreen: { promptsLayout: 'list', prompts: [{ label: 'Start tender', prompt: '/tender pricing' }] },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Start tender' }));
+    expect(screen.getByRole('textbox')).toHaveTextContent('/tender pricing');
+    setComposerText(screen.getByRole('textbox'), '/plan compare prices');
+    expect(mocks.stream.submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+    expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+      input: 'compare prices', planMode: true, commandSource: { name: 'plan' },
+    });
+  });
+
+  it.each(['starter', 'slash'] as const)(
+    'stages a submit_prompt workflow and its capabilities from the %s until explicit send',
+    async (entry) => {
+      const skills = { ids: ['skill-review'] };
+      const plugins = { nodeKeys: ['plugin-search'] };
+      mocks.stream.client.assistants.getRuntimeCapabilities.mockResolvedValueOnce({
+        skills: [{ id: 'skill-review', label: 'Review skill' }],
+        plugins: [{ nodeKey: 'plugin-search', provider: 'search', label: 'Search plugin' }],
+        subAgents: [],
+        commands: [{
+          name: 'tender', label: 'Review tender', kind: 'prompt_workflow',
+          action: {
+            type: 'submit_prompt', template: 'Review the tender: {{args}}',
+            runtimeCapabilities: { mode: 'allowlist', skills, plugins, subAgents: { nodeKeys: [] } },
+          },
+        }],
+      });
+      const { container } = renderChat({
+        startScreen: {
+          promptsLayout: 'list',
+          prompts: [
+            { label: 'Get started', prompt: '/tender pricing' },
+            { label: 'General question', prompt: 'Summarize progress' },
+          ],
+        },
+      });
+      await waitFor(() => expect(screen.getByTestId('runtime-capabilities-ready')).toHaveTextContent('ready'));
+      const textbox = screen.getByRole('textbox');
+      if (entry === 'starter') {
+        fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
+      } else {
+        setComposerText(textbox, '/tender');
+        const palette = container.querySelector<HTMLElement>('[data-slot="slash-palette"]')!;
+        fireEvent.mouseDown(await within(palette).findByRole('button', { name: 'Review tender' }));
+      }
+
+      expect(screen.getByRole('textbox').textContent?.trim()).toBe(entry === 'starter' ? 'Review the tender: pricing' : 'Review the tender:');
+      const body = document.querySelector('[data-slot="composer-body"]');
+      expect(body).toHaveTextContent('Review skill');
+      expect(body).toHaveTextContent('Search plugin');
+      expect(mocks.stream.submit).not.toHaveBeenCalled();
+
+      if (entry === 'starter') {
+        fireEvent.click(screen.getByRole('button', { name: 'General question' }));
+        expect(screen.getByRole('textbox')).toHaveTextContent('Summarize progress');
+        expect(body).not.toHaveTextContent('Review skill');
+        expect(body).not.toHaveTextContent('Search plugin');
+        fireEvent.click(screen.getByRole('button', { name: 'Get started' }));
+      }
+      setComposerText(screen.getByRole('textbox'), 'Review the attached pricing schedule');
+      fireEvent.click(screen.getByRole('button', { name: 'send' }));
+      await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledTimes(1));
+      expect(mocks.stream.submit.mock.calls[0][0].input).toMatchObject({
+        input: 'Review the attached pricing schedule',
+        commandSource: { name: 'tender', kind: 'prompt_workflow', executionType: 'submit_prompt' },
+        runtimeCapabilities: { recommended: { skills, plugins } },
+      });
+    },
+  );
+
   it('executes host slash commands with args as submitted prompts', async () => {
     renderChat({
       composer: {

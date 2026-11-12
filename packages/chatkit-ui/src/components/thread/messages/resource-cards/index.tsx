@@ -11,6 +11,7 @@ import { useResourceCardActions } from '../../../../resource-cards/context';
 import { useChatkitTranslation } from '../../../../i18n/useChatkitTranslation';
 import { IconDefinitionRenderer } from '../../../ui/icon-definition';
 import { ResourceCardBlocks } from './content';
+import { ResourceCardLayout } from './layout';
 
 export function messageResourceCards(
   message: Pick<ChatkitMessage, 'content'>,
@@ -28,16 +29,20 @@ export function messageResourceCards(
 function ResourceCard({
   card,
   messageId,
+  disabledReason,
+  openLabel: customOpenLabel,
 }: {
   card: TMessageContentResourceCard;
   messageId: string;
+  disabledReason?: string;
+  openLabel?: string;
 }) {
   const actions = useResourceCardActions();
   const { t } = useChatkitTranslation();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const available = !!actions.openResourceCard;
-  const openLabel = t('resourceCard.open');
+  const openLabel = customOpenLabel ?? t('resourceCard.open');
   const open = async () => {
     if (!available || busy) return;
     setBusy(true);
@@ -47,11 +52,12 @@ function ResourceCard({
       if (!result.success) {
         const code = result.code;
         setError(
-          t(
-            code === 'forbidden'
-              ? 'resourceCard.forbidden'
-              : 'resourceCard.unavailable',
-          ),
+          result.message ??
+            t(
+              code === 'forbidden'
+                ? 'resourceCard.forbidden'
+                : 'resourceCard.unavailable',
+            ),
         );
       }
     } catch {
@@ -61,26 +67,17 @@ function ResourceCard({
     }
   };
   return (
-    <div
-      className="rounded-chat-panel border border-border bg-card px-4 py-3"
-      data-testid="resource-card"
-    >
-      <div className="flex items-center gap-3">
+    <ResourceCardLayout
+      title={card.data.title}
+      description={card.data.description}
+      icon={
         <IconDefinitionRenderer
           icon={card.data.icon}
           size={22}
           fallback={<Box className="h-5 w-5 shrink-0 text-muted-foreground" />}
         />
-        <div className="min-w-0 flex-1">
-          <div className="break-words font-medium text-foreground">
-            {card.data.title}
-          </div>
-          {card.data.description && (
-            <div className="mt-1 whitespace-pre-line break-words text-sm text-muted-foreground">
-              {card.data.description}
-            </div>
-          )}
-        </div>
+      }
+      action={
         <button
           type="button"
           onClick={open}
@@ -93,7 +90,8 @@ function ResourceCard({
           )}
           {openLabel}
         </button>
-      </div>
+      }
+    >
       {!!card.data.content?.length && (
         <ResourceCardBlocks
           content={card.data.content}
@@ -102,7 +100,7 @@ function ResourceCard({
       )}
       {!available && (
         <p className="mt-2 text-sm text-muted-foreground">
-          {t('resourceCard.disabled')}
+          {disabledReason ?? t('resourceCard.disabled')}
         </p>
       )}
       {error && (
@@ -110,14 +108,20 @@ function ResourceCard({
           {error}
         </p>
       )}
-    </div>
+    </ResourceCardLayout>
   );
 }
 
 export function MessageResourceCards({
   message,
+  disabledReason,
+  openLabel,
 }: {
   message: ChatkitMessage;
+  /** Context-specific explanation when this card has no opening action. */
+  disabledReason?: string;
+  /** Describes the actual destination, e.g. a group's authorized published version. */
+  openLabel?: string;
   mode?: MessagePresentationMode;
   isStreaming?: boolean;
 }) {
@@ -128,6 +132,8 @@ export function MessageResourceCards({
       {cards.map((card) => (
         <ResourceCard
           key={card.id}
+          disabledReason={disabledReason}
+          openLabel={openLabel}
           card={card}
           messageId={card.messageId ?? message.id}
         />

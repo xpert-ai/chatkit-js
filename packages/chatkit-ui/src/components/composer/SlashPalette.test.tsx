@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SlashPalette } from './SlashPalette';
@@ -63,6 +63,36 @@ describe('SlashPalette', () => {
     expect(option).not.toHaveClass('rounded-md');
   });
 
+  it('uses the same current row for pointer and keyboard navigation', () => {
+    const onActiveChange = vi.fn();
+    const props = {
+      options: [
+        ...options,
+        { ...options[0], id: 'second-command', label: 'Second' },
+      ],
+      paletteRef: { current: null },
+      optionRefs: { current: [] },
+      emptyLabel: 'No commands',
+      onSelect: vi.fn(),
+      onActiveChange,
+    };
+    const view = render(<SlashPalette {...props} palette={palette} />);
+    const [first, second] = screen.getAllByRole('button');
+    expect(first).toHaveAttribute('aria-current', 'true');
+    fireEvent(
+      second,
+      Object.assign(new MouseEvent('pointermove', { bubbles: true }), {
+        pointerType: 'mouse',
+      }),
+    );
+    expect(onActiveChange).toHaveBeenCalledWith(1);
+    view.rerender(
+      <SlashPalette {...props} palette={{ ...palette, activeIndex: 1 }} />,
+    );
+    expect(first).not.toHaveAttribute('aria-current');
+    expect(second).toHaveAttribute('aria-current', 'true');
+  });
+
   it('renders capability command child counts next to the title', () => {
     const capabilityCommand: ResolvedSlashCommand = {
       ...command,
@@ -118,6 +148,12 @@ describe('SlashPalette', () => {
                 label: 'documents',
                 meta: {
                   color: '#2563EB',
+                  skillSource: {
+                    type: 'project',
+                    ownerId: 'p1',
+                    label: 'Bid Studio',
+                    skillId: 'docs',
+                  },
                 },
               },
             },
@@ -132,6 +168,7 @@ describe('SlashPalette', () => {
     );
 
     const option = screen.getByRole('button', { name: /documents/ });
+    expect(within(option).getByText(/Bid Studio/)).toBeVisible();
     expect(within(option).getByText('documents')).not.toHaveStyle({
       color: '#2563EB',
     });
