@@ -5,8 +5,11 @@
   padding-bottom: calc(1.25rem * var(--chat-density-scale, 1));
 }
 .chatkit-presence-trigger {
+  --presence-avatar-size: calc(5rem * var(--chat-density-scale, 1));
   /* The avatar extends into the name card without offsetting the trigger. */
-  grid-template-rows: calc(5rem - 0.75rem * var(--chat-density-scale, 1)) auto;
+  grid-template-rows: calc(
+      var(--presence-avatar-size) - 0.75rem * var(--chat-density-scale, 1)
+    ) auto;
 }
 .chatkit-presence-bubble {
   padding: calc(0.75rem * var(--chat-density-scale, 1))
@@ -20,6 +23,7 @@
   width: min(23rem, calc(100% - 2 * var(--presence-inset)));
 }
 .chatkit-presence-header {
+  --presence-avatar-size: calc(4rem * var(--chat-density-scale, 1));
   padding: calc(1rem * var(--chat-density-scale, 1));
   gap: calc(0.75rem * var(--chat-density-scale, 1));
 }

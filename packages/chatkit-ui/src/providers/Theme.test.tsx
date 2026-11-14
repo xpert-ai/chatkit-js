@@ -18,6 +18,7 @@ describe('ThemeProvider', () => {
     const root = screen.getByTestId('surface').parentElement;
     if (!root) throw new Error('ThemeProvider root is missing');
     expect(root.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
+    expect(root.style.getPropertyValue('--chat-avatar-radius')).toBe('0%');
     expect(root.style.getPropertyValue('--chat-density-scale')).toBe('0.75');
     rerender(
       <ThemeProvider theme={{ radius: 'round', density: 'spacious' }}>
@@ -28,6 +29,7 @@ describe('ThemeProvider', () => {
       'calc(var(--radius, 0.625rem) + 4px)',
     );
     expect(root.style.getPropertyValue('--chat-density-scale')).toBe('1.25');
+    expect(root.style.getPropertyValue('--chat-avatar-radius')).toBe('28%');
   });
   it('applies dark mode to the document root for portaled UI and restores it on unmount', () => {
     document.documentElement.classList.remove('dark');

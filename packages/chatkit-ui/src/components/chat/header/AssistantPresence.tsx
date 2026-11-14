@@ -37,13 +37,8 @@ export type AssistantPresenceProps = {
 
 const PRESENCE_EASE = [0.22, 1, 0.36, 1] as const;
 
-function PresenceCharacter({
-  presence,
-  size = '5rem',
-}: {
-  presence: AssistantPresenceProps;
-  size?: string;
-}) {
+function PresenceCharacter({ presence }: { presence: AssistantPresenceProps }) {
+  const size = 'var(--presence-avatar-size)';
   const systemReducedMotion = useReducedMotion();
   const still = presence.reducedMotion || systemReducedMotion;
   return (
@@ -118,7 +113,7 @@ export function AssistantPresence(props: AssistantPresenceProps) {
         onClick={() => props.onOpenChange(true)}
       >
         {/* Reserve the header height while expanded; the conversation must not jump. */}
-        <span className="block size-20">
+        <span className="block size-(--presence-avatar-size)">
           {!hideTrigger && <PresenceCharacter presence={props} />}
         </span>
         <motion.span
@@ -237,7 +232,7 @@ export function AssistantSummaryDialog({
                 {title ?? t('assistantPresence.details')}
               </Dialog.Title>
               <div className="chatkit-presence-header flex shrink-0 items-start">
-                <PresenceCharacter presence={presence} size="4rem" />
+                <PresenceCharacter presence={presence} />
                 <div className="chatkit-presence-details min-w-0 flex-1">
                   <h2 className="truncate font-semibold">{presence.name}</h2>
                   <PresenceStatus {...presence} />

@@ -38,7 +38,13 @@ export function getThemeRadii(
     round: baseRadius,
     pill: `calc(${baseRadius} + 4px)`,
   };
-  return { panel: panelRadius[radius], item: itemRadius[radius] };
+  // Percentages keep each silhouette proportional to its tile across densities.
+  const avatarRadius = { sharp: '0%', soft: '20%', round: '28%', pill: '50%' };
+  return {
+    panel: panelRadius[radius],
+    item: itemRadius[radius],
+    avatar: avatarRadius[radius],
+  };
 }
 
 /** Explicit tokens also work in Radix portals, outside the ThemeProvider DOM root. */
@@ -47,6 +53,7 @@ export function getSurfaceThemeStyle(theme: ChatKitTheme): CSSProperties {
   return {
     '--chat-panel-radius': radius.panel,
     '--chat-item-radius': radius.item,
+    '--chat-avatar-radius': radius.avatar,
     '--chat-density-scale': getDensitySpacing(theme.density ?? 'normal')
       .spacing,
   } as CSSProperties;

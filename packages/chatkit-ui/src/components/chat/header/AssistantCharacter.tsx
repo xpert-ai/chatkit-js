@@ -8,6 +8,7 @@ import {
 import { InlinePetStatus } from '../../pet/InlinePetStatus';
 import { getIncludedPetOption } from '../../pet/builtinPets';
 import { ChatkitAvatar, type ChatkitAvatarData } from '../../ui/chatkit-avatar';
+import { cn } from '../../../lib/utils';
 
 export function AssistantCharacter({
   avatar,
@@ -74,11 +75,25 @@ export function AssistantCharacter({
       />
     );
   }
-  const animated = !still && (!avatar || appearance?.kind === 'character');
+  const hasAvatarMedia =
+    avatar?.url ||
+    avatar?.emoji?.unified ||
+    avatar?.emoji?.id ||
+    avatar?.emoji?.colons;
+  const defaultFace = !appearance && !hasAvatarMedia;
+  const animated = !still && (defaultFace || appearance?.kind === 'character');
   return (
     <span
-      className="inline-flex items-center justify-center"
-      style={{ width: size, height: size }}
+      className={cn(
+        'inline-flex items-center justify-center',
+        defaultFace &&
+          'overflow-hidden rounded-chat-avatar bg-primary text-primary-foreground',
+      )}
+      style={{
+        width: size,
+        height: size,
+        background: defaultFace ? avatar?.background : undefined,
+      }}
       data-character-state={state}
     >
       <span
@@ -88,12 +103,12 @@ export function AssistantCharacter({
             : 'block size-full'
         }
       >
-        {(avatar?.url || avatar?.emoji) &&
+        {hasAvatarMedia &&
         !(appearance?.kind === 'character' && appearance.id === 'bosi') ? (
           <ChatkitAvatar
             avatar={avatar}
             label={name}
-            className="size-full bg-transparent"
+            className="size-full rounded-chat-avatar bg-transparent"
             imageClassName="object-contain"
             fallbackClassName="bg-transparent"
           />
@@ -102,7 +117,7 @@ export function AssistantCharacter({
             viewBox="0 0 100 100"
             role="img"
             aria-label={name}
-            className="size-full text-primary"
+            className="size-full"
             style={
               appearance?.kind === 'character'
                 ? { color: appearance.color }
