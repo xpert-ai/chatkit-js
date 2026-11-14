@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   stream: {
     client: {
       viewHosts: {
+        getLocalDraftBinding: vi.fn(),
         listSlotViews: vi.fn(),
         getManifest: vi.fn(),
         getData: vi.fn(),

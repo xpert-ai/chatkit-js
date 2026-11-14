@@ -144,6 +144,7 @@ export function useStreamInterrupts({
               isParentAvailable,
               sendCommand,
               waitForRequestUserInput,
+              appToolScope: { client: clientRef.current, threadId: activeThreadIdRef.current },
             });
             if (!response) {
               continue;

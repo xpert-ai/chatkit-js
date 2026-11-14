@@ -40,6 +40,7 @@ it('stamps forwarded tool receipts with the initialized project scope revision',
     },
   };
   const viewHosts: RemoteViewHostsClient = {
+    getLocalDraftBinding: vi.fn(),
     getManifest: vi.fn().mockResolvedValue(manifest),
     getRemoteComponentEntry: vi
       .fn()

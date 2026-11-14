@@ -9,6 +9,13 @@ export async function checkSessionSdk(
   const require = createRequire(manifest);
   const entry = require.resolve('@xpert-ai/xpert-sdk');
   const sdk = await import(pathToFileURL(entry).href);
+  const browserEntry = require.resolve('@xpert-ai/xpert-sdk/workbench/browser');
+  const browser = await import(pathToFileURL(browserEntry).href);
+  assert.equal(
+    typeof browser.createLocalDraftBridge,
+    'function',
+    'Installed SDK must include the Workbench browser entry; install the paired SDK release with the frozen lockfile',
+  );
   assert.equal(
     typeof sdk.HTTPError,
     'function',
@@ -67,6 +74,11 @@ export async function checkSessionSdk(
       },
     },
   });
+  assert.equal(
+    typeof client.viewHosts.getLocalDraftBinding,
+    'function',
+    'Installed SDK must authorize local drafts through ViewHostsClient.getLocalDraftBinding',
+  );
   for (const method of ['getControlView', 'getCapabilities'])
     assert.equal(
       typeof client.threads[method],

@@ -13,6 +13,8 @@
 }
 [data-slot='composer-context-collapse'] {
   display: grid;
+  /* Long context labels must shrink within the composer, not widen the grid. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
   opacity: 1;
   visibility: visible;
@@ -45,7 +47,10 @@
   /* Follow the inner control radius plus its inset; keep sharp themes square. */
   border-radius: min(
     calc(var(--chat-panel-radius, var(--radius)) * 2),
-    calc(var(--chat-item-radius, var(--radius)) + var(--composer-compact-inset-block))
+    calc(
+      var(--chat-item-radius, var(--radius)) +
+        var(--composer-compact-inset-block)
+    )
   );
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

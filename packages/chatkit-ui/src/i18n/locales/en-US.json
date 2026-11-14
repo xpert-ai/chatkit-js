@@ -1328,6 +1328,8 @@
             "analysisLimits": "Up to {{rows}} rows per query",
             "detailsAllowed": "Dataset detail rows allowed",
             "aggregatesOnly": "Aggregated results only",
+            "analysisDelegatedAudience": "Uses the source manager’s current permissions to share only these approved results with all group members. Other controls stay fixed to published defaults. Revocation blocks new results.",
+            "acceptDelegatedResults": "Accept delegated results using the source manager’s permissions (both confirmations are required for analysis)",
             "acceptAnalysis": "Accept data analysis permissions (leave unchecked for view only)"
         },
         "loadingMembers": "Loading members…",

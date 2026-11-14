@@ -1,3 +1,4 @@
+import { createLocalDraftBridge } from '@xpert-ai/xpert-sdk/workbench/browser';
 import { viewProjectType } from './ProjectViewRecovery';
 import { EditorLifecycleContext } from '../editors/context';
 import { RemoteEditor } from '../editors/remote-editor';
@@ -35,6 +36,7 @@ import {
 
 export type RemoteViewHostsClient = Pick<
   Client['viewHosts'],
+  | 'getLocalDraftBinding'
   | 'getManifest'
   | 'getRemoteComponentEntry'
   | 'getData'
@@ -124,22 +126,37 @@ export function RemoteViewFrame({
   ]);
   const contextRef = React.useRef({
     key: scopeKey,
+    client: viewHosts, hostId, viewKey: listedManifest.key,
     ready: contextReady,
     revision: 0,
     runtimeScope,
   });
   if (
+    contextRef.current.client !== viewHosts ||
+    contextRef.current.hostId !== hostId ||
+    contextRef.current.viewKey !== listedManifest.key ||
     contextRef.current.key !== scopeKey ||
     contextRef.current.ready !== contextReady
   ) {
     contextRef.current = {
       key: scopeKey,
+      client: viewHosts, hostId, viewKey: listedManifest.key,
       ready: contextReady,
       revision: contextRef.current.revision + 1,
       runtimeScope,
     };
   }
   const revision = contextRef.current.revision;
+  const localDraft = React.useMemo(
+    () => createLocalDraftBridge((resourceId, signal) =>
+      viewHosts.getLocalDraftBinding('agent', hostId, manifest.key, resourceId, { runtimeScope, signal }), {
+      // ChatKit owns browser budgets and offline editing policy; frames cannot override them.
+      storage: { maxDraftBytes: 20 * 1024 * 1024, maxTotalBytes: 50 * 1024 * 1024, maxDrafts: 20 },
+      allowCachedWrites: true,
+      maxCachedBindings: 16,
+    }),
+    [viewHosts, hostId, manifest.key, instanceId, revision],
+  );
   const [validatedRevision, setValidatedRevision] = React.useState(-1);
   const blocked = !contextReady || loading || validatedRevision !== revision;
   const initializedRef = React.useRef<{
@@ -638,7 +655,7 @@ export function RemoteViewFrame({
           });
           return;
         case 'invokeClientCommand':
-          void runRequest(message, 'clientCommandResult', async () => {
+          void runRequest(message, 'clientCommandResult', async (signal) => {
             const commandKey = readRequiredString(message.commandKey);
             if (
               !commandKey ||
@@ -649,6 +666,10 @@ export function RemoteViewFrame({
               throw new Error(
                 `Client command '${commandKey ?? ''}' is not available.`,
               );
+            }
+            if (commandKey === 'workbench.content.draft') {
+              if (message.scopeRevision !== revision) throw new Error('Stale editor context.');
+              return localDraft(message.payload, signal);
             }
             if (commandKey === 'workbench.content.status') {
               const value = message.payload;
@@ -688,6 +709,7 @@ export function RemoteViewFrame({
     return () => window.removeEventListener('message', handleMessage);
   }, [
     ensureFileAccessSession,
+    localDraft,
     blocked,
     revision,
     hostId,

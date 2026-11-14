@@ -37,6 +37,7 @@ const runtimeScope = {
 
 function createViewHosts() {
   return {
+    getLocalDraftBinding: vi.fn(),
     getManifest: vi.fn().mockResolvedValue(manifest),
     getRemoteComponentEntry: vi
       .fn()

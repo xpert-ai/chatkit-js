@@ -11,6 +11,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   Client,
   type ChatGroupSnapshot,
+  type GroupArtifactGrant,
   type GroupArtifactReference,
   type GroupArtifactView,
 } from '@xpert-ai/xpert-sdk';
@@ -142,6 +143,206 @@ it.each([false, true])(
       expect(accept).toHaveBeenCalledWith(
         'g',
         { grantId: 'grant', expectedRevision: 1, acceptAnalysis: consent },
+        expect.anything(),
+      ),
+    );
+  },
+);
+
+it.each([false, true])(
+  'requires separate delegated-results consent: %s',
+  async (consent) => {
+    const c = client(),
+      api = c.groups.artifacts;
+    vi.spyOn(api, 'list').mockResolvedValue({ items: [], nextOffset: null });
+    vi.spyOn(api, 'offers').mockResolvedValue({
+      items: [
+        {
+          ...reference,
+          id: 'grant',
+          targetGroupId: 'g',
+          targetProjectId: 'runtime',
+          permission: 'read',
+          status: 'offered',
+          analysis: {
+            execution: 'delegated_results',
+            mode: 'explore',
+            datasets: [
+              {
+                key: 'inventory',
+                fields: ['plant', 'value'],
+                filters: [{ field: 'plant', operator: 'eq', values: ['A'] }],
+              },
+            ],
+            allowDetails: false,
+            maxRows: 20,
+          },
+        },
+      ],
+      nextOffset: null,
+    });
+    const accept = vi.spyOn(api, 'accept').mockResolvedValue(reference);
+    render(
+      <ThemeProvider>
+        <GroupArtifacts
+          client={c}
+          group={group}
+          onClose={() => {}}
+          onOpen={() => {}}
+        />
+      </ThemeProvider>,
+    );
+    const checkbox = await screen.findByRole('checkbox', {
+      name: 'group.artifacts.acceptAnalysis',
+    });
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByText('plant eq A')).toBeTruthy();
+    fireEvent.click(checkbox);
+    const delegated = screen.getByRole('checkbox', {
+      name: 'group.artifacts.acceptDelegatedResults',
+    });
+    expect(delegated).not.toBeChecked();
+    expect(
+      screen.getByText('group.artifacts.analysisDelegatedAudience'),
+    ).toBeTruthy();
+    if (consent) fireEvent.click(delegated);
+    fireEvent.click(screen.getByText('group.artifacts.accept'));
+    await waitFor(() =>
+      expect(accept).toHaveBeenCalledWith(
+        'g',
+        {
+          grantId: 'grant',
+          expectedRevision: 1,
+          acceptAnalysis: true,
+          acceptDelegatedResults: consent,
+        },
+        expect.anything(),
+      ),
+    );
+  },
+);
+
+it.each(['revision', 'client', 'viewer', 'owner', 'unchanged'] as const)(
+  'requires fresh consent after the %s changes',
+  async (change) => {
+    const original = client();
+    let revision = 1;
+    const offer = (): GroupArtifactGrant => ({
+      ...reference,
+      id: 'grant',
+      targetGroupId: 'g',
+      targetProjectId: 'runtime',
+      permission: 'read',
+      status: 'offered',
+      revision,
+      analysis: {
+        execution: 'delegated_results',
+        mode: 'explore',
+        allowDetails: false,
+        maxRows: 20,
+        datasets: [{ key: 'inventory', fields: ['value'], filters: [] }],
+      },
+    });
+    function prepare(c: Client) {
+      vi.spyOn(c.groups.artifacts, 'list').mockResolvedValue({
+        items: [],
+        nextOffset: null,
+      });
+      vi.spyOn(c.groups.artifacts, 'offers').mockImplementation(async () => ({
+        items: [offer()],
+        nextOffset: null,
+      }));
+      return vi
+        .spyOn(c.groups.artifacts, 'accept')
+        .mockResolvedValue(reference);
+    }
+    let accept = prepare(original);
+    const element = (c: Client, currentGroup = group) => (
+      <ThemeProvider>
+        <GroupArtifacts
+          client={c}
+          group={currentGroup}
+          onClose={() => {}}
+          onOpen={() => {}}
+        />
+      </ThemeProvider>
+    );
+    const mounted = render(element(original));
+    const analysis = await screen.findByRole('checkbox', {
+      name: 'group.artifacts.acceptAnalysis',
+    });
+    const delegated = screen.getByRole('checkbox', {
+      name: 'group.artifacts.acceptDelegatedResults',
+    });
+    fireEvent.click(analysis);
+    fireEvent.click(delegated);
+    expect(analysis).toBeChecked();
+    expect(delegated).toBeChecked();
+    if (change === 'revision') {
+      revision = 2;
+      fireEvent.click(screen.getByText('group.artifacts.refresh'));
+      await waitFor(() =>
+        expect(original.groups.artifacts.offers).toHaveBeenCalledTimes(2),
+      );
+    } else if (change === 'client') {
+      const replacement = client();
+      accept = prepare(replacement);
+      mounted.rerender(element(replacement));
+      await waitFor(() =>
+        expect(replacement.groups.artifacts.offers).toHaveBeenCalledOnce(),
+      );
+    } else if (change === 'viewer') {
+      mounted.rerender(
+        element(original, {
+          ...group,
+          viewerParticipantId: 'replacement',
+          members: [{ ...group.members[0], id: 'replacement' }],
+        }),
+      );
+      await waitFor(() =>
+        expect(original.groups.artifacts.offers).toHaveBeenCalledTimes(2),
+      );
+    } else if (change === 'owner') {
+      mounted.rerender(
+        element(original, {
+          ...group,
+          members: [{ ...group.members[0], role: 'member' }],
+        }),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole('checkbox')).not.toBeInTheDocument(),
+      );
+      mounted.rerender(element(original));
+      await waitFor(() =>
+        expect(original.groups.artifacts.offers).toHaveBeenCalledTimes(2),
+      );
+    } else {
+      fireEvent.click(screen.getByText('group.artifacts.refresh'));
+      await waitFor(() =>
+        expect(original.groups.artifacts.offers).toHaveBeenCalledTimes(2),
+      );
+    }
+    await waitFor(() =>
+      expect(screen.queryByRole('status')).not.toBeInTheDocument(),
+    );
+    for (const name of [
+      'group.artifacts.acceptAnalysis',
+      'group.artifacts.acceptDelegatedResults',
+    ]) {
+      if (change === 'unchanged')
+        expect(screen.getByRole('checkbox', { name })).toBeChecked();
+      else expect(screen.getByRole('checkbox', { name })).not.toBeChecked();
+    }
+    fireEvent.click(screen.getByText('group.artifacts.accept'));
+    await waitFor(() =>
+      expect(accept).toHaveBeenCalledWith(
+        'g',
+        {
+          grantId: 'grant',
+          expectedRevision: revision,
+          acceptAnalysis: change === 'unchanged',
+          acceptDelegatedResults: change === 'unchanged',
+        },
         expect.anything(),
       ),
     );

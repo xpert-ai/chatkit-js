@@ -1,3 +1,5 @@
+import { MCP_APP_TOOL_AUTHORIZE } from '@xpert-ai/chatkit-types';
+import { useMcpAppTools } from './useMcpAppTools';
 import { parseMcpAppProjectLink } from './project-link';
 import {
   resolveLocalizedText,
@@ -62,12 +64,13 @@ type McpAppBridgeOptions = Pick<
   Pick<
     ReturnType<typeof useMcpAppResource>,
     | 'sendInitialToolNotifications'
+    | 'resourceEpoch'
     | 'getResourceEpoch'
     | 'isResourceEpochCurrent'
   > &
   Pick<
     ReturnType<typeof useMcpAppApprovals>,
-    'clearPendingApproval' | 'dispatchHostRpc'
+    'clearPendingApproval' | 'dispatchHostRpc' | 'authorizeHostAction'
   > & {
     postToApp: (message: unknown) => void;
     sandboxProxy: ResolvedMcpAppSandboxProxy | null;
@@ -94,6 +97,7 @@ export function useMcpAppBridge({
   resource,
   data,
   sendInitialToolNotifications,
+  resourceEpoch,
   getResourceEpoch,
   isResourceEpochCurrent,
   setHeight,
@@ -113,8 +117,15 @@ export function useMcpAppBridge({
   conversationId,
   streamIsLoading,
   dispatchHostRpc,
+  authorizeHostAction,
 }: McpAppBridgeOptions) {
   const { openProject } = useWorkbench();
+  const handleAppTools = useMcpAppTools({
+    client, threadId, appInstanceId: data.appInstanceId, resourceEpoch,
+    element: () => iframeRef.current,
+    isCurrent: () => !teardownStartedRef.current && isResourceEpochCurrent(resourceEpoch),
+    post: postToApp, callHost: callHostRpc, authorize: authorizeHostAction,
+  });
   React.useEffect(() => {
     if (!initializedRef.current) return;
     postToApp({
@@ -166,8 +177,14 @@ export function useMcpAppBridge({
       const postResponse = (message: unknown) => {
         if (isCurrent()) postToApp(message);
       };
+      if (handleAppTools(event.data)) return;
       const request = normalizeJsonRpcMessage(event.data);
       if (!request?.method) {
+        return;
+      }
+
+      if (request.method === MCP_APP_TOOL_AUTHORIZE) {
+        postResponse(jsonRpcError(request.id, 'This method is reserved for host initiated calls', -32601));
         return;
       }
 
@@ -514,6 +531,7 @@ export function useMcpAppBridge({
       window.removeEventListener('message', handleMessage);
     };
   }, [
+    handleAppTools,
     callHostRpc,
     getResourceEpoch,
     isResourceEpochCurrent,

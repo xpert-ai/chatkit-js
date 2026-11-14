@@ -1,3 +1,4 @@
+import { resolveAppClientTool } from '../../../components/thread/messages/mcp-app/bridge/app-tools';
 import type { ToolCall } from '@langchain/core/messages/tool';
 import {
   REQUEST_USER_INPUT_RESULT_PURPOSE_IMPLEMENTATION_CONFIRMATION,
@@ -230,7 +231,9 @@ export async function resolveClientToolCallResponse(
     isParentAvailable,
     sendCommand,
     waitForRequestUserInput,
+    appToolScope,
   }: {
+    appToolScope?: { client: object | null | undefined; threadId: string | null | undefined };
     isParentAvailable: boolean;
     sendCommand: ParentMessenger['sendCommand'];
     waitForRequestUserInput: (
@@ -243,6 +246,9 @@ export async function resolveClientToolCallResponse(
   if (requestUserInputParams) {
     return waitForRequestUserInput(call, requestUserInputParams);
   }
+
+  const appResponse = await resolveAppClientTool(appToolScope?.client, appToolScope?.threadId, call);
+  if (appResponse) return appResponse;
 
   if (!isParentAvailable) {
     return null;

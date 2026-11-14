@@ -9,6 +9,7 @@ import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { ResourceAnalysisSummary } from './ResourceAnalysisSummary';
+import { useArtifactConsent } from './useArtifactConsent';
 import {
   Dialog,
   DialogContent,
@@ -52,9 +53,7 @@ export function GroupArtifacts({
   const [removal, setRemoval] = useState<GroupArtifactReference | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(false);
-  const [analysisConsent, setAnalysisConsent] = useState<
-    Record<string, boolean>
-  >({});
+  const consent = useArtifactConsent(client, group, owner);
   const [scope] = useState(() => ({ controller: new AbortController() }));
   async function load(more = false) {
     const signal = scope.controller.signal;
@@ -97,7 +96,7 @@ export function GroupArtifacts({
     scope.controller = controller;
     void load();
     return () => controller.abort();
-  }, [client, group.id, owner, scope]);
+  }, [client, group.id, group.viewerParticipantId, owner, scope]);
   async function mutate(action: (signal: AbortSignal) => Promise<unknown>) {
     const signal = scope.controller.signal;
     setBusy(true);
@@ -203,16 +202,36 @@ export function GroupArtifacts({
                         <label className="flex items-center gap-2 text-sm">
                           <Checkbox
                             disabled={busy}
-                            checked={analysisConsent[grant.id] === true}
+                            checked={consent.checked(grant, 'analysis')}
                             onCheckedChange={(checked) =>
-                              setAnalysisConsent((current) => ({
-                                ...current,
-                                [grant.id]: checked === true,
-                              }))
+                              consent.setChecked(
+                                grant,
+                                'analysis',
+                                checked === true,
+                              )
                             }
                           />
                           {t('group.artifacts.acceptAnalysis')}
                         </label>
+                        {grant.analysis.execution === 'delegated_results' && (
+                          <label className="flex items-center gap-2 text-sm">
+                            <Checkbox
+                              disabled={busy}
+                              checked={consent.checked(
+                                grant,
+                                'delegatedResults',
+                              )}
+                              onCheckedChange={(checked) =>
+                                consent.setChecked(
+                                  grant,
+                                  'delegatedResults',
+                                  checked === true,
+                                )
+                              }
+                            />
+                            {t('group.artifacts.acceptDelegatedResults')}
+                          </label>
+                        )}
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
@@ -234,8 +253,19 @@ export function GroupArtifacts({
                             expectedRevision: grant.revision,
                             ...(grant.analysis
                               ? {
-                                  acceptAnalysis:
-                                    analysisConsent[grant.id] === true,
+                                  acceptAnalysis: consent.checked(
+                                    grant,
+                                    'analysis',
+                                  ),
+                                  ...(grant.analysis.execution ===
+                                  'delegated_results'
+                                    ? {
+                                        acceptDelegatedResults: consent.checked(
+                                          grant,
+                                          'delegatedResults',
+                                        ),
+                                      }
+                                    : {}),
                                 }
                               : {}),
                           },
