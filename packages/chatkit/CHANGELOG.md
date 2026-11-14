@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.22.0
+
+### Minor Changes
+
+- 05200d7: Expose live MCP App tool declarations and route client-tool requests through authenticated view authorization and host approval. Add scoped browser draft recovery and separate owner consent for delegated analysis results, invalidating consent when the grant revision or credential/owner context changes.
+
 ## 0.21.0
 
 ### Minor Changes
