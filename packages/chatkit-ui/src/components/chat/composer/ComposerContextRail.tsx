@@ -26,7 +26,7 @@ export function ComposerContextRail({
       data-slot="composer-context-rail"
       className="flex min-w-0 flex-wrap items-center"
     >
-      <div className="min-w-0 max-w-full">
+      <div className="min-w-0 max-w-[min(100%,20rem)]">
         {project && <ProjectSelector {...project} />}
       </div>
       {files && <WorkspaceFileSelector {...files} />}
