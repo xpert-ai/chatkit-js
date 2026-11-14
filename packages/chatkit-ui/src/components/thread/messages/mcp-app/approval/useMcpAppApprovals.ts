@@ -48,6 +48,36 @@ export function useMcpAppApprovals({
   messageId,
   client,
 }: McpAppApprovalsOptions) {
+  const hostRequests = React.useRef(
+    new Map<string, (response: unknown) => void>(),
+  );
+  const replyToRequest = React.useCallback(
+    (response: unknown) => {
+      if (
+        response &&
+        typeof response === 'object' &&
+        'id' in response &&
+        typeof response.id === 'string'
+      ) {
+        const resolve = hostRequests.current.get(response.id);
+        if (resolve) {
+          resolve(response);
+          return;
+        }
+      }
+      postToApp(response);
+    },
+    [postToApp],
+  );
+  React.useEffect(
+    () => () => {
+      for (const [id, resolve] of hostRequests.current)
+        resolve(jsonRpcError(id, 'MCP App view closed'));
+      hostRequests.current.clear();
+    },
+    [],
+  );
+
   const clearPendingApproval = React.useCallback(() => {
     pendingApprovalRef.current = null;
     approvalActionRef.current = null;
@@ -58,10 +88,16 @@ export function useMcpAppApprovals({
 
   const processHostRpcResponse = React.useCallback(
     (request: JsonRpcRequest, response: unknown) => {
+      if (
+        typeof request.id === 'string' &&
+        request.id.startsWith('xpert-host-approval-') &&
+        !hostRequests.current.has(request.id)
+      )
+        return;
       const nextApproval = readMcpAppPendingApproval(response, request);
       if (nextApproval) {
         if (pendingApprovalRef.current) {
-          postToApp(
+          replyToRequest(
             jsonRpcError(
               request.id,
               'Another MCP App approval request is already pending',
@@ -88,16 +124,16 @@ export function useMcpAppApprovals({
         try {
           triggerMcpAppDownloads(request.params);
         } catch (downloadError) {
-          postToApp(
+          replyToRequest(
             jsonRpcError(request.id, getErrorMessage(downloadError), -32005),
           );
           return;
         }
       }
 
-      postToApp(response);
+      replyToRequest(response);
     },
-    [postToApp],
+    [replyToRequest],
   );
 
   const dispatchHostRpc = React.useCallback(
@@ -109,14 +145,14 @@ export function useMcpAppApprovals({
         processHostRpcResponse(request, response);
       } catch (rpcError) {
         if (!isResourceEpochCurrent(epoch)) return;
-        postToApp(jsonRpcError(request.id, getErrorMessage(rpcError)));
+        replyToRequest(jsonRpcError(request.id, getErrorMessage(rpcError)));
       }
     },
     [
       callHostRpc,
       getResourceEpoch,
       isResourceEpochCurrent,
-      postToApp,
+      replyToRequest,
       processHostRpcResponse,
     ],
   );
@@ -129,7 +165,7 @@ export function useMcpAppApprovals({
       if (!approval || approvalActionRef.current) return;
       if (approval.expiresAt <= Date.now()) {
         clearPendingApproval();
-        postToApp(
+        replyToRequest(
           jsonRpcError(
             approval.request.id,
             'The MCP App approval request expired',
@@ -155,7 +191,7 @@ export function useMcpAppApprovals({
           );
           if (!isResourceEpochCurrent(epoch)) return;
           clearPendingApproval();
-          postToApp(
+          replyToRequest(
             jsonRpcError(
               approval.request.id,
               'The user rejected the MCP App action',
@@ -198,10 +234,51 @@ export function useMcpAppApprovals({
       client,
       data,
       messageId,
-      postToApp,
+      replyToRequest,
       processHostRpcResponse,
       runtimeAppInstanceToken,
     ],
   );
-  return { clearPendingApproval, dispatchHostRpc, resolvePendingApproval };
+  const authorizeHostAction = React.useCallback(
+    (request: JsonRpcRequest, signal: AbortSignal) => {
+      if (signal.aborted)
+        return Promise.reject(new Error('MCP App view closed'));
+      if (pendingApprovalRef.current || hostRequests.current.size)
+        return Promise.reject(
+          new Error('Another MCP App approval request is already pending'),
+        );
+      const id = `xpert-host-approval-${crypto.randomUUID()}`;
+      return new Promise<void>((resolve, reject) => {
+        const finish = (response: unknown) => {
+          clearTimeout(timeout);
+          signal.removeEventListener('abort', cancel);
+          hostRequests.current.delete(id);
+          if (isMcpAppRpcSuccess(response)) resolve();
+          else
+            reject(
+              new Error(
+                'MCP App action was rejected, expired, or is no longer authorized',
+              ),
+            );
+        };
+        const cancel = () => {
+          if (pendingApprovalRef.current?.request.id === id)
+            clearPendingApproval();
+          finish(jsonRpcError(id, 'MCP App view closed'));
+        };
+        const timeout = setTimeout(cancel, 5 * 60_000);
+        hostRequests.current.set(id, finish);
+        signal.addEventListener('abort', cancel, { once: true });
+        void dispatchHostRpc({ ...request, id });
+      });
+    },
+    [clearPendingApproval, dispatchHostRpc],
+  );
+  return {
+    clearPendingApproval,
+    dispatchHostRpc,
+    resolvePendingApproval,
+    authorizeHostAction,
+    replyToRequest,
+  };
 }

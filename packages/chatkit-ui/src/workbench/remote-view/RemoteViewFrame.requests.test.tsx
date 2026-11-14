@@ -31,9 +31,11 @@ const manifest: XpertExtensionViewManifest = {
   ],
 };
 
-async function setup() {
+async function setup(localDrafts = false) {
+  const selectedManifest = localDrafts ? { ...manifest, clientCommands: [{ key: 'workbench.content.draft' }] } : manifest;
   const viewHosts = {
-    getManifest: vi.fn().mockResolvedValue(manifest),
+    getLocalDraftBinding: vi.fn(),
+    getManifest: vi.fn().mockResolvedValue(selectedManifest),
     getRemoteComponentEntry: vi
       .fn()
       .mockResolvedValue('<html><body>View</body></html>'),
@@ -50,7 +52,7 @@ async function setup() {
   const { unmount } = render(
     <ThemeProvider>
       <RemoteViewFrame
-        manifest={manifest}
+        manifest={selectedManifest}
         hostId="agent-1"
         locale="en-US"
         title="Documents"
@@ -67,6 +69,7 @@ async function setup() {
   const post = vi.spyOn(contentWindow, 'postMessage');
   fireEvent.load(iframe);
   const instanceId = post.mock.calls.at(-1)?.[0].instanceId;
+  const scopeRevision = post.mock.calls.at(-1)?.[0].scopeRevision;
   expect(instanceId).toEqual(expect.any(String));
   post.mockClear();
   const send = (message: object) =>
@@ -76,6 +79,7 @@ async function setup() {
           channel: REMOTE_COMPONENT_CHANNEL,
           protocolVersion: 1,
           instanceId,
+          scopeRevision,
           ...message,
         },
       });
@@ -86,6 +90,33 @@ async function setup() {
 }
 
 describe('RemoteViewFrame request errors', () => {
+  it('requires a declared draft command and a current iframe scope before authorization', async () => {
+    const f = await setup();
+    f.send({ type: 'invokeClientCommand', requestId: 'draft-1', commandKey: 'workbench.content.draft',
+      payload: { operation: 'list', resourceId: 'resource' } });
+    await waitFor(() => expect(f.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', requestId: 'draft-1' }), '*'));
+    expect(f.viewHosts.getLocalDraftBinding).not.toHaveBeenCalled();
+    f.unmount();
+    const current = await setup(true);
+    current.send({ type: 'invokeClientCommand', requestId: 'draft-2', commandKey: 'workbench.content.draft', scopeRevision: -1,
+      payload: { operation: 'list', resourceId: 'resource' } });
+    await act(async () => undefined);
+    expect(current.viewHosts.getLocalDraftBinding).not.toHaveBeenCalled();
+  });
+
+  it('uses the SDK binding endpoint and discards late draft access after disposal', async () => {
+    const f = await setup(true);
+    let resolve: (value: { resourceId: string; scopeKey: string; maxBytes: number }) => void = () => {};
+    f.viewHosts.getLocalDraftBinding.mockImplementation(() => new Promise(done => { resolve = done; }));
+    f.send({ type: 'invokeClientCommand', requestId: 'draft', commandKey: 'workbench.content.draft',
+      payload: { operation: 'list', resourceId: 'resource' } });
+    await waitFor(() => expect(f.viewHosts.getLocalDraftBinding).toHaveBeenCalledWith('agent', 'agent-1', manifest.key, 'resource',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })));
+    f.unmount();
+    await act(async () => resolve({ resourceId: 'resource', scopeKey: 'a'.repeat(64), maxBytes: 1024 }));
+    expect(f.post.mock.calls.some(([message]) => message.type === 'clientCommandResult')).toBe(false);
+  });
+
   it('returns a transient lookup error to its caller without a banner and allows a retry', async () => {
     const f = await setup();
     const message =

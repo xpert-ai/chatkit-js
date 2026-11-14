@@ -163,7 +163,7 @@ export function McpAppMessage({
 
   useMcpAppTeardown({ ...state, data, sandboxProxy, messageId, client });
 
-  useMcpAppApprovalExpiry({ ...state, ...approvals, postToApp });
+  useMcpAppApprovalExpiry({ ...state, ...approvals, postToApp: approvals.replyToRequest });
 
   React.useEffect(() => {
     resourceLifecycle.sendInitialToolNotifications();

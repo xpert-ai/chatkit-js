@@ -18,12 +18,21 @@ export function ResourceAnalysisSummary({
         )}
       </p>
       <p className="text-muted-foreground">
-        {t('group.artifacts.analysisAudience')}
+        {t(
+          policy.execution === 'delegated_results'
+            ? 'group.artifacts.analysisDelegatedAudience'
+            : 'group.artifacts.analysisAudience',
+        )}
       </p>
       <ul className="space-y-1">
         {policy.datasets.map((dataset) => (
           <li key={dataset.key} className="break-words">
             {dataset.key}: {dataset.fields.join(', ')}
+            {Object.entries(dataset.controlValues ?? {}).map(([control, values]) => (
+              <p key={control} className="text-muted-foreground">
+                {control}: {values.map((value) => String(value)).join(', ')}
+              </p>
+            ))}
             {dataset.filters.map((filter, index) => (
               <p key={index} className="text-muted-foreground">
                 {filter.field} {filter.operator}{' '}
