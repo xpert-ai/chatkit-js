@@ -1,5 +1,19 @@
 # @xpert-ai/chatkit-ui
 
+## 0.24.0
+
+### Minor Changes
+
+- 05200d7: Expose live MCP App tool declarations and route client-tool requests through authenticated view authorization and host approval. Add scoped browser draft recovery and separate owner consent for delegated analysis results, invalidating consent when the grant revision or credential/owner context changes.
+
+### Patch Changes
+
+- 05200d7: Upgrade @xpert-ai/xpert-sdk to ^0.26.0 and consume its published Workbench browser entry for local drafts. Keep storage budgets and offline-write policy in the trusted ChatKit host, and validate the installed runtime without a local SDK patch.
+- 62e03cc: Keep long project names within the Composer by constraining the context toolbar width and allowing its grid column to shrink on narrow screens.
+- Updated dependencies [05200d7]
+  - @xpert-ai/chatkit-types@0.22.0
+  - @xpert-ai/chatkit-web-shared@0.18.4
+
 ## 0.23.1
 
 ### Patch Changes
