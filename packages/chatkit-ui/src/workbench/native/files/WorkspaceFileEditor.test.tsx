@@ -39,7 +39,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 const officeSaved = vi.fn();
-vi.mock('../office/presentation/PptxEditor', () => ({
+vi.mock('../office/document/DocxEditor', () => ({
   default: React.forwardRef(function MockOffice(
     { onDirty }: { onDirty: () => void },
     ref,
@@ -131,7 +131,7 @@ describe('workspace file saving', () => {
 
 it('acknowledges Office edits only after the server accepts the exported bytes', async () => {
   officeSaved.mockClear();
-  const { client, register, download } = setup('slides.pptx');
+  const { client, register, download } = setup('document.docx');
   let acceptSave!: (result: { filePath: string }) => void;
   const pendingSave = new Promise<{ filePath: string }>((resolve) => {
     acceptSave = resolve;
@@ -140,7 +140,7 @@ it('acknowledges Office edits only after the server accepts the exported bytes',
     .spyOn(client.workbench, 'saveBinaryFile')
     .mockRejectedValueOnce(new Error('Save failed'))
     .mockReturnValueOnce(pendingSave)
-    .mockResolvedValue({ filePath: 'slides.pptx' });
+    .mockResolvedValue({ filePath: 'document.docx' });
   fireEvent.click(await screen.findByText('Edit office'));
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
@@ -153,7 +153,7 @@ it('acknowledges Office edits only after the server accepts the exported bytes',
   expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
   expect(await persist.mock.calls[1][2].text()).toBe('edited office');
   await act(async () => {
-    acceptSave({ filePath: 'slides.pptx' });
+    acceptSave({ filePath: 'document.docx' });
     await pendingSave;
   });
   // markSaved runs before React commits the parent's clean-state effect.

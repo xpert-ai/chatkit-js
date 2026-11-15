@@ -32,9 +32,6 @@ const DocxEditor = React.lazy(() => import('../office/document/DocxEditor'));
 const SpreadsheetEditor = React.lazy(
   () => import('../office/spreadsheet/SpreadsheetEditor'),
 );
-const PptxEditor = React.lazy(
-  () => import('../office/presentation/PptxEditor'),
-);
 
 export function WorkspaceFileEditor({
   client,
@@ -262,11 +259,13 @@ export function WorkspaceFileEditor({
       case 'spreadsheet':
         return <SpreadsheetEditor ref={editor} {...editorProps} />;
       case 'pptx':
-        return <PptxEditor ref={editor} {...editorProps} />;
-      case 'image':
         return (
-          <ImagePreview src={url} title={fileName(file.filePath)} />
+          <p role="status" className="p-4 text-muted-foreground">
+            {t('workbench.files.pluginRequired')}
+          </p>
         );
+      case 'image':
+        return <ImagePreview src={url} title={fileName(file.filePath)} />;
       case 'pdf':
         return (
           <iframe
