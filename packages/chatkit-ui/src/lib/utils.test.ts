@@ -14,6 +14,7 @@ describe('theme utility classes', () => {
 
     expect(cn('rounded-chat-item', smallButtonRadius)).toBe(smallButtonRadius);
     expect(cn('rounded-md', 'rounded-chat-item')).toBe('rounded-chat-item');
+    expect(cn('rounded-full', 'rounded-chat-avatar')).toBe('rounded-chat-avatar');
     expect(cn('rounded-chat-panel', 'rounded-none')).toBe('rounded-none');
     expect(cn('rounded-chat-item', 'rounded-chat-panel')).toBe(
       'rounded-chat-panel',

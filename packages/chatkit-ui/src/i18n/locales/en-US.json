@@ -253,6 +253,7 @@
             "imageLimit": "Choose a PNG, JPEG or WebP image up to 10 MB."
         },
         "files": {
+            "pluginRequired": "Open a Project and enable the PPTX Editor plugin to edit this presentation.",
             "save": "Save",
             "saving": "Saving…",
             "saved": "Saved",

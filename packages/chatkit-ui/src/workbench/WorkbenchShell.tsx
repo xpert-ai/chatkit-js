@@ -1,3 +1,4 @@
+import { useFileEditorNavigation } from './content/useFileEditorNavigation';
 import { isNativeView } from './shell/native-view';
 import {
   workbenchAvailable,
@@ -41,7 +42,10 @@ import {
 import { workbenchLayoutKey } from './layout-storage';
 import { useNativeWorkbench } from './native/useNativeWorkbench';
 import { getErrorMessage } from './shell/commands/request-context';
-import type { WorkbenchAssistantContext, WorkbenchShellProps } from './shell/types';
+import type {
+  WorkbenchAssistantContext,
+  WorkbenchShellProps,
+} from './shell/types';
 import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDialog';
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
@@ -213,18 +217,21 @@ function WorkbenchContent({
     visitPreview,
   } = useWorkbenchPages(startPageScope, requestScope);
 
-  const { views, menuViews, viewsScope, loading, showLoading, error } = useWorkbenchViews({
-    client: viewHosts,
-    hostId: stream.assistantId,
-    scopeKey: viewScopeKey,
-    retentionKey: layoutKey ?? '',
-    runtimeScope,
-    enabled:
-      remoteViewsEnabled && authenticated && Boolean(stream.assistantId.trim()),
-    ready: stream.runtimeScopeReady !== false,
-    locale,
-    revision: reloadVersion,
-  });
+  const { views, menuViews, viewsScope, loading, showLoading, error } =
+    useWorkbenchViews({
+      client: viewHosts,
+      hostId: stream.assistantId,
+      scopeKey: viewScopeKey,
+      retentionKey: layoutKey ?? '',
+      runtimeScope,
+      enabled:
+        remoteViewsEnabled &&
+        authenticated &&
+        Boolean(stream.assistantId.trim()),
+      ready: stream.runtimeScopeReady !== false,
+      locale,
+      revision: reloadVersion,
+    });
 
   const initialLoading = useInitialLoading(
     layoutKey,
@@ -576,7 +583,8 @@ function WorkbenchContent({
   });
 
   const openScheduleForm = useWorkbenchEntryNavigation({
-    scheduleEnabled: authenticated && remoteViewsEnabled && viewsScope === viewScopeKey,
+    scheduleEnabled:
+      authenticated && remoteViewsEnabled && viewsScope === viewScopeKey,
     threadId: stream.threadId,
     editors,
     contentApi: stream.client.content,
@@ -650,15 +658,33 @@ function WorkbenchContent({
     remember: rememberResourceCard,
   });
 
+  const openWorkspaceFile = useFileEditorNavigation({
+    api: stream.client.content,
+    assistantId: stream.assistantId,
+    projectId: runtimeScope.projectId,
+    ready: stream.runtimeScopeReady !== false,
+    native: (file, fromTab) => {
+      const key = native.openFile(file);
+      replaceNewTab(fromTab, key);
+      setActiveViewKey(key);
+      setOpen(true);
+    },
+    navigate: (navigation) =>
+      executeClientCommand('workbench.navigation.open', navigation, {
+        key: 'chatkit.file',
+      }),
+    failed: () =>
+      setNotification({
+        level: 'error',
+        message: t('workbench.files.pluginRequired'),
+      }),
+  });
   const artifactActions = useArtifactActions({
     stream,
     enabled,
     authenticated,
     openPreview,
-    openWorkspaceFile: (file) => {
-      setActiveViewKey(native.openFile(file));
-      setOpen(true);
-    },
+    openWorkspaceFile,
     unavailableMessage: t('workbench.files.failed'),
     onAnnotate: async (reference) => {
       await parentMessenger.updateComposer({
@@ -845,12 +871,7 @@ function WorkbenchContent({
           setOpen(true);
         }
       }}
-      onOpenNativeFile={(file, fromTab) => {
-        const key = native.openFile(file);
-        replaceNewTab(fromTab, key);
-        setActiveViewKey(key);
-        setOpen(true);
-      }}
+      onOpenNativeFile={openWorkspaceFile}
       onCloseNative={(key) => {
         if (native.requestClose(key) && activeViewKey === key) {
           const next = adjacentTab(key);

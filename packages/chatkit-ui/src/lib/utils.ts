@@ -6,7 +6,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      radius: ['chat-item', 'chat-panel'],
+      radius: ['chat-item', 'chat-panel', 'chat-avatar'],
     },
   },
 });

@@ -10,6 +10,46 @@ import { normalizeChatkitAvatar } from '../../ui/chatkit-avatar';
 import { INCLUDED_PET_OPTIONS } from '../../pet/builtinPets';
 
 describe('Extensible Assistant avatars', () => {
+  it('uses the assistant theme for the default face and respects an avatar-only background', () => {
+    const { container, rerender } = render(
+      <AssistantCharacter avatar={null} name="Assistant" state="idle" />,
+    );
+    const tile = () => container.querySelector('[data-character-state]');
+    expect(tile()).toHaveClass('bg-primary', 'text-primary-foreground');
+    expect(screen.getByRole('img', { name: 'Assistant' })).not.toHaveClass(
+      'text-primary',
+    );
+
+    rerender(
+      <AssistantCharacter
+        avatar={{ background: '#0e7490' }}
+        name="Assistant"
+        state="running"
+      />,
+    );
+    expect(tile()).toHaveStyle({ background: '#0e7490' });
+    expect(tile()).toHaveClass('text-primary-foreground');
+
+    rerender(
+      <AssistantCharacter
+        avatar={{
+          appearance: {
+            version: 1,
+            kind: 'character',
+            id: 'bosi',
+            color: '#7c6ee6',
+          },
+        }}
+        name="Assistant"
+        state="idle"
+      />,
+    );
+    expect(tile()).not.toHaveClass('bg-primary');
+    expect(screen.getByRole('img', { name: 'Assistant' })).toHaveStyle({
+      color: '#7c6ee6',
+    });
+  });
+
   it('discovers bundled pets from metadata and accepts future identifiers', () => {
     expect(INCLUDED_PET_OPTIONS.length).toBeGreaterThan(0);
     expect(INCLUDED_PET_OPTIONS.some((pet) => pet.id === 'boba')).toBe(true);
