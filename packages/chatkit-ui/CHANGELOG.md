@@ -1,5 +1,17 @@
 # @xpert-ai/chatkit-ui
 
+## 0.25.0
+
+### Minor Changes
+
+- 1e8c1e0: Open Project PPTX files through the registered file editor and retire the embedded writable PPTX editor. Keep ordinary native file routing and ignore editor-resolution results from a previous Project context.
+
+  Requires the matching Xpert server and PPTX Editor plugin. Upgrade the browser SDK dependency to `^0.27.0`, which provides `ContentClient.resolveFile`. Non-Project PPTX editing now directs users to the Project plugin workflow.
+
+### Patch Changes
+
+- 75b8fbf: Show the default Assistant face on its avatar background or the Assistant accent color. Scale avatars in the chat header and details panel with theme density and use proportional avatar corners for each radius preset.
+
 ## 0.24.0
 
 ### Minor Changes
