@@ -35,7 +35,7 @@ export function useFileEditorNavigation(options: {
     };
   }, []);
   return (file: XpertWorkspaceFile, fromTab?: string) => {
-    if (fileKind(file.filePath, file.mimeType) !== 'pptx')
+    if (!['pptx', 'docx', 'pdf'].includes(fileKind(file.filePath, file.mimeType)))
       return options.native(file, fromTab);
     const { assistantId, projectId, api } = options;
     if (!assistantId || !projectId || !options.ready) {

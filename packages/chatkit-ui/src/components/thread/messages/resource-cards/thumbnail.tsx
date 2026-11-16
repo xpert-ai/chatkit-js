@@ -4,13 +4,10 @@ import type { ReactNode, Ref } from 'react';
 export function ResourceCardThumbnail({
   children,
   containerRef,
-  reserveIconSpace = false,
   action,
 }: {
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
-  /** Preserve the existing row height of cards that have no cover image. */
-  reserveIconSpace?: boolean;
   action?: {
     onClick: () => void;
     disabled: boolean;
@@ -19,11 +16,12 @@ export function ResourceCardThumbnail({
   };
 }) {
   const surface =
-    'absolute -left-[8%] top-[10%] flex aspect-square w-full origin-top -rotate-6 items-center justify-center overflow-hidden rounded-chat-item border border-border bg-background p-1 shadow-sm';
+    'absolute inset-0 flex size-full -rotate-6 items-center justify-center overflow-hidden rounded-chat-item border border-border bg-background p-1 shadow-sm';
   return (
     <div
       ref={containerRef}
-      className={`relative shrink-0 w-[calc(clamp(2.75rem,calc(3.5rem*var(--density-spacing,1)),3.5rem)*1.45)] ${reserveIconSpace ? 'h-[max(2.75rem,calc(3rem*var(--density-spacing,1)))]' : 'h-[clamp(2.75rem,calc(3.5rem*var(--density-spacing,1)),3.5rem)]'}`}
+      // Reserve the full thumbnail height; the card padding contains its rotation.
+      className="relative aspect-square shrink-0 w-[calc(clamp(2.75rem,calc(3.5rem*var(--density-spacing,1)),3.5rem)*1.45)]"
     >
       {action ? (
         <button

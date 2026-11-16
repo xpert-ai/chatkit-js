@@ -20,17 +20,15 @@ export function ResourceCardLayout({
   compact?: boolean;
   preview?: ReactNode;
 }) {
-  const card = (
+  return (
     <div
-      className={`@container/resource-card min-w-0 rounded-chat-panel border border-border bg-card text-card-foreground ${compact ? 'px-[var(--density-padding,1rem)] py-[var(--density-gap,0.5rem)]' : 'p-[var(--density-padding,1rem)]'}`}
+      className="@container/resource-card min-w-0 rounded-chat-panel border border-border bg-card p-[var(--density-padding,1rem)] text-card-foreground"
       data-testid="resource-card"
     >
       <div className="flex items-center gap-[var(--density-gap,0.5rem)]">
         {preview ??
           (compact ? (
-            <ResourceCardThumbnail reserveIconSpace>
-              {icon}
-            </ResourceCardThumbnail>
+            <ResourceCardThumbnail>{icon}</ResourceCardThumbnail>
           ) : (
             <div className="shrink-0" aria-hidden="true">
               {icon}
@@ -63,13 +61,5 @@ export function ResourceCardLayout({
       </div>
       {children}
     </div>
-  );
-  // Keep the card's row height fixed while clearing the thumbnail's visual overhang.
-  return preview || compact ? (
-    <div className="pb-[calc(clamp(2.75rem,calc(3.5rem*var(--density-spacing,1)),3.5rem)*0.6)]">
-      {card}
-    </div>
-  ) : (
-    card
   );
 }
