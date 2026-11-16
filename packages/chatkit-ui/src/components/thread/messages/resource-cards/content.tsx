@@ -47,7 +47,7 @@ function FileItem({ file }: { file: ResourceCardFile }) {
           type="button"
           onClick={() => void download()}
           disabled={!downloadResourceCardFile || busy}
-          aria-label={`${t('actions.files.download')} ${file.title}`}
+          aria-label={`${t('workbench.files.download')} ${file.title}`}
           className="rounded-chat-item border p-2 hover:bg-muted disabled:opacity-50"
         >
           {busy ? (

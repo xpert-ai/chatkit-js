@@ -30,13 +30,21 @@ describe('export resource files in Workbench', () => {
       sessionId: 's',
       expiresAt: '2099-01-01T00:00:00Z',
     });
-    files.createFileAccessGrant.mockResolvedValueOnce({
-      url: '/preview',
-      expiresAt: '2099-01-01T00:00:00Z',
-      mimeType: 'application/pdf',
-      fileName: '标书.pdf',
-      size: 512,
-    });
+    files.createFileAccessGrant
+      .mockResolvedValueOnce({
+        url: '/original-metadata',
+        expiresAt: '2099-01-01T00:00:00Z',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        fileName: '标书.docx',
+      })
+      .mockResolvedValueOnce({
+        url: '/preview',
+        expiresAt: '2099-01-01T00:00:00Z',
+        mimeType: 'application/pdf',
+        fileName: '标书.pdf',
+        size: 512,
+      });
     files.readFileAccess.mockResolvedValue(
       new Blob(['%PDF preview'], { type: 'application/octet-stream' }),
     );
@@ -75,7 +83,24 @@ describe('export resource files in Workbench', () => {
       name: /Open 标书.docx/,
     });
     await f.waitFor(() => expect(open).toBeEnabled());
-    expect(files.createFileAccessSession).not.toHaveBeenCalled();
+    await f.waitFor(() =>
+      expect(
+        ui.container.querySelector('[data-file-type="word"]'),
+      ).not.toBeNull(),
+    );
+    // Rendering resolves only the original file's type. Preview bytes still
+    // require the user's open action and their own scoped grant.
+    expect(files.readFileAccess).not.toHaveBeenCalled();
+    expect(files.createFileAccessGrant).toHaveBeenCalledExactlyOnceWith(
+      's',
+      { fileKey: 'export', targetId: 'v1', purpose: 'download' },
+      expect.objectContaining({
+        runtimeScope: {
+          projectId: 'project-1',
+          conversationId: 'conversation-1',
+        },
+      }),
+    );
     f.fireEvent.click(open);
     await f.waitFor(() =>
       expect(
@@ -123,14 +148,14 @@ describe('export resource files in Workbench', () => {
       { fileKey: 'export', targetId: 'v1', purpose: 'download' },
       expect.anything(),
     );
-    const downloaded = f.vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0];
+    const downloaded = f.vi.mocked(URL.createObjectURL).mock.calls.at(-1)?.[0];
     expect(downloaded).toBeInstanceOf(Blob);
     if (!(downloaded instanceof Blob))
       throw new Error('Expected original file bytes');
     expect(await downloaded.arrayBuffer()).toEqual(
       await original.arrayBuffer(),
     );
-    expect(files.revokeFileAccessSession).toHaveBeenCalledTimes(2);
+    expect(files.revokeFileAccessSession).toHaveBeenCalledTimes(3);
     ui.unmount();
     f.vi.advanceTimersByTime(1000);
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:file-1');
