@@ -14,7 +14,13 @@ import {
 import type { AssistantMessageWithAgentRuns } from '../../../lib/agent-run-render-tree';
 
 type ToolEvent = TMessageContentComponent<
-  Pick<TMessageComponentStep, 'toolset' | 'tool' | 'title' | 'status' | 'error'>
+  Pick<TMessageComponentStep, 'tool' | 'title' | 'status' | 'error'> &
+    Partial<
+      Pick<
+        TMessageComponentStep,
+        'toolset' | 'icon' | 'input' | 'output' | 'toolPresentation'
+      >
+    >
 >;
 
 const delegate: ToolEvent = {
@@ -94,6 +100,117 @@ function view(value: AssistantMessageWithAgentRuns, open = vi.fn()) {
 }
 
 describe('external Assistant tool event presentation', () => {
+  it.each(['bid_submit_role_task', 'sandbox_shell'])(
+    'opens the redacted input and output of %s',
+    (tool) => {
+      const step: ToolEvent = {
+        ...roleOutput,
+        executionId: 'root',
+        data: {
+          category: 'Tool',
+          tool,
+          title: tool,
+          status: 'success',
+          toolPresentation: 'redacted',
+          icon: { type: 'emoji', value: '📄' },
+          input: { taskId: '•••5785' },
+          output: { accepted: false, draftSaved: true },
+        },
+      };
+      render(view({ ...message([step]), agentRuns: [] }));
+      const row = screen.getByRole('button', { name: tool });
+      expect(
+        row.querySelector('[data-slot="tool-step-icon"]'),
+      ).toHaveTextContent('📄');
+      fireEvent.click(row);
+      expect(row).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Input')).toBeVisible();
+      expect(screen.getByText('Output')).toBeVisible();
+      expect(screen.getByText(/•••5785/)).toBeVisible();
+      expect(screen.getByText(/draftSaved/)).toBeVisible();
+    },
+  );
+
+  it('shows the registered localized title, tool identifier and SVG for an undeclared call', () => {
+    const step: ToolEvent = {
+      ...roleOutput, executionId: 'root',
+      data: { category: 'Tool', tool: 'lookup', title: '查询状态', status: 'success', toolPresentation: 'redacted',
+        icon: { type: 'svg', value: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/></svg>' } },
+    };
+    render(view({ ...message([step]), agentRuns: [] }));
+    const row = screen.getByRole('button', { name: /查询状态.*lookup/ });
+    expect(row).toBeDisabled();
+    const src = row.querySelector('img')?.getAttribute('src');
+    expect(src).toMatch(/^data:image\/svg\+xml/);
+    expect(decodeURIComponent(src!)).toContain('xmlns="http://www.w3.org/2000/svg"');
+  });
+
+  it('shows a failed preview with its receipt, public error and a local fallback icon', () => {
+    const step: ToolEvent = {
+      ...roleOutput,
+      executionId: 'root',
+      data: {
+        category: 'Tool',
+        tool: 'bid_submit_role_task',
+        title: 'bid_submit_role_task',
+        toolset: 'mcp',
+        status: 'fail',
+        toolPresentation: 'redacted',
+        output: { draftSaved: true },
+        error: 'FORM_INVALID',
+      },
+    };
+    render(view({ ...message([step]), agentRuns: [] }));
+    const row = screen.getByRole('button', { name: 'bid_submit_role_task' });
+    const providerIcon = row.querySelector('img')!;
+    expect(providerIcon).toHaveAttribute('src', '/api/xpert-toolset/builtin-provider/mcp/icon');
+    fireEvent.error(providerIcon);
+    expect(row.querySelector('[data-slot="tool-step-icon"]')).toHaveClass(
+      'lucide-wrench',
+    );
+    fireEvent.click(row);
+    expect(screen.getByText(/draftSaved/)).toBeVisible();
+    expect(screen.getByText('FORM_INVALID')).toBeVisible();
+  });
+
+  it('renders a shadowless child and a named tool with no declared details', () => {
+    const progress: ToolEvent = {
+      ...roleOutput,
+      data: {
+        category: 'Tool',
+        tool: 'lookup',
+        title: 'Lookup',
+        toolPresentation: 'redacted',
+        status: 'fail',
+      },
+    };
+    const value = message([progress]);
+    render(
+      view({
+        ...value,
+        agentRuns: [
+          {
+            id: 'external',
+            parentId: 'root',
+            title: 'Reviewer',
+            status: 'success',
+          },
+        ],
+      }),
+    );
+
+    const child = screen.getByRole('button', { name: /Reviewer/ });
+    expect(child.parentElement).toHaveClass('rounded-chat-panel');
+    expect(child.parentElement).not.toHaveClass('shadow-sm');
+    if (child.getAttribute('aria-expanded') !== 'true') fireEvent.click(child);
+    const row = screen.getByRole('button', { name: 'Lookup lookup' });
+    expect(row.querySelector('[data-slot="tool-step-icon"]')).toHaveClass(
+      'lucide-wrench',
+    );
+    expect(row).toBeDisabled();
+    expect(row).not.toHaveAttribute('aria-expanded');
+  });
+
   it('shows one clickable expert card and counts only the remaining preparation tool', () => {
     const open = vi.fn();
     render(view(message(), open));

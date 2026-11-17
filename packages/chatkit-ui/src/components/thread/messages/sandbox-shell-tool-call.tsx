@@ -169,6 +169,7 @@ function getSandboxShellExitCode(data: ShellStepData) {
 }
 
 export function isSandboxShellStep(data: ShellStepData) {
+  if (data.toolPresentation === 'redacted') return false;
   const namedData = data as NamedStepData;
   return [data.tool, data.type, data.title, namedData.name].some(
     (value) => normalizeShellToken(value) === 'sandbox_shell',

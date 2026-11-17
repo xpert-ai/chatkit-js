@@ -69,6 +69,7 @@ export function getComponentMessageRenderer(
   content: TMessageContentComponent,
   data: ComponentMessagePartialStepData,
 ): ComponentMessageRenderer | null {
+  if (data.toolPresentation === 'redacted') return null;
   return (
     COMPONENT_MESSAGE_RENDERERS.find((renderer) =>
       renderer.match(content, data),

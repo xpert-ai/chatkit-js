@@ -66,11 +66,7 @@ function ToolCallCopyButton({
       title={label}
       onClick={handleCopy}
     >
-      {isCopied ? (
-        <Check aria-hidden="true" />
-      ) : (
-        <Copy aria-hidden="true" />
-      )}
+      {isCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
     </button>
   );
 }
@@ -147,22 +143,26 @@ export function DefaultToolCallOutput({
 }: ComponentMessageDetailsRendererProps) {
   const { t } = useChatkitTranslation();
   // Image artifacts are retained for model input, but do not opt into UI display.
-  const presentation = parseToolOutputPresentation(data.artifact);
-  const output = data.output ?? (presentation ? null : data.artifact) ?? null;
+  const isPreview = data.toolPresentation === 'redacted';
+  const attachmentOutput =
+    isPreview || parseToolOutputPresentation(data.artifact)
+      ? undefined
+      : data.artifact;
+  const output = isPreview ? data.output : (data.output ?? attachmentOutput);
   const error = data.error ?? null;
 
-  if (error) {
-    return (
-      <div className="space-y-1">
-        <div className="text-[11px] font-medium text-destructive">
-          {t('message.toolGroup.errorTitle')}
-        </div>
-        <ToolCallValueBlock value={error} destructive />
+  const errorDetails = error ? (
+    <div className="space-y-1">
+      <div className="text-[11px] font-medium text-destructive">
+        {t('message.toolGroup.errorTitle')}
       </div>
-    );
-  }
+      <ToolCallValueBlock value={error} destructive />
+    </div>
+  ) : null;
 
-  if (output === null) return null;
+  if (errorDetails && !isPreview) return errorDetails;
+  if (output === undefined || (output === null && !isPreview))
+    return errorDetails;
 
   return (
     <div className="space-y-2">
@@ -170,6 +170,7 @@ export function DefaultToolCallOutput({
         {t('message.toolGroup.outputTitle')}
       </div>
       <ToolCallValueBlock value={output} />
+      {errorDetails}
     </div>
   );
 }

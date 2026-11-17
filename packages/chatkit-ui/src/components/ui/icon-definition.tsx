@@ -10,6 +10,7 @@ export type IconDefinitionRendererProps = {
   fallback?: React.ReactNode;
   decorative?: boolean;
   dataSlot?: string;
+  svgAsImage?: boolean;
 };
 
 function getIconStyle(
@@ -65,6 +66,7 @@ export function IconDefinitionRenderer({
   fallback = null,
   decorative = true,
   dataSlot = 'icon-definition',
+  svgAsImage = false,
 }: IconDefinitionRendererProps) {
   if (!icon) {
     return fallback;
@@ -122,7 +124,7 @@ export function IconDefinitionRenderer({
 
   if (icon.type === 'svg') {
     const svgMarkup = getInlineSvgMarkup(icon.value);
-    if (svgMarkup) {
+    if (svgMarkup && !svgAsImage) {
       return (
         <span
           {...accessibilityProps}
@@ -137,6 +139,11 @@ export function IconDefinitionRenderer({
       );
     }
 
+    // Inline HTML supplies the SVG namespace implicitly. A standalone SVG image needs it explicitly.
+    const imageMarkup = svgMarkup?.replace(
+      /^<svg(?=[\s>])(?![^>]*\sxmlns\s*=)/i,
+      '<svg xmlns="http://www.w3.org/2000/svg"',
+    );
     return (
       <img
         alt={decorative ? '' : (icon.alt ?? '')}
@@ -146,7 +153,11 @@ export function IconDefinitionRenderer({
           className,
         )}
         data-slot={dataSlot}
-        src={icon.value}
+        src={
+          imageMarkup
+            ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(imageMarkup)}`
+            : icon.value
+        }
         style={style}
       />
     );
