@@ -228,9 +228,11 @@ export function ToolStepIcon({
   organizationId?: string;
   apiUrl?: string;
 }) {
-  const usesToolsetAvatar = shouldUseToolsetAvatar(data.toolset);
+  const isPreview = data.toolPresentation === 'redacted';
+  const usesToolsetAvatar = !data.icon && shouldUseToolsetAvatar(data.toolset);
   const avatar = useToolsetAvatar(data.toolset_id, usesToolsetAvatar, apiUrl);
   const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
+  const FallbackIcon = isPreview ? Wrench : CircleHelp;
   const [failedIconUrl, setFailedIconUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -241,10 +243,11 @@ export function ToolStepIcon({
     return (
       <IconDefinitionRenderer
         icon={data.icon}
+        svgAsImage={isPreview}
         className={className}
         dataSlot="tool-step-icon"
         fallback={
-          <CircleHelp
+          <FallbackIcon
             className={className}
             aria-hidden="true"
             data-slot="tool-step-icon"
@@ -277,10 +280,10 @@ export function ToolStepIcon({
     );
   }
 
-  const TypeIcon = getStepTypeIcon(data.type);
-  if (TypeIcon) {
+  const StepIcon = getStepTypeIcon(data.type);
+  if (StepIcon) {
     return (
-      <TypeIcon
+      <StepIcon
         className={className}
         aria-hidden="true"
         data-slot="tool-step-icon"
@@ -299,18 +302,8 @@ export function ToolStepIcon({
     );
   }
 
-  if (usesToolsetAvatar) {
-    return (
-      <CircleHelp
-        className={className}
-        aria-hidden="true"
-        data-slot="tool-step-icon"
-      />
-    );
-  }
-
   return (
-    <CircleHelp
+    <FallbackIcon
       className={className}
       aria-hidden="true"
       data-slot="tool-step-icon"

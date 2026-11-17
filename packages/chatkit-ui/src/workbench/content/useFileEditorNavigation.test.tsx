@@ -19,11 +19,11 @@ function options() {
     failed: vi.fn(),
   };
 }
-describe('PPTX plugin navigation', () => {
-  it('uses the authorized editor and never opens the embedded PPTX editor', async () => {
+describe('Document plugin navigation', () => {
+  it.each(['pptx', 'docx', 'pdf'])('uses the authorized plugin for %s', async (extension) => {
     const o = options(),
       hook = renderHook(() => useFileEditorNavigation(o));
-    hook.result.current(file);
+    hook.result.current({ ...file, filePath: `report.${extension}` });
     await waitFor(() =>
       expect(o.navigate).toHaveBeenCalledWith({
         target: 'workbench.view',

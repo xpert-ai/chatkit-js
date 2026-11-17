@@ -453,8 +453,8 @@ export function AgentRunGroup({
     <div
       className={cn(
         mode !== 'bubbles' && [
-          'border border-border/70 pl-2 rounded-lg',
-          depth > 0 ? 'ml-1' : '-mx-2.5 shadow-sm',
+          'rounded-chat-panel border border-border/70 pl-2',
+          depth > 0 ? 'ml-1' : '-mx-2.5',
         ],
       )}
     >

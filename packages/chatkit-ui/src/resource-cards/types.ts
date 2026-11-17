@@ -1,8 +1,10 @@
 import type {
   ResourceCardFile,
+  ResourceCardFileReference,
   ResourceCardImage,
   TMessageContentResourceCard,
 } from '@xpert-ai/chatkit-types';
+import type { XpertViewFileAccessGrantResult } from '@xpert-ai/xpert-sdk';
 
 export type ResourceCardOpenResult =
   | { success: true; status: 'opened' }
@@ -10,6 +12,10 @@ export type ResourceCardOpenResult =
 
 /** Each capability can be provided without a Workbench, including inline images. */
 export type ResourceCardActions = {
+  loadResourceCardFileMetadata?: (
+    file: ResourceCardFileReference,
+    signal: AbortSignal,
+  ) => Promise<Pick<XpertViewFileAccessGrantResult, 'mimeType'>>;
   loadResourceCardImage?: (
     image: ResourceCardImage,
     signal: AbortSignal,

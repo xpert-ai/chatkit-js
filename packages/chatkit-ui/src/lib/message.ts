@@ -358,7 +358,12 @@ function mergeComponentStepData(
   incoming: TMessageContentComponent['data'],
 ): TMessageContentComponent['data'] {
   const previousData = (previous ?? {}) as ComponentStepLike
-  const incomingData = omitBy((incoming ?? {}) as ComponentStepLike, isNil)
+  const step = (incoming ?? {}) as ComponentStepLike
+  const incomingData = omitBy(step, (value, key) =>
+    value === null && step.toolPresentation === 'redacted' && (key === 'input' || key === 'output')
+      ? false
+      : isNil(value),
+  )
 
   return {
     ...previousData,
