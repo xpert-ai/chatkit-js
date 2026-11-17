@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-host-automation
 
+## 0.17.7
+
+### Patch Changes
+
+- Updated dependencies [941768b]
+  - @xpert-ai/chatkit-types@0.23.0
+  - @xpert-ai/chatkit-web-shared@0.18.5
+
 ## 0.17.6
 
 ### Patch Changes

@@ -1,5 +1,26 @@
 # @xpert-ai/chatkit-ui
 
+## 0.26.0
+
+### Minor Changes
+
+- b0d05ef: Open Project Word and PDF files through the registered document plugins, and prevent writable Word files from falling back to the embedded editor. Preserve authorized file resolution and stale-context handling, and provide a shared plugin-required message.
+
+  Let resource cards contain their complete square thumbnails and use density-aware padding so document icons and covers stay inside the card.
+
+- 941768b: Show tool names and icons in child assistant runs and let users expand a call to inspect its published inputs, outputs and errors. Preserve explicit null values during streaming, provide a fallback tool icon, and remove the shadow from child assistant cards.
+
+### Patch Changes
+
+- f2e8545: Keep single-file resource deliveries in a compact horizontal row: a square cover extending below the card on the left, one title and file details in the middle, and open/download actions on the right. Reuse the same thumbnail surface for all file types and declared file icons when no cover is supplied, while preserving the existing row height. Lazy-load previews, release image URLs and retain file actions on preview failure. Preserve distinct file labels, access errors, download retry and existing multi-block cards.
+
+  Reuse ChatKit's shared Office file icons when a cover is missing or fails. Resolve MIME metadata through scoped SDK file grants without downloading document bytes, including for historical cards and direct file targets.
+
+- f2e8545: Prevent completed Workbench entry navigation from reopening the previous document after a plugin creates a presentation or the layout changes. New navigation requests and scope changes continue to apply normally.
+- Updated dependencies [941768b]
+  - @xpert-ai/chatkit-types@0.23.0
+  - @xpert-ai/chatkit-web-shared@0.18.5
+
 ## 0.25.0
 
 ### Minor Changes

@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-angular
 
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [941768b]
+  - @xpert-ai/chatkit-types@0.23.0
+  - @xpert-ai/chatkit-web-component@0.19.5
+
 ## 0.18.4
 
 ### Patch Changes
