@@ -3,7 +3,8 @@ import type { RuntimeCapabilityOption } from './runtime-capabilities';
 
 export const COMPOSER_CAPABILITY_TOKEN_LENGTH = 1;
 export const COMPOSER_CAPABILITY_TOKEN = '\uFFFC';
-export const COMPOSER_CAPABILITY_SELECTOR = '[data-composer-capability-key], [data-composer-thread-key]';
+export const COMPOSER_CAPABILITY_SELECTOR =
+  '[data-composer-capability-key], [data-composer-thread-key]';
 
 export type ComposerTextPart = {
   type: 'text';
@@ -22,14 +23,30 @@ export type ComposerThreadPart = {
   reference: ChatKitThreadReference;
 };
 
-export type ComposerPart = ComposerTextPart | ComposerCapabilityPart | ComposerThreadPart;
+export type ComposerPart =
+  | ComposerTextPart
+  | ComposerCapabilityPart
+  | ComposerThreadPart;
 
-export function getComposerTokenPartMap(parts: ComposerPart[]): Map<string, ComposerCapabilityPart | ComposerThreadPart> {
-  return new Map(parts.filter((part): part is ComposerCapabilityPart | ComposerThreadPart => part.type !== 'text').map(part => [part.key, part]));
+export function getComposerTokenPartMap(
+  parts: ComposerPart[],
+): Map<string, ComposerCapabilityPart | ComposerThreadPart> {
+  return new Map(
+    parts
+      .filter(
+        (part): part is ComposerCapabilityPart | ComposerThreadPart =>
+          part.type !== 'text',
+      )
+      .map((part) => [part.key, part]),
+  );
 }
 
-export function getComposerThreadReferences(parts: ComposerPart[]): ChatKitThreadReference[] {
-  return parts.flatMap(part => part.type === 'thread' ? [part.reference] : []);
+export function getComposerThreadReferences(
+  parts: ComposerPart[],
+): ChatKitThreadReference[] {
+  return parts.flatMap((part) =>
+    part.type === 'thread' ? [part.reference] : [],
+  );
 }
 
 export type ComposerSelectionOffsets = {
@@ -230,48 +247,99 @@ export function findAdjacentComposerToken(
   return null;
 }
 
-export function readComposerPartsFromElement(
-  element: HTMLElement,
-  existingCapabilities: ReadonlyMap<string, ComposerCapabilityPart | ComposerThreadPart>,
-): ComposerPart[] {
-  const parts: ComposerPart[] = [];
-  const appendText = (text: string) => {
-    if (!text) {
-      return;
-    }
-    parts.push({ type: 'text', text: text.replace(/\u00a0/g, ' ') });
-  };
+type ComposerDomPoint = { node: Node; offset: number };
+type ComposerDomSegment = {
+  node: Node;
+  text: string;
+  token?: HTMLElement;
+  start: ComposerDomPoint;
+  end: ComposerDomPoint;
+};
 
+// Chromium's contenteditable creates block children for Enter and multiline
+// insertion. Use the same line boundaries for serialization and caret offsets.
+function composerDomSegments(root: Node): ComposerDomSegment[] {
+  const segments: ComposerDomSegment[] = [];
+  const isBlock = (node: Node) =>
+    node instanceof HTMLElement &&
+    (node.tagName === 'DIV' || node.tagName === 'P');
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      appendText(node.textContent ?? '');
+      const text = node.textContent ?? '';
+      segments.push({
+        node,
+        text,
+        start: { node, offset: 0 },
+        end: { node, offset: text.length },
+      });
       return;
     }
-
-    if (!(node instanceof HTMLElement)) {
-      node.childNodes.forEach(walk);
-      return;
-    }
-
-    if (node.matches(COMPOSER_CAPABILITY_SELECTOR)) {
-      const key = node.dataset.composerCapabilityKey ?? node.dataset.composerThreadKey;
-      const capability = key ? existingCapabilities.get(key) : null;
-      if (capability) {
-        parts.push(capability);
+    if (node instanceof HTMLElement) {
+      const parent = node.parentNode ?? root;
+      const index = Array.prototype.indexOf.call(parent.childNodes, node);
+      if (node.matches(COMPOSER_CAPABILITY_SELECTOR)) {
+        segments.push({
+          node,
+          text: COMPOSER_CAPABILITY_TOKEN,
+          token: node,
+          start: { node: parent, offset: index },
+          end: { node: parent, offset: index + 1 },
+        });
+        return;
       }
-      return;
+      if (node.tagName === 'BR') {
+        if (node.hasAttribute('data-composer-trailing-break')) return;
+        // An otherwise empty line contains a browser caret placeholder.
+        if (
+          parent.childNodes.length === 1 &&
+          (parent === root || isBlock(parent))
+        )
+          return;
+        segments.push({
+          node,
+          text: '\n',
+          start: { node: parent, offset: index },
+          end: { node: parent, offset: index + 1 },
+        });
+        return;
+      }
     }
-
-    if (node.tagName === 'BR') {
-      if (node.hasAttribute('data-composer-trailing-break')) return;
-      appendText('\n');
-      return;
-    }
-
-    node.childNodes.forEach(walk);
+    const children = Array.from(node.childNodes);
+    children.forEach((child, index) => {
+      if (index > 0 && (isBlock(child) || isBlock(children[index - 1]))) {
+        segments.push({
+          node: child,
+          text: '\n',
+          start: { node, offset: index },
+          end: { node: child, offset: 0 },
+        });
+      }
+      walk(child);
+    });
   };
+  walk(root);
+  return segments;
+}
 
-  element.childNodes.forEach(walk);
+export function readComposerPartsFromElement(
+  element: HTMLElement,
+  existingCapabilities: ReadonlyMap<
+    string,
+    ComposerCapabilityPart | ComposerThreadPart
+  >,
+): ComposerPart[] {
+  const parts: ComposerPart[] = [];
+  for (const segment of composerDomSegments(element)) {
+    if (segment.token) {
+      const key =
+        segment.token.dataset.composerCapabilityKey ??
+        segment.token.dataset.composerThreadKey;
+      const part = key ? existingCapabilities.get(key) : undefined;
+      if (part) parts.push(part);
+    } else {
+      parts.push({ type: 'text', text: segment.text.replace(/\u00a0/g, ' ') });
+    }
+  }
   return normalizeComposerParts(parts);
 }
 
@@ -349,116 +417,24 @@ function getComposerPointOffset(
 }
 
 function getComposerEditingTextFromNode(node: Node): string {
-  let value = '';
-
-  const walk = (current: Node) => {
-    if (current.nodeType === Node.TEXT_NODE) {
-      value += current.textContent ?? '';
-      return;
-    }
-
-    if (
-      !(current instanceof HTMLElement) &&
-      !(current instanceof DocumentFragment)
-    ) {
-      current.childNodes.forEach(walk);
-      return;
-    }
-
-    if (
-      current instanceof HTMLElement &&
-      current.matches(COMPOSER_CAPABILITY_SELECTOR)
-    ) {
-      value += COMPOSER_CAPABILITY_TOKEN;
-      return;
-    }
-
-    if (current instanceof HTMLElement && current.tagName === 'BR') {
-      if (current.hasAttribute('data-composer-trailing-break')) return;
-      value += '\n';
-      return;
-    }
-
-    current.childNodes.forEach(walk);
-  };
-
-  walk(node);
-  return value;
+  return composerDomSegments(node)
+    .map((segment) => segment.text)
+    .join('');
 }
 
 function findDomPointForComposerOffset(
   root: HTMLElement,
   offset: number,
-): { node: Node; offset: number } {
+): ComposerDomPoint {
   let remaining = offset;
-  let lastNode: Node = root;
-  let lastOffset = root.childNodes.length;
-
-  const walk = (node: Node): { node: Node; offset: number } | null => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const textLength = (node.textContent ?? '').length;
-      if (remaining <= textLength) {
-        return { node, offset: remaining };
-      }
-      remaining -= textLength;
-      lastNode = node;
-      lastOffset = textLength;
-      return null;
+  for (const segment of composerDomSegments(root)) {
+    if (remaining <= 0) return segment.start;
+    if (remaining <= segment.text.length) {
+      return segment.node.nodeType === Node.TEXT_NODE
+        ? { node: segment.node, offset: remaining }
+        : segment.end;
     }
-
-    if (!(node instanceof HTMLElement)) {
-      for (const child of Array.from(node.childNodes)) {
-        const result = walk(child);
-        if (result) {
-          return result;
-        }
-      }
-      return null;
-    }
-
-    if (node.matches(COMPOSER_CAPABILITY_SELECTOR)) {
-      const parent = node.parentNode ?? root;
-      const index = Array.prototype.indexOf.call(parent.childNodes, node);
-      if (remaining <= 0) {
-        return { node: parent, offset: index };
-      }
-      if (remaining <= COMPOSER_CAPABILITY_TOKEN_LENGTH) {
-        return { node: parent, offset: index + 1 };
-      }
-      remaining -= COMPOSER_CAPABILITY_TOKEN_LENGTH;
-      lastNode = parent;
-      lastOffset = index + 1;
-      return null;
-    }
-
-    if (node.tagName === 'BR') {
-      if (node.hasAttribute('data-composer-trailing-break')) return null;
-      const parent = node.parentNode ?? root;
-      const index = Array.prototype.indexOf.call(parent.childNodes, node);
-      if (remaining <= 0) {
-        return { node: parent, offset: index };
-      }
-      if (remaining <= 1) {
-        return { node: parent, offset: index + 1 };
-      }
-      remaining -= 1;
-      lastNode = parent;
-      lastOffset = index + 1;
-      return null;
-    }
-
-    for (const child of Array.from(node.childNodes)) {
-      const result = walk(child);
-      if (result) {
-        return result;
-      }
-    }
-
-    lastNode = node;
-    lastOffset = node.childNodes.length;
-    return null;
-  };
-
-  const result = walk(root);
-  return result ?? { node: lastNode, offset: lastOffset };
+    remaining -= segment.text.length;
+  }
+  return { node: root, offset: root.childNodes.length };
 }

@@ -144,6 +144,48 @@ describe('task lifecycle and transport recovery', () => {
     },
   );
 
+  it('acknowledges queued drafts only on server admission, and discards canceled drafts explicitly', async () => {
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    const finished = deferred<undefined>();
+    mocks.runStream.mockImplementationOnce(async function* () {
+      await finished.promise;
+      yield* [];
+    });
+    mocks.runStream.mockImplementationOnce(
+      async function* (_thread, _assistant, options) {
+        options.onRunCreated({ run_id: 'queued-run', thread_id: 'thread-1' });
+        yield* [];
+      },
+    );
+    let run!: Promise<void>;
+    await act(async () => {
+      run = stream.submit({ input: { input: 'Run task' } });
+    });
+    const accepted = vi.fn();
+    const discarded = vi.fn();
+    await act(async () => {
+      await stream.submit(
+        { input: { input: 'Keep queued' } },
+        { followUpMode: 'queue', onRunAccepted: accepted },
+      );
+      await stream.submit(
+        { input: { input: 'Discard queued' } },
+        { followUpMode: 'queue', onDraftDiscarded: discarded },
+      );
+    });
+    expect(accepted).not.toHaveBeenCalled();
+    expect(discarded).not.toHaveBeenCalled();
+    act(() => stream.removePendingFollowUp(stream.pendingFollowUps[1].id));
+    expect(discarded).toHaveBeenCalledOnce();
+    mocks.getThread.mockResolvedValue({ status: 'idle', operation: null });
+    await act(async () => {
+      finished.resolve(undefined);
+      await run;
+    });
+    await waitFor(() => expect(accepted).toHaveBeenCalledOnce());
+  });
+
   it('keeps a live approval idle until the user answers', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));

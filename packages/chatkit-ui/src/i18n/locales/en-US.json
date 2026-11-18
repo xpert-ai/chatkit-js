@@ -419,6 +419,7 @@
         "loadingThread": "Loading thread...",
         "stop": "Stop",
         "send": "Send message",
+        "draftRecovered": "Draft recovered. Check conversation history before resending an unconfirmed message. Re-add attachments and verify selected capabilities before sending.",
         "submissionUnconfirmed": "The submission could not be confirmed. Reload this conversation to check its status before retrying.",
         "modelPicker": {
             "selectionRejected": "This model is no longer available. Select an available model, then resend your message.",

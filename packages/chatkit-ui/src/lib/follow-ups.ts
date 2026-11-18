@@ -34,6 +34,8 @@ export type ExplicitFollowUpRunInput = {
 };
 
 export type PendingFollowUp = {
+  onRunAccepted?: () => void;
+  onDraftDiscarded?: () => void;
   id: string;
   clientMessageId: string;
   mode: FollowUpBehavior;
@@ -219,6 +221,8 @@ export function createPendingFollowUp(
   request: TChatRequest,
   mode: FollowUpBehavior,
   options?: {
+    onRunAccepted?: () => void;
+    onDraftDiscarded?: () => void;
     context?: Record<string, unknown>;
     config?: Record<string, unknown>;
   },
@@ -233,6 +237,10 @@ export function createPendingFollowUp(
   return {
     id: clientMessageId,
     clientMessageId,
+    ...(options?.onDraftDiscarded
+      ? { onDraftDiscarded: options.onDraftDiscarded }
+      : {}),
+    ...(options?.onRunAccepted ? { onRunAccepted: options.onRunAccepted } : {}),
     mode,
     request: {
       ...request,

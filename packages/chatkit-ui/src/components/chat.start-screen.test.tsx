@@ -315,6 +315,7 @@ function setComposerText(element: HTMLElement, value: string) {
 
 describe('Chat start screen prompts', () => {
   beforeEach(() => {
+    localStorage.clear();
     mocks.uploadFile.mockReset();
     mocks.uploadFile.mockResolvedValue({
       id: 'asset-1',

@@ -111,6 +111,7 @@ export type StreamSubmitOptions = {
   followUpMode?: FollowUpBehavior;
   /** Called only after the server accepts the run and returns its identity. */
   onRunAccepted?: () => void;
+  onDraftDiscarded?: () => void;
   onThreadResolved?: (
     threadId: string,
     conversationId?: string | null,

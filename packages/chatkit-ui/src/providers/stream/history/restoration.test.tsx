@@ -135,6 +135,34 @@ describe('thread history restoration', () => {
     });
   });
 
+  it('reports late admission to the original submission after navigating away', async () => {
+    render(provider('thread-1'));
+    await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));
+    const response = deferred<undefined>();
+    const accepted = vi.fn();
+    mocks.runStream.mockImplementationOnce(
+      async function* (_thread, _assistant, options) {
+        await response.promise;
+        options.onRunCreated({ run_id: 'old-run', thread_id: 'thread-1' });
+        yield* [];
+      },
+    );
+    let run!: Promise<void>;
+    await act(async () => {
+      run = stream.submit(
+        { input: { input: 'original' } },
+        { onRunAccepted: accepted },
+      );
+    });
+    act(() => stream.reset('thread-2'));
+    await act(async () => {
+      response.resolve(undefined);
+      await run;
+    });
+    expect(accepted).toHaveBeenCalledOnce();
+    expect(stream.activeRunId).not.toBe('old-run');
+  });
+
   it('propagates a rejected resume without acknowledging it', async () => {
     render(provider('thread-1'));
     await waitFor(() => expect(stream.historyLoad.status).toBe('loaded'));

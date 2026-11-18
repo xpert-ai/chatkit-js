@@ -140,6 +140,7 @@ export function useStreamFollowUps({
         context: normalizedRequest.context,
         config: normalizedRequest.config as Config | undefined,
       });
+      options?.onRunAccepted?.();
     },
     [additionalContext, assistantId, client, resolveConversationId],
   );
@@ -198,6 +199,7 @@ export function useStreamFollowUps({
 
       try {
         await sendSteerFollowUp(activeThreadId, nextRequest, {
+          onRunAccepted: currentItem.onRunAccepted,
           ...(currentItem.context ? { context: currentItem.context } : {}),
           ...(currentItem.config ? { config: currentItem.config } : {}),
         });
@@ -282,6 +284,8 @@ export function useStreamFollowUps({
       removePendingFollowUps(mergedGroup.items.map((item) => item.id));
       insertPendingFollowUpsIntoTranscript(mergedGroup.items);
       await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
+        onRunAccepted: () =>
+          mergedGroup.items.forEach((item) => item.onRunAccepted?.()),
         ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
         ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
         threadId: activeThreadIdRef.current ?? threadId ?? undefined,
@@ -350,6 +354,8 @@ export function useStreamFollowUps({
         removePendingFollowUps(mergedGroup.items.map((item) => item.id));
         insertPendingFollowUpsIntoTranscript(mergedGroup.items);
         await submitRef.current?.(toQueuedSendRequest(mergedGroup.request), {
+          onRunAccepted: () =>
+            mergedGroup.items.forEach((item) => item.onRunAccepted?.()),
           ...(mergedGroup.context ? { context: mergedGroup.context } : {}),
           ...(mergedGroup.config ? { config: mergedGroup.config } : {}),
           threadId: activeThreadIdRef.current ?? threadId ?? undefined,

@@ -138,7 +138,15 @@ export function useAssistantConversation({
     historyState.currentThread?.title,
     surface,
   );
-  const draft = useChatDraft({ ...runtime });
+  const draft = useChatDraft({
+    ...runtime,
+    draftContext: {
+      apiUrl: session.stream.apiUrl,
+      assistantId: session.stream.assistantId,
+      organizationId: session.stream.organizationId,
+      threadId: session.stream.threadId,
+    },
+  });
   const goal = useChatGoal({
     ...session,
     ...feedback,

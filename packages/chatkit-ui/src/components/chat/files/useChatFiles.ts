@@ -1,4 +1,3 @@
-import type { ChatKitReference } from '@xpert-ai/chatkit-types';
 import type { XpertWorkspaceFile } from '@xpert-ai/xpert-sdk';
 import * as React from 'react';
 import { getComposerThreadReferences } from '../../../lib/composer-parts';
@@ -18,7 +17,12 @@ import { toReferencedWorkspaceFile } from './file-utils';
 
 type ChatFilesOptions = Pick<
   ReturnType<typeof useChatDraft>,
-  'composerParts' | 'composerInputRef' | 'setThreadMention'
+  | 'composerParts'
+  | 'composerInputRef'
+  | 'setThreadMention'
+  | 'draftContextId'
+  | 'draftReferences'
+  | 'setDraftReferences'
 > &
   Pick<
     ReturnType<typeof useChatEnvironment>,
@@ -29,6 +33,9 @@ type ChatFilesOptions = Pick<
 
 export function useChatFiles({
   composerParts,
+  draftContextId,
+  draftReferences: references,
+  setDraftReferences: setReferences,
   referenceRequest,
   composerInputRef,
   stream,
@@ -43,7 +50,6 @@ export function useChatFiles({
       hasParsingFiles: false,
     });
 
-  const [references, setReferences] = React.useState<ChatKitReference[]>([]);
   const [referencedWorkspaceFiles, setReferencedWorkspaceFiles] =
     React.useState<ChatAttachmentFile[]>([]);
 
@@ -52,6 +58,11 @@ export function useChatFiles({
 
   const attachmentsRef = React.useRef<ChatAttachmentsHandle>(null);
   const appliedReferenceRequestRef = React.useRef<string | null>(null);
+  React.useLayoutEffect(() => {
+    attachmentsRef.current?.clear();
+    setReferencedWorkspaceFiles([]);
+  }, [draftContextId]);
+
   const hasReferences =
     references.length > 0 ||
     getComposerThreadReferences(composerParts).length > 0 ||

@@ -127,6 +127,36 @@ describe('Chat Goal input mode', () => {
     expect(screen.getByRole('textbox').textContent).toBe('');
   });
 
+  it('restores a rejected goal objective and its persisted draft', async () => {
+    localStorage.clear();
+    enableGoalRuntimeCommand();
+    mocks.stream.threadId = 'thread-1';
+    mocks.stream.projectScopeResolved = true;
+    const adapter = createGoalAdapter();
+    vi.mocked(adapter.setGoal).mockRejectedValueOnce(new Error('Goal rejected'));
+    const options = {
+      goal: adapter,
+    };
+    const first = renderChat(options);
+    await waitFor(() =>
+      expect(screen.getByTestId('goal-command-available')).toHaveTextContent(
+        'goal-ready',
+      ),
+    );
+    fireEvent.click(screen.getByTestId('goal-command'));
+    setComposerText(screen.getByRole('textbox'), 'Keep this objective');
+    fireEvent.click(screen.getByRole('button', { name: 'send' }));
+    await waitFor(() =>
+      expect(screen.getByRole('textbox').textContent).toBe(
+        'Keep this objective',
+      ),
+    );
+    first.unmount();
+    renderChat(options);
+    expect(screen.getByRole('textbox').textContent).toBe('Keep this objective');
+    localStorage.clear();
+  });
+
   it('submits goal mode input as a goal before a thread exists', async () => {
     enableGoalRuntimeCommand();
     const adapter = createGoalAdapter();
