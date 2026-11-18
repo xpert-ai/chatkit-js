@@ -555,6 +555,8 @@ export type ChatKitAssistantComputers = {
 
 /** Public view state owned by a routed embedder. Never carries credentials. */
 export type ChatKitWorkbenchNavigation = {
+  /** Identifies an explicit request to refocus a view at the same address. */
+  requestId?: string;
   projectId: string | null;
   view: {
     viewKey: string;
