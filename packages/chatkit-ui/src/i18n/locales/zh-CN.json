@@ -253,6 +253,7 @@
             "imageLimit": "请选择不超过 10 MB 的 PNG、JPEG 或 WebP 图片。"
         },
         "files": {
+            "pluginRequired": "请在项目中打开此文件，并启用相应的文档编辑器插件。",
             "save": "保存",
             "saving": "保存中…",
             "saved": "已保存",

@@ -230,6 +230,14 @@ describe('appendMessageContent', () => {
     expect(message.status).toBeUndefined();
   });
 
+  it('keeps null tool output across incremental updates', () => {
+    const data = { category: 'Tool', toolPresentation: 'redacted', tool: 'lookup' };
+    const row = { id: 'call', type: 'component', data: { ...data, input: false } };
+    const message = { id: 'm', type: 'assistant', content: [row] } as any;
+    appendMessageContent(message, { ...row, data: { ...data, output: null } } as any);
+    expect(message.content).toMatchObject([{ id: 'call', data: { input: false, output: null } }]);
+  });
+
   it('preserves tool metadata when a component update arrives with the same id', () => {
     const message = {
       id: 'assistant-1',

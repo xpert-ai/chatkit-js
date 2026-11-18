@@ -322,6 +322,8 @@ export type TMessageComponentStep<T = unknown> = {
   tool?: string;
   /** Optional tool-specific display icon supplied by the trusted runtime. */
   icon?: IconDefinition;
+  /** Inputs and outputs are safe previews, not executable tool results. */
+  toolPresentation?: 'redacted';
   title: string;
   message: string;
   status: 'success' | 'fail' | 'running';

@@ -28,12 +28,8 @@ const MarkdownEditor = React.lazy(
 const CodeEditor = React.lazy(
   () => import('../../../components/code-editor/CodeEditor'),
 );
-const DocxEditor = React.lazy(() => import('../office/document/DocxEditor'));
 const SpreadsheetEditor = React.lazy(
   () => import('../office/spreadsheet/SpreadsheetEditor'),
-);
-const PptxEditor = React.lazy(
-  () => import('../office/presentation/PptxEditor'),
 );
 
 export function WorkspaceFileEditor({
@@ -54,7 +50,7 @@ export function WorkspaceFileEditor({
   const { t } = useChatkitTranslation();
   const kind = fileKind(file.filePath, file.mimeType);
   const [canWrite, setCanWrite] = React.useState(false);
-  const editable = canWrite && editableKinds.includes(kind);
+  const editable = canWrite && kind !== 'docx' && editableKinds.includes(kind);
   const textFile = kind === 'text' || kind === 'markdown' || kind === 'html';
   const [source, setSource] = React.useState<Blob | null>(null);
   const baseline = React.useRef<Blob | null>(null);
@@ -248,7 +244,7 @@ export function WorkspaceFileEditor({
         />
       );
     }
-    if (!editable && ['docx', 'spreadsheet', 'pptx'].includes(kind))
+    if ((!canWrite && kind === 'docx') || (!editable && ['spreadsheet', 'pptx'].includes(kind)))
       return (
         <OfficeFilePreview
           blob={source}
@@ -257,16 +253,17 @@ export function WorkspaceFileEditor({
         />
       );
     switch (kind) {
-      case 'docx':
-        return <DocxEditor ref={editor} {...editorProps} />;
       case 'spreadsheet':
         return <SpreadsheetEditor ref={editor} {...editorProps} />;
+      case 'docx':
       case 'pptx':
-        return <PptxEditor ref={editor} {...editorProps} />;
-      case 'image':
         return (
-          <ImagePreview src={url} title={fileName(file.filePath)} />
+          <p role="status" className="p-4 text-muted-foreground">
+            {t('workbench.files.pluginRequired')}
+          </p>
         );
+      case 'image':
+        return <ImagePreview src={url} title={fileName(file.filePath)} />;
       case 'pdf':
         return (
           <iframe

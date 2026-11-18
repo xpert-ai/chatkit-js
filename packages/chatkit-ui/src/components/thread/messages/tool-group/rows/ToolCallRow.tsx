@@ -139,6 +139,16 @@ function ToolCallRowContent({
         >
           {label}
         </span>
+        {data.toolPresentation === 'redacted' &&
+        data.tool &&
+        data.tool !== label ? (
+          <code
+            className="min-w-0 truncate text-[11px] text-muted-foreground"
+            title={data.tool}
+          >
+            {data.tool}
+          </code>
+        ) : null}
         {durationLabel ? (
           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/80">
             {durationLabel}

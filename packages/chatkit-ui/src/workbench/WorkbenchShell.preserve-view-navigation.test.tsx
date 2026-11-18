@@ -16,6 +16,7 @@ const {
   WorkbenchShell,
   manifest,
   baseOptions,
+  setObservedWidth,
 } = fixture;
 
 function navigation(
@@ -39,16 +40,20 @@ function navigation(
 
 function createShell() {
   const onContext = vi.fn();
-  return (initialNavigation?: ChatKitWorkbenchClientCommandRequest) => (
-    <WorkbenchShell
-      options={{ ...baseOptions, workbench: { enabled: true } }}
-      locale="en-US"
-      onRequestContextChange={onContext}
-      initialNavigation={initialNavigation}
-    >
-      <span>Chat</span>
-    </WorkbenchShell>
-  );
+  return function renderShell(
+    initialNavigation?: ChatKitWorkbenchClientCommandRequest,
+  ) {
+    return (
+      <WorkbenchShell
+        options={{ ...baseOptions, workbench: { enabled: true } }}
+        locale="en-US"
+        onRequestContextChange={onContext}
+        initialNavigation={initialNavigation}
+      >
+        <span>Chat</span>
+      </WorkbenchShell>
+    );
+  };
 }
 
 function pendingViews() {
@@ -61,6 +66,45 @@ function pendingViews() {
 
 describe('Workbench navigation with preserved View', () => {
   setupWorkbenchTests();
+
+  it('does not replay an already applied entry after a plugin opens a new document', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const shell = createShell();
+    const entry = navigation({ selectionId: 'template-source' });
+    const { rerender } = render(shell(entry));
+    await waitFor(() =>
+      expect(mocks.remoteViewProps?.initialQuery?.selectionId).toBe(
+        'template-source',
+      ),
+    );
+
+    await act(async () => {
+      await mocks.remoteViewProps?.onClientCommand(
+        'workbench.navigation.open',
+        {
+          target: 'assistant.project',
+          projectId: 'project-1',
+          viewKey: manifest.key,
+          selectionId: 'generated-presentation',
+        },
+        manifest,
+      );
+    });
+    await waitFor(() =>
+      expect(mocks.remoteViewProps?.initialQuery?.selectionId).toBe(
+        'generated-presentation',
+      ),
+    );
+
+    // Layout callbacks change across a responsive breakpoint. The old entry is
+    // a completed command, not a controlled document selection.
+    setObservedWidth(400);
+    rerender(shell(entry));
+    await act(async () => {});
+    expect(mocks.remoteViewProps?.initialQuery?.selectionId).toBe(
+      'generated-presentation',
+    );
+  });
 
   it('restores the requested query only after destination views are validated', async () => {
     const destination = pendingViews();

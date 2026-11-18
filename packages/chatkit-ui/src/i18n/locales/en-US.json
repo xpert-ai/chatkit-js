@@ -253,6 +253,7 @@
             "imageLimit": "Choose a PNG, JPEG or WebP image up to 10 MB."
         },
         "files": {
+            "pluginRequired": "Open this file in a Project with its document editor plugin enabled.",
             "save": "Save",
             "saving": "Saving…",
             "saved": "Saved",

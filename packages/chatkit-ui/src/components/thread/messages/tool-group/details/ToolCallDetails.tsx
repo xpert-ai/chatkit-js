@@ -74,7 +74,9 @@ export function ToolCallDetails({
 
   const OutputRenderer = getToolCallOutputRenderer(data);
   const toolName = resolveLocalizedText(data.tool, i18n.language);
-  const hasInput = data.input !== undefined && data.input !== null;
+  const hasInput =
+    data.input !== undefined &&
+    (data.input !== null || data.toolPresentation === 'redacted');
   const hasOutput =
     data.error !== undefined ||
     data.output !== undefined ||

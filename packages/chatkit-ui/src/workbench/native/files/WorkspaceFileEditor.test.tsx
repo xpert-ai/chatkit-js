@@ -39,7 +39,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 const officeSaved = vi.fn();
-vi.mock('../office/presentation/PptxEditor', () => ({
+vi.mock('../office/spreadsheet/SpreadsheetEditor', () => ({
   default: React.forwardRef(function MockOffice(
     { onDirty }: { onDirty: () => void },
     ref,
@@ -131,7 +131,7 @@ describe('workspace file saving', () => {
 
 it('acknowledges Office edits only after the server accepts the exported bytes', async () => {
   officeSaved.mockClear();
-  const { client, register, download } = setup('slides.pptx');
+  const { client, register, download } = setup('workbook.xlsx');
   let acceptSave!: (result: { filePath: string }) => void;
   const pendingSave = new Promise<{ filePath: string }>((resolve) => {
     acceptSave = resolve;
@@ -140,7 +140,7 @@ it('acknowledges Office edits only after the server accepts the exported bytes',
     .spyOn(client.workbench, 'saveBinaryFile')
     .mockRejectedValueOnce(new Error('Save failed'))
     .mockReturnValueOnce(pendingSave)
-    .mockResolvedValue({ filePath: 'slides.pptx' });
+    .mockResolvedValue({ filePath: 'workbook.xlsx' });
   fireEvent.click(await screen.findByText('Edit office'));
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
@@ -153,7 +153,7 @@ it('acknowledges Office edits only after the server accepts the exported bytes',
   expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
   expect(await persist.mock.calls[1][2].text()).toBe('edited office');
   await act(async () => {
-    acceptSave({ filePath: 'slides.pptx' });
+    acceptSave({ filePath: 'workbook.xlsx' });
     await pendingSave;
   });
   // markSaved runs before React commits the parent's clean-state effect.
@@ -172,4 +172,12 @@ it('acknowledges Office edits only after the server accepts the exported bytes',
     expect(officeSaved).toHaveBeenCalledTimes(2);
     expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false);
   });
+});
+
+it('requires the native plugin for editable DOCX instead of opening a second editor', async () => {
+  const { client } = setup('document.docx');
+  const persist = vi.spyOn(client.workbench, 'saveBinaryFile');
+  expect(await screen.findByText(/document editor plugin/i)).toBeVisible();
+  expect(screen.queryByText('Edit office')).not.toBeInTheDocument();
+  expect(persist).not.toHaveBeenCalled();
 });

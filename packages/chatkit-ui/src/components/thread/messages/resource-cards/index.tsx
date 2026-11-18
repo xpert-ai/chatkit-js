@@ -1,6 +1,6 @@
 import type { MessagePresentationMode } from '../../../../lib/message-presentation';
 import * as React from 'react';
-import { Box, Loader2 } from 'lucide-react';
+import { Box, Download, ExternalLink, Loader2 } from 'lucide-react';
 import {
   parseResourceCardContent,
   upsertResourceCardContent,
@@ -10,8 +10,11 @@ import {
 import { useResourceCardActions } from '../../../../resource-cards/context';
 import { useChatkitTranslation } from '../../../../i18n/useChatkitTranslation';
 import { IconDefinitionRenderer } from '../../../ui/icon-definition';
+import { Button } from '../../../ui/button';
 import { ResourceCardBlocks } from './content';
 import { ResourceCardLayout } from './layout';
+import { ResourceCardCover } from './cover';
+import { ResourceCardFileIcon } from './file-icon';
 
 export function messageResourceCards(
   message: Pick<ChatkitMessage, 'content'>,
@@ -41,14 +44,67 @@ function ResourceCard({
   const { t } = useChatkitTranslation();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [downloading, setDownloading] = React.useState(false);
+  const pendingDownload = React.useRef(false);
+  // This is a layout decision on the declared content kind and cardinality.
+  // Do not infer file formats or plugin capabilities from titles or resource types.
+  const blocks = card.data.content;
+  const cover =
+    blocks?.length === 2 &&
+    blocks[0].kind === 'image-gallery' &&
+    !blocks[0].title &&
+    blocks[0].images.length === 1 &&
+    blocks[1].kind === 'file-list' &&
+    !blocks[1].title &&
+    blocks[1].files.length === 1
+      ? blocks[0].images[0]
+      : undefined;
+  const fileBlock = cover
+    ? blocks?.[1]
+    : blocks?.length === 1
+      ? blocks[0]
+      : undefined;
+  const target = card.data.open;
+  const file =
+    fileBlock?.kind === 'file-list' &&
+    !fileBlock.title &&
+    fileBlock.files.length === 1
+      ? fileBlock.files[0]
+      : !blocks?.length && target.target === 'workbench.file'
+        ? {
+            id: card.data.resource.id,
+            title: card.data.title,
+            file: {
+              viewKey: target.viewKey,
+              fileKey: target.fileKey,
+              targetId: target.targetId,
+            },
+          }
+        : undefined;
   const available = !!actions.openResourceCard;
   const openLabel = customOpenLabel ?? t('resourceCard.open');
+  const download = async () => {
+    if (!file || !actions.downloadResourceCardFile || pendingDownload.current)
+      return;
+    pendingDownload.current = true;
+    setDownloading(true);
+    setError(null);
+    try {
+      await actions.downloadResourceCardFile(file);
+    } catch {
+      setError(t('resourceCard.unavailable'));
+    } finally {
+      pendingDownload.current = false;
+      setDownloading(false);
+    }
+  };
   const open = async () => {
-    if (!available || busy) return;
+    const openResourceCard = actions.openResourceCard;
+    if (!openResourceCard || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await actions.openResourceCard!(card, messageId);
+      const result = await openResourceCard(card, messageId);
       if (!result.success) {
         const code = result.code;
         setError(
@@ -69,30 +125,87 @@ function ResourceCard({
   return (
     <ResourceCardLayout
       title={card.data.title}
-      description={card.data.description}
+      description={
+        card.data.description || file ? (
+          <>
+            {card.data.description}
+            {file && file.title !== card.data.title && <div>{file.title}</div>}
+            {file?.description && <div>{file.description}</div>}
+          </>
+        ) : undefined
+      }
+      compact={!!file}
+      preview={
+        cover ? (
+          <ResourceCardCover
+            image={cover}
+            onOpen={() => void open()}
+            disabled={!available || busy}
+            openLabel={`${openLabel} ${card.data.title}`}
+            fallback={file ? <ResourceCardFileIcon file={file} /> : undefined}
+          />
+        ) : undefined
+      }
       icon={
-        <IconDefinitionRenderer
-          icon={card.data.icon}
-          size={22}
-          fallback={<Box className="h-5 w-5 shrink-0 text-muted-foreground" />}
-        />
+        file ? (
+          <ResourceCardFileIcon file={file} />
+        ) : (
+          <IconDefinitionRenderer
+            icon={card.data.icon}
+            size={22}
+            fallback={
+              <Box className="h-5 w-5 shrink-0 text-muted-foreground" />
+            }
+          />
+        )
       }
       action={
-        <button
-          type="button"
-          onClick={open}
-          disabled={!available || busy}
-          aria-label={`${openLabel} ${card.data.title}`}
-          className="inline-flex shrink-0 items-center gap-1 rounded-chat-item border border-border px-3 py-1.5 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-        >
-          {busy && (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <div className="ml-auto flex shrink-0 items-center gap-[var(--density-gap,0.5rem)]">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={open}
+            disabled={!available || busy}
+            aria-label={`${openLabel} ${card.data.title}`}
+            title={openLabel}
+            className={
+              file
+                ? 'size-[max(2.25rem,calc(2.25rem*var(--density-spacing,1)))] p-0'
+                : 'h-[max(2.25rem,calc(2.25rem*var(--density-spacing,1)))] px-[max(0.625rem,var(--density-padding,1rem))]'
+            }
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : file ? (
+              <ExternalLink className="size-4" aria-hidden="true" />
+            ) : null}
+            {!file && openLabel}
+          </Button>
+          {file && (
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => void download()}
+              disabled={!actions.downloadResourceCardFile || downloading}
+              aria-label={`${t('workbench.files.download')} ${file.title}`}
+              title={t('workbench.files.download')}
+              aria-busy={downloading}
+              className="h-[max(2.25rem,calc(2.25rem*var(--density-spacing,1)))] px-[max(0.625rem,var(--density-padding,1rem))] @max-[28rem]/resource-card:w-[max(2.25rem,calc(2.25rem*var(--density-spacing,1)))] @max-[28rem]/resource-card:p-0"
+            >
+              {downloading ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="size-4" aria-hidden="true" />
+              )}
+              <span className="@max-[28rem]/resource-card:sr-only">
+                {t('workbench.files.download')}
+              </span>
+            </Button>
           )}
-          {openLabel}
-        </button>
+        </div>
       }
     >
-      {!!card.data.content?.length && (
+      {!file && !!card.data.content?.length && (
         <ResourceCardBlocks
           content={card.data.content}
           title={card.data.title}

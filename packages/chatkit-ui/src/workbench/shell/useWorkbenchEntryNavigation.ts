@@ -59,8 +59,28 @@ export function useWorkbenchEntryNavigation({
   setNotification,
 }: EntryNavigationOptions) {
   const { t } = useChatkitTranslation();
+  const applied = React.useRef<
+    | {
+        request: EntryNavigationOptions['initialNavigation'];
+        scope: string;
+      }
+    | undefined
+  >(undefined);
+  const scope = JSON.stringify([contentScope?.assistantId, runtimeScope]);
   React.useEffect(() => {
+    if (!initialNavigation) {
+      applied.current = undefined;
+      return;
+    }
     if (!initialNavigation || !ready || !runtimeScopeReady) return;
+    // An entry is a command, not controlled selection state. Revalidating views
+    // or changing layout callbacks must not reopen its old document after a
+    // plugin navigates to a newly created file. A new request or scope still runs.
+    if (
+      applied.current?.request === initialNavigation &&
+      applied.current.scope === scope
+    )
+      return;
     const navigation = parseNavigation(initialNavigation.payload);
     if (
       navigation.target === 'assistant.conversation' &&
@@ -71,26 +91,44 @@ export function useWorkbenchEntryNavigation({
     }
     let cancelled = false;
     void (async () => {
-      const resolved = contentApi && contentScope
-        ? await resolveContentEntry(navigation, contentApi, contentScope) : navigation;
+      const resolved =
+        contentApi && contentScope
+          ? await resolveContentEntry(navigation, contentApi, contentScope)
+          : navigation;
       if (cancelled) return;
-      if (!resolved.viewKey || !views.some((view) => view.key === resolved.viewKey)) return;
+      if (!resolved.viewKey) {
+        applied.current = { request: initialNavigation, scope };
+        return;
+      }
+      if (!views.some((view) => view.key === resolved.viewKey)) return;
       const viewKey = contentTabKey(resolved.viewKey, resolved.query);
       if (editors?.isDirty(viewKey) && !(await editors.prepare(viewKey))) {
-        if (!cancelled) setNotification({ level: 'error', message: t('contentReview.Unsaved') });
+        if (!cancelled)
+          setNotification({
+            level: 'error',
+            message: t('contentReview.Unsaved'),
+          });
         return;
       }
       if (cancelled) return;
       if (!resolved.preserveView || Object.keys(resolved.query).length > 0)
-        setViewQueries((current) => ({ ...current, [viewKey]: resolved.query }));
+        setViewQueries((current) => ({
+          ...current,
+          [viewKey]: resolved.query,
+        }));
       selectView(viewKey);
       setOpen(true);
+      applied.current = { request: initialNavigation, scope };
     })().catch(() => {
-      if (!cancelled) setNotification({ level: 'error', message: t('workbench.loadFailed') });
+      if (!cancelled)
+        setNotification({ level: 'error', message: t('workbench.loadFailed') });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [
     editors,
+    scope,
     initialNavigation,
     contentApi,
     contentScope?.projectId,
@@ -108,7 +146,10 @@ export function useWorkbenchEntryNavigation({
     (key: string, query: XpertViewQuery) => {
       setViewQueries((current) => ({ ...current, [key]: query }));
       // Remount the form so a cached iframe cannot reuse the previous draft.
-      setViewResetKeys((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
+      setViewResetKeys((current) => ({
+        ...current,
+        [key]: (current[key] ?? 0) + 1,
+      }));
       selectView(key);
       setExpanded(false);
       setOpen(true);
@@ -137,6 +178,11 @@ export function useWorkbenchEntryNavigation({
     },
     [openForm, threadId],
   );
-  return scheduleEnabled && runtimeScopeReady && runtimeScope.conversationId &&
-    threadId && views.some((view) => view.key === key) ? openScheduleForm : undefined;
+  return scheduleEnabled &&
+    runtimeScopeReady &&
+    runtimeScope.conversationId &&
+    threadId &&
+    views.some((view) => view.key === key)
+    ? openScheduleForm
+    : undefined;
 }
