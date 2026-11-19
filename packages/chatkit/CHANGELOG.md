@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.23.1
+
+### Patch Changes
+
+- b2cbce1: Expose the optional Workbench navigation requestId used by hosts to refocus an existing view at the same address. Cover returning from a native tab while preserving the view's maximized layout.
+
 ## 0.23.0
 
 ### Minor Changes

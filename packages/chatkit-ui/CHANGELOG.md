@@ -1,5 +1,18 @@
 # @xpert-ai/chatkit-ui
 
+## 0.26.1
+
+### Patch Changes
+
+- df6ab52: Automatically protect Assistant composer drafts with local browser storage and
+  restore exact multiline text and portable references after reloads. Keep pending
+  submissions recoverable until server acknowledgement, preserve newer input, and
+  isolate drafts by the existing service, organization, Assistant, and conversation
+  branch context without requiring additional host configuration.
+- 5721ef9: Keep terminal tool durations unknown when no persisted end time exists, so reopening a conversation cannot extend elapsed time. Preserve live timing for running steps and stable durations from authoritative receipts.
+- Updated dependencies [b2cbce1]
+  - @xpert-ai/chatkit-types@0.23.1
+
 ## 0.26.0
 
 ### Minor Changes
