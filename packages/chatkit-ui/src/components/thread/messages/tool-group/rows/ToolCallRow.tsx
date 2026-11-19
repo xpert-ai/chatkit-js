@@ -19,10 +19,7 @@ import {
   getToolStepData,
   isPausedToolStep,
 } from '../status/step-status';
-import {
-  useFrozenTimestamp,
-  useToolStepDurationLabel,
-} from '../status/useToolStepDuration';
+import { useToolStepDurationLabel } from '../status/useToolStepDuration';
 import type { ToolStepRunState } from '../types';
 
 const TOOL_CALL_ROW_TEXT_CLASS =
@@ -84,12 +81,8 @@ function ToolCallRowContent({
     data.output !== undefined ||
     data.artifact !== undefined ||
     hasCustomDetails;
-  const fallbackEndedAt = useFrozenTimestamp(
-    data.status === 'running' && (status === 'fail' || isPaused),
-  );
   const durationLabel = useToolStepDurationLabel(data, {
     status,
-    fallbackEndedAt,
     isPaused,
   });
   const [isExpanded, setIsExpanded] = React.useState(false);

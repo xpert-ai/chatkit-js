@@ -55,6 +55,7 @@ type AssistantComposerProps = Pick<
     | 'setSelectedTool'
     | 'trimmedDraft'
     | 'draft'
+    | 'recoveredDraft'
   > &
   Pick<ReturnType<typeof useChatCapabilities>, 'composerCapabilities'> &
   Pick<
@@ -152,6 +153,7 @@ export function getAssistantComposerProps({
   isPromptEditDisabled,
   composerDomVersion,
   draft,
+  recoveredDraft,
   composerInputRef,
   missingConfig,
   isHistoryLoading,
@@ -220,6 +222,11 @@ export function getAssistantComposerProps({
   runtimeResources,
 }: AssistantComposerProps): ChatComposerFormProps {
   return {
+    beforeEditor: recoveredDraft ? (
+      <p role="status" className="px-3 pt-2 text-xs text-muted-foreground">
+        {t('chat.draftRecovered')}
+      </p>
+    ) : undefined,
     compact,
     onSubmit: handleSubmit,
     style: getSurfaceThemeStyle(theme),

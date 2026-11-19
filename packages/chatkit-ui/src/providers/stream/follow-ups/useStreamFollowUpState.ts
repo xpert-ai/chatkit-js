@@ -107,6 +107,7 @@ export function useStreamFollowUpState({
       if (!targetItem || targetItem.mode !== 'queue') {
         return;
       }
+      targetItem.onDraftDiscarded?.();
       removePendingFollowUps([id]);
     },
     [removePendingFollowUps],

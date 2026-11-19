@@ -10,11 +10,7 @@ import type {
   ChatKitReferenceCompositionMode,
 } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
-import {
-  createComposerTextParts,
-  getComposerThreadReferences,
-  getComposerTokenPartMap,
-} from '../../../lib/composer-parts';
+import { getComposerThreadReferences } from '../../../lib/composer-parts';
 import {
   buildHumanMessageInputPayload,
   mergeReferences,
@@ -39,6 +35,7 @@ import { useSendTransition } from '../messages/SendTransition';
 
 type ChatSubmissionOptions = Pick<
   ReturnType<typeof useChatDraft>,
+  | 'beginDraftSubmission'
   | 'trimmedDraft'
   | 'composerPartsRef'
   | 'selectedTool'
@@ -81,6 +78,7 @@ type ChatSubmissionOptions = Pick<
 
 export function useChatSubmission({
   isSubmissionBlocked,
+  beginDraftSubmission,
   trimmedDraft,
   uploadedFiles,
   referencedWorkspaceFiles,
@@ -245,7 +243,7 @@ export function useChatSubmission({
         !stream.threadId &&
         !nextFollowUpMode;
 
-      const submittedComposerParts = composerPartsRef.current;
+      const draftSubmission = beginDraftSubmission();
       const submittedPromptWorkflow = promptWorkflow.selected;
       promptWorkflow.clear();
       const submittedReferences = references;
@@ -262,6 +260,7 @@ export function useChatSubmission({
         caretOffset: 0,
         resetDom: true,
         syncRemovedCapabilityTokens: false,
+        persist: false,
       });
       const rollbackAttachments =
         attachmentsRef.current?.clearWithRollback() ?? (() => undefined);
@@ -274,23 +273,8 @@ export function useChatSubmission({
       resetRunRuntimeCapabilities();
 
       const restoreSubmittedDraft = () => {
+        if (!draftSubmission.reject()) return;
         promptWorkflow.restore(submittedPromptWorkflow);
-        const currentParts = composerPartsRef.current;
-        const currentCapabilities = getComposerTokenPartMap(currentParts);
-        const submittedPartsToRestore = submittedComposerParts.filter(
-          (part) => part.type === 'text' || !currentCapabilities.has(part.key),
-        );
-        const separator =
-          submittedPartsToRestore.length > 0 && currentParts.length > 0
-            ? createComposerTextParts('\n')
-            : [];
-        commitComposerParts(
-          [...submittedPartsToRestore, ...separator, ...currentParts],
-          {
-            resetDom: true,
-            syncRemovedCapabilityTokens: false,
-          },
-        );
         rollbackAttachments();
         setReferences((current) =>
           mergeReferences(submittedReferences, current),
@@ -315,29 +299,25 @@ export function useChatSubmission({
         },
         {
           ...(nextFollowUpMode ? { followUpMode: nextFollowUpMode } : {}),
+          onRunAccepted: draftSubmission.accept,
+          onDraftDiscarded: draftSubmission.accept,
           ...(requestOptions.context
             ? { context: requestOptions.context }
             : {}),
           ...(requestOptions.config ? { config: requestOptions.config } : {}),
-          ...(shouldPersistSessionRuntimeCapabilities || resourceSubmission
-            ? {
-                onThreadResolved: (
-                  threadId: string,
-                  conversationId?: string | null,
-                ) => {
-                  resourceSubmission?.onThreadResolved(
-                    threadId,
-                    conversationId,
-                  );
-                  if (shouldPersistSessionRuntimeCapabilities) {
-                    return persistSessionRuntimeCapabilities(
-                      threadId,
-                      sessionRuntimeCapabilitiesForPersistence,
-                    );
-                  }
-                },
-              }
-            : {}),
+          onThreadResolved: (
+            threadId: string,
+            conversationId?: string | null,
+          ) => {
+            draftSubmission.onThreadResolved(threadId);
+            resourceSubmission?.onThreadResolved(threadId, conversationId);
+            if (shouldPersistSessionRuntimeCapabilities) {
+              return persistSessionRuntimeCapabilities(
+                threadId,
+                sessionRuntimeCapabilitiesForPersistence,
+              );
+            }
+          },
           ...(!nextFollowUpMode
             ? {
                 optimisticValues: (prev) => {
@@ -365,6 +345,7 @@ export function useChatSubmission({
     },
     [
       sendTransition,
+      beginDraftSubmission,
       addRunRuntimeCapabilities,
       effectiveSessionRuntimeCapabilities,
       getRuntimeCapabilitiesForSubmit,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   findAdjacentComposerToken,
+  getComposerSelectionOffsets,
+  setComposerSelectionOffset,
   getComposerEditingText,
   getComposerPlainText,
   getComposerThreadReferences,
@@ -62,5 +64,34 @@ describe('thread composer tokens', () => {
     );
     expect(getComposerThreadReferences(parts)).toEqual([thread.reference]);
     expect(getComposerPlainText(parts)).toBe('Use  please');
+  });
+});
+
+describe('browser multiline composer DOM', () => {
+  it.each([
+    [
+      'First<div><br></div><div>  第二行</div><div>Last</div>',
+      'First\n\n  第二行\nLast',
+    ],
+    ['<div>First</div><div>Second</div>', 'First\nSecond'],
+    ['First<div><br></div>', 'First\n'],
+    ['<div><br></div><div>Second</div>', '\nSecond'],
+    ['<br>', ''],
+  ])('preserves block line breaks in %s', (html, text) => {
+    const element = document.createElement('div');
+    element.contentEditable = 'true';
+    element.innerHTML = html;
+    document.body.append(element);
+    expect(
+      getComposerPlainText(readComposerPartsFromElement(element, new Map())),
+    ).toBe(text);
+    for (let offset = 0; offset <= text.length; offset++) {
+      setComposerSelectionOffset(element, offset);
+      expect(getComposerSelectionOffsets(element)).toEqual({
+        start: offset,
+        end: offset,
+      });
+    }
+    element.remove();
   });
 });

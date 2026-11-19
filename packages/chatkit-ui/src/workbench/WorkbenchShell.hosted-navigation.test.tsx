@@ -51,6 +51,29 @@ function shell(
 describe('host-routed ChatKit Workbench', () => {
   setupWorkbenchTests();
 
+  it('refocuses the same maximized view on a new host request after visiting a native tab', async () => {
+    mocks.listSlotViews.mockResolvedValue([manifest]);
+    const navigation: ChatKitWorkbenchNavigation = {
+      projectId: 'project-1',
+      view: { viewKey: manifest.key, layout: 'maximized' },
+    };
+    const { rerender } = render(shell(navigation));
+    await screen.findByLabelText('Restore panel');
+    act(() => screen.getByRole('button', { name: 'New tab' }).click());
+    expect(screen.getByRole('tab', { name: 'New tab' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    rerender(shell({ ...navigation, requestId: 'reselect' }));
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    );
+    expect(screen.getByLabelText('Restore panel')).toBeInTheDocument();
+  });
+
   it('opens the requested view maximized and reopens the same view after a manual restore', async () => {
     mocks.listSlotViews.mockResolvedValue([manifest]);
     const onChange = vi.fn();

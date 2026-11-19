@@ -228,13 +228,13 @@ export function useStreamTransport({
                 onRunCreated: ({ run_id }) => {
                   runAccepted = true;
                   streamingRunId = run_id;
+                  options?.onRunAccepted?.();
                   if (
                     abortController.signal.aborted ||
                     abortRef.current !== abortController
                   )
                     return;
                   rememberActiveRunId(run_id);
-                  options?.onRunAccepted?.();
                 },
               });
 

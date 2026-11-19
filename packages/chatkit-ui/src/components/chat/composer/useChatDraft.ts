@@ -1,5 +1,6 @@
 import type {
   ChatKitThreadReference,
+  ChatKitReference,
   ToolOption,
 } from '@xpert-ai/chatkit-types';
 import * as React from 'react';
@@ -13,7 +14,11 @@ import {
   type ComposerPart,
 } from '../../../lib/composer-parts';
 import { getReferenceKey } from '../../../lib/references';
-import type { RuntimeCapabilityOption } from '../../../lib/runtime-capabilities';
+import {
+  createEmptyRuntimeCapabilitiesSelection,
+  toggleRuntimeCapabilitySelection,
+  type RuntimeCapabilityOption,
+} from '../../../lib/runtime-capabilities';
 import type { ThreadMentionPaletteHandle } from '../../composer/ThreadMentionPalette';
 import {
   getRemovedComposerCapabilityParts,
@@ -21,23 +26,35 @@ import {
   type useRuntimeCapabilitiesState,
 } from '../runtime-capabilities';
 import type { ThreadMentionState } from './draft-utils';
+import type { DraftContext } from './draft-storage';
+import { useDraftPersistence } from './useDraftPersistence';
 
 type ChatDraftOptions = Partial<
   Pick<
     ReturnType<typeof useRuntimeCapabilitiesState>,
-    'setRunRuntimeCapabilities' | 'setRuntimeCapabilityPalette'
+    | 'setRunRuntimeCapabilities'
+    | 'setRuntimeCapabilityPalette'
+    | 'applyExternalRuntimeCapabilities'
+    | 'runtimeCapabilitiesReady'
   >
->;
+> & { draftContext?: DraftContext };
 
 export function useChatDraft({
   setRunRuntimeCapabilities,
   setRuntimeCapabilityPalette,
+  draftContext,
+  applyExternalRuntimeCapabilities,
+  runtimeCapabilitiesReady,
 }: ChatDraftOptions = {}) {
   const [composerParts, setComposerParts] = React.useState<ComposerPart[]>([]);
   const [renderedComposerParts, setRenderedComposerParts] = React.useState<
     ComposerPart[]
   >([]);
 
+  const [draftReferences, updateDraftReferences] = React.useState<
+    ChatKitReference[]
+  >([]);
+  const draftReferencesRef = React.useRef<ChatKitReference[]>([]);
   const [composerDomVersion, setComposerDomVersion] = React.useState(0);
   const [selectedTool, setSelectedTool] = React.useState<ToolOption | null>(
     null,
@@ -63,6 +80,61 @@ export function useChatDraft({
     (option: RuntimeCapabilityOption) => void
   >(() => undefined);
 
+  const [restoration, setRestoration] = React.useState<ComposerPart[] | null>(
+    null,
+  );
+  React.useEffect(() => {
+    if (!restoration || !runtimeCapabilitiesReady) return;
+    let selection = createEmptyRuntimeCapabilitiesSelection();
+    for (const part of restoration) {
+      if (
+        part.type === 'capability' &&
+        !(
+          part.capability.type === 'skill' &&
+          part.capability.capability.resource
+        )
+      ) {
+        selection = toggleRuntimeCapabilitySelection(
+          selection,
+          part.capability.type,
+          part.capability.id,
+          true,
+        );
+      }
+    }
+    applyExternalRuntimeCapabilities?.(selection);
+  }, [restoration, runtimeCapabilitiesReady, applyExternalRuntimeCapabilities]);
+
+  const restoreParts = React.useCallback(
+    (parts: ComposerPart[], references: ChatKitReference[]) => {
+      draftReferencesRef.current = references;
+      updateDraftReferences(references);
+      composerPartsRef.current = parts;
+      setRestoration(parts);
+      setComposerParts(parts);
+      setRenderedComposerParts(parts);
+      setComposerDomVersion((version) => version + 1);
+      setThreadMention(null);
+      setSelectedTool(null);
+    },
+    [],
+  );
+  const { save, saveReferences, beginSubmission, recovered, contextId } =
+    useDraftPersistence(draftContext, restoreParts);
+
+  const setDraftReferences: React.Dispatch<
+    React.SetStateAction<ChatKitReference[]>
+  > = React.useCallback(
+    (value) => {
+      const next =
+        typeof value === 'function' ? value(draftReferencesRef.current) : value;
+      draftReferencesRef.current = next;
+      updateDraftReferences(next);
+      saveReferences(next);
+    },
+    [saveReferences],
+  );
+
   const commitComposerParts = React.useCallback(
     (
       nextParts: ComposerPart[],
@@ -70,11 +142,14 @@ export function useChatDraft({
         caretOffset?: number | null;
         resetDom?: boolean;
         syncRemovedCapabilityTokens?: boolean;
+        persist?: boolean;
       },
     ) => {
+      setRestoration(null);
       const normalized = normalizeComposerParts(nextParts);
       const previous = composerPartsRef.current;
       composerPartsRef.current = normalized;
+      if (options?.persist !== false) save(normalized);
 
       if (typeof options?.caretOffset === 'number') {
         pendingComposerCaretOffsetRef.current = options.caretOffset;
@@ -105,7 +180,7 @@ export function useChatDraft({
         setComposerDomVersion((version) => version + 1);
       }
     },
-    [setRunRuntimeCapabilities],
+    [setRunRuntimeCapabilities, save],
   );
 
   const setComposerText = React.useCallback(
@@ -191,6 +266,11 @@ export function useChatDraft({
     [commitComposerParts, focusComposerAt],
   );
   return {
+    draftContextId: contextId,
+    draftReferences,
+    setDraftReferences,
+    beginDraftSubmission: beginSubmission,
+    recoveredDraft: recovered,
     selectedTool,
     composerParts,
     composerPartsRef,

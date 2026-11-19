@@ -44,7 +44,10 @@ type ChatGoalOptions = Pick<
   Pick<ReturnType<typeof useChatHistory>, 'refreshThreads'> &
   Pick<
     ReturnType<typeof useChatDraft>,
-    'composerPartsRef' | 'setComposerText' | 'focusComposerAt'
+    | 'composerPartsRef'
+    | 'commitComposerParts'
+    | 'beginDraftSubmission'
+    | 'focusComposerAt'
   > & {
     surface: 'main' | 'side';
     options: ChatKitOptions | null | undefined;
@@ -62,7 +65,8 @@ export function useChatGoal({
   refreshThreads,
   getRuntimeCapabilitiesForCommand,
   composerPartsRef,
-  setComposerText,
+  commitComposerParts,
+  beginDraftSubmission,
   setRuntimeCapabilityPalette,
   focusComposerAt,
   runRuntimeCapabilities,
@@ -198,11 +202,15 @@ export function useChatGoal({
       commandSource,
       runtimeCapabilities: commandRuntimeCapabilities,
       visibleInput,
+      draftSubmission,
     }: {
       args: string;
       commandSource: ChatKitCommandSource;
       runtimeCapabilities?: RuntimeCapabilitiesSelection;
       visibleInput?: string;
+      draftSubmission?: ReturnType<
+        ReturnType<typeof useChatDraft>['beginDraftSubmission']
+      >;
     }) => {
       const command = parseGoalCommand(args);
       const threadId = stream.threadId?.trim();
@@ -216,11 +224,13 @@ export function useChatGoal({
         }
         if (command.type !== 'set' && command.type !== 'edit') {
           setGoalError(t('chat.goal.startThreadRequired'));
+          draftSubmission?.reject();
           return;
         }
       }
       if (!goalAdapter) {
         setGoalError(t('chat.goal.unavailable'));
+        draftSubmission?.reject();
         return;
       }
 
@@ -249,6 +259,8 @@ export function useChatGoal({
           runtimeCapabilities: runtimeCapabilitiesForGoalSetup,
           signal: goalAbortController.signal,
         });
+        if (result.threadId) draftSubmission?.onThreadResolved(result.threadId);
+        draftSubmission?.accept();
         if (
           goalAbortController.signal.aborted ||
           goalRequestIdRef.current !== goalRequestId ||
@@ -349,6 +361,7 @@ export function useChatGoal({
             });
         }
       } catch (error) {
+        draftSubmission?.reject();
         if (
           goalAbortController.signal.aborted ||
           goalRequestIdRef.current !== goalRequestId ||
@@ -387,11 +400,13 @@ export function useChatGoal({
       return false;
     }
 
-    setComposerText('', 0);
+    const draftSubmission = beginDraftSubmission();
+    commitComposerParts([], { resetDom: true, caretOffset: 0, persist: false });
     setRuntimeCapabilityPalette(null);
     focusComposerAt(0);
     void handleGoalCommand({
       args: objective,
+      draftSubmission,
       commandSource: {
         type: 'slash_command',
         name: 'goal',
@@ -408,7 +423,8 @@ export function useChatGoal({
     handleGoalCommand,
     isGoalModeOpen,
     runRuntimeCapabilities,
-    setComposerText,
+    commitComposerParts,
+    beginDraftSubmission,
     setRuntimeCapabilityPalette,
   ]);
 

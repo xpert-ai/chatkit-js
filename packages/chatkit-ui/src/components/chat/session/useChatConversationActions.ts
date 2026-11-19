@@ -127,15 +127,16 @@ export function useChatConversationActions({
   React.useLayoutEffect(() => {
     if (previousProjectRef.current === activeProjectId) return;
     previousProjectRef.current = activeProjectId;
-    commitComposerParts(
-      composerPartsRef.current.filter((part) => part.type === 'text'),
-      {
-        resetDom: true,
-        syncRemovedCapabilityTokens: false,
-      },
-    );
+    if (!stream.threadId)
+      commitComposerParts(
+        composerPartsRef.current.filter((part) => part.type === 'text'),
+        {
+          resetDom: true,
+          syncRemovedCapabilityTokens: false,
+        },
+      );
     attachmentsRef.current?.clear();
-    setReferences([]);
+    if (!stream.threadId) setReferences([]);
     setReferencedWorkspaceFiles([]);
     setThreadMention(null);
     setSelectedTool(null);
@@ -145,7 +146,7 @@ export function useChatConversationActions({
     setIsChangingBranch(false);
     setHistoryError(null);
     setRuntimeCapabilityPalette(null);
-    resetRunRuntimeCapabilities();
+    if (!stream.threadId) resetRunRuntimeCapabilities();
     // The stream clears local connector state. Do not mutate the previous
     // conversation's persisted bindings while changing the active project.
   }, [activeProjectId, commitComposerParts, resetRunRuntimeCapabilities]);
