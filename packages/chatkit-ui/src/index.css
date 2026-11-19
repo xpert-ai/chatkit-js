@@ -8,6 +8,8 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/geist';
 
+@source '../../chatkit-widgets/src/components';
+
 @custom-variant dark (&:is(.dark *));
 
 /* Match the host neutral palette; derive component surfaces from these existing variables. */

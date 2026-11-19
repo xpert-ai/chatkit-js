@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@a2ui/lit": "^0.8.1",
+    "@radix-ui/react-select": "2.2.6",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.460.0",

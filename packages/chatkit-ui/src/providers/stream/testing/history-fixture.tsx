@@ -91,6 +91,7 @@ export function provider(
   initialThread?: string,
   apiKey = 'cs-x-test',
   projectId = 'project-1',
+  resumeContext?: Record<string, unknown>,
 ) {
   return (
     <StreamProvider
@@ -98,6 +99,7 @@ export function provider(
       apiUrl="https://api.example.test/api/ai"
       xpertId="assistant-1"
       projectId={projectId}
+      resumeContext={resumeContext}
       initialThread={initialThread}
       threadStateMode={mocks.queryThread ? 'url' : 'memory'}
     >

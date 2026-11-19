@@ -14,8 +14,9 @@
  limitations under the License.
  */
 
-import React, { useState, useMemo, type ReactNode } from "react";
+import React, { useState, useMemo, useId, type ReactNode } from "react";
 import { Types } from "@a2ui/lit/0.8";
+import { useSurfaceStyles } from "../../context/A2UIContext.js";
 import { useTheme } from "../../context/ThemeContext.js";
 import { cn, classMapToString } from "../../lib/utils.js";
 import type { A2UIComponentProps } from "../../types/index.js";
@@ -30,8 +31,10 @@ interface TabsProps extends A2UIComponentProps {
   renderChild?: (node: Types.AnyComponentNode) => ReactNode;
 }
 
-export function Tabs({ node, renderChild }: TabsProps) {
+export function Tabs({ node, renderChild, surfaceId }: TabsProps) {
   const theme = useTheme();
+  const group = useId();
+  const radio = useSurfaceStyles(surfaceId)?.tabsVariant === "radio";
   const [activeIndex, setActiveIndex] = useState(0);
 
   const properties = node.properties as {
@@ -54,6 +57,26 @@ export function Tabs({ node, renderChild }: TabsProps) {
 
   if (tabItems.length === 0) {
     return null;
+  }
+
+  if (radio) {
+    return (
+      <div className={containerClasses}>
+        <div role="radiogroup" aria-label={tabItems.map(item => item.title?.literalString).join(" / ")}
+          className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {tabItems.map((item, index) => (
+            <label key={index} className="inline-flex min-h-8 cursor-pointer items-center gap-2 text-sm">
+              <input type="radio" name={group} checked={index === activeIndex}
+                onChange={() => setActiveIndex(index)} className="accent-primary" />
+              {item.title?.literalString}
+            </label>
+          ))}
+        </div>
+        <div className="mt-3" key={activeIndex}>
+          {tabItems[activeIndex]?.child && renderChild?.(tabItems[activeIndex].child)}
+        </div>
+      </div>
+    );
   }
 
   return (

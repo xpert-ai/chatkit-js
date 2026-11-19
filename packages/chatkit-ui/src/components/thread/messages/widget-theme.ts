@@ -5,6 +5,10 @@ export const widgetTheme: Theme = {
   ...defaultTheme,
   components: {
     ...defaultTheme.components,
+    Button: {
+      ...defaultTheme.components.Button,
+      '[&_.text-foreground]:text-inherit': true,
+    },
     Column: {
       flex: true,
       'flex-col': true,
