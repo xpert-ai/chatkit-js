@@ -1,4 +1,7 @@
 {
+    "widget": {
+        "actionFailed": "Could not submit this action."
+    },
     "sharing": {
         "projectUnavailable": "Sharing project conversations is not supported yet.",
         "existingNotice": "This is your saved snapshot. Copying or opening it keeps the same link, messages and expiry.",

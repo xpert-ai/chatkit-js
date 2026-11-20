@@ -1,5 +1,5 @@
 import type { TMessageComponentWidgetData } from '@xpert-ai/chatkit-types';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   A2UIRenderer,
   SurfaceRenderer,
@@ -7,6 +7,7 @@ import {
   useA2UI,
   ThemeProvider,
 } from '@xpert-ai/a2ui-react';
+import { WidgetActions } from './widget-actions';
 import { WidgetPresentation } from './widget-presentation';
 import { widgetTheme } from './widget-theme';
 
@@ -15,6 +16,7 @@ type RowData = Record<string, unknown>;
 export type WidgetMessageProps = {
   messageId: string;
   data: TMessageComponentWidgetData;
+  widgetId?: string;
   /** Disable source actions while keeping passive presentation disclosures usable. */
   readOnly?: boolean;
 };
@@ -22,12 +24,15 @@ export type WidgetMessageProps = {
 export function WidgetMessage({
   messageId,
   data,
+  widgetId,
   readOnly = false,
 }: WidgetMessageProps) {
   const widgets = Array.isArray(data.widgets) ? data.widgets : [];
   if (widgets.length === 0) return null;
 
-  const baseSurfaceId = `widget-${messageId}`;
+  const baseSurfaceId = widgetId
+    ? `widget-${encodeURIComponent(messageId)}:${encodeURIComponent(widgetId)}`
+    : `widget-${messageId}`;
 
   return (
     <ThemeProvider theme={widgetTheme}>
@@ -66,6 +71,15 @@ export function WidgetMessage({
                 >
                   {surface}
                 </fieldset>
+              ) : widget.serverActions?.length ? (
+                <WidgetActions
+                  messageId={messageId}
+                  widgetId={widgetId}
+                  serverActions={widget.serverActions}
+                  requiresIdleThread={widget.requiresIdleThread}
+                >
+                  {surface}
+                </WidgetActions>
               ) : (
                 surface
               )}
@@ -87,17 +101,29 @@ function FlatWidgetSurface({
 }) {
   const { processMessages } = useA2UI();
   const [renderError, setRenderError] = useState(false);
+  const appliedPayload = useRef<string | null>(null);
   const normalizedMessages = useMemo(
     () => normalizeFlatWidgetMessages(messages, surfaceId),
     [messages, surfaceId],
   );
 
   useEffect(() => {
+    return () => {
+      appliedPayload.current = null;
+      processMessages([{ deleteSurface: { surfaceId } }]);
+    };
+  }, [processMessages, surfaceId]);
+
+  useEffect(() => {
     if (normalizedMessages.length === 0) return;
+    // Replayed cards must not reset a form the user is already editing.
+    const payload = JSON.stringify(normalizedMessages);
+    if (payload === appliedPayload.current) return;
 
     setRenderError(false);
     try {
       processMessages(normalizedMessages);
+      appliedPayload.current = payload;
     } catch (error) {
       console.warn('[chatkit-ui] Failed to render widget surface', {
         surfaceId,
@@ -106,10 +132,6 @@ function FlatWidgetSurface({
       setRenderError(true);
       return;
     }
-
-    return () => {
-      processMessages([{ deleteSurface: { surfaceId } }]);
-    };
   }, [normalizedMessages, processMessages, surfaceId]);
 
   if (renderError) {
