@@ -1,6 +1,10 @@
 {
     "widget": {
-        "actionFailed": "操作提交失败。"
+        "actionFailed": "操作提交失败。",
+        "actionTooLarge": "提交的数据过大。",
+        "actionSent": "已提交给助手。",
+        "actionStartsTurn": "提交此卡片会将填写的内容发送给助手。",
+        "dialogTitle": "详细内容"
     },
     "sharing": {
         "projectUnavailable": "暂不支持分享项目内的对话。",

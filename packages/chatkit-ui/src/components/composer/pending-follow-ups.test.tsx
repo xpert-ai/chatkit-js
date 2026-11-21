@@ -1,3 +1,4 @@
+import { PrimitiveThemeProvider, type SurfaceTheme } from '@xpert-ai/chatkit-primitives';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type * as React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ const themeMock = vi.hoisted(() => ({
   theme: {
     radius: 'soft',
     density: 'normal',
-  },
+  } as SurfaceTheme,
 }));
 
 vi.mock('../../i18n/useChatkitTranslation', () => ({
@@ -189,12 +190,13 @@ describe('PendingFollowUps', () => {
       onEdit: vi.fn(),
       onRemove: vi.fn(),
     };
-    const { rerender } = render(<PendingFollowUps {...props} />);
+    const view = () => <PrimitiveThemeProvider theme={themeMock.theme}><PendingFollowUps {...props} /></PrimitiveThemeProvider>;
+    const { rerender } = render(view());
     fireEvent.click(screen.getByRole('button', { name: 'Send now' }));
     expect(onSendNow).toHaveBeenCalledWith('manual');
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
     themeMock.theme = { radius: 'sharp', density: 'spacious' };
-    rerender(<PendingFollowUps {...props} />);
+    rerender(view());
     const menu = screen.getByRole('dialog');
     expect(menu.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
     expect(menu.style.getPropertyValue('--chat-density-scale')).toBe('1.25');

@@ -1,3 +1,5 @@
+import { PrimitiveThemeProvider } from '@xpert-ai/chatkit-primitives';
+import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { getDensitySpacing, getSurfaceThemeStyle } from '../lib/theme-surfaces';
 import * as React from 'react';
 import type {
@@ -229,6 +231,7 @@ export function ThemeProvider({
   children,
   theme: themeProp,
 }: ThemeProviderProps) {
+  const { t } = useChatkitTranslation();
   const themeRef = React.useRef<HTMLDivElement>(null);
   const [themeRevision, setThemeRevision] = React.useState(0);
 
@@ -467,7 +470,9 @@ export function ThemeProvider({
           }),
         }}
       >
-        {children}
+        <PrimitiveThemeProvider theme={theme} rootRef={themeRef} revision={themeRevision} labels={{ close: t('composer.resources.close'), dialog: t('widget.dialogTitle') }}>
+          {children}
+        </PrimitiveThemeProvider>
       </div>
     </ThemeContext.Provider>
   );

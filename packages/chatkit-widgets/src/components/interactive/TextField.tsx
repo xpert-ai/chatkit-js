@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Input, Textarea, Label } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo, useCallback, useId, useState } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useDataBinding } from "../../hooks/useDataBinding.js";
@@ -95,26 +96,26 @@ export function TextField({ node, surfaceId }: TextFieldProps) {
   const isTextArea = textFieldType === "longText";
 
   return (
-    <div className={cn(containerClasses)}>
+    <div className={cn("ck-field", containerClasses)}>
       {label && (
-        <label htmlFor={id} className={cn(labelClasses)}>
+        <Label htmlFor={id} className={cn(labelClasses)}>
           {label}
-        </label>
+        </Label>
       )}
       {isTextArea ? (
-        <textarea
+        <Textarea
           id={id}
           value={value}
           placeholder={placeholder}
           onChange={handleChange}
           className={cn(
             elementClasses,
-            "min-h-[80px] resize-y",
+            "resize-y",
             !isValid && "border-destructive"
           )}
         />
       ) : (
-        <input
+        <Input
           type={inputType}
           id={id}
           value={value}

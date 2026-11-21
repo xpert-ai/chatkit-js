@@ -14,7 +14,8 @@
  limitations under the License.
  */
 
-import React, { useState, useMemo, useId, type ReactNode } from "react";
+import { Tabs as PrimitiveTabs, TabsList, TabsTrigger, TabsContent, RadioGroup, RadioGroupItem, Label } from "@xpert-ai/chatkit-primitives";
+import React, { useState, useMemo, type ReactNode } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useSurfaceStyles } from "../../context/A2UIContext.js";
 import { useTheme } from "../../context/ThemeContext.js";
@@ -33,7 +34,6 @@ interface TabsProps extends A2UIComponentProps {
 
 export function Tabs({ node, renderChild, surfaceId }: TabsProps) {
   const theme = useTheme();
-  const group = useId();
   const radio = useSurfaceStyles(surfaceId)?.tabsVariant === "radio";
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -62,16 +62,14 @@ export function Tabs({ node, renderChild, surfaceId }: TabsProps) {
   if (radio) {
     return (
       <div className={containerClasses}>
-        <div role="radiogroup" aria-label={tabItems.map(item => item.title?.literalString).join(" / ")}
+        <RadioGroup value={String(activeIndex)} onValueChange={value => setActiveIndex(Number(value))}
+          aria-label={tabItems.map(item => item.title?.literalString).join(" / ")}
           className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          {tabItems.map((item, index) => (
-            <label key={index} className="inline-flex min-h-8 cursor-pointer items-center gap-2 text-sm">
-              <input type="radio" name={group} checked={index === activeIndex}
-                onChange={() => setActiveIndex(index)} className="accent-primary" />
-              {item.title?.literalString}
-            </label>
-          ))}
-        </div>
+          {tabItems.map((item, index) => <Label key={index} className="ck-checkbox-field">
+            <RadioGroupItem value={String(index)} aria-label={item.title?.literalString} />
+            {item.title?.literalString}
+          </Label>)}
+        </RadioGroup>
         <div className="mt-3" key={activeIndex}>
           {tabItems[activeIndex]?.child && renderChild?.(tabItems[activeIndex].child)}
         </div>
@@ -80,36 +78,15 @@ export function Tabs({ node, renderChild, surfaceId }: TabsProps) {
   }
 
   return (
-    <div className={cn(containerClasses)}>
-      {/* Tab controls */}
-      <div className={cn(controlsClasses)} role="tablist">
-        {tabItems.map((item, index) => {
-          const title = item.title?.literalString ?? `Tab ${index + 1}`;
-          const isSelected = index === activeIndex;
-
-          return (
-            <button
-              key={index}
-              role="tab"
-              aria-selected={isSelected}
-              onClick={() => setActiveIndex(index)}
-              className={cn(
-                "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-                isSelected && selectedClasses
-              )}
-            >
-              {title}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab content */}
-      <div className="mt-2" role="tabpanel">
-        {tabItems[activeIndex]?.child && renderChild
-          ? renderChild(tabItems[activeIndex].child as Types.AnyComponentNode)
-          : null}
-      </div>
-    </div>
+    <PrimitiveTabs value={String(activeIndex)} onValueChange={value => setActiveIndex(Number(value))} className={containerClasses}>
+      <TabsList className={controlsClasses}>
+        {tabItems.map((item, index) => <TabsTrigger key={index} value={String(index)} className={cn(index === activeIndex && selectedClasses)}>
+          {item.title?.literalString ?? `Tab ${index + 1}`}
+        </TabsTrigger>)}
+      </TabsList>
+      {tabItems.map((item, index) => <TabsContent key={index} value={String(index)}>
+        {item.child && renderChild?.(item.child)}
+      </TabsContent>)}
+    </PrimitiveTabs>
   );
 }

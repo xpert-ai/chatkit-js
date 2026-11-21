@@ -1,0 +1,63 @@
+/* Package classes are scanned by Tailwind 4 in workspace and published builds. */
+@source "./";
+
+@theme inline {
+  --radius-chat-panel: var(--chat-panel-radius, var(--radius, 0.625rem));
+  --radius-chat-item: var(--chat-item-radius, var(--radius, 0.375rem));
+  --radius-chat-avatar: var(--chat-avatar-radius, 20%);
+}
+
+@layer components {
+  .ck-control {
+    min-width: 0;
+    height: max(2rem, calc(1.25rem + 1rem * var(--chat-density-scale, 1)));
+    padding-inline: calc(0.625rem * var(--chat-density-scale, 1));
+    padding-block: 0.25rem;
+    border-radius: var(--chat-item-radius, var(--radius, 0.375rem));
+  }
+  .ck-button {
+    min-height: max(2rem, calc(1.25rem + 1rem * var(--chat-density-scale, 1)));
+    height: auto;
+    padding-inline: calc(0.625rem * var(--chat-density-scale, 1));
+    padding-block: calc(0.375rem * var(--chat-density-scale, 1));
+    gap: calc(0.375rem * var(--chat-density-scale, 1));
+  }
+  .ck-textarea {
+    min-height: calc(5rem * var(--chat-density-scale, 1));
+    padding: calc(0.625rem * var(--chat-density-scale, 1));
+  }
+  .ck-field {
+    display: grid;
+    min-width: 0;
+    gap: calc(0.375rem * var(--chat-density-scale, 1));
+  }
+  .ck-checkbox {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+  }
+  .ck-checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: calc(0.5rem * var(--chat-density-scale, 1));
+    min-height: 2rem;
+  }
+  .ck-card {
+    padding: var(--density-padding, 1rem);
+  }
+  .ck-tabs-list {
+    min-height: max(2rem, calc(1.25rem + 1rem * var(--chat-density-scale, 1)));
+    padding: 0.25rem;
+  }
+  .ck-tabs-trigger {
+    padding: calc(0.25rem * var(--chat-density-scale, 1))
+      calc(0.625rem * var(--chat-density-scale, 1));
+  }
+  @media (pointer: coarse) {
+    .ck-control,
+    .ck-button,
+    .ck-checkbox-field {
+      min-height: max(44px, 2.75rem);
+    }
+  }
+}

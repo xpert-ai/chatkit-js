@@ -1,6 +1,10 @@
 {
     "widget": {
-        "actionFailed": "Could not submit this action."
+        "actionFailed": "Could not submit this action.",
+        "actionTooLarge": "The submitted values are too large.",
+        "actionSent": "Submitted to the assistant.",
+        "actionStartsTurn": "Submitting this card sends your values to the assistant.",
+        "dialogTitle": "Details"
     },
     "sharing": {
         "projectUnavailable": "Sharing project conversations is not supported yet.",

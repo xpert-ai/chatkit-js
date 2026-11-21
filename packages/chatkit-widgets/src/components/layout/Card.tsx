@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Card as PrimitiveCard } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo, type ReactNode } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useTheme } from "../../context/ThemeContext.js";
@@ -32,5 +33,5 @@ export function Card({ children }: CardProps) {
     return classMapToString(theme.components.Card);
   }, [theme]);
 
-  return <div className={cn(themeClasses)}>{children}</div>;
+  return <PrimitiveCard className={cn("ck-card", themeClasses)}>{children}</PrimitiveCard>;
 }

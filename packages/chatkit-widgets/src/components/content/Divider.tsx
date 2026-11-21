@@ -14,10 +14,11 @@
  limitations under the License.
  */
 
+import { Separator } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useTheme } from "../../context/ThemeContext.js";
-import { cn, classMapToString } from "../../lib/utils.js";
+import { classMapToString } from "../../lib/utils.js";
 import type { A2UIComponentProps } from "../../types/index.js";
 
 type DividerAxis = "horizontal" | "vertical";
@@ -39,15 +40,5 @@ export function Divider({ node }: DividerProps) {
     return classMapToString(theme.components.Divider);
   }, [theme]);
 
-  const orientationClasses = useMemo(() => {
-    return axis === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]";
-  }, [axis]);
-
-  return (
-    <div
-      role="separator"
-      aria-orientation={axis}
-      className={cn(themeClasses, orientationClasses)}
-    />
-  );
+  return <Separator orientation={axis} className={themeClasses} />;
 }

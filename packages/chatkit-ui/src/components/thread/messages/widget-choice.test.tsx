@@ -87,7 +87,10 @@ describe('A2UI project choice', () => {
     fireEvent.keyDown(trigger, { key: 'ArrowDown' });
     const menu = await screen.findByRole('listbox');
     const themeRoot = trigger.closest<HTMLElement>('[data-density]')!;
-    expect(themeRoot).toContainElement(menu);
+    expect(themeRoot).not.toContainElement(menu);
+    const portalRoot = menu.closest<HTMLElement>('[data-chatkit-portal-root]')!;
+    expect(portalRoot.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
+    expect(portalRoot.style.getPropertyValue('--chat-density-scale')).toBe('0.75');
     expect(themeRoot.style.getPropertyValue('--chat-panel-radius')).toBe('0px');
     expect(themeRoot.style.getPropertyValue('--chat-density-scale')).toBe('0.75');
     expect(
@@ -100,6 +103,7 @@ describe('A2UI project choice', () => {
     expect(themeRoot.style.getPropertyValue('--chat-panel-radius')).toContain(
       '+ 4px',
     );
+    expect(portalRoot.style.getPropertyValue('--chat-density-scale')).toBe('1.25');
     expect(menu.closest('.dark')).not.toBeNull();
     fireEvent.click(within(menu).getByRole('option', { name: 'Sales' }));
     expect(trigger).toHaveTextContent('Sales');

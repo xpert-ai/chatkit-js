@@ -1,0 +1,214 @@
+{
+  "name": "@xpert-ai/chatkit-primitives",
+  "version": "0.1.0",
+  "description": "Shared shadcn/Radix controls and surface themes for ChatKit and A2UI.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "components.json",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/styles.css",
+    "./package.json": "./package.json",
+    "./alert-dialog": {
+      "types": "./dist/alert-dialog.d.ts",
+      "import": "./dist/alert-dialog.js",
+      "require": "./dist/alert-dialog.cjs"
+    },
+    "./tabs": {
+      "types": "./dist/tabs.d.ts",
+      "import": "./dist/tabs.js",
+      "require": "./dist/tabs.cjs"
+    },
+    "./card": {
+      "types": "./dist/card.d.ts",
+      "import": "./dist/card.js",
+      "require": "./dist/card.cjs"
+    },
+    "./slider": {
+      "types": "./dist/slider.d.ts",
+      "import": "./dist/slider.js",
+      "require": "./dist/slider.cjs"
+    },
+    "./popover": {
+      "types": "./dist/popover.d.ts",
+      "import": "./dist/popover.js",
+      "require": "./dist/popover.cjs"
+    },
+    "./toolbar-button": {
+      "types": "./dist/toolbar-button.d.ts",
+      "import": "./dist/toolbar-button.js",
+      "require": "./dist/toolbar-button.cjs"
+    },
+    "./sheet": {
+      "types": "./dist/sheet.d.ts",
+      "import": "./dist/sheet.js",
+      "require": "./dist/sheet.cjs"
+    },
+    "./scroll-area": {
+      "types": "./dist/scroll-area.d.ts",
+      "import": "./dist/scroll-area.js",
+      "require": "./dist/scroll-area.cjs"
+    },
+    "./label": {
+      "types": "./dist/label.d.ts",
+      "import": "./dist/label.js",
+      "require": "./dist/label.cjs"
+    },
+    "./sonner": {
+      "types": "./dist/sonner.d.ts",
+      "import": "./dist/sonner.js",
+      "require": "./dist/sonner.cjs"
+    },
+    "./tooltip": {
+      "types": "./dist/tooltip.d.ts",
+      "import": "./dist/tooltip.js",
+      "require": "./dist/tooltip.cjs"
+    },
+    "./calendar": {
+      "types": "./dist/calendar.d.ts",
+      "import": "./dist/calendar.js",
+      "require": "./dist/calendar.cjs"
+    },
+    "./command": {
+      "types": "./dist/command.d.ts",
+      "import": "./dist/command.js",
+      "require": "./dist/command.cjs"
+    },
+    "./toggle-group": {
+      "types": "./dist/toggle-group.d.ts",
+      "import": "./dist/toggle-group.js",
+      "require": "./dist/toggle-group.cjs"
+    },
+    "./avatar": {
+      "types": "./dist/avatar.d.ts",
+      "import": "./dist/avatar.js",
+      "require": "./dist/avatar.cjs"
+    },
+    "./dialog": {
+      "types": "./dist/dialog.d.ts",
+      "import": "./dist/dialog.js",
+      "require": "./dist/dialog.cjs"
+    },
+    "./badge": {
+      "types": "./dist/badge.d.ts",
+      "import": "./dist/badge.js",
+      "require": "./dist/badge.cjs"
+    },
+    "./separator": {
+      "types": "./dist/separator.d.ts",
+      "import": "./dist/separator.js",
+      "require": "./dist/separator.cjs"
+    },
+    "./progress-circle": {
+      "types": "./dist/progress-circle.d.ts",
+      "import": "./dist/progress-circle.js",
+      "require": "./dist/progress-circle.cjs"
+    },
+    "./button": {
+      "types": "./dist/button.d.ts",
+      "import": "./dist/button.js",
+      "require": "./dist/button.cjs"
+    },
+    "./toggle": {
+      "types": "./dist/toggle.d.ts",
+      "import": "./dist/toggle.js",
+      "require": "./dist/toggle.cjs"
+    },
+    "./checkbox": {
+      "types": "./dist/checkbox.d.ts",
+      "import": "./dist/checkbox.js",
+      "require": "./dist/checkbox.cjs"
+    },
+    "./dropdown-menu": {
+      "types": "./dist/dropdown-menu.d.ts",
+      "import": "./dist/dropdown-menu.js",
+      "require": "./dist/dropdown-menu.cjs"
+    },
+    "./select": {
+      "types": "./dist/select.d.ts",
+      "import": "./dist/select.js",
+      "require": "./dist/select.cjs"
+    },
+    "./textarea": {
+      "types": "./dist/textarea.d.ts",
+      "import": "./dist/textarea.js",
+      "require": "./dist/textarea.cjs"
+    },
+    "./input": {
+      "types": "./dist/input.d.ts",
+      "import": "./dist/input.js",
+      "require": "./dist/input.cjs"
+    },
+    "./radio-group": {
+      "types": "./dist/radio-group.d.ts",
+      "import": "./dist/radio-group.js",
+      "require": "./dist/radio-group.cjs"
+    },
+    "./fieldset": {
+      "types": "./dist/fieldset.d.ts",
+      "import": "./dist/fieldset.js",
+      "require": "./dist/fieldset.cjs"
+    },
+    "./lib/utils": {
+      "types": "./dist/utils.d.ts",
+      "import": "./dist/utils.js",
+      "require": "./dist/utils.cjs"
+    },
+    "./components/ui/*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "require": "./dist/*.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup && node scripts/copy-styles.mjs",
+    "types": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "^0.562.0",
+    "radix-ui": "^1.4.3",
+    "react-day-picker": "9.14.0",
+    "sonner": "^2.0.1",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^25.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "rimraf": "^5.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,3 +1,4 @@
+import { Fieldset } from '@xpert-ai/chatkit-primitives';
 import {
   useContext,
   useLayoutEffect,
@@ -11,13 +12,21 @@ import {
   type A2UIActionEvent,
 } from '@xpert-ai/a2ui-react';
 import { HTTPError } from '@xpert-ai/xpert-sdk';
+import {
+  encodeWidgetAgentAction,
+  findWidgetAgentAction,
+  WIDGET_ACTION_MAX_LENGTH,
+} from '@xpert-ai/chatkit-types';
 import { StreamContext } from '../../../providers/stream/context';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 
 type WidgetActionsProps = {
   messageId: string;
   widgetId?: string;
-  serverActions: string[];
+  widgetName?: string;
+  surfaceId?: string;
+  serverActions?: string[];
+  agentActions?: string[];
   requiresIdleThread?: boolean;
   children: ReactNode;
 };
@@ -25,7 +34,10 @@ type WidgetActionsProps = {
 export function WidgetActions({
   messageId,
   widgetId,
-  serverActions,
+  widgetName,
+  surfaceId,
+  serverActions = [],
+  agentActions = [],
   requiresIdleThread,
   children,
 }: WidgetActionsProps) {
@@ -34,33 +46,77 @@ export function WidgetActions({
   const { t } = useChatkitTranslation();
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [sent, setSent] = useState(false);
   const pending = useRef(false);
   const threadId = stream?.threadId;
   const waitForIdle = Boolean(requiresIdleThread && stream?.isLoading);
+  const submitted =
+    sent ||
+    Boolean(
+      findWidgetAgentAction(stream?.messages ?? [], {
+        messageId,
+        widgetId,
+        surfaceId,
+      }),
+    );
   const scope = useRef<object | null>(null);
 
   useLayoutEffect(() => {
     scope.current = {};
     pending.current = false;
     setSubmitting(false);
+    setSent(false);
     setError('');
     return () => {
       scope.current = null;
     };
-  }, [threadId, messageId, widgetId]);
+  }, [threadId, messageId, widgetId, widgetName]);
 
   async function dispatch(action: A2UIActionEvent) {
-    if (!serverActions.includes(action.actionId)) {
+    const toServer = serverActions.includes(action.actionId);
+    const toAgent = !toServer && agentActions.includes(action.actionId);
+    if (!toServer && !toAgent) {
       sendAction(action);
       return;
     }
-    if (!stream || !threadId || !widgetId || waitForIdle || pending.current)
+    if (
+      !stream ||
+      !threadId ||
+      !widgetId ||
+      waitForIdle ||
+      pending.current ||
+      submitted
+    )
       return;
     const origin = scope.current;
     pending.current = true;
     setSubmitting(true);
     setError('');
     try {
+      if (toAgent) {
+        const input = encodeWidgetAgentAction({
+          name: action.actionId,
+          messageId,
+          widgetId,
+          widgetName,
+          surfaceId,
+          timestamp: new Date().toISOString(),
+          context: action.context ?? {},
+        });
+        if (input.length > WIDGET_ACTION_MAX_LENGTH)
+          throw new Error(t('widget.actionTooLarge'));
+        await stream.submit(
+          { input: { input } },
+          {
+            threadId,
+            ...(stream.isLoading ? { followUpMode: 'queue' as const } : {}),
+            onRunAccepted: () => {
+              if (origin === scope.current) setSent(true);
+            },
+          },
+        );
+        return;
+      }
       const result = await stream.client.threads.submitWidgetAction(threadId, {
         messageId,
         widgetId,
@@ -82,13 +138,20 @@ export function WidgetActions({
 
   return (
     <A2UIProvider onAction={dispatch}>
-      <fieldset
-        disabled={!threadId || !widgetId || waitForIdle || submitting}
+      <Fieldset
+        disabled={
+          !threadId || !widgetId || waitForIdle || submitting || submitted
+        }
         aria-busy={submitting}
         className="min-w-0"
       >
         {children}
-      </fieldset>
+      </Fieldset>
+      {agentActions.length > 0 && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t(submitted ? 'widget.actionSent' : 'widget.actionStartsTurn')}
+        </p>
+      )}
       {error && (
         <div role="alert" className="text-sm text-destructive">
           {error}

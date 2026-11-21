@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Label, NativeSelect } from "@xpert-ai/chatkit-primitives";
 import React, { useId, useState } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useDataBinding } from "../../hooks/useDataBinding.js";
@@ -80,14 +81,14 @@ export function MultipleChoice({ node, surfaceId }: MultipleChoiceProps) {
   }
 
   return (
-    <div className={cn(classMapToString(styles.container))}>
+    <div className={cn("ck-field", classMapToString(styles.container))}>
       {label && (
-        <label htmlFor={id} className={cn(classMapToString(styles.label))}>
+        <Label htmlFor={id} className={cn(classMapToString(styles.label))}>
           {label}
-        </label>
+        </Label>
       )}
       {isMultiple ? (
-        <select
+        <NativeSelect
           id={id}
           multiple
           value={selections}
@@ -99,14 +100,14 @@ export function MultipleChoice({ node, surfaceId }: MultipleChoiceProps) {
               ).slice(0, maxAllowedSelections),
             )
           }
-          className={cn(classMapToString(styles.element))}
+          className={cn("ck-control min-h-24 rounded-chat-item border border-input bg-background text-sm text-foreground", classMapToString(styles.element))}
         >
           {choices.map((option, index) => (
             <option key={index} value={option.value}>
               {option.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       ) : (
         <ChoiceSelect
           id={id}

@@ -9,7 +9,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./styles.css": "./styles.css"
   },
   "type": "module",
   "scripts": {
@@ -26,7 +27,8 @@
     "url": "https://github.com/xpert-ai/chatkit-js"
   },
   "files": [
-    "dist"
+    "dist",
+    "styles.css"
   ],
   "keywords": [
     "a2ui",
@@ -45,18 +47,18 @@
     "access": "public"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
-    "tailwindcss": "^3.4.0"
+    "react": ">=18 <20",
+    "react-dom": ">=18 <20",
+    "tailwindcss": "^4.1.17"
   },
   "dependencies": {
     "@a2ui/lit": "^0.8.1",
-    "@radix-ui/react-select": "2.2.6",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.460.0",
     "markdown-it": "^14.1.0",
-    "tailwind-merge": "^2.2.0"
+    "tailwind-merge": "^3.4.0",
+    "@xpert-ai/chatkit-primitives": "workspace:~"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
@@ -72,5 +74,8 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.53.5"
-  }
+  },
+  "sideEffects": [
+    "**/*.css"
+  ]
 }

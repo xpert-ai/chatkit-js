@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@xpert-ai/chatkit-primitives/styles.css';
 @import './theme-surfaces.css';
 @import './components/chat/composer/composer-layout.css';
 @import './workbench/floating-chat/floating-chat.css';
