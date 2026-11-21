@@ -4,6 +4,11 @@
   "description": "Shared shadcn/Radix controls and surface themes for ChatKit and A2UI.",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xpert-ai/chatkit-js",
+    "directory": "packages/chatkit-primitives"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
