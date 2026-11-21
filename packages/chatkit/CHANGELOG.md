@@ -1,5 +1,12 @@
 # @xpert-ai/chatkit-types
 
+## 0.24.0
+
+### Minor Changes
+
+- da47ce6: Support direct server actions on message Widgets while preserving host callbacks for other actions.
+- e7b5d2b: Submit declared A2UI actions to the originating Agent conversation while preserving server actions and host callbacks. Restore submitted field values and read-only state from conversation history, and display readable submission receipts in messages and navigation.
+
 ## 0.23.1
 
 ### Patch Changes

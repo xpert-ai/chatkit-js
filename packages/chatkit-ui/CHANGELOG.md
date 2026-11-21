@@ -1,5 +1,25 @@
 # @xpert-ai/chatkit-ui
 
+## 0.27.0
+
+### Minor Changes
+
+- da47ce6: Support direct server actions on message Widgets while preserving host callbacks for other actions.
+- e7b5d2b: Extract ChatKit's shadcn/Radix controls into a shared primitives package and reuse them in A2UI. Unify density, radius, semantic colors and themed portals; preserve Widget data bindings, actions and class-map overrides. Existing ChatKit UI exports remain compatible. Standalone A2UI consumers must use Tailwind 4 and import the shared stylesheet once.
+- e7b5d2b: Submit declared A2UI actions to the originating Agent conversation while preserving server actions and host callbacks. Restore submitted field values and read-only state from conversation history, and display readable submission receipts in messages and navigation.
+
+### Patch Changes
+
+- 91db121: Render single-choice A2UI widgets with a themed, keyboard-accessible dropdown.
+- Updated dependencies [da47ce6]
+- Updated dependencies [e7b5d2b]
+- Updated dependencies [91db121]
+- Updated dependencies [e7b5d2b]
+  - @xpert-ai/chatkit-types@0.24.0
+  - @xpert-ai/chatkit-primitives@0.2.0
+  - @xpert-ai/a2ui-react@0.18.0
+  - @xpert-ai/chatkit-web-shared@0.18.6
+
 ## 0.26.1
 
 ### Patch Changes
