@@ -120,7 +120,11 @@ export function createRemoteTheme(
       colorSuccessBackground: isDarkMode
         ? 'color-mix(in srgb, var(--xui-color-success) 18%, var(--xui-color-background))'
         : 'color-mix(in srgb, var(--xui-color-success) 9%, var(--xui-color-background))',
-      colorWarning: readThemeColor(style, '--warning', primary),
+      colorWarning: readThemeColor(
+        style,
+        '--warning',
+        isDarkMode ? '#fbbf24' : '#b45309',
+      ),
       colorInfo: readThemeColor(style, '--info', primary),
       colorRing: readThemeColor(style, '--ring', primary),
       colorChart1: readThemeColor(style, '--chart-1', primary),
