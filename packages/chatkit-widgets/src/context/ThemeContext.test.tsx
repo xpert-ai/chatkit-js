@@ -150,24 +150,7 @@ describe("ThemeContext", () => {
   });
 
   describe("Theme CSS Classes", () => {
-    it("should have Tailwind CSS classes for Button", () => {
-      const buttonTheme = defaultTheme.components.Button;
-
-      // Check for common ShadCN button styles
-      expect(buttonTheme["inline-flex"]).toBe(true);
-      expect(buttonTheme["items-center"]).toBe(true);
-      expect(buttonTheme["justify-center"]).toBe(true);
-      expect(buttonTheme["rounded-md"]).toBe(true);
-    });
-
-    it("should have Tailwind CSS classes for Card", () => {
-      const cardTheme = defaultTheme.components.Card;
-
-      expect(cardTheme["rounded-lg"]).toBe(true);
-      expect(cardTheme["border"]).toBe(true);
-      expect(cardTheme["shadow-sm"]).toBe(true);
-    });
-
+    // Shared-control rendering and override compatibility are covered in shared-primitives.test.tsx.
     it("should have flex classes for Row", () => {
       const rowTheme = defaultTheme.components.Row;
 

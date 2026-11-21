@@ -20,17 +20,16 @@ npm install react react-dom tailwindcss
 
 ### 1. Set up Tailwind CSS
 
-Ensure your project has Tailwind CSS configured. Add the A2UI React components to your `tailwind.config.js`:
+Use Tailwind CSS 4 and import the renderer stylesheet once in your host stylesheet:
 
-```js
-module.exports = {
-  content: [
-    // ... your content paths
-    "./node_modules/@xpert-ai/a2ui-react/**/*.{js,ts,jsx,tsx}",
-  ],
-  // ... rest of config
-};
+```css
+@import "tailwindcss";
+@import "@xpert-ai/a2ui-react/styles.css";
 ```
+
+Keep your host's shadcn semantic color variables (`background`, `foreground`, `primary`, `border`, etc.). Basic controls are shared with ChatKit through `@xpert-ai/chatkit-primitives`. ChatKit hosts already include that stylesheet and bridge their active theme, density and translated labels to portaled controls.
+
+Standalone hosts that need live radius/density and scoped portals can install `@xpert-ai/chatkit-primitives`, apply `getSurfaceThemeStyle(theme)` to their theme root, and pass its ref and theme to `PrimitiveThemeProvider`. The A2UI `ThemeProvider` remains available for class-map overrides.
 
 ### 2. Wrap your app with providers
 

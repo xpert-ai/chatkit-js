@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Checkbox as PrimitiveCheckbox, Label } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo, useCallback, useId } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useDataBinding } from "../../hooks/useDataBinding.js";
@@ -55,27 +56,26 @@ export function CheckBox({ node, surfaceId }: CheckBoxProps) {
   }, [theme]);
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (checked: boolean | "indeterminate") => {
       if (valuePath) {
-        setValue(valuePath, e.target.checked);
+        setValue(valuePath, checked === true);
       }
     },
     [valuePath, setValue]
   );
 
   return (
-    <div className={cn(containerClasses)}>
-      <input
-        type="checkbox"
+    <div className={cn("ck-checkbox-field", containerClasses)}>
+      <PrimitiveCheckbox
         id={id}
         checked={checked}
-        onChange={handleChange}
+        onCheckedChange={handleChange}
         className={cn(elementClasses)}
       />
       {label && (
-        <label htmlFor={id} className={cn(labelClasses)}>
+        <Label htmlFor={id} className={cn(labelClasses)}>
           {label}
-        </label>
+        </Label>
       )}
     </div>
   );

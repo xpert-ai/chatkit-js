@@ -90,6 +90,12 @@ export type TWidgetPresentation = {
 
 export type TMessageComponentWidgetItem = {
   name: string;
+  /** Action names handled by the server for this Widget. Other actions belong to the host. */
+  serverActions?: string[];
+  /** Action names submitted as user input to the owning conversation. */
+  agentActions?: string[];
+  /** Interaction requires an idle thread. */
+  requiresIdleThread?: boolean;
   /** Optional display-only provenance. Older clients may omit this footer. */
   presentation?: TWidgetPresentation;
   /**

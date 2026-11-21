@@ -5,6 +5,10 @@ export const widgetTheme: Theme = {
   ...defaultTheme,
   components: {
     ...defaultTheme.components,
+    Button: {
+      ...defaultTheme.components.Button,
+      '[&_.text-foreground]:text-inherit': true,
+    },
     Column: {
       flex: true,
       'flex-col': true,
@@ -22,14 +26,14 @@ export const widgetTheme: Theme = {
     Text: {
       all: { 'min-w-0': true, 'break-words': true, '[&_p]:m-0': true },
       h1: {
-        'text-3xl': true,
+        'text-xl': true,
         'font-semibold': true,
         'text-foreground': true,
         'tabular-nums': true,
         'tracking-tight': true,
       },
       h2: {
-        'text-2xl': true,
+        'text-lg': true,
         'font-semibold': true,
         'text-foreground': true,
         'tabular-nums': true,
@@ -44,13 +48,6 @@ export const widgetTheme: Theme = {
         'text-foreground': true,
         'leading-relaxed': true,
       },
-    },
-    Card: {
-      'rounded-chat-panel': true,
-      border: true,
-      'border-border': true,
-      'bg-background': true,
-      'p-[var(--density-padding,1rem)]': true,
     },
   },
 };

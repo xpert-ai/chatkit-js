@@ -507,7 +507,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('status:')).toBeInTheDocument();
     expect(screen.getByText('"ok"')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Raw' }), { key: 'Enter' });
 
     expect(screen.getByText(/"items": \[/)).toBeInTheDocument();
   });

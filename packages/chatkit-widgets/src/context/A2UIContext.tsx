@@ -83,6 +83,10 @@ export function A2UIProvider({ children, onAction }: A2UIProviderProps) {
   );
 }
 
+export function useSurfaceStyles(surfaceId: string) {
+  return useContext(A2UIContext)?.surfaces.get(surfaceId)?.styles;
+}
+
 export function useA2UIContext(): A2UIContextValue {
   const context = useContext(A2UIContext);
   if (!context) {

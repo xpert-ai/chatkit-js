@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@xpert-ai/chatkit-primitives/styles.css';
 @import './theme-surfaces.css';
 @import './components/chat/composer/composer-layout.css';
 @import './workbench/floating-chat/floating-chat.css';
@@ -7,6 +8,8 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/geist';
+
+@source '../../chatkit-widgets/src/components';
 
 @custom-variant dark (&:is(.dark *));
 

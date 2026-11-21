@@ -14,16 +14,7 @@
  limitations under the License.
  */
 
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-/**
- * Utility function to merge Tailwind CSS classes.
- * Combines clsx for conditional classes with tailwind-merge to handle conflicts.
- */
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+export { cn } from "@xpert-ai/chatkit-primitives";
 
 /**
  * Converts a Record<string, boolean> (class map) to a className string.

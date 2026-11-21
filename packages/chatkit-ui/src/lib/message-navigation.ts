@@ -18,6 +18,7 @@ import type {
 import { resolveLocalizedText } from '../i18n/localized-text';
 import { getReferenceLabel, normalizeReferences } from './references';
 import { isNonTranscriptMessageContent } from './message-content-presentation';
+import { widgetActionText } from './widget-action-text';
 import {
   buildAssistantRenderTree,
   getAgentRunTitle,
@@ -132,7 +133,7 @@ function truncate(value: string, maxLength: number) {
 }
 
 function pushText(draft: NavigationDraft, value: unknown) {
-  const text = readString(value);
+  const text = readString(widgetActionText(value) ?? value);
   if (text) draft.text.push(text);
 }
 

@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "src/index.css",
+    "css": "../chatkit-primitives/src/styles.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
@@ -14,8 +14,8 @@
   "rtl": false,
   "aliases": {
     "components": "@/components",
-    "utils": "@/lib/utils",
-    "ui": "@/components/ui",
+    "utils": "@xpert-ai/chatkit-primitives/lib/utils",
+    "ui": "@xpert-ai/chatkit-primitives/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
   },

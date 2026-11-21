@@ -43,6 +43,7 @@ type StreamInterruptsOptions = Pick<
     'waitForRequestUserInput' | 'hasPendingUserInput'
   > & {
     assistantId: string;
+    resumeContext?: Record<string, unknown>;
     projectId: string | undefined;
   };
 
@@ -51,6 +52,7 @@ export function useStreamInterrupts({
   activeThreadIdRef,
   clientRef,
   assistantId,
+  resumeContext,
   updateConversationId,
   valuesRef,
   lastExecutionIdRef,
@@ -65,6 +67,11 @@ export function useStreamInterrupts({
   hasPendingUserInput,
 }: StreamInterruptsOptions) {
   const restoredInputRef = useRef<string | null>(null);
+  const getResumeOptions = useCallback(() => {
+    const retained = lastStreamOptionsRef.current;
+    // A reload discards in-memory submission options while the host still supplies its request context.
+    return retained.context || !resumeContext ? retained : { ...retained, context: resumeContext };
+  }, [lastStreamOptionsRef, resumeContext]);
   const submitHITLResponse = useCallback(
     async (response: HITLResponse, executionId?: string) => {
       let conversationId = conversationIdRef.current?.trim() || null;
@@ -104,11 +111,11 @@ export function useStreamInterrupts({
       });
 
       return (
-        submitRef.current?.(resumeInput, lastStreamOptionsRef.current) ??
+        submitRef.current?.(resumeInput, getResumeOptions()) ??
         Promise.resolve()
       );
     },
-    [assistantId, projectId, updateConversationId],
+    [assistantId, projectId, updateConversationId, getResumeOptions],
   );
 
   const rememberHITLExecutionId = useCallback(
@@ -176,7 +183,7 @@ export function useStreamInterrupts({
             executionId:
               restoredExecutionId ?? lastExecutionIdRef.current ?? undefined,
           },
-          lastStreamOptionsRef.current,
+          getResumeOptions(),
         );
       }
 
@@ -184,6 +191,7 @@ export function useStreamInterrupts({
     },
     [
       handleHITLInterrupt,
+      getResumeOptions,
       isParentAvailable,
       sendCommand,
       setError,
