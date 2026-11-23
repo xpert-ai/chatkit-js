@@ -15,6 +15,33 @@ function getAgentNodes(
 }
 
 describe('buildAssistantRenderTree', () => {
+  it('omits replayed runtime events and keeps visible events with the same title', () => {
+    const result = buildAssistantRenderTree({
+      id: 'reply',
+      type: 'assistant',
+      executionId: 'root',
+      content: [
+        {
+          type: 'agent_event',
+          executionId: 'root',
+          title: '总结标题',
+          data: { presentation: 'runtime' },
+        },
+        {
+          type: 'agent_event',
+          executionId: 'root',
+          title: '总结标题',
+          data: { presentation: 'event' },
+        },
+      ],
+    });
+    expect(result.units).toHaveLength(1);
+    expect(result.units[0]).toMatchObject({
+      type: 'entry',
+      entry: { item: { data: { presentation: 'event' } } },
+    });
+  });
+
   it('renders copied root text, reasoning and tools without agent cards', () => {
     const result = buildAssistantRenderTree({
       id: 'branched-reply',

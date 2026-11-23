@@ -7,6 +7,37 @@ import { createLangGraphEventState } from '../../langGraphEventMapper';
 import { applyStreamEvent } from '../../Stream';
 
 describe('applyStreamEvent', () => {
+  it.each(['running', 'success', 'fail'])(
+    'keeps runtime progress out of messages (%s)',
+    (status) => {
+      const setValues = vi.fn();
+      const sendEvent = vi.fn();
+      applyStreamEvent(
+        {
+          event: 'message',
+          data: JSON.stringify({
+            type: 'event',
+            event: 'on_chat_event',
+            data: {
+              type: 'background_job',
+              presentation: 'runtime',
+              executionId: 'root',
+              title: 'Progress',
+              status,
+            },
+          }),
+        },
+        setValues,
+        vi.fn(),
+        sendEvent,
+        [],
+        createLangGraphEventState(),
+      );
+      expect(setValues).not.toHaveBeenCalled();
+      expect(sendEvent).toHaveBeenCalled();
+    },
+  );
+
   it('upserts agent run lifecycle events onto the latest assistant message', () => {
     let state = {
       messages: [

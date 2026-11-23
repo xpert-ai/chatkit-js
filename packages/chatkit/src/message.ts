@@ -1,3 +1,4 @@
+import type { TChatActivityPresentation } from './activity-presentation.js';
 import type { TMessageContentFileActivity } from './file-activity-receipt.js';
 import type { TMessageContentResourceCard } from './resource-card.js';
 import type { ToolCall } from '@langchain/core/messages/tool';
@@ -348,6 +349,8 @@ export type TMessageComponentStep<T = unknown> = {
  */
 export type TChatEventMessage = {
   type?: string;
+  /** Runtime-only activities are omitted from the conversation transcript. */
+  presentation?: TChatActivityPresentation;
   title?: string;
   message?: string;
   status?: 'success' | 'fail' | 'running';
