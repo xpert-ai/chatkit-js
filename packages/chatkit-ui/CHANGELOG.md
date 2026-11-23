@@ -1,5 +1,13 @@
 # @xpert-ai/chatkit-ui
 
+## 0.27.1
+
+### Patch Changes
+
+- 3d9a081: Honor runtime-only presentation for background chat events and agent executions in the conversation transcript.
+- Updated dependencies [3d9a081]
+  - @xpert-ai/chatkit-types@0.24.1
+
 ## 0.27.0
 
 ### Minor Changes

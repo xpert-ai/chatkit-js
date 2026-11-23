@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-types
 
+## 0.24.1
+
+### Patch Changes
+
+- 3d9a081: Honor runtime-only presentation for background chat events and agent executions in the conversation transcript.
+
 ## 0.24.0
 
 ### Minor Changes
