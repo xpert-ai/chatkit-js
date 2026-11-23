@@ -2,6 +2,8 @@ import { parseAgentExecutionOutcome } from './agent-execution-outcome';
 import type { TAgentExecutionOutcome } from '@xpert-ai/chatkit-types';
 import {
   ChatMessageEventTypeEnum,
+  hasRuntimePresentation,
+  isRuntimeAgentExecution,
   type TMessageContentComplex,
 } from '@xpert-ai/chatkit-types';
 
@@ -156,7 +158,12 @@ export function normalizeAgentRunInfo(
   value: unknown,
   eventType?: ChatMessageEventTypeEnum,
 ): AgentRunInfo | null {
-  if (!isRecord(value)) return null;
+  if (
+    !isRecord(value) ||
+    hasRuntimePresentation(value) ||
+    isRuntimeAgentExecution(value)
+  )
+    return null;
 
   const id = readTrimmedString(value.id);
   if (!id) return null;
@@ -297,7 +304,7 @@ export function upsertAgentRun(
 export function createAgentEventContent(
   data: unknown,
 ): AgentEventContent | null {
-  if (!isRecord(data)) return null;
+  if (!isRecord(data) || hasRuntimePresentation(data)) return null;
 
   const executionId = readTrimmedString(data.executionId);
   if (!executionId) return null;

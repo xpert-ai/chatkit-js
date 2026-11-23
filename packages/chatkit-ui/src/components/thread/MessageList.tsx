@@ -1,4 +1,9 @@
-import { isCallEndedContent } from '@xpert-ai/chatkit-types';
+import {
+  isCallEndedContent,
+  parseWidgetAgentAction,
+} from '@xpert-ai/chatkit-types';
+import { WidgetActionReceipt } from './messages/widget-action-receipt';
+import { widgetActionText } from '../../lib/widget-action-text';
 import { CallEndedMessage } from './messages/call-ended';
 import { PresentationScrollAnchor } from './PresentationScrollAnchor';
 import { MessageBubble } from './messages/message-bubble';
@@ -88,7 +93,7 @@ function formatMessageContent(
     | NonNullable<Exclude<TranscriptContent, string>>[number],
 ): string {
   if (typeof content === 'string') {
-    return content;
+    return widgetActionText(content) ?? content;
   }
 
   if (Array.isArray(content)) {
@@ -348,13 +353,16 @@ export function MessageList({
 
           const messageContent =
             typeof message.content === 'string'
-              ? message.content
+              ? formatMessageContent(message.content)
               : Array.isArray(message.content)
                 ? message.content
                     .map((part) => formatMessageContent(part))
                     .join('')
                 : formatMessageContent(message.content);
           const hasPlainRenderableContent = messageContent.trim().length > 0;
+          const widgetAction = isHumanMessage
+            ? parseWidgetAgentAction(message.content)
+            : null;
           const humanMessage = message as HumanMessageWithMeta;
           const humanReferences = humanMessage.references ?? [];
           const humanAttachments = getVisibleHumanAttachments(
@@ -388,6 +396,7 @@ export function MessageList({
             Boolean(message.id) && editing?.messageId === message.id;
           const canEditMessage =
             isHumanMessage &&
+            !widgetAction &&
             editing?.enabled &&
             Boolean(message.id) &&
             humanMessage.inputCheckpoint !== null &&
@@ -648,7 +657,9 @@ export function MessageList({
                               ))}
                             </div>
                           )}
-                          {Array.isArray(message.content) ? (
+                          {widgetAction ? (
+                            <WidgetActionReceipt action={widgetAction} />
+                          ) : Array.isArray(message.content) ? (
                             message.content.map((part, partIndex) => (
                               <p
                                 key={`${part.type}-${partIndex}`}

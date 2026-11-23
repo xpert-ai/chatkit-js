@@ -5,7 +5,10 @@ import { SharedConversationFrame } from './SharedConversationFrame';
 vi.mock('./ReadonlyMessageList', () => ({
   ReadonlyMessageList: () => <div data-testid="transcript">Read only</div>,
 }));
-vi.mock('../../i18n', () => ({ setLanguage: vi.fn() }));
+vi.mock('../../i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../i18n')>()),
+  setLanguage: vi.fn(),
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();

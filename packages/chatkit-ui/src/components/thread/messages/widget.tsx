@@ -1,5 +1,10 @@
-import type { TMessageComponentWidgetData } from '@xpert-ai/chatkit-types';
-import { useEffect, useMemo, useState } from 'react';
+import { Fieldset } from '@xpert-ai/chatkit-primitives';
+import {
+  findWidgetAgentAction,
+  type WidgetAgentAction,
+  type TMessageComponentWidgetData,
+} from '@xpert-ai/chatkit-types';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   A2UIRenderer,
   SurfaceRenderer,
@@ -7,14 +12,18 @@ import {
   useA2UI,
   ThemeProvider,
 } from '@xpert-ai/a2ui-react';
+import { WidgetActions } from './widget-actions';
 import { WidgetPresentation } from './widget-presentation';
 import { widgetTheme } from './widget-theme';
+import { StreamContext } from '../../../providers/stream/context';
+import { replayWidgetSubmission } from './widget-action-replay';
 
 type RowData = Record<string, unknown>;
 
 export type WidgetMessageProps = {
   messageId: string;
   data: TMessageComponentWidgetData;
+  widgetId?: string;
   /** Disable source actions while keeping passive presentation disclosures usable. */
   readOnly?: boolean;
 };
@@ -22,16 +31,20 @@ export type WidgetMessageProps = {
 export function WidgetMessage({
   messageId,
   data,
+  widgetId,
   readOnly = false,
 }: WidgetMessageProps) {
+  const stream = useContext(StreamContext);
   const widgets = Array.isArray(data.widgets) ? data.widgets : [];
   if (widgets.length === 0) return null;
 
-  const baseSurfaceId = `widget-${messageId}`;
+  const baseSurfaceId = widgetId
+    ? `widget-${encodeURIComponent(messageId)}:${encodeURIComponent(widgetId)}`
+    : `widget-${messageId}`;
 
   return (
     <ThemeProvider theme={widgetTheme}>
-      <div className="min-w-0 space-y-3 overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-start [&_th]:font-medium [&_td]:border-b [&_td]:border-border/50 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:tabular-nums">
+      <div className="chatkit-widget-surface min-w-0 space-y-3 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-start [&_th]:font-medium [&_td]:border-b [&_td]:border-border/50 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:tabular-nums">
         {widgets.map((widget, index) => {
           const config = widget?.config;
           const messages = Array.isArray(widget?.messages)
@@ -39,10 +52,19 @@ export function WidgetMessage({
             : [];
           const surfaceId =
             widgets.length > 1 ? `${baseSurfaceId}-${index}` : baseSurfaceId;
+          const submission = findWidgetAgentAction(stream?.messages ?? [], {
+            messageId,
+            widgetId,
+            surfaceId,
+          });
 
           const surface =
             messages.length > 0 ? (
-              <FlatWidgetSurface messages={messages} surfaceId={surfaceId} />
+              <FlatWidgetSurface
+                messages={messages}
+                surfaceId={surfaceId}
+                submission={submission}
+              />
             ) : hasLegacySurface(config) ? (
               <SurfaceRenderer
                 surfaceId={surfaceId}
@@ -53,7 +75,7 @@ export function WidgetMessage({
           return (
             <div key={surfaceId} className="min-w-0">
               {readOnly ? (
-                <fieldset
+                <Fieldset
                   disabled
                   className="min-w-0"
                   onClickCapture={(event) => {
@@ -65,7 +87,20 @@ export function WidgetMessage({
                   }}
                 >
                   {surface}
-                </fieldset>
+                </Fieldset>
+              ) : widget.serverActions?.length ||
+                widget.agentActions?.length ? (
+                <WidgetActions
+                  messageId={messageId}
+                  widgetId={widgetId}
+                  widgetName={widget.name}
+                  surfaceId={surfaceId}
+                  serverActions={widget.serverActions}
+                  agentActions={widget.agentActions}
+                  requiresIdleThread={widget.requiresIdleThread}
+                >
+                  {surface}
+                </WidgetActions>
               ) : (
                 surface
               )}
@@ -81,23 +116,41 @@ export function WidgetMessage({
 function FlatWidgetSurface({
   messages,
   surfaceId,
+  submission,
 }: {
   messages: Types.ServerToClientMessage[];
   surfaceId: string;
+  submission: WidgetAgentAction | null;
 }) {
   const { processMessages } = useA2UI();
   const [renderError, setRenderError] = useState(false);
+  const appliedPayload = useRef<string | null>(null);
   const normalizedMessages = useMemo(
-    () => normalizeFlatWidgetMessages(messages, surfaceId),
-    [messages, surfaceId],
+    () =>
+      replayWidgetSubmission(
+        normalizeFlatWidgetMessages(messages, surfaceId),
+        submission,
+      ),
+    [messages, surfaceId, submission],
   );
 
   useEffect(() => {
+    return () => {
+      appliedPayload.current = null;
+      processMessages([{ deleteSurface: { surfaceId } }]);
+    };
+  }, [processMessages, surfaceId]);
+
+  useEffect(() => {
     if (normalizedMessages.length === 0) return;
+    // Replayed cards must not reset a form the user is already editing.
+    const payload = JSON.stringify(normalizedMessages);
+    if (payload === appliedPayload.current) return;
 
     setRenderError(false);
     try {
       processMessages(normalizedMessages);
+      appliedPayload.current = payload;
     } catch (error) {
       console.warn('[chatkit-ui] Failed to render widget surface', {
         surfaceId,
@@ -106,10 +159,6 @@ function FlatWidgetSurface({
       setRenderError(true);
       return;
     }
-
-    return () => {
-      processMessages([{ deleteSurface: { surfaceId } }]);
-    };
   }, [normalizedMessages, processMessages, surfaceId]);
 
   if (renderError) {

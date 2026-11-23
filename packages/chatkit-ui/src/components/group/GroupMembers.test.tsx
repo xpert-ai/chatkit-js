@@ -157,7 +157,7 @@ describe('group member management', () => {
   });
   it('searches scoped candidates, excludes existing members and invites the selected assistant', async () => {
     const { candidates, add } = setup();
-    fireEvent.click(screen.getByRole('tab', { name: 'group.assistant 2' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'group.assistant 2' }), { key: 'Enter' });
     fireEvent.click(
       screen.getByRole('combobox', { name: 'group.selectMember' }),
     );
@@ -207,7 +207,7 @@ describe('group member management', () => {
     candidates
       .mockResolvedValueOnce(rows)
       .mockResolvedValueOnce(rows.slice(50));
-    fireEvent.click(screen.getByRole('tab', { name: 'group.assistant 2' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'group.assistant 2' }), { key: 'Enter' });
     fireEvent.click(
       screen.getByRole('combobox', { name: 'group.selectMember' }),
     );
@@ -227,12 +227,12 @@ describe('group member management', () => {
   });
   it('clears a selected candidate when changing member type', async () => {
     const { add } = setup();
-    fireEvent.click(screen.getByRole('tab', { name: 'group.assistant 2' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'group.assistant 2' }), { key: 'Enter' });
     fireEvent.click(
       screen.getByRole('combobox', { name: 'group.selectMember' }),
     );
     fireEvent.click(await screen.findByRole('option', { name: 'Assistant F' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'group.person 2' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'group.person 2' }), { key: 'Enter' });
     expect(
       screen.getByRole('combobox', { name: 'group.selectMember' }),
     ).not.toHaveTextContent('Assistant F');
@@ -241,7 +241,7 @@ describe('group member management', () => {
   });
   it('allows wheel scrolling in the portaled candidate list inside a modal dialog', async () => {
     setup(group, true);
-    fireEvent.click(screen.getByRole('tab', { name: 'group.assistant 2' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'group.assistant 2' }), { key: 'Enter' });
     fireEvent.click(
       screen.getByRole('combobox', { name: 'group.selectMember' }),
     );

@@ -53,6 +53,7 @@ export const StreamSession = ({
   initialThread,
   runtimeKey,
   locale,
+  resumeContext,
   additionalContext,
   threadStateMode,
   hostIntegration,
@@ -70,6 +71,7 @@ export const StreamSession = ({
   initialThread?: string | null;
   runtimeKey?: string | number;
   locale?: string | null;
+  resumeContext?: Record<string, unknown>;
   additionalContext?: Record<string, unknown>;
   threadStateMode: 'url' | 'memory';
   hostIntegration: boolean;
@@ -125,6 +127,7 @@ export const StreamSession = ({
     ...runState,
     ...host,
     ...userInput,
+    resumeContext,
     assistantId,
     projectId,
   });

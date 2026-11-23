@@ -1,3 +1,4 @@
+import { PrimitiveThemeProvider } from '@xpert-ai/chatkit-primitives';
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -252,7 +253,7 @@ describe('Chat pet integration', () => {
     ['settings.open', 'settings.title'],
     ['history.threadHistory', 'history.title'],
   ])('opens %s from More and restores keyboard focus when the sheet closes', async (action, title) => {
-    render(<Chat options={baseOptions} />);
+    render(<PrimitiveThemeProvider labels={{ close: 'sheet.close' }}><Chat options={baseOptions} /></PrimitiveThemeProvider>);
     const more = screen.getByRole('button', { name: 'chat.moreActions' });
     expect(screen.queryByRole('button', { name: action })).not.toBeInTheDocument();
     fireEvent.keyDown(more, { key: 'Enter' });

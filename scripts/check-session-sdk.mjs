@@ -79,7 +79,7 @@ export async function checkSessionSdk(
     'function',
     'Installed SDK must authorize local drafts through ViewHostsClient.getLocalDraftBinding',
   );
-  for (const method of ['getControlView', 'getCapabilities'])
+  for (const method of ['getControlView', 'getCapabilities', 'submitWidgetAction'])
     assert.equal(
       typeof client.threads[method],
       'function',

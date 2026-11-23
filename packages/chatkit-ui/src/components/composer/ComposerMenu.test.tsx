@@ -1,3 +1,4 @@
+import { PrimitiveThemeProvider } from '@xpert-ai/chatkit-primitives';
 import {
   act,
   fireEvent,
@@ -176,7 +177,7 @@ describe('ComposerMenu', () => {
 
   it('keeps theme radius on the panel and expanded close button', () => {
     themeMock.radius = 'pill';
-    render(<ComposerMenu />);
+    render(<PrimitiveThemeProvider theme={{ radius: themeMock.radius }}><ComposerMenu /></PrimitiveThemeProvider>);
     openMenu();
 
     expect(

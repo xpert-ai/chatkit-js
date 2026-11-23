@@ -39,28 +39,10 @@ function formatStepDuration(durationMs: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export function useFrozenTimestamp(shouldFreeze: boolean) {
-  const [frozenAt, setFrozenAt] = React.useState<number | null>(() =>
-    shouldFreeze ? Date.now() : null,
-  );
-
-  React.useEffect(() => {
-    if (shouldFreeze) {
-      setFrozenAt((current) => current ?? Date.now());
-      return;
-    }
-
-    setFrozenAt(null);
-  }, [shouldFreeze]);
-
-  return frozenAt;
-}
-
 export function useToolStepDurationLabel(
   data: PartialStepData,
   options?: {
     status?: StepStatus;
-    fallbackEndedAt?: number | null;
     isPaused?: boolean;
   },
 ) {
@@ -69,9 +51,7 @@ export function useToolStepDurationLabel(
   const explicitEndedAt = parseStepDate(data.end_date);
   const status = options?.status ?? data.status;
   const isElapsing = status === 'running' && !options?.isPaused;
-  const endedAt =
-    explicitEndedAt ??
-    (!isElapsing ? (options?.fallbackEndedAt ?? null) : null);
+  const endedAt = explicitEndedAt;
 
   React.useEffect(() => {
     if (!isElapsing || createdAt === null || endedAt !== null) {
@@ -88,10 +68,9 @@ export function useToolStepDurationLabel(
     };
   }, [createdAt, endedAt, isElapsing]);
 
-  if (createdAt === null) return null;
-  // Without a completion timestamp, a terminal event has no known duration.
-  // Using the mount time would inflate historical durations on every refresh.
-  if (!isElapsing && endedAt === null) return null;
+  // Historical terminal steps without a receipt time have unknown duration.
+  // Mount time must never become a tool completion timestamp.
+  if (createdAt === null || (!isElapsing && endedAt === null)) return null;
 
   const durationMs = Math.max(0, (endedAt ?? durationNow) - createdAt);
   return formatStepDuration(durationMs);

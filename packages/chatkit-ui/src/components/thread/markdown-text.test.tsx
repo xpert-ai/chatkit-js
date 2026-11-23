@@ -350,7 +350,7 @@ describe('MarkdownText', () => {
 
     await waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Code' }), { key: 'Enter' });
 
     expect(screen.getByText('graph TD; A-->B;')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
@@ -364,7 +364,7 @@ describe('MarkdownText', () => {
 
     await waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Code' }), { key: 'Enter' });
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
 
     await waitFor(() =>

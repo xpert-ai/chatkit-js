@@ -309,3 +309,9 @@
   .chatkit-change-directory { max-width: 100%; font-size: 0.75rem; }
   .chatkit-change-directory:empty { display: none; }
 }
+
+/* Focus rings stay inside the message viewport; only wide content scrolls. */
+.chatkit-widget-surface { padding: 4px; overflow: visible; }
+.chatkit-widget-surface .a2ui-surface { min-width: 0; max-width: 100%; }
+.chatkit-widget-surface table { display: block; max-width: 100%; overflow-x: auto; }
+.chatkit-widget-surface input, .chatkit-widget-surface textarea { min-width: 0; }

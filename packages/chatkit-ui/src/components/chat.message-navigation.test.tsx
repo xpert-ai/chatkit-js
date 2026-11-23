@@ -324,6 +324,7 @@ describe('Chat message navigation', () => {
   });
 
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
     mocks.threads.splice(0);
     mocks.stream.threadId = 'thread-1';

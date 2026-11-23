@@ -608,6 +608,7 @@ export function setupChatTest() {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    localStorage.clear();
     mocks.theme = { radius: 'soft', density: 'normal' };
     globalThis.fetch = vi.fn(async () => new Response(null, { status: 404 }));
     mocks.stream.client.assistants.getResourceCommands

@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Slider as PrimitiveSlider, Label } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo, useCallback, useId, useState } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useDataBinding } from "../../hooks/useDataBinding.js";
@@ -61,34 +62,34 @@ export function Slider({ node, surfaceId }: SliderProps) {
   }, [theme]);
 
   const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = parseFloat(e.target.value);
+    (values: number[]) => {
+      const newValue = values[0] ?? minValue;
       setLocalValue(newValue);
 
       if (valuePath) {
         setValue(valuePath, newValue);
       }
     },
-    [valuePath, setValue]
+    [valuePath, setValue, minValue]
   );
 
   return (
-    <div className={cn(containerClasses)}>
+    <div className={cn("ck-field", containerClasses)}>
       {label && (
         <div className="flex items-center justify-between">
-          <label htmlFor={id} className={cn(labelClasses)}>
+          <Label htmlFor={id} className={cn(labelClasses)}>
             {label}
-          </label>
+          </Label>
           <span className="text-sm text-muted-foreground">{value}</span>
         </div>
       )}
-      <input
-        type="range"
+      <PrimitiveSlider
         id={id}
+        aria-label={label ?? undefined}
         min={minValue}
         max={maxValue}
-        value={value}
-        onChange={handleChange}
+        value={[value]}
+        onValueChange={handleChange}
         className={cn(elementClasses)}
       />
     </div>

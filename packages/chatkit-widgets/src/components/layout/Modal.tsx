@@ -14,101 +14,48 @@
  limitations under the License.
  */
 
-import React, { useState, useMemo, useCallback, type ReactNode } from "react";
-import { X } from "lucide-react";
-import { Types } from "@a2ui/lit/0.8";
-import { useTheme } from "../../context/ThemeContext.js";
-import { cn, classMapToString } from "../../lib/utils.js";
-import type { A2UIComponentProps } from "../../types/index.js";
+import React, { useMemo, useState, type ReactNode } from 'react';
+import { Types } from '@a2ui/lit/0.8';
+import { Dialog, DialogContent, DialogTitle, usePrimitiveLabels } from '@xpert-ai/chatkit-primitives';
+import { useTheme } from '../../context/ThemeContext.js';
+import { classMapToString } from '../../lib/utils.js';
+import type { A2UIComponentProps } from '../../types/index.js';
 
 interface ModalProps extends A2UIComponentProps {
-  node: Types.AnyComponentNode & { type: "Modal" };
+  node: Types.AnyComponentNode & { type: 'Modal' };
   renderChild?: (node: Types.AnyComponentNode) => ReactNode;
 }
 
 export function Modal({ node, renderChild }: ModalProps) {
   const theme = useTheme();
+  const labels = usePrimitiveLabels();
   const [isOpen, setIsOpen] = useState(false);
-
   const properties = node.properties as {
     entryPointChild?: Types.AnyComponentNode;
     contentChild?: Types.AnyComponentNode;
   };
-
-  const entryPointChild = properties.entryPointChild;
-  const contentChild = properties.contentChild;
-
-  const backdropClasses = useMemo(() => {
-    return classMapToString(theme.components.Modal.backdrop);
-  }, [theme]);
-
-  const elementClasses = useMemo(() => {
-    return classMapToString(theme.components.Modal.element);
-  }, [theme]);
-
-  const handleOpen = useCallback(() => {
-    setIsOpen(true);
-  }, []);
-
-  const handleClose = useCallback(() => {
-    setIsOpen(false);
-  }, []);
-
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) {
-        handleClose();
-      }
-    },
-    [handleClose]
-  );
-
-  React.useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        handleClose();
-      }
-    };
-
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [isOpen, handleClose]);
-
-  return (
-    <>
-      {entryPointChild && renderChild && (
-        <div onClick={handleOpen} className="cursor-pointer">
-          {renderChild(entryPointChild)}
-        </div>
-      )}
-
-      {isOpen && (
-        <>
-          <div
-            className={cn(backdropClasses)}
-            onClick={handleBackdropClick}
-            aria-hidden="true"
-          />
-
-          <div
-            role="dialog"
-            aria-modal="true"
-            className={cn(elementClasses)}
-          >
-            <button
-              onClick={handleClose}
-              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
-
-            <div className="mt-4">
-              {contentChild && renderChild ? renderChild(contentChild) : null}
-            </div>
-          </div>
-        </>
-      )}
-    </>
-  );
+  const { entryPointChild, contentChild } = properties;
+  const elementClasses = useMemo(() => classMapToString(theme.components.Modal.element), [theme]);
+  const triggerRef = React.useRef<HTMLDivElement>(null);
+  return <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    {entryPointChild && renderChild && <div
+      ref={triggerRef}
+      role={entryPointChild.type === 'Button' ? undefined : 'button'}
+      tabIndex={entryPointChild.type === 'Button' ? undefined : 0}
+      onClick={() => setIsOpen(true)}
+      onKeyDown={event => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault(); setIsOpen(true);
+        }
+      }}
+    >{renderChild(entryPointChild)}</div>}
+    <DialogContent overlayClassName={classMapToString(theme.components.Modal.backdrop)} className={elementClasses} aria-describedby={undefined}
+      onCloseAutoFocus={event => {
+        event.preventDefault();
+        (triggerRef.current?.querySelector<HTMLElement>('button') ?? triggerRef.current)?.focus();
+      }}>
+      <DialogTitle className="sr-only">{labels.dialog}</DialogTitle>
+      {contentChild && renderChild?.(contentChild)}
+    </DialogContent>
+  </Dialog>;
 }
