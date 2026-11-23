@@ -71,6 +71,9 @@ type RemoteViewFrameProps = {
 };
 
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
+// Mutations can include bounded document rendering. Keep ordinary reads short.
+const REMOTE_ACTION_TIMEOUT_MS = 120_000;
+const REMOTE_DOWNLOAD_TIMEOUT_MS = 300_000;
 
 export function RemoteViewFrame({
   renderProjectRecovery,
@@ -431,7 +434,11 @@ export function RemoteViewFrame({
       const timeout = window.setTimeout(() => {
         timedOut = true;
         controller.abort();
-      }, REMOTE_REQUEST_TIMEOUT_MS);
+      }, responseType === 'actionResult'
+        ? REMOTE_ACTION_TIMEOUT_MS
+        : responseType === 'fileAccessResult' && message.purpose === 'download'
+          ? REMOTE_DOWNLOAD_TIMEOUT_MS
+          : REMOTE_REQUEST_TIMEOUT_MS);
       try {
         const result = await operation(controller.signal);
         if (

@@ -64,3 +64,21 @@ if (typeof Blob.prototype.text !== 'function') {
     },
   });
 }
+
+// Undici may cache a Blob constructor from an earlier jsdom realm in a reused
+// test worker. Normalize Response blobs only when File/FileReader cannot consume
+// that constructor; keep real bytes and the current browser objects together.
+if (
+  typeof Response === 'function' &&
+  !((await new Response().blob()) instanceof Blob)
+) {
+  Object.defineProperty(Response.prototype, 'blob', {
+    configurable: true,
+    writable: true,
+    async value(this: Response): Promise<Blob> {
+      return new Blob([await this.arrayBuffer()], {
+        type: this.headers.get('Content-Type') ?? '',
+      });
+    },
+  });
+}

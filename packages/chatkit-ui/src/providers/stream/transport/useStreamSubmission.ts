@@ -283,6 +283,7 @@ export function useStreamSubmission({
       }
 
       let createdThreadId: string | null = null;
+      let conversationCreated = false;
       setIsLoading(true);
       isLoadingRef.current = true;
       try {
@@ -328,6 +329,7 @@ export function useStreamSubmission({
             },
           });
           nextThreadId = created.threadId;
+          conversationCreated = true;
           if (input && !isResumeRunInput(input)) {
             input = withPersistedRuntimeResources(
               input,
@@ -351,6 +353,7 @@ export function useStreamSubmission({
             },
           });
           nextThreadId = created.threadId;
+          conversationCreated = true;
           if (input && !isResumeRunInput(input)) {
             input = withPersistedRuntimeResources(
               input,
@@ -395,14 +398,18 @@ export function useStreamSubmission({
         }
         valuesRef.current = valuesBeforeSubmission;
         setValues(valuesBeforeSubmission);
-        updateConversationId(previousConversationId);
-        updateConnectorBindingIdsState(previousConnectorBindingIds);
-        activeThreadIdRef.current = previousActiveThreadId;
-        setThreadId(previousThreadId);
+        // A saved conversation is already visible to the host and preference writes.
+        // Keep it retryable when its first run is rejected; deleting it strands the host on a 404 route.
+        if (!conversationCreated) {
+          updateConversationId(previousConversationId);
+          updateConnectorBindingIdsState(previousConnectorBindingIds);
+          activeThreadIdRef.current = previousActiveThreadId;
+          setThreadId(previousThreadId);
+        }
         setError(normalizedError);
         isLoadingRef.current = false;
         setIsLoading(false);
-        if (createdThreadId) {
+        if (createdThreadId && !conversationCreated) {
           try {
             await client.threads.delete(createdThreadId);
           } catch (rollbackError) {
