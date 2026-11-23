@@ -304,10 +304,11 @@ export function getAssistantComposerProps({
           }}
         />
 
-        {showTerminateAction && canStopRun && (
+        {(isPauseActive || showTerminateAction) && canStopRun && (
           <Button
             type="button"
             variant="ghost"
+            title={t('threadControl.stopDescription')}
             className="h-[calc(2rem*var(--chat-density-scale,1))] px-[calc(.5rem*var(--chat-density-scale,1))] text-xs"
             disabled={isChangingBranch || isResumingRun || isStoppingRun}
             onClick={(event) => {
@@ -315,7 +316,7 @@ export function getAssistantComposerProps({
               void handleComposerRunControl('stop');
             }}
           >
-            {t('threadControl.terminate')}
+            {t('threadControl.stop')}
           </Button>
         )}
 
@@ -333,7 +334,7 @@ export function getAssistantComposerProps({
         (!hasComposerInput || hasPendingInteractiveRequest),
       stopDisabled: isChangingBranch || isStoppingRun || !canPauseRun,
       onStop: () => void handleComposerRunControl('pause'),
-      stopLabel: t('threadControl.stop'),
+      stopLabel: t('threadControl.pause'),
       showResume: isPauseActive && !hasComposerInput,
       resumeDisabled:
         Boolean(

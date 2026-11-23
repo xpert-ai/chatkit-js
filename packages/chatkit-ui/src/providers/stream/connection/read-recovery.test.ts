@@ -79,7 +79,7 @@ describe('recovery read scheduling', () => {
     await vi.advanceTimersByTimeAsync(600_000);
     expect(recovery.getSnapshot()).toBe('connected');
   });
-  it.each([401, 403, 404])(
+  it.each([400, 401, 403, 404])(
     'stops retries on HTTP %i and resets only for a new scope',
     async (status) => {
       const recovery = new ReadRecovery();
@@ -94,6 +94,12 @@ describe('recovery read scheduling', () => {
       expect(recovery.getSnapshot()).toBe('connected');
     },
   );
+  it('keeps a replacement connection stale until a server read succeeds', async () => {
+    const recovery = new ReadRecovery(true);
+    expect(recovery.getSnapshot()).toBe('reconnecting');
+    await recovery.read('control:thread', async () => ({ state: 'input_required' }));
+    expect(recovery.getSnapshot()).toBe('connected');
+  });
   it('aborts a queued retry on navigation and rejects a late response without changing the new scope', async () => {
     const recovery = new ReadRecovery();
     let finish!: (value: string) => void;

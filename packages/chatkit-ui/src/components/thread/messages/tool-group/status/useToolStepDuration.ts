@@ -89,6 +89,9 @@ export function useToolStepDurationLabel(
   }, [createdAt, endedAt, isElapsing]);
 
   if (createdAt === null) return null;
+  // Without a completion timestamp, a terminal event has no known duration.
+  // Using the mount time would inflate historical durations on every refresh.
+  if (!isElapsing && endedAt === null) return null;
 
   const durationMs = Math.max(0, (endedAt ?? durationNow) - createdAt);
   return formatStepDuration(durationMs);

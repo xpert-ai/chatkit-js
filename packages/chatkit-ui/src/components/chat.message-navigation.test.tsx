@@ -481,8 +481,8 @@ describe('Chat message navigation', () => {
     }]);
     mocks.stream.pauseRun.mockReturnValue(new Promise<void>((resolve) => { acceptPause = resolve; }));
     render(<Chat options={baseOptions} />);
-    const button = await screen.findByRole('button', { name: 'threadControl.stop' });
-    expect(screen.getAllByRole('button', { name: 'threadControl.stop' })).toHaveLength(1);
+    const button = await screen.findByRole('button', { name: 'threadControl.pause' });
+    expect(screen.getAllByRole('button', { name: 'threadControl.pause' })).toHaveLength(1);
     expect(button.closest('form')).not.toBeNull();
     expect(button).not.toBeDisabled();
     fireEvent.click(button);
@@ -506,20 +506,15 @@ describe('Chat message navigation', () => {
     await waitFor(() => expect(mocks.stream.resumeRun).toHaveBeenCalledExactlyOnceWith('source-run', 'pause-1'));
   });
 
-  it('shows one Stop button that pauses, then exposes only disabled resume while pausing', async () => {
+  it('uses the square button to pause without terminating the run', async () => {
     mocks.stream.isLoading = true;
     mocks.stream.activeRunId = 'source-run';
-    mocks.stream.pauseRun.mockReturnValue(new Promise(() => {}));
     render(<Chat options={baseOptions} />);
-    const stop = await screen.findByRole('button', { name: 'threadControl.stop' });
-    expect(screen.getAllByRole('button', { name: 'threadControl.stop' })).toHaveLength(1);
-    expect(stop.querySelector('.lucide-square')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'threadControl.pause' })).toBeNull();
-    fireEvent.click(stop);
-    expect(screen.queryByRole('button', { name: 'threadControl.stop' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'threadControl.resume' })).toBeDisabled();
-    expect(screen.getByText('threadControl.pausing')).toBeInTheDocument();
-    expect(mocks.stream.pauseRun).toHaveBeenCalledExactlyOnceWith('source-run');
+    const pause = await screen.findByRole('button', { name: 'threadControl.pause' });
+    expect(pause.querySelector('.lucide-square')).toBeInTheDocument();
+    expect(pause).toBeEnabled();
+    fireEvent.click(pause);
+    await waitFor(() => expect(mocks.stream.pauseRun).toHaveBeenCalledExactlyOnceWith('source-run'));
     expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
 
@@ -531,9 +526,9 @@ describe('Chat message navigation', () => {
     }]);
     mocks.stream.pauseRun.mockRejectedValueOnce(new Error('Pause failed'));
     render(<Chat options={baseOptions} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'threadControl.stop' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'threadControl.pause' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('connection.actionUnconfirmed');
-    const retry = screen.getByRole('button', { name: 'threadControl.stop' });
+    const retry = screen.getByRole('button', { name: 'threadControl.pause' });
     expect(retry.closest('form')).not.toBeNull();
     expect(retry).not.toBeDisabled();
     fireEvent.click(retry);
@@ -551,10 +546,10 @@ describe('Chat message navigation', () => {
     expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
 
-  it('keeps pause disabled until a run id exists and never cancels the run', () => {
+  it('keeps pause disabled until a run id exists', () => {
     mocks.stream.isLoading = true;
     render(<Chat options={baseOptions} />);
-    const pause = screen.getByRole('button', { name: 'threadControl.stop' });
+    const pause = screen.getByRole('button', { name: 'threadControl.pause' });
     expect(pause).toBeDisabled();
     fireEvent.click(pause);
     expect(mocks.stream.stop).not.toHaveBeenCalled();
@@ -565,7 +560,7 @@ describe('Chat message navigation', () => {
     mocks.stream.isLoading = true;
     mocks.stream.activeRunId = 'stream-run';
     render(<Chat options={baseOptions} />);
-    fireEvent.click(screen.getByRole('button', { name: 'threadControl.stop' }));
+    fireEvent.click(screen.getByRole('button', { name: 'threadControl.pause' }));
     await waitFor(() => expect(mocks.stream.pauseRun).toHaveBeenCalledExactlyOnceWith('stream-run'));
     expect(mocks.stream.stop).not.toHaveBeenCalled();
   });
@@ -795,7 +790,7 @@ describe('Chat message navigation', () => {
     const { rerender } = await editSecondMessage();
     await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalled());
     rerender(<Chat options={baseOptions} />);
-    const pause = await screen.findByRole('button', { name: 'threadControl.stop' });
+    const pause = await screen.findByRole('button', { name: 'threadControl.pause' });
     expect(pause).not.toBeDisabled();
     fireEvent.click(pause);
     await waitFor(() =>

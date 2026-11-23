@@ -845,46 +845,52 @@ describe('Chat start screen prompts', () => {
     });
   });
 
-  it('restores the draft, attachments, and references when first submission setup fails', async () => {
-    let rejectSubmission: ((reason: unknown) => void) | undefined;
-    mocks.stream.submit.mockImplementation(
-      () =>
-        new Promise<void>((_resolve, reject) => {
-          rejectSubmission = reject;
-        }),
-    );
-    const { container } = renderChat();
-    const fileInput = container.querySelector('input[type="file"]');
-    const file = new File(['content'], 'notice.pdf', {
-      type: 'application/pdf',
-    });
+  it.each([
+    'Thread creation failed',
+    '应用用户不能覆盖模型、环境或内部执行配置。',
+  ])(
+    'restores the draft, attachments, and references after rejection: %s',
+    async (reason) => {
+      let rejectSubmission: ((reason: unknown) => void) | undefined;
+      mocks.stream.submit.mockImplementation(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectSubmission = reject;
+          }),
+      );
+      const { container } = renderChat();
+      const fileInput = container.querySelector('input[type="file"]');
+      const file = new File(['content'], 'notice.pdf', {
+        type: 'application/pdf',
+      });
 
-    const textbox = screen.getByRole('textbox');
-    setComposerText(textbox, 'Review the notice');
-    fireEvent.change(fileInput as HTMLInputElement, {
-      target: { files: [file] },
-    });
-    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledWith(file));
-    await screen.findByText('notice.pdf');
-    pasteLongReference(textbox, 'quoted '.repeat(900));
-    expect(screen.getByText('Pasted text')).toBeInTheDocument();
+      const textbox = screen.getByRole('textbox');
+      setComposerText(textbox, 'Review the notice');
+      fireEvent.change(fileInput as HTMLInputElement, {
+        target: { files: [file] },
+      });
+      await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledWith(file));
+      await screen.findByText('notice.pdf');
+      pasteLongReference(textbox, 'quoted '.repeat(900));
+      expect(screen.getByText('Pasted text')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'send' }));
-    await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: 'send' }));
+      await waitFor(() => expect(mocks.stream.submit).toHaveBeenCalledOnce());
 
-    await act(async () => {
-      rejectSubmission?.(new Error('Thread creation failed'));
-      await Promise.resolve();
-    });
+      await act(async () => {
+        rejectSubmission?.(Object.assign(new Error(reason), { status: 400 }));
+        await Promise.resolve();
+      });
 
-    await waitFor(() =>
-      expect(screen.getByRole('textbox')).toHaveTextContent(
-        'Review the notice',
-      ),
-    );
-    expect(screen.getByText('notice.pdf')).toBeInTheDocument();
-    expect(screen.getByText('Pasted text')).toBeInTheDocument();
-  });
+      await waitFor(() =>
+        expect(screen.getByRole('textbox')).toHaveTextContent(
+          'Review the notice',
+        ),
+      );
+      expect(screen.getByText('notice.pdf')).toBeInTheDocument();
+      expect(screen.getByText('Pasted text')).toBeInTheDocument();
+    },
+  );
 
   it('edits a start-screen prompt into the composer without sending or clearing context', async () => {
     const { container } = renderChat();

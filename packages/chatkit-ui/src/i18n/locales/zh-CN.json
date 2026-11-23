@@ -443,6 +443,13 @@
         "retryUpload": "重新上传",
         "dropFilesTitle": "松手上传文件",
         "dropFilesHint": "文件会附加到你的下一条消息。",
+        "attachmentError": {
+            "uploadFailed": "上传失败，请重试。",
+            "parseFailed": "文件解析失败，请重新选择文件后重试。",
+            "storageFull": "存储空间已满。请在“套餐与用量”查看容量，增加存储额度或清理不再需要的文件后重试。",
+            "http": "上传失败（HTTP {{status}}），请稍后重试；如仍失败，请联系管理员。",
+            "remove": "移除 {{name}}"
+        },
         "attachmentStatus": {
             "uploaded": "已上传",
             "scanning": "扫描中",
@@ -1429,6 +1436,7 @@
         }
     },
     "connection": {
+        "retry": "重新连接",
         "reconnecting": "连接暂不可用，正在重连",
         "unavailable": "暂时无法获取更新，已有进度已保留",
         "actionUnconfirmed": "未能确认操作结果，请稍后重试"

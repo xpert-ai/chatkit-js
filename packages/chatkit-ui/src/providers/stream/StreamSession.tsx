@@ -407,6 +407,7 @@ export const StreamSession = ({
     readThreadControl,
     readThreadBranches,
     connectionState: connection.connectionState,
+    reconnect: connection.reconnect,
     client: credentials.client,
     authenticatedFetch: credentials.fetchWithClientSecretRefresh,
     refreshClientSecret: credentials.refreshClientSecret,

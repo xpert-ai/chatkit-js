@@ -443,6 +443,13 @@
         "retryUpload": "Retry upload",
         "dropFilesTitle": "Drop files to upload",
         "dropFilesHint": "They will be attached to your next message.",
+        "attachmentError": {
+            "uploadFailed": "Upload failed. Please retry.",
+            "parseFailed": "File parsing failed. Select the file again to retry.",
+            "storageFull": "Storage is full. Check Plans and usage, increase your storage allowance or remove unused files, then retry.",
+            "http": "Upload failed (HTTP {{status}}). Retry later or contact your administrator if it continues.",
+            "remove": "Remove {{name}}"
+        },
         "attachmentStatus": {
             "uploaded": "Uploaded",
             "scanning": "Scanning",
@@ -1429,6 +1436,7 @@
         }
     },
     "connection": {
+        "retry": "Reconnect",
         "reconnecting": "Connection interrupted. Reconnecting…",
         "unavailable": "Updates are temporarily unavailable. Your progress is preserved.",
         "actionUnconfirmed": "Could not confirm the action. Please try again shortly."

@@ -29,6 +29,79 @@ const optimistic = {
 describe('run admission and recovery', () => {
   setupHistoryTests();
 
+  it('keeps the saved first conversation and host route retryable after HTTP 400', async () => {
+    mocks.isParentAvailable = true;
+    render(provider());
+    await waitFor(() => expect(stream.isReady).toBe(true));
+    const onThreadResolved = vi.fn();
+    mocks.runStream.mockImplementation(async function* () {
+      yield* [];
+      throw rejected;
+    });
+    await act(async () => {
+      await expect(
+        stream.submit(
+          { input: { input: 'Review tender' } },
+          { ...optimistic, onThreadResolved },
+        ),
+      ).rejects.toBe(rejected);
+    });
+    expect(stream.threadId).toBe('new-thread');
+    expect(stream.conversationId).toBe('new-conversation');
+    expect(stream.error).toBe(rejected);
+    expect(stream.isLoading).toBe(false);
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
+    expect(onThreadResolved).toHaveBeenCalledWith(
+      'new-thread',
+      'new-conversation',
+    );
+    expect(mocks.sendEvent).toHaveBeenCalledWith('public_event', [
+      'thread.change',
+      { threadId: 'new-thread' },
+    ]);
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', [
+      'thread.change',
+      { threadId: null },
+    ]);
+    expect(stream.messages.some((message) => message.id === 'new-user')).toBe(
+      false,
+    );
+
+    mocks.runStream.mockImplementation(async function* () {});
+    await act(async () => {
+      await stream.submit({ input: { input: 'Retry tender' } });
+    });
+    expect(mocks.createThread).toHaveBeenCalledOnce();
+    expect(mocks.createConversation).toHaveBeenCalledOnce();
+    expect(mocks.runStream).toHaveBeenLastCalledWith(
+      'new-thread',
+      'assistant-1',
+      expect.anything(),
+    );
+    expect(stream.error).toBeNull();
+  });
+
+  it('still cleans up a thread whose conversation initialization failed without publishing it', async () => {
+    mocks.isParentAvailable = true;
+    mocks.createConversation.mockRejectedValue(rejected);
+    render(provider());
+    await waitFor(() => expect(stream.isReady).toBe(true));
+    await act(async () => {
+      await expect(
+        stream.submit({ input: { input: 'Review tender' } }, optimistic),
+      ).rejects.toBe(rejected);
+    });
+    expect(stream.threadId).toBeNull();
+    expect(stream.conversationId).toBeNull();
+    expect(stream.error).toBe(rejected);
+    expect(mocks.deleteThread).toHaveBeenCalledWith('new-thread');
+    expect(mocks.runStream).not.toHaveBeenCalled();
+    expect(mocks.sendEvent).not.toHaveBeenCalledWith('public_event', [
+      'thread.change',
+      { threadId: 'new-thread' },
+    ]);
+  });
+
   it.each([
     { label: 'older successful assistant', items: [oldAssistant] },
     { label: 'no assistant', items: [] },

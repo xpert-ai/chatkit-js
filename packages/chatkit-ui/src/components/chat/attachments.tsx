@@ -3,6 +3,7 @@ import { FileText, Loader2, RefreshCw, X } from 'lucide-react';
 
 import { cn, createMessageId } from '../../lib/utils';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
+import { attachmentErrorMessage } from './attachment-error';
 import type {
   AgentFile,
   AgentFileStatus,
@@ -184,15 +185,14 @@ export const ChatAttachments = React.forwardRef<
               ? {
                   ...item,
                   status: 'error' as const,
-                  error:
-                    error instanceof Error ? error.message : 'Upload failed',
+                  error: attachmentErrorMessage(error, t),
                 }
               : item,
           ),
         );
       }
     },
-    [uploadFile],
+    [uploadFile, t],
   );
 
   const queueFiles = React.useCallback(
@@ -450,67 +450,98 @@ export const ChatAttachments = React.forwardRef<
           const parseFailed =
             item.status === 'success' && parseStatus === 'failed';
 
+          const errorMessage =
+            item.status === 'error' || parseFailed
+              ? item.error ||
+                t(
+                  parseFailed
+                    ? 'chat.attachmentError.parseFailed'
+                    : 'chat.attachmentError.uploadFailed',
+                )
+              : undefined;
+
           return (
             <div
               key={item.localId}
               className={cn(
-                'flex items-center gap-2 rounded-chat-item px-2 py-1 text-sm',
+                'flex max-w-full flex-col gap-1 rounded-chat-item px-2 py-1 text-sm',
                 item.status === 'error' || parseFailed
                   ? 'bg-destructive/10 border border-destructive/30'
                   : 'bg-muted',
               )}
             >
-              {(item.status === 'uploading' || isParsing) && (
-                <Loader2
-                  size={14}
-                  className="animate-spin text-muted-foreground"
-                />
-              )}
-              {item.status === 'success' && !isParsing && !parseFailed && (
-                <FileText size={14} className="text-muted-foreground" />
-              )}
-              {(item.status === 'error' || parseFailed) && (
-                <FileText size={14} className="text-destructive" />
-              )}
-
-              <span
-                className={cn(
-                  'max-w-30 truncate',
-                  (item.status === 'error' || parseFailed) &&
-                    'text-destructive',
-                )}
+              <div
+                className="flex items-center gap-2"
+                aria-describedby={
+                  errorMessage ? `attachment-error-${item.localId}` : undefined
+                }
               >
-                {item.file.name}
-              </span>
-              {item.status === 'success' && parseStatus && (
-                <span className="text-xs text-muted-foreground">
-                  {t(`chat.attachmentStatus.${parseStatus}`)}
-                </span>
-              )}
+                {(item.status === 'uploading' || isParsing) && (
+                  <Loader2
+                    size={14}
+                    className="animate-spin text-muted-foreground"
+                  />
+                )}
+                {item.status === 'success' && !isParsing && !parseFailed && (
+                  <FileText size={14} className="text-muted-foreground" />
+                )}
+                {(item.status === 'error' || parseFailed) && (
+                  <FileText size={14} className="text-destructive" />
+                )}
 
-              {item.status === 'error' && (
+                <span
+                  title={item.file.name}
+                  className={cn(
+                    'max-w-30 truncate',
+                    (item.status === 'error' || parseFailed) &&
+                      'text-destructive',
+                  )}
+                >
+                  {item.file.name}
+                </span>
+                {item.status === 'success' && parseStatus && (
+                  <span className="text-xs text-muted-foreground">
+                    {t(`chat.attachmentStatus.${parseStatus}`)}
+                  </span>
+                )}
+
+                {item.status === 'error' && (
+                  <button
+                    type="button"
+                    onClick={() => retryUpload(item.localId)}
+                    className="ml-1 rounded-chat-item p-0.5 text-destructive hover:bg-destructive/20"
+                    title={retryUploadLabel}
+                    aria-label={retryUploadLabel}
+                  >
+                    <RefreshCw size={12} />
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => retryUpload(item.localId)}
-                  className="ml-1 rounded-chat-item p-0.5 text-destructive hover:bg-destructive/20"
-                  title={retryUploadLabel}
+                  onClick={() => removeAttachment(item.localId)}
+                  aria-label={t('chat.attachmentError.remove', {
+                    name: item.file.name,
+                  })}
+                  className={cn(
+                    'ml-1 rounded-chat-item p-0.5',
+                    item.status === 'error'
+                      ? 'text-destructive hover:bg-destructive/20'
+                      : 'hover:bg-muted-foreground/20',
+                  )}
                 >
-                  <RefreshCw size={12} />
+                  <X size={12} />
                 </button>
+              </div>
+              {errorMessage && (
+                <p
+                  id={`attachment-error-${item.localId}`}
+                  role="alert"
+                  className="max-w-full whitespace-normal break-words text-xs text-destructive"
+                >
+                  {errorMessage}
+                </p>
               )}
-
-              <button
-                type="button"
-                onClick={() => removeAttachment(item.localId)}
-                className={cn(
-                  'ml-1 rounded-chat-item p-0.5',
-                  item.status === 'error'
-                    ? 'text-destructive hover:bg-destructive/20'
-                    : 'hover:bg-muted-foreground/20',
-                )}
-              >
-                <X size={12} />
-              </button>
             </div>
           );
         })}

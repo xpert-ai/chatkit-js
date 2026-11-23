@@ -45,6 +45,9 @@ export class ReadRecovery {
   private nextReadAt = 0;
   private blocked = false;
   private state: ConnectionState = 'connected';
+  constructor(private connecting = false) {
+    if (connecting) this.state = 'reconnecting';
+  }
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -66,6 +69,7 @@ export class ReadRecovery {
     this.pending.clear();
     this.nextReadAt = 0;
     this.blocked = false;
+    this.connecting = false;
     this.publish();
   }
   activate() {
@@ -78,7 +82,7 @@ export class ReadRecovery {
     const next =
       this.blocked || [...this.failures.values()].some((n) => n >= 3)
         ? 'unavailable'
-        : this.failures.size
+        : this.connecting || this.failures.size
           ? 'reconnecting'
           : 'connected';
     if (this.state === next) return;
@@ -87,6 +91,7 @@ export class ReadRecovery {
   }
   succeeded(key: string) {
     if (this.stopped) return;
+    this.connecting = false;
     this.failures.delete(key);
     if (!this.failures.size) this.nextReadAt = 0;
     this.publish();

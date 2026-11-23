@@ -159,6 +159,8 @@ export type StreamContextType = {
   ) => Promise<import('@xpert-ai/xpert-sdk').ThreadControlView>;
   readThreadBranches?: () => Promise<import('@xpert-ai/xpert-sdk').Thread[]>;
   connectionState?: ConnectionState;
+  /** Restart status subscriptions without submitting or resuming execution. */
+  reconnect?: () => void;
   isLoading: boolean;
   /** Raw thread interruption, including cancellation; does not imply work is running or will resume. */
   isThreadInterrupted?: boolean;

@@ -739,7 +739,10 @@ export function useAssistantConversation({
     },
     composerBefore: (
       <>
-        <ConnectionStatus state={session.stream.connectionState} />
+        <ConnectionStatus
+          state={session.stream.connectionState}
+          onReconnect={session.stream.reconnect}
+        />
         {runControl.runControlError?.threadId === session.stream.threadId && (
           <p role="alert" className="text-xs text-destructive">
             {runControl.runControlError.message}

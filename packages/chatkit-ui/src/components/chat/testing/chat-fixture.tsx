@@ -301,15 +301,26 @@ vi.mock('../../composer/SendButton', () => ({
     disabled,
     showStop,
     onStop,
+    showResume,
+    resumeDisabled,
+    onResume,
   }: {
     disabled?: boolean;
     showStop?: boolean;
     onStop?: () => void;
+    showResume?: boolean;
+    resumeDisabled?: boolean;
+    onResume?: () => void;
   }) => (
     <>
       {showStop && (
         <button type="button" onClick={onStop}>
           stop
+        </button>
+      )}
+      {showResume && (
+        <button type="button" disabled={resumeDisabled} onClick={onResume}>
+          resume
         </button>
       )}
       <button type="submit" disabled={disabled}>
