@@ -17,7 +17,9 @@ type WorkbenchShellTabsOptions = {
   native: ReturnType<typeof useNativeWorkbench>;
   externalViewOpen: boolean;
   sideChats: SideChatSession[];
+  onCloseSideChat: (id: string) => void;
   previews: ReturnType<typeof useWorkbenchPages>['previews'];
+  storePreview: ReturnType<typeof useWorkbenchPages>['openPreview'];
   scopedViews: ReturnType<typeof useWorkbenchViewTabs>['scopedViews'];
   newTabs: ReturnType<typeof useWorkbenchPages>['newTabs'];
   startPageScope: string;
@@ -36,7 +38,9 @@ export function useWorkbenchShellTabs({
   native,
   externalViewOpen,
   sideChats,
+  onCloseSideChat,
   previews,
+  storePreview,
   scopedViews,
   newTabs,
   startPageScope,
@@ -82,6 +86,15 @@ export function useWorkbenchShellTabs({
     setActiveViewKey(key);
     setOpen(true);
   }, [addNewTab, setActiveViewKey, setOpen]);
+
+  const openPreview = React.useCallback(
+    (preview: Parameters<typeof storePreview>[0]) => {
+      storePreview(preview);
+      setActiveViewKey(preview.key);
+      setOpen(true);
+    },
+    [storePreview, setActiveViewKey, setOpen],
+  );
 
   // Wait for scope restoration and manifests before choosing the empty-panel fallback.
   React.useEffect(() => {
@@ -142,5 +155,21 @@ export function useWorkbenchShellTabs({
     },
     [tabKeys],
   );
-  return { tabKeys, adjacentTab, replaceNewTab, insertTabBefore, createNewTab };
+  const closeSideChatTab = React.useCallback(
+    (id: string) => {
+      const key = sideChatViewKey(id);
+      onCloseSideChat(id);
+      if (activeViewKey === key) setActiveViewKey(adjacentTab(key));
+    },
+    [activeViewKey, adjacentTab, onCloseSideChat, setActiveViewKey],
+  );
+  return {
+    tabKeys,
+    adjacentTab,
+    replaceNewTab,
+    insertTabBefore,
+    createNewTab,
+    openPreview,
+    closeSideChatTab,
+  };
 }

@@ -297,45 +297,44 @@ function WorkbenchContent({
   React.useEffect(() => {
     if (open && restoring) completeRestoration();
   }, [open, restoring, completeRestoration]);
-  const openPreview = React.useCallback(
-    (preview: WorkbenchPreview) => {
-      storePreview(preview);
-      setActiveViewKey(preview.key);
-      setOpen(true);
-    },
-    [storePreview, setOpen],
-  );
-
   const selectTab = (key: string) => {
     if (views.some((view) => view.key === key)) selectView(key);
     else setActiveViewKey(key);
     visitPreview(key);
   };
 
-  const { tabKeys, adjacentTab, replaceNewTab, createNewTab } =
-    useWorkbenchShellTabs({
-      native,
-      externalViewOpen,
-      sideChats: sideChats.sessions,
-      previews,
-      scopedViews,
-      newTabs,
-      startPageScope,
-      mainChatInWorkbench,
-      activeViewKey,
-      setActiveViewKey,
-      loading,
-      views,
-      closeNewTab,
-      addNewTab,
-      setOpen,
-      fallbackReady:
-        open &&
-        !initialLoading &&
-        !loading &&
-        !error &&
-        (!sideChatEnabled || !stream.conversationId || sideChats.ready),
-    });
+  const {
+    tabKeys,
+    adjacentTab,
+    replaceNewTab,
+    createNewTab,
+    openPreview,
+    closeSideChatTab,
+  } = useWorkbenchShellTabs({
+    native,
+    externalViewOpen,
+    sideChats: sideChats.sessions,
+    onCloseSideChat: sideChats.closeSideChat,
+    previews,
+    storePreview,
+    scopedViews,
+    newTabs,
+    startPageScope,
+    mainChatInWorkbench,
+    activeViewKey,
+    setActiveViewKey,
+    loading,
+    views,
+    closeNewTab,
+    addNewTab,
+    setOpen,
+    fallbackReady:
+      open &&
+      !initialLoading &&
+      !loading &&
+      !error &&
+      (!sideChatEnabled || !stream.conversationId || sideChats.ready),
+  });
 
   React.useEffect(() => {
     const element = rootRef.current;
@@ -712,7 +711,7 @@ function WorkbenchContent({
       },
       sideChatEnabled,
       askInSideChat,
-      sideChats,
+      sideChats: { ...sideChats, closeSideChat: closeSideChatTab },
       externalAssistantsEnabled,
       openExternalAssistant,
       openGroupAssistant: stream.group
@@ -784,6 +783,7 @@ function WorkbenchContent({
       t,
       askInSideChat,
       sideChats,
+      closeSideChatTab,
       externalAssistantsEnabled,
       openExternalAssistant,
       hasExternalRuns,
@@ -937,11 +937,7 @@ function WorkbenchContent({
       startPageLoading={showLoading}
       expanded={expanded}
       onClose={closeWorkbench}
-      onRequestCloseSideChat={(id) => {
-        const key = sideChatViewKey(id);
-        sideChats.closeSideChat(id);
-        if (activeViewKey === key) setActiveViewKey(adjacentTab(key));
-      }}
+      onRequestCloseSideChat={closeSideChatTab}
       onToggleExpanded={() => setExpanded((current) => !current)}
       onReload={reload}
       onSelect={selectTab}

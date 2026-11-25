@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 import type { ChatKitTheme } from '@xpert-ai/chatkit-types';
 import { ThemeProvider } from '../../src/providers/Theme';
 import { WorkbenchStartPage } from '../../src/workbench/start-page/WorkbenchStartPage';
-import { SideChatMenuButton } from '../../src/workbench/side-chat/SideChatMenuButton';
+import { TaskSummaryTrigger } from '../../src/components/task-summary/TaskSummary';
+import {
+  collectLiveTaskSummary,
+  mergeTaskSummary,
+} from '../../src/lib/task-summary';
 import {
   WorkbenchContext,
   disabledWorkbenchContext,
@@ -15,6 +19,40 @@ import '../../src/i18n';
 import '../../src/index.css';
 
 // Synthetic records only. This preview never calls platform or Assistant APIs.
+const summary = mergeTaskSummary(
+  null,
+  collectLiveTaskSummary({
+    messages: [
+      {
+        id: 'example-message',
+        taskSummary: {
+          version: 1,
+          outputs: [
+            {
+              id: 'example-output',
+              kind: 'site',
+              title: 'Workbench 交互预览',
+              origin: 'integration',
+              resource: {
+                type: 'url',
+                url: 'https://example.com/workbench',
+              },
+            },
+          ],
+          sources: [
+            {
+              id: 'example-source',
+              kind: 'web_page',
+              title: 'Xpert AI 文档',
+              resource: { type: 'browser', url: 'https://example.com/docs' },
+            },
+          ],
+        },
+      },
+    ],
+  }),
+);
+
 function Preview() {
   const [dark, setDark] = React.useState(false);
   const [radius, setRadius] = React.useState<ChatKitTheme['radius']>('round');
@@ -146,7 +184,17 @@ function Preview() {
           >
             <div className="flex items-center gap-2 border-b p-2">
               <span className="mr-2 shrink-0 text-sm">示例 Conversation</span>
-              <SideChatMenuButton chats={chats} />
+              <TaskSummaryTrigger
+                summary={summary}
+                sideChats={chats}
+                onRetryHistory={() => {}}
+                onLoadSection={() => {}}
+                onNavigateMessage={() => setNotice('已选择示例消息')}
+                onFocusComposer={() => setNotice('已选择创建输出内容')}
+                onOpenResource={(_resource, _messageId, title) =>
+                  setNotice(`已选择：${title}`)
+                }
+              />
               <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
                 {sessions
                   .filter((s) => s.opened)

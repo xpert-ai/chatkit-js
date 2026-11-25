@@ -682,8 +682,9 @@ export type ChatKitOptions = {
   goal?: ChatKitGoalAdapter;
 
   /**
-   * Optional compact thread summary surface. Disabled by default so existing
-   * integrations keep their current layout until they opt in.
+   * Compact thread summary surface, including the Workbench side-chat list.
+   * Enabled by default when Workbench side chats are available; otherwise opt-in.
+   * Set enabled to false to explicitly hide the summary surface.
    */
   taskSummary?: {
     enabled?: boolean;

@@ -212,6 +212,11 @@ describe('WorkbenchShell', () => {
           >
             Reopen first
           </button>
+          <button
+            onClick={() => workbench.sideChats?.closeSideChat('side-thread-1')}
+          >
+            Collapse first from summary
+          </button>
         </>
       );
     }
@@ -243,5 +248,17 @@ describe('WorkbenchShell', () => {
     ).toHaveAttribute('aria-selected', 'true');
     expect(mocks.copyThread).toHaveBeenCalledTimes(2);
     expect(mocks.sideChatMounts).toBe(2);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Collapse first from summary' }),
+    );
+    expect(
+      screen.queryByRole('tab', { name: 'First topic' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Second topic' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(mocks.sideChatUnmounts).toBe(0);
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
   });
 });

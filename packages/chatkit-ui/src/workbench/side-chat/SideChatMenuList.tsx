@@ -1,16 +1,17 @@
 import * as React from 'react';
-import { Loader2, MessageSquare, Plus, Pencil } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import type { useWorkbenchSideChat } from '../shell/side-chat/useWorkbenchSideChat';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { SideChatSummaryRow } from './SideChatSummaryRow';
 
 export function SideChatMenuList({
   chats,
   onOpened,
 }: {
   chats: ReturnType<typeof useWorkbenchSideChat>;
-  onOpened: () => void;
+  onOpened?: () => void;
 }) {
   const { t } = useChatkitTranslation();
   const [editing, setEditing] = React.useState<string | null>(null);
@@ -21,23 +22,23 @@ export function SideChatMenuList({
     setError('');
     try {
       await action();
-      onOpened();
+      onOpened?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
-  const item =
-    'flex min-w-0 items-center gap-2 rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring';
   return (
     <section
       aria-label={t('workbench.sideChat.list')}
-      className="border-b border-border/60 pb-2 mb-2"
+      className="chatkit-summary-section"
     >
-      <div className="flex items-center justify-between px-2 py-1 text-sm text-muted-foreground">
-        <span>{t('workbench.sideChat.list')}</span>
+      <div className="group/side-chat-heading chatkit-summary-heading flex items-center justify-between text-muted-foreground">
+        <h3 className="text-sm font-medium">{t('workbench.sideChat.list')}</h3>
         <Button
           size="icon"
           variant="ghost"
+          className="size-[max(24px,calc(1.75rem*var(--chat-density-scale,1)))] rounded-chat-item opacity-0 transition-opacity group-hover/side-chat-heading:opacity-100 focus-visible:opacity-100 data-[creating=true]:opacity-100 [@media(hover:none)]:opacity-100"
+          data-creating={chats.opening}
           disabled={chats.opening}
           aria-label={t('workbench.sideChat.create')}
           onClick={() => void run(chats.askInSideChat)}
@@ -49,44 +50,21 @@ export function SideChatMenuList({
           )}
         </Button>
       </div>
-      <div className="max-h-64 overflow-y-auto">
+      <div className="chatkit-summary-items max-h-64 overflow-y-auto">
         {chats.sessions.map((session) => (
-          <div key={session.threadId} className="flex items-center">
-            <button
-              type="button"
-              className={`${item} flex-1 ${chats.activeId === session.threadId ? 'bg-accent text-accent-foreground' : ''}`}
-              aria-current={
-                chats.activeId === session.threadId ? 'true' : undefined
-              }
-              title={session.title}
-              onClick={() =>
-                void run(() => chats.openSideChat(session.threadId))
-              }
-            >
-              {session.status === 'busy' ? (
-                <Loader2 size={16} className="shrink-0 animate-spin" />
-              ) : (
-                <MessageSquare size={16} className="shrink-0" />
-              )}
-              <span className="truncate flex-1 text-left">{session.title}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {t(`workbench.sideChat.${session.status ?? 'idle'}`)}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={item}
-              aria-label={t('workbench.sideChat.rename', {
-                title: session.title,
-              })}
-              onClick={() => {
-                setEditing(session.threadId);
-                setTitle(session.title);
-              }}
-            >
-              <Pencil size={14} />
-            </button>
-          </div>
+          <SideChatSummaryRow
+            key={session.threadId}
+            session={session}
+            active={chats.activeId === session.threadId}
+            creating={chats.opening}
+            onOpen={() => void run(() => chats.openSideChat(session.threadId))}
+            onClose={() => chats.closeSideChat(session.threadId)}
+            onRename={() => {
+              setEditing(session.threadId);
+              setTitle(session.title);
+            }}
+            onCreate={() => void run(chats.askInSideChat)}
+          />
         ))}
         {!chats.sessions.length && (
           <p className="px-2 py-2 text-xs text-muted-foreground">

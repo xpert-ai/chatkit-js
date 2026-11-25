@@ -1,4 +1,3 @@
-import { SideChatMenuButton } from './side-chat/SideChatMenuButton';
 import type { useWorkbenchSideChat } from './shell/side-chat/useWorkbenchSideChat';
 import * as React from 'react';
 import type {
@@ -110,15 +109,8 @@ export function WorkbenchToggleButton() {
   );
 
   if (viewMenu && (workbench.available || workbench.sideChatEnabled)) {
-    return (
-      <>
-        {!workbench.open && (
-          <WorkbenchViewMenu {...viewMenu}>{button}</WorkbenchViewMenu>
-        )}
-        {workbench.sideChatEnabled && workbench.sideChats && (
-          <SideChatMenuButton chats={workbench.sideChats} />
-        )}
-      </>
+    return workbench.open ? null : (
+      <WorkbenchViewMenu {...viewMenu}>{button}</WorkbenchViewMenu>
     );
   }
 
