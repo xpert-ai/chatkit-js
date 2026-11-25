@@ -43,6 +43,7 @@ export function writeSideChatLayout(
 export function sideChatRecords(
   threads: Thread[],
   fallbackTitle: string,
+  pendingTitles?: ReadonlyMap<string, string>,
 ): SideChatSession[] {
   return threads.flatMap((thread) => {
     const parsed = metadata.safeParse(thread.metadata);
@@ -51,7 +52,10 @@ export function sideChatRecords(
       {
         threadId: thread.thread_id,
         sourceThreadId: parsed.data.parent_thread_id ?? '',
-        title: parsed.data.title?.trim() || fallbackTitle,
+        title:
+          parsed.data.title?.trim() ||
+          pendingTitles?.get(thread.thread_id) ||
+          fallbackTitle,
         status: thread.status,
         updatedAt: thread.updated_at,
       },

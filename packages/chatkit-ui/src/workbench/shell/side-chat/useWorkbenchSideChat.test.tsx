@@ -13,7 +13,10 @@ function setup(records: ReturnType<typeof record>[] = []) {
   let index = 0;
   const copy = vi
     .fn()
-    .mockImplementation(async () => ({ thread_id: `side-${++index}` }));
+    .mockImplementation(async () => ({
+      thread_id: `side-${++index}`,
+      metadata: { titleSource: 'default' },
+    }));
   const listThreads = vi.fn().mockResolvedValue(records);
   const update = vi.fn().mockResolvedValue({});
   const stream = {
@@ -164,17 +167,50 @@ it('clears mounted side chats when access is revoked', async () => {
   expect(f.result.current.sessions).toEqual([]);
 });
 
-it('does not retry a successful fork when saving its title fails', async () => {
+it('keeps a temporary label without treating creation as a manual rename', async () => {
   const f = setup();
   await waitFor(() => expect(f.result.current.ready).toBe(true));
-  f.update.mockRejectedValue(new Error('Title could not be saved'));
   await act(() => f.result.current.askInSideChat());
-  await waitFor(() =>
-    expect(f.result.current.error).toBe('Title could not be saved'),
-  );
-  expect(f.result.current.sessions).toHaveLength(1);
-  f.update.mockResolvedValue({});
-  await act(() => f.result.current.renameSideChat('side-1', 'Recovered'));
-  expect(f.result.current.sessions[0].title).toBe('Recovered');
+  expect(f.update).not.toHaveBeenCalled();
+  expect(f.result.current.sessions[0].title).toBe('Side chat 1');
+  await act(() => f.result.current.renameSideChat('side-1', 'My chosen title'));
+  expect(f.update).toHaveBeenCalledWith('side-1', {
+    metadata: { title: 'My chosen title' },
+  });
   expect(f.copy).toHaveBeenCalledOnce();
+});
+
+it('refreshes the generated title on completion and preserves the active tab', async () => {
+  const f = setup([record('side-1')]);
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  await act(() => f.result.current.openSideChat('side-1'));
+  const active = f.result.current.activeViewKey;
+  act(() => f.result.current.updateStatus('side-1', 'busy'));
+  f.listThreads.mockResolvedValue([
+    {
+      ...record('side-1'),
+      metadata: {
+        ...record('side-1').metadata,
+        title: 'Compare deployment options',
+      },
+    },
+  ]);
+  act(() => f.result.current.updateStatus('side-1', 'idle'));
+  await waitFor(() =>
+    expect(f.result.current.sessions[0].title).toBe(
+      'Compare deployment options',
+    ),
+  );
+  expect(f.result.current.activeViewKey).toBe(active);
+  expect(f.result.current.sessions[0].opened).toBe(true);
+});
+
+it('keeps labels working on servers without automatic-title support', async () => {
+  const f = setup();
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  f.copy.mockResolvedValueOnce({ thread_id: 'legacy', metadata: {} });
+  await act(() => f.result.current.askInSideChat());
+  expect(f.update).toHaveBeenCalledWith('legacy', {
+    metadata: { title: 'Side chat 1' },
+  });
 });

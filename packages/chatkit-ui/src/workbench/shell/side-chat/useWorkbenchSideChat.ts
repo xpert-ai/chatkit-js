@@ -31,6 +31,7 @@ type State = {
 type Attempt = {
   requestId: string;
   pending?: Promise<string>;
+  automaticTitle?: boolean;
   references: ChatKitReference[];
 };
 
@@ -115,7 +116,13 @@ export function useWorkbenchSideChat({
           conversationId,
           { signal: controller.signal },
         );
-        const records = sideChatRecords(threads, t('workbench.sideChat.title'));
+        const records = sideChatRecords(
+          threads,
+          t('workbench.sideChat.title'),
+          new Map(
+            current.current.map((session) => [session.threadId, session.title]),
+          ),
+        );
         if (controller.signal.aborted) return;
         setState((old) => {
           const previous = old.scope === scope ? old.sessions : [];
@@ -284,27 +291,31 @@ export function useWorkbenchSideChat({
           mode: 'latest-sealed-reply',
           requestId: request.requestId,
         })
-        .then((thread) => thread.thread_id);
+        .then((thread) => {
+          request.automaticTitle = thread.metadata?.titleSource === 'default';
+          return thread.thread_id;
+        });
       try {
         const id = await request.pending;
         attempts.current.delete(intentKey);
-        // The fork has succeeded: a label failure must never create another child.
-        void stream.client.threads
-          .update(id, { metadata: { title } })
-          .catch((error: unknown) => {
-            if (alive.current && generation.current === context)
-              setState((old) =>
-                old.scope === scope
-                  ? {
-                      ...old,
-                      error:
-                        error instanceof Error
-                          ? error.message
-                          : t('workbench.loadFailed'),
-                    }
-                  : old,
-              );
-          });
+        // Older servers have no automatic-title ownership; retain their existing label behavior.
+        if (!request.automaticTitle)
+          void stream.client.threads
+            .update(id, { metadata: { title } })
+            .catch((error: unknown) => {
+              if (alive.current && generation.current === context)
+                setState((old) =>
+                  old.scope === scope
+                    ? {
+                        ...old,
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : t('workbench.loadFailed'),
+                      }
+                    : old,
+                );
+            });
         if (!alive.current || generation.current !== context) return;
         setState((old) => ({
           scope,
@@ -385,6 +396,8 @@ export function useWorkbenchSideChat({
       status: SideChatSession['status'],
       selectedThreadId?: string | null,
     ) => {
+      const previous = current.current.find((s) => s.threadId === id)?.status;
+      if (status === 'idle' && previous && previous !== 'idle') reload();
       update((list) =>
         list.map((s) =>
           s.threadId === id && s.status !== status ? { ...s, status } : s,
