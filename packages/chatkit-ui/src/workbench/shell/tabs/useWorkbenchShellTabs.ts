@@ -11,16 +11,12 @@ import { useWorkbenchTabOrder } from '../../useWorkbenchTabOrder';
 import type { useWorkbenchViews } from '../../useWorkbenchViews';
 import type { useWorkbenchViewTabs } from '../../useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY } from '../../WorkbenchPanel';
-import {
-  SIDE_CHAT_VIEW_KEY,
-  type SideChatSession,
-} from '../../side-chat/types';
+import { sideChatViewKey, type SideChatSession } from '../../side-chat/types';
 
 type WorkbenchShellTabsOptions = {
   native: ReturnType<typeof useNativeWorkbench>;
   externalViewOpen: boolean;
-  sideChat: SideChatSession | null;
-  sideChatOpening: boolean;
+  sideChats: SideChatSession[];
   previews: ReturnType<typeof useWorkbenchPages>['previews'];
   scopedViews: ReturnType<typeof useWorkbenchViewTabs>['scopedViews'];
   newTabs: ReturnType<typeof useWorkbenchPages>['newTabs'];
@@ -39,8 +35,7 @@ type WorkbenchShellTabsOptions = {
 export function useWorkbenchShellTabs({
   native,
   externalViewOpen,
-  sideChat,
-  sideChatOpening,
+  sideChats,
   previews,
   scopedViews,
   newTabs,
@@ -59,20 +54,14 @@ export function useWorkbenchShellTabs({
     () => [
       ...native.tabs.map((tab) => tab.key),
       ...(externalViewOpen ? [EXTERNAL_ASSISTANTS_VIEW_KEY] : []),
-      ...(sideChat || sideChatOpening ? [SIDE_CHAT_VIEW_KEY] : []),
+      ...sideChats
+        .filter((session) => session.opened)
+        .map((session) => sideChatViewKey(session.threadId)),
       ...previews.map((preview) => preview.key),
       ...scopedViews.map((view) => view.key),
       ...newTabs,
     ],
-    [
-      native.tabs,
-      externalViewOpen,
-      sideChat,
-      sideChatOpening,
-      previews,
-      scopedViews,
-      newTabs,
-    ],
+    [native.tabs, externalViewOpen, sideChats, previews, scopedViews, newTabs],
   );
 
   const {

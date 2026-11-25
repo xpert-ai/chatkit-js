@@ -67,13 +67,13 @@ describe('Workbench conversation lifetime', () => {
     mocks.listSlotViews.mockResolvedValue([]);
     openShell(null);
     await screen.findByRole('tab', { name: 'New tab' });
-    const tools = screen.getByRole('region', { name: 'Common tools' });
+    const tools = screen.getByRole('region', { name: 'Open' });
     const refresh = pendingViews();
     mocks.listSlotViews.mockReturnValueOnce(refresh.promise);
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
     expect(screen.getByText('Loading views...')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeDisabled();
-    expect(screen.getByRole('region', { name: 'Common tools' })).toBe(tools);
+    expect(screen.getByRole('region', { name: 'Open' })).toBe(tools);
     await act(async () => refresh.reject(new Error('Temporary failure')));
     expect(screen.getByRole('alert')).toHaveTextContent('Temporary failure');
     expect(screen.queryByText('Loading views...')).not.toBeInTheDocument();
@@ -84,7 +84,7 @@ describe('Workbench conversation lifetime', () => {
     await act(async () => retry.resolve([]));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText('Loading views...')).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Common tools' })).toBe(tools);
+    expect(screen.getByRole('region', { name: 'Open' })).toBe(tools);
   });
 
   it.each([
@@ -104,7 +104,7 @@ describe('Workbench conversation lifetime', () => {
       const shell = openShell(from);
       await screen.findByRole('tab', { name: 'New tab' });
       const panel = screen.getByRole('tabpanel');
-      const tools = within(panel).getByRole('region', { name: 'Common tools' });
+      const tools = within(panel).getByRole('region', { name: 'Open' });
       const recommendation = within(panel).getByRole('button', {
         name: 'Documents',
       });
@@ -122,9 +122,7 @@ describe('Workbench conversation lifetime', () => {
         recommendation,
       );
       await act(async () => destination.resolve([recommended]));
-      expect(within(panel).getByRole('region', { name: 'Common tools' })).toBe(
-        tools,
-      );
+      expect(within(panel).getByRole('region', { name: 'Open' })).toBe(tools);
       expect(within(panel).getByRole('button', { name: 'Documents' })).toBe(
         recommendation,
       );
@@ -279,8 +277,14 @@ describe('Workbench conversation lifetime', () => {
       ),
     );
     expect(frame).not.toBeInTheDocument();
-    expect(await screen.findByText('This view cannot be opened in the current project. Check the project type and access, or select another project.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Select project' })).toBeEnabled();
+    expect(
+      await screen.findByText(
+        'This view cannot be opened in the current project. Check the project type and access, or select another project.',
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Select project' }),
+    ).toBeEnabled();
     expect(screen.queryByText('Forbidden')).not.toBeInTheDocument();
   });
 });

@@ -598,6 +598,11 @@ export type ChatKitWorkbenchOptions = {
    */
   viewRail?: { enabled?: boolean };
 
+  /** Stable, non-secret per-user key for local Workbench preferences/history. Change on account switch. */
+  preferencesKey?: string;
+  /** Optional HTTP(S) search URL containing {query}. Requests occur only on explicit submission. */
+  searchUrlTemplate?: string;
+
   /** Native side chat branched from the current thread. Disabled by default. */
   sideChat?: {
     enabled?: boolean;

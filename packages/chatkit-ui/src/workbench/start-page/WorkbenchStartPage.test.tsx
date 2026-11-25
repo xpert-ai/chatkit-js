@@ -53,6 +53,7 @@ function setup(
     loading: false,
     error: null,
     onReload: vi.fn(),
+    onOpenTool: vi.fn(),
     onSelectView: vi.fn(),
     onOpenPreview: vi.fn(),
     ...overrides,
@@ -80,9 +81,9 @@ describe('WorkbenchStartPage', () => {
       screen.getByRole('button', { name: 'Files / folders' }),
     ).toBeEnabled();
   });
-  it('opens native tools and reserves More tools for future integrations', () => {
+  it('opens native tools and exposes all authorized views in the customizable menu', () => {
     const onOpenTool = vi.fn();
-    setup({ onOpenTool, conversationReady: true });
+    const props = setup({ onOpenTool, conversationReady: true });
     for (const [name, tool] of [
       ['Files / folders', 'files'],
       ['Terminal', 'terminal'],
@@ -92,52 +93,37 @@ describe('WorkbenchStartPage', () => {
       expect(onOpenTool).toHaveBeenLastCalledWith(tool);
     }
     fireEvent.click(screen.getByRole('button', { name: 'More tools' }));
-    expect(screen.getByRole('status')).toHaveTextContent(/MCP/);
+    fireEvent.click(screen.getByRole('button', { name: 'Pin Studio' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    expect(
+      screen.getByRole('button', { name: 'Move Studio up' }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Move Studio up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore defaults' }));
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Studio',
+      }),
+    );
+    expect(props.onSelectView).toHaveBeenCalledWith('studio');
   });
 
-  it('recommends dynamic views and closed fixed views, and opens recent workspace files', () => {
+  it('opens recent workspace files and preserves the original file evidence', () => {
     const onOpenFile = vi.fn();
     const file = { filePath: 'reports/budget.xlsx' };
-    setup({
-      openedViewKeys: ['files', 'studio'],
+    const props = setup({
       recentFiles: [{ file, openedAt: Date.now() }],
       onOpenFile,
     });
-    const recommended = within(
-      screen.getByRole('region', { name: 'Recommended' }),
-    );
-    expect(
-      recommended.queryByRole('button', { name: /Files/ }),
-    ).not.toBeInTheDocument();
-    expect(recommended.getByRole('button', { name: /Studio/ })).toBeVisible();
     fireEvent.click(
       screen.getByRole('button', { name: /reports\/budget.xlsx/ }),
     );
     expect(onOpenFile).toHaveBeenCalledWith(file);
-    expect(screen.getByRole('button', { name: 'Terminal' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Side chat' })).toBeDisabled();
-  });
-
-  it('orders tools, dynamic views and recent items and opens the original file evidence', () => {
-    const props = setup();
-    expect(
-      screen.getAllByRole('heading').map((item) => item.textContent),
-    ).toEqual(['Common tools', 'Recommended', 'Recently opened']);
-    expect(
-      within(screen.getByRole('region', { name: 'Common tools' })).getByRole(
-        'button',
-        { name: 'Files / folders' },
-      ),
-    ).toBeInTheDocument();
-    fireEvent.click(
-      within(screen.getByRole('region', { name: 'Recommended' })).getByRole(
-        'button',
-        { name: /Studio/ },
-      ),
-    );
-    expect(props.onSelectView).toHaveBeenCalledWith('studio');
     fireEvent.click(screen.getByRole('button', { name: /Report.pdf/ }));
     expect(props.onOpenPreview).toHaveBeenCalledWith(preview);
+    expect(
+      screen.getAllByRole('heading').map((item) => item.textContent),
+    ).toEqual(['Open', 'Recently opened']);
   });
 
   it('filters names and descriptions without navigating on a plain-text search', () => {

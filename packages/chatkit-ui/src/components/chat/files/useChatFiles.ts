@@ -88,7 +88,10 @@ export function useChatFiles({
     }
     appliedReferenceRequestRef.current = referenceRequest.id;
     setReferences((previous) =>
-      mergeReferences(previous, [referenceRequest.reference]),
+      mergeReferences(
+        previous,
+        referenceRequest.references ?? [referenceRequest.reference],
+      ),
     );
     requestAnimationFrame(() => composerInputRef.current?.focus());
   }, [referenceRequest]);

@@ -19,13 +19,13 @@ const options: ChatKitOptions = {
 };
 ```
 
-ChatKit uses the SDK's `threads.copy`, `threads.get`, and conversation message search APIs. It does not bypass the SDK with raw HTTP requests. Platform deployment must include thread schema migration and historical backfill; enabling the UI alone is insufficient.
+ChatKit uses the SDK's `threads.copy`, `threads.get`, `threads.update`, `conversations.listThreads`, and conversation message search APIs. It does not bypass the SDK with raw HTTP requests. Platform deployment must include thread schema migration and historical backfill; enabling the UI alone is insufficient.
 
 ## Selection and opening
 
 Text selection is restricted to a single referenceable message. The selection toolbar offers the existing quote action and **Ask in side chat**. The source may be generating a response. Selection, Workbench start-page, floating-chat, and Conversation Map actions all request the same sealed-boundary mode. Selecting text attaches a quote; it does not choose the fork boundary.
 
-1. Selecting the action opens Workbench in a loading state.
+1. Selecting the action creates a new side chat; repeated clicks during the same pending request are deduplicated. The start-page tab is replaced only after creation succeeds.
 2. ChatKit calls `threads.copy(sourceThreadId, { mode: 'latest-sealed-reply', requestId })` through the SDK.
 3. The first quote supplies a short, stable tab title.
 4. The existing `ChatKitQuoteReference` is merged into the side-chat composer, which receives focus.
@@ -33,11 +33,17 @@ Text selection is restricted to a single referenceable message. The selection to
 
 The server chooses the newest sealed reply on the source head's ancestor path, validates its graph revision and history, and copies its pinned checkpoint dependency closure. It does not pause or cancel the source. If no sealed reply exists, it returns `side_chat_checkpoint_unavailable` and asks the user to wait for a completed reply. Missing or incompatible checkpoints are rejected without falling back to live state. If copying fails, the selection retains its quote for retry and the main composer is preserved.
 
-## Reuse, drafts, and closing
+## Multiple side chats, drafts, and restoration
 
-Within one ChatKit mount, one source thread reuses one side-chat thread. Overlapping entry points share one pending request. Retries retain the same request ID, including after an unknown network outcome, so the server returns the existing child even if the source has advanced. Late responses after navigation cannot activate a side chat in another source. Repeated selections activate the view and append deduplicated references. Switching tabs, closing the whole Workbench panel, or navigating away from and back to the source thread within the page preserves the draft.
+Each successful creation gets an independent child thread and a tab keyed by that thread ID. Repeating creation after success creates another side chat; retrying a failed or uncertain request reuses the same request ID. Concurrent creation clicks share one pending request and collect their quotes. Navigation invalidates pending UI activation, so late responses cannot take over another conversation.
 
-Explicitly closing a side-chat tab asks for confirmation, with an option not to ask again. Confirming removes the local view, reuse mapping and request ID; it does not delete the server thread. A later selection creates a new fork with a fresh ID. Reloading the page does not discover or restore old side chats. Server threads follow the platform's retention policy rather than unreliable unload-time deletion.
+The header's **Side chats** button lists the current conversation's server records with status and rename controls. The Workbench start page and `Cmd/Ctrl+Alt+S` also create side chats. The message-selection toolbar can create a new chat or send the selection to an existing chat. Shortcuts apply within the ChatKit surface.
+
+Closing a tab hides it without deleting its server thread or stopping its run. Within the current conversation, visited chat runtimes remain mounted, retaining draft text, attachments and stream state. The list can reopen a closed chat. Open tab IDs, their relative order, active selection and selected editing branches are stored locally; reload first fetches authorized records before restoring tabs. It mounts restored open tabs, not every server record. `purpose: message-edit` records are never shown as extra side chats; a saved selection is accepted only within its authorized parent lineage.
+
+Storage is scoped by API, organization, host identity, Assistant, Project and conversation. Supply a non-secret `workbench.preferencesKey` that changes with the signed-in user, or an existing per-user `sessionKey`. Runtime messages remain server-owned. A successful empty list or denied access clears stale views; transient errors expose retry. Separate conversation navigation unmounts the old runtimes, and normal Chat draft persistence applies; browser reload does not preserve unsent binary attachments or live network connections.
+
+Renaming uses `threads.update(id, { metadata: { title } })`. Deploy the platform's `PATCH /threads/{thread_id}` implementation with this UI. It requires conversation management permission, trims and limits titles to 200 characters, rejects other metadata, and updates only the thread's title. A label-write failure never retries a successful fork.
 
 ## Native Chat isolation
 

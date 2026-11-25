@@ -35,4 +35,5 @@ export type ChatProps = {
 export type ChatReferenceRequest = {
   id: string;
   reference: ChatKitReference;
+  references?: ChatKitReference[];
 };

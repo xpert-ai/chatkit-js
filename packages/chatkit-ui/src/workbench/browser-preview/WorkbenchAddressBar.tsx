@@ -1,3 +1,6 @@
+import { useWorkbench } from '../context';
+import { rankSuggestions } from './search-suggestions';
+import { useSearchHistory } from './useSearchHistory';
 import * as React from 'react';
 import {
   ArrowLeft,
@@ -10,6 +13,7 @@ import {
   House,
   MoreVertical,
   RefreshCw,
+  Search,
 } from 'lucide-react';
 import { Input } from '../../components/ui/input';
 import {
@@ -30,6 +34,10 @@ export type AddressSuggestion = {
   detail?: string;
   icon?: React.ReactNode;
   history?: boolean;
+  kind?: 'action' | 'chat' | 'file' | 'website' | 'query';
+  updatedAt?: number;
+  opened?: boolean;
+  disabled?: boolean;
   onSelect: () => void;
 };
 export type BrowserNavigation = {
@@ -41,6 +49,7 @@ export type BrowserNavigation = {
 };
 
 export function WorkbenchAddressBar({
+  variant = 'compact',
   value,
   onChange,
   apiUrl,
@@ -51,6 +60,7 @@ export function WorkbenchAddressBar({
   loading = false,
   navigation,
 }: {
+  variant?: 'compact' | 'start';
   value: string;
   onChange: (value: string) => void;
   apiUrl: string;
@@ -63,6 +73,8 @@ export function WorkbenchAddressBar({
 }) {
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
+  const workbench = useWorkbench();
+  const history = useSearchHistory(workbench.storageScope, apiUrl);
   const input = React.useRef<HTMLInputElement>(null);
   const list = React.useRef<HTMLDivElement>(null);
   const focusHistory = React.useRef(false);
@@ -74,18 +86,71 @@ export function WorkbenchAddressBar({
   const [copied, setCopied] = React.useState(false);
   const id = React.useId();
   const address = resolveWorkbenchAddress(value, apiUrl);
-  const needle = value.trim().toLocaleLowerCase();
-  const matches = suggestions
-    .filter(
-      (item) =>
-        (!historyOnly || item.history) &&
-        (!needle ||
-          `${item.title} ${item.detail ?? ''}`
-            .toLocaleLowerCase()
-            .includes(needle)),
-    )
-    .slice(0, 8);
-  const showSuggestions = expanded && matches.length > 0;
+  const openAddress = (preview: UrlWorkbenchPreview) => {
+    history.remember({
+      value: preview.url,
+      title: preview.title,
+      kind: 'website',
+    });
+    setExpanded(false);
+    onOpen(preview);
+  };
+  const remembered: AddressSuggestion[] = history.entries.map((entry) => ({
+    key: `history:${entry.kind}:${entry.value}`,
+    title: entry.title,
+    detail: entry.kind === 'website' ? entry.value : undefined,
+    kind: entry.kind,
+    history: entry.kind === 'website',
+    updatedAt: entry.at,
+    icon: entry.kind === 'query' ? <Search size={16} /> : <History size={16} />,
+    onSelect: () => {
+      const resolved = resolveWorkbenchAddress(entry.value, apiUrl);
+      if (entry.kind === 'website' && resolved.kind === 'url')
+        openAddress(resolved.preview);
+      else {
+        onChange(entry.value);
+        setExpanded(true);
+      }
+    },
+  }));
+  const ranked = rankSuggestions(
+    [...suggestions, ...remembered],
+    value,
+    historyOnly,
+  );
+  const webSearch =
+    value.trim() && workbench.searchUrlTemplate?.includes('{query}')
+      ? resolveWorkbenchAddress(
+          workbench.searchUrlTemplate.replace(
+            '{query}',
+            encodeURIComponent(value.trim()),
+          ),
+          apiUrl,
+        )
+      : null;
+  const matches: AddressSuggestion[] = [...ranked];
+  if (
+    !historyOnly &&
+    address.kind === 'url' &&
+    !ranked.some((item) => item.detail === address.preview.url)
+  )
+    matches.unshift({
+      key: 'command:open-url',
+      title: t('workbench.start.openUrl'),
+      detail: address.preview.url,
+      kind: 'website',
+      icon: <ArrowUpRight size={16} />,
+      onSelect: () => openAddress(address.preview),
+    });
+  if (!historyOnly && address.kind === 'search' && webSearch?.kind === 'url')
+    matches.push({
+      key: 'command:web-search',
+      title: t('workbench.browser.searchWeb', { query: value }),
+      kind: 'action',
+      icon: <Search size={16} />,
+      onSelect: () => openAddress(webSearch.preview),
+    });
+  const showSuggestions = expanded;
   const selected = active >= 0 ? matches[active] : undefined;
   React.useEffect(() => {
     if (showSuggestions)
@@ -106,56 +171,89 @@ export function WorkbenchAddressBar({
     'inline-flex size-8 shrink-0 items-center justify-center rounded-[var(--chat-item-radius,var(--radius))] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-35 disabled:pointer-events-none';
   const submit = () => {
     if (selected && showSuggestions) {
+      if (selected.disabled) return;
+      if (value.trim())
+        history.remember({
+          value: value.trim(),
+          title: value.trim(),
+          kind: 'query',
+        });
       setExpanded(false);
       selected.onSelect();
     } else if (address.kind === 'url') {
+      const existing = suggestions.find(
+        (item) => item.opened && item.detail === address.preview.url,
+      );
+      if (existing) {
+        setExpanded(false);
+        existing.onSelect();
+        return;
+      }
       setExpanded(false);
       if (address.preview.url === currentUrl) {
         onChange(currentUrl);
         onReload();
-      } else onOpen(address.preview);
+      } else openAddress(address.preview);
     } else if (address.kind === 'invalid') {
       setError(t('workbench.start.invalidUrl'));
     } else {
+      if (value.trim())
+        history.remember({
+          value: value.trim(),
+          title: value.trim(),
+          kind: 'query',
+        });
       setExpanded(true);
     }
   };
   return (
     <div className="relative z-20 shrink-0" style={getSurfaceThemeStyle(theme)}>
-      <div className="flex h-12 items-center gap-1 border-b bg-background px-2">
-        <button
-          type="button"
-          className={iconButton}
-          aria-label={t('workbench.browser.back')}
-          title={t('workbench.browser.back')}
-          disabled={!navigation?.canBack}
-          onClick={navigation?.onBack}
-        >
-          <ArrowLeft size={17} />
-        </button>
-        <button
-          type="button"
-          className={iconButton}
-          aria-label={t('workbench.browser.forward')}
-          title={t('workbench.browser.forward')}
-          disabled={!navigation?.canForward}
-          onClick={navigation?.onForward}
-        >
-          <ArrowRight size={17} />
-        </button>
-        <button
-          type="button"
-          className={iconButton}
-          aria-label={t('workbench.browser.reload')}
-          title={t('workbench.browser.reload')}
-          disabled={loading}
-          onClick={onReload}
-        >
-          <RefreshCw
-            size={17}
-            className={loading ? 'animate-spin' : undefined}
-          />
-        </button>
+      <div
+        className={
+          variant === 'start'
+            ? 'flex items-center gap-1 bg-background'
+            : 'flex h-12 items-center gap-1 border-b bg-background px-2'
+        }
+      >
+        {(variant === 'compact' ||
+          navigation?.canBack ||
+          navigation?.canForward) && (
+          <>
+            <button
+              type="button"
+              className={iconButton}
+              aria-label={t('workbench.browser.back')}
+              title={t('workbench.browser.back')}
+              disabled={!navigation?.canBack}
+              onClick={navigation?.onBack}
+            >
+              <ArrowLeft size={17} />
+            </button>
+            <button
+              type="button"
+              className={iconButton}
+              aria-label={t('workbench.browser.forward')}
+              title={t('workbench.browser.forward')}
+              disabled={!navigation?.canForward}
+              onClick={navigation?.onForward}
+            >
+              <ArrowRight size={17} />
+            </button>
+            <button
+              type="button"
+              className={iconButton}
+              aria-label={t('workbench.browser.reload')}
+              title={t('workbench.browser.reload')}
+              disabled={loading}
+              onClick={onReload}
+            >
+              <RefreshCw
+                size={17}
+                className={loading ? 'animate-spin' : undefined}
+              />
+            </button>
+          </>
+        )}
         <form
           role="search"
           aria-label={t('workbench.start.search')}
@@ -166,8 +264,11 @@ export function WorkbenchAddressBar({
           }}
         >
           <div
-            className={`flex h-9 items-center rounded-[var(--chat-item-radius,var(--radius))] border ${focused ? 'border-border bg-muted/70' : 'border-transparent hover:bg-muted/50'}`}
+            className={`flex items-center rounded-chat-panel border ${variant === 'start' ? 'min-h-[calc(3.5rem*var(--chat-density-scale,1))] px-4 shadow-sm border-border' : 'h-9'} ${focused ? 'border-ring bg-muted/30' : 'hover:bg-muted/30'}`}
           >
+            {variant === 'start' && (
+              <Search size={20} className="shrink-0 text-muted-foreground" />
+            )}
             <Input
               ref={input}
               type="search"
@@ -183,7 +284,7 @@ export function WorkbenchAddressBar({
               autoComplete="off"
               spellCheck={false}
               value={value}
-              className={`h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 ${focused ? 'text-left' : 'text-center'}`}
+              className={`h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 ${focused || variant === 'start' ? 'text-left' : 'text-center'}`}
               onFocus={(event) => {
                 setFocused(true);
                 setExpanded(true);
@@ -247,15 +348,35 @@ export function WorkbenchAddressBar({
               aria-label={t('workbench.browser.suggestions')}
               className="absolute inset-x-0 top-full mt-1 max-h-80 overflow-y-auto rounded-[var(--chat-panel-radius,var(--radius))] border bg-popover p-1.5 text-popover-foreground shadow-lg"
             >
+              {!matches.length && address.kind === 'search' && (
+                <p
+                  role="status"
+                  className="px-3 py-3 text-sm text-muted-foreground"
+                >
+                  {t(
+                    historyOnly
+                      ? 'workbench.browser.noHistory'
+                      : 'workbench.start.noResults',
+                  )}
+                </p>
+              )}
               {matches.map((item, index) => (
                 <div
                   key={item.key}
                   id={`${id}-${index}`}
                   role="option"
                   aria-selected={index === active}
-                  className={`flex cursor-pointer items-center gap-3 rounded-[var(--chat-item-radius,var(--radius))] px-3 py-2.5 text-sm ${index === active ? 'bg-muted' : 'hover:bg-muted/60'}`}
+                  aria-disabled={item.disabled || undefined}
+                  className={`flex cursor-pointer items-center gap-3 rounded-[var(--chat-item-radius,var(--radius))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.625rem*var(--chat-density-scale,1))] text-sm ${index === active ? 'bg-muted' : 'hover:bg-muted/60'}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
+                    if (item.disabled) return;
+                    if (value.trim())
+                      history.remember({
+                        value: value.trim(),
+                        title: value.trim(),
+                        kind: 'query',
+                      });
                     setExpanded(false);
                     item.onSelect();
                   }}
@@ -265,7 +386,7 @@ export function WorkbenchAddressBar({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">
-                      {item.title}
+                      <SearchMatch text={item.title} query={value} />
                     </span>
                     {item.detail && (
                       <span className="block truncate text-xs text-muted-foreground">
@@ -273,17 +394,16 @@ export function WorkbenchAddressBar({
                       </span>
                     )}
                   </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {item.opened
+                      ? t('workbench.browser.switchTab')
+                      : item.kind
+                        ? t(`workbench.browser.kind.${item.kind}`)
+                        : ''}
+                  </span>
                 </div>
               ))}
             </div>
-          )}
-          {expanded && historyOnly && !matches.length && (
-            <p
-              role="status"
-              className="absolute inset-x-0 top-full mt-1 rounded-[var(--chat-panel-radius,var(--radius))] border bg-popover p-3 text-sm text-muted-foreground shadow-lg"
-            >
-              {t('workbench.browser.noHistory')}
-            </p>
           )}
         </form>
         <DropdownMenu>
@@ -325,6 +445,12 @@ export function WorkbenchAddressBar({
               <History />
               {t('workbench.browser.history')}
             </DropdownMenuItem>
+            {history.entries.length > 0 && (
+              <DropdownMenuItem onSelect={history.clear}>
+                <History />
+                {t('workbench.browser.clearHistory')}
+              </DropdownMenuItem>
+            )}
             {currentUrl && (
               <>
                 <DropdownMenuItem
@@ -369,5 +495,23 @@ export function WorkbenchAddressBar({
         </p>
       )}
     </div>
+  );
+}
+
+function SearchMatch({ text, query }: { text: string; query: string }) {
+  const needle = query.trim();
+  const index = needle
+    ? text.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase())
+    : -1;
+  return index < 0 ? (
+    text
+  ) : (
+    <>
+      {text.slice(0, index)}
+      <mark className="bg-accent text-accent-foreground font-semibold">
+        {text.slice(index, index + needle.length)}
+      </mark>
+      {text.slice(index + needle.length)}
+    </>
   );
 }
