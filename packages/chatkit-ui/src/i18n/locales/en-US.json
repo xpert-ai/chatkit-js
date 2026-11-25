@@ -552,6 +552,11 @@
         }
     },
     "history": {
+        "pinned": "Pinned",
+        "archiveFilter": "Conversation status",
+        "activeChats": "Active chats",
+        "archivedChats": "Archived chats",
+        "archiveEmpty": "No archived chats. Archived chats stay here until you restore them.",
         "threadHistory": "Message history",
         "title": "Message history",
         "refresh": "Refresh message history",
@@ -1523,6 +1528,10 @@
         "AskPrompt": "Read the latest content of document {{resourceId}} ({{path}}), then propose changes for human approval. Instructions: {{instruction}}"
     },
     "conversationMenu": {
+        "pin": "Pin chat",
+        "unpin": "Unpin chat",
+        "archive": "Archive",
+        "unarchive": "Unarchive",
         "addSchedule": "Add scheduled task…",
         "actionsFor": "Actions for {{title}}",
         "rename": "Rename",

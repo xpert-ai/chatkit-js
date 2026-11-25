@@ -1,13 +1,19 @@
 import * as React from 'react';
 import {
   Clock,
+  ChevronDown,
   Copy,
   Download,
   GitBranch,
+  Folder,
   Loader2,
   MessageCirclePlus,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
+  Archive,
+  ArchiveRestore,
   Share,
   Trash2,
 } from 'lucide-react';
@@ -52,7 +58,8 @@ export const conversationMenuItemClassName =
 export type ConversationMenuProps = {
   context: ConversationActionContext;
   target: ThreadItem;
-  placement?: 'header' | 'history';
+  placement?: 'header' | 'history' | 'floating';
+  triggerTitle?: string;
   extraItems?: React.ReactNode;
   moreButtonRef?: React.Ref<HTMLButtonElement>;
   onMenuCloseAutoFocus?: (event: Event) => void;
@@ -72,6 +79,7 @@ function ConversationMenuSession({
   context,
   target,
   placement = 'header',
+  triggerTitle = target.title,
   extraItems,
   moreButtonRef,
   onMenuCloseAutoFocus,
@@ -87,9 +95,11 @@ function ConversationMenuSession({
   const { t, actions } = menu;
   const titleId = React.useId();
   const label =
-    placement === 'header'
-      ? t('chat.moreActions')
-      : t('conversationMenu.actionsFor', { title: target.title });
+    placement === 'floating'
+      ? `${t('workbench.floatingChat.conversations')}: ${triggerTitle}`
+      : placement === 'header'
+        ? t('chat.moreActions')
+        : t('conversationMenu.actionsFor', { title: target.title });
   const hasActions = Object.values(actions).some(
     (action) => !Array.isArray(action) && action.visible,
   );
@@ -123,7 +133,11 @@ function ConversationMenuSession({
   const reuse = actions.share.visible || actions.export.visible;
   return (
     <>
-      <DropdownMenu open={menu.open} onOpenChange={menu.onOpenChange}>
+      <DropdownMenu
+        modal={placement !== 'floating'}
+        open={menu.open}
+        onOpenChange={menu.onOpenChange}
+      >
         <DropdownMenuTrigger asChild>
           <ToolbarButton
             ref={(node) => {
@@ -135,17 +149,34 @@ function ConversationMenuSession({
             // Extra items manage their own availability (e.g. terminate during reconnect).
             disabled={!context.ready && !extraItems && !schedule}
             aria-label={label}
+            title={placement === 'floating' ? triggerTitle : undefined}
+            data-header-control={placement === 'floating' ? '' : undefined}
             className={cn(
+              placement === 'floating' && 'chatkit-floating-chat-title',
               placement === 'history' &&
                 'relative z-10 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100 data-[state=open]:opacity-100',
             )}
           >
-            <MoreHorizontal size={16} />
+            {placement === 'floating' ? (
+              <>
+                <Folder className="shrink-0" aria-hidden="true" />
+                <span className="truncate">{triggerTitle}</span>
+                <ChevronDown className="shrink-0" aria-hidden="true" />
+              </>
+            ) : (
+              <MoreHorizontal size={16} />
+            )}
           </ToolbarButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          align="end"
-          className="min-w-64 max-w-[calc(100vw-2rem)]"
+          align={placement === 'floating' ? 'start' : 'end'}
+          side={placement === 'floating' ? 'top' : 'bottom'}
+          sideOffset={8}
+          data-floating-chat-menu={placement === 'floating' ? '' : undefined}
+          className={cn(
+            'min-w-64 max-w-[calc(100vw-2rem)]',
+            placement === 'floating' && 'chatkit-floating-chat-menu',
+          )}
           onCloseAutoFocus={(event) => {
             if (menu.dialog) event.preventDefault();
             onMenuCloseAutoFocus?.(event);
@@ -153,6 +184,26 @@ function ConversationMenuSession({
         >
           {action('conversationMenu.rename', actions.rename, <Pencil />, () =>
             menu.openDialog('rename'),
+          )}
+          {action(
+            menu.detail?.sidebar?.pinned
+              ? 'conversationMenu.unpin'
+              : 'conversationMenu.pin',
+            actions.pin,
+            menu.detail?.sidebar?.pinned ? <PinOff /> : <Pin />,
+            () => {
+              void menu.changeSidebar('pinned');
+            },
+          )}
+          {action(
+            menu.detail?.sidebar?.archived
+              ? 'conversationMenu.unarchive'
+              : 'conversationMenu.archive',
+            actions.archive,
+            menu.detail?.sidebar?.archived ? <ArchiveRestore /> : <Archive />,
+            () => {
+              void menu.changeSidebar('archived');
+            },
           )}
           {actions.rename.visible && exploration && <DropdownMenuSeparator />}
           {action(

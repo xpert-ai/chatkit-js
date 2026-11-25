@@ -1,4 +1,6 @@
 import * as React from 'react';
+import { useWorkbenchConversationMenu } from './useWorkbenchConversationMenu';
+import type { ConversationMenuProps } from '../../components/conversation/ConversationMenu';
 
 export type FloatingChatMode = 'minimized' | 'compact' | 'expanded';
 export type WorkbenchChatMetadata = {
@@ -6,6 +8,7 @@ export type WorkbenchChatMetadata = {
   running: boolean;
   error?: boolean;
   attentionKey?: string;
+  conversationMenu?: Pick<ConversationMenuProps, 'context' | 'target'>;
 };
 
 type ChatPresentation = {
@@ -54,7 +57,8 @@ export function WorkbenchChatProvider({
         previous.metadata.title === metadata.title &&
         previous.metadata.running === metadata.running &&
         previous.metadata.error === metadata.error &&
-        previous.metadata.attentionKey === metadata.attentionKey
+        previous.metadata.attentionKey === metadata.attentionKey &&
+        previous.metadata.conversationMenu === metadata.conversationMenu
           ? previous
           : { scope, metadata },
       );
@@ -98,10 +102,19 @@ export function usePublishWorkbenchChat(metadata?: WorkbenchChatMetadata) {
   const publish = context?.publish;
   const scope = context?.scope;
   const { title, running, error, attentionKey } = metadata ?? {};
+  const conversationMenu = useWorkbenchConversationMenu(
+    metadata?.conversationMenu,
+  );
   React.useLayoutEffect(() => {
     if (scope !== undefined && running !== undefined)
-      publish?.(scope, { title, running, error, attentionKey });
-  }, [scope, publish, title, running, error, attentionKey]);
+      publish?.(scope, {
+        title,
+        running,
+        error,
+        attentionKey,
+        conversationMenu,
+      });
+  }, [scope, publish, title, running, error, attentionKey, conversationMenu]);
 }
 
 /** Hidden transcripts must not update scroll-follow/read state while output continues. */

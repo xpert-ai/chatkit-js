@@ -10,6 +10,7 @@ import {
 } from '../../src/workbench/context';
 import type { SideChatSession } from '../../src/workbench/side-chat/types';
 import type { useWorkbenchSideChat } from '../../src/workbench/shell/side-chat/useWorkbenchSideChat';
+import { FloatingChatPreview } from './FloatingChatPreview';
 import '../../src/i18n';
 import '../../src/index.css';
 
@@ -140,7 +141,7 @@ function Preview() {
             </label>
           </div>
           <div
-            className="mx-auto min-h-[80vh] border-x"
+            className="relative mx-auto flex h-[calc(100dvh-2.75rem)] flex-col border-x"
             style={{ maxWidth: narrow ? 390 : 1500 }}
           >
             <div className="flex items-center gap-2 border-b p-2">
@@ -171,42 +172,50 @@ function Preview() {
                   ))}
               </div>
             </div>
-            <WorkbenchStartPage
-              views={[]}
-              recent={[
-                {
-                  preview: {
-                    kind: 'browser',
-                    key: 'example-web',
-                    title: 'Timeline components',
-                    url: 'https://example.com/timeline',
+            <div className="min-h-0 flex-1 overflow-auto pb-44">
+              <WorkbenchStartPage
+                views={[]}
+                recent={[
+                  {
+                    preview: {
+                      kind: 'browser',
+                      key: 'example-web',
+                      title: 'Timeline components',
+                      url: 'https://example.com/timeline',
+                    },
+                    openedAt: 2,
                   },
-                  openedAt: 2,
-                },
-                {
-                  preview: {
-                    kind: 'browser',
-                    key: 'example-docs',
-                    title: 'Xpert AI 文档',
-                    url: 'https://example.com/docs',
+                  {
+                    preview: {
+                      kind: 'browser',
+                      key: 'example-docs',
+                      title: 'Xpert AI 文档',
+                      url: 'https://example.com/docs',
+                    },
+                    openedAt: 1,
                   },
-                  openedAt: 1,
-                },
-              ]}
-              locale="zh-CN"
-              apiUrl="/api/ai"
-              loading={false}
-              error={null}
-              conversationReady
-              sideChatEnabled
-              onReload={() => setNotice('已刷新示例功能列表')}
-              onSelectView={(key) => setNotice(`打开视图：${key}`)}
-              onOpenTool={(tool) =>
-                tool === 'side-chat'
-                  ? void askInSideChat()
-                  : setNotice(`选择了 ${tool}；预览不执行终端或文件操作`)
-              }
-              onOpenPreview={(preview) => setNotice(`已选择：${preview.title}`)}
+                ]}
+                locale="zh-CN"
+                apiUrl="/api/ai"
+                loading={false}
+                error={null}
+                conversationReady
+                sideChatEnabled
+                onReload={() => setNotice('已刷新示例功能列表')}
+                onSelectView={(key) => setNotice(`打开视图：${key}`)}
+                onOpenTool={(tool) =>
+                  tool === 'side-chat'
+                    ? void askInSideChat()
+                    : setNotice(`选择了 ${tool}；预览不执行终端或文件操作`)
+                }
+                onOpenPreview={(preview) =>
+                  setNotice(`已选择：${preview.title}`)
+                }
+              />
+            </div>
+            <FloatingChatPreview
+              onSideChat={() => void askInSideChat()}
+              onNotice={setNotice}
             />
           </div>
         </main>

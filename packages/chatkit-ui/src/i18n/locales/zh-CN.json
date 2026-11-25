@@ -552,6 +552,11 @@
         }
     },
     "history": {
+        "pinned": "已置顶",
+        "archiveFilter": "会话状态",
+        "activeChats": "未归档会话",
+        "archivedChats": "已归档",
+        "archiveEmpty": "暂无已归档会话。归档的会话可在这里恢复。",
         "threadHistory": "消息历史",
         "title": "消息历史",
         "refresh": "刷新消息历史",
@@ -1523,6 +1528,10 @@
         "AskPrompt": "请先读取文档 {{resourceId}}（{{path}}）的最新内容，再提出需要人类确认的修改提案。要求：{{instruction}}"
     },
     "conversationMenu": {
+        "pin": "置顶聊天",
+        "unpin": "取消置顶",
+        "archive": "归档",
+        "unarchive": "取消归档",
         "addSchedule": "添加计划任务…",
         "actionsFor": "{{title}} 的会话操作",
         "rename": "重命名",

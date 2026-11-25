@@ -108,7 +108,12 @@ describe('Workbench floating main conversation', () => {
     fireEvent.click(
       screen.getByLabelText('Open conversation input: Review bid'),
     );
-    fireEvent.click(screen.getByLabelText('Open conversation tab'));
+    fireEvent.keyDown(screen.getByLabelText('Conversation menu: Review bid'), {
+      key: 'Enter',
+    });
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Open conversation tab' }),
+    );
     expect(
       screen.queryByRole('region', { name: 'Floating conversation' }),
     ).not.toBeInTheDocument();

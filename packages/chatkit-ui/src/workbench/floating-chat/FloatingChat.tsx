@@ -5,7 +5,6 @@ import { useTheme } from '../../providers/Theme';
 import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
 import { useWorkbenchChat } from './context';
 import { useFloatingChatPosition } from './useFloatingChatPosition';
-import { useFloatingChatFocus } from './useFloatingChatFocus';
 import { useFloatingChatResize } from './useFloatingChatResize';
 import { FloatingChatHeader } from './FloatingChatHeader';
 
@@ -39,17 +38,6 @@ export function FloatingChat({
     mode === 'expanded' ? chat?.expandedWidth : chat?.compactWidth,
     mode === 'expanded' ? 800 : 640,
   );
-  const focused = useFloatingChatFocus(
-    position.surfaceRef,
-    active && !minimized,
-  );
-  const [menuOpen, setMenuOpen] = React.useState(false);
-  const headerVisible =
-    mode === 'expanded' ||
-    focused ||
-    menuOpen ||
-    position.dragging ||
-    resize.resizing;
   const launcherPosition = useFloatingChatPosition<HTMLButtonElement>(
     active && minimized,
     chat?.launcherPosition,
@@ -156,7 +144,7 @@ export function FloatingChat({
       >
         <FloatingChatHeader
           title={title}
-          visible={headerVisible}
+          conversationMenu={metadata?.conversationMenu}
           expanded={mode === 'expanded'}
           dragProps={position.handleProps}
           onToggle={() =>
@@ -165,12 +153,6 @@ export function FloatingChat({
           onMinimize={() => changeMode('minimized')}
           onOpenChat={onOpenChat}
           onNewSideChat={onNewSideChat}
-          onMenuOpenChange={setMenuOpen}
-          onFocusInput={() =>
-            position.surfaceRef.current
-              ?.querySelector<HTMLElement>('[role="textbox"]')
-              ?.focus()
-          }
           status={
             status !== 'idle' ? (
               <span role="status" aria-label={statusLabel} title={statusLabel}>

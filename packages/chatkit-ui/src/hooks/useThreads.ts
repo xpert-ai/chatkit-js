@@ -1,6 +1,8 @@
 import * as React from 'react';
 import type {
   ChatConversationStatus,
+  ConversationSidebarPatch,
+  ConversationSidebarState,
   ChatConversation as ThreadRecord,
 } from '@xpert-ai/xpert-sdk';
 import { useStreamContext } from '../providers/Stream';
@@ -26,6 +28,10 @@ type UseThreadsResult = {
     payload: Partial<ThreadRecord>,
   ) => Promise<ThreadRecord>;
   deleteThread: (recordId: string) => Promise<void>;
+  updateThreadSidebar: (
+    recordId: string,
+    patch: ConversationSidebarPatch,
+  ) => Promise<ConversationSidebarState>;
 };
 
 export type ThreadItem = {
@@ -43,6 +49,7 @@ export type ThreadItem = {
   status: ChatConversationStatus;
   error?: string;
   lastMessageAt?: Date;
+  sidebar?: ConversationSidebarState;
 };
 
 const DEFAULT_LIMIT = 50;
@@ -94,6 +101,7 @@ const toThreadItem = (threadRecord: ThreadRecord): ThreadItem => ({
   status: threadRecord.status || 'idle',
   error: threadRecord.error,
   lastMessageAt: toDate(threadRecord.updatedAt),
+  sidebar: threadRecord.sidebar,
 });
 
 const sortThreadRecords = (threadRecords: ThreadRecord[]): ThreadRecord[] => {
@@ -149,7 +157,10 @@ export function useThreads(
         ) {
           return next;
         }
-        return sortThreadRecords([threadRecord, ...next]);
+        const sidebar =
+          threadRecord.sidebar ??
+          prev.find((item) => item.id === threadRecord.id)?.sidebar;
+        return sortThreadRecords([{ ...threadRecord, sidebar }, ...next]);
       });
     },
     [filterProjectId],
@@ -220,6 +231,24 @@ export function useThreads(
       return updated;
     },
     [client, assistantId, upsertThreadRecord],
+  );
+
+  const updateThreadSidebar = React.useCallback(
+    async (recordId: string, patch: ConversationSidebarPatch) => {
+      const sidebar = await client.conversations.updateSidebar(recordId, patch);
+      if (
+        mutationScope.current.client === client &&
+        mutationScope.current.assistantId === assistantId
+      ) {
+        setThreadRecords((records) =>
+          records.map((record) =>
+            record.id === recordId ? { ...record, sidebar } : record,
+          ),
+        );
+      }
+      return sidebar;
+    },
+    [client, assistantId],
   );
 
   const deleteThread = React.useCallback(
@@ -349,6 +378,7 @@ export function useThreads(
     refreshThreads,
     createThread,
     updateThread,
+    updateThreadSidebar,
     deleteThread,
   };
 }
