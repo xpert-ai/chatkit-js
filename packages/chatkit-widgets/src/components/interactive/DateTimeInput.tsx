@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Input, Label } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo, useCallback, useId, useState } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useDataBinding } from "../../hooks/useDataBinding.js";
@@ -81,13 +82,13 @@ export function DateTimeInput({ node, surfaceId }: DateTimeInputProps) {
   );
 
   return (
-    <div className={cn(containerClasses)}>
+    <div className={cn("ck-field", containerClasses)}>
       {label && (
-        <label htmlFor={id} className={cn(labelClasses)}>
+        <Label htmlFor={id} className={cn(labelClasses)}>
           {label}
-        </label>
+        </Label>
       )}
-      <input
+      <Input
         type={inputType}
         id={id}
         value={value}

@@ -1,13 +1,21 @@
 import * as React from 'react';
-import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWorkbenchSideChat } from './useWorkbenchSideChat';
 import type { WorkbenchRuntime } from '../../WorkbenchRuntime';
-import type { SideChatSession } from '../../side-chat/types';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
-
-function setup() {
-  const copy = vi.fn().mockResolvedValue({ thread_id: 'side-1' });
+const record = (id: string, purpose = 'side-chat') => ({
+  thread_id: id,
+  metadata: { purpose, parent_thread_id: 'source', title: id },
+  status: 'idle',
+});
+function setup(records: ReturnType<typeof record>[] = []) {
+  let index = 0;
+  const copy = vi
+    .fn()
+    .mockImplementation(async () => ({ thread_id: `side-${++index}` }));
+  const listThreads = vi.fn().mockResolvedValue(records);
+  const update = vi.fn().mockResolvedValue({});
   const stream = {
     apiUrl: '/api/ai',
     organizationId: 'org',
@@ -15,79 +23,55 @@ function setup() {
     conversationId: 'conversation',
     threadId: 'source',
     isLoading: true,
-    client: { threads: { copy } },
+    client: { threads: { copy, update }, conversations: { listThreads } },
   } as unknown as WorkbenchRuntime;
   const hook = renderHook(
     ({ stream }) => {
-      const [sideChat, setSideChat] = React.useState<SideChatSession | null>(
+      const [activeViewKey, setActiveViewKey] = React.useState<string | null>(
         null,
       );
-      const [opening, setSideChatOpening] = React.useState(false);
-      const [, setActiveViewKey] = React.useState<string | null>(null);
-      const [, setCloseDialog] = React.useState(false);
-      const [, setConfirmationDisabled] = React.useState(false);
       const { t } = useChatkitTranslation();
-      const actions = useWorkbenchSideChat({
-        stream,
-        sideChatEnabled: true,
-        t,
-        setActiveViewKey,
-        setOpen: vi.fn(),
-        setSideChatOpening,
-        setSideChat,
-        sideChat,
-        setSideChatCloseDialogOpen: setCloseDialog,
-        adjacentTab: () => '',
-        closeWorkbench: vi.fn(),
-        sideChatCloseConfirmationDisabled: true,
-        setSideChatCloseConfirmationDisabled: setConfirmationDisabled,
-      });
-      return { ...actions, sideChat, opening };
+      return {
+        ...useWorkbenchSideChat({
+          stream,
+          sideChatEnabled: true,
+          t,
+          activeViewKey,
+          setActiveViewKey,
+          setOpen: vi.fn(),
+        }),
+        activeViewKey,
+      };
     },
     { initialProps: { stream } },
   );
-  return { ...hook, stream, copy };
+  return { ...hook, stream, copy, listThreads, update };
 }
-
-describe('side chat creation', () => {
-  it('keeps the creation identity after a rejected response, then reuses the child while running', async () => {
+beforeEach(() => localStorage.clear());
+describe('multiple side chats', () => {
+  it('creates three independent children and reopens a closed tab without another copy', async () => {
     const f = setup();
-    f.copy.mockRejectedValueOnce(
-      Object.assign(new Error('HTTP 409: raw payload'), {
-        status: 409,
-        text: JSON.stringify({
-          code: 'side_chat_checkpoint_unavailable',
-          message: 'No completed reply yet',
-        }),
-      }),
-    );
-    await act(async () => {
-      await expect(
-        f.result.current.askInSideChat({ type: 'quote', text: 'keep this' }),
-      ).rejects.toThrow('No completed reply yet');
-    });
-    expect(f.result.current.sideChat).toBeNull();
-    await act(() =>
-      f.result.current.askInSideChat({ type: 'quote', text: 'keep this' }),
-    );
-    expect(f.copy.mock.calls[1]).toEqual(f.copy.mock.calls[0]);
-    expect(f.copy.mock.calls[0]).toEqual([
-      'source',
-      {
-        mode: 'latest-sealed-reply',
-        requestId: expect.any(String),
-      },
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    for (let i = 0; i < 3; i++)
+      await act(() =>
+        f.result.current.askInSideChat({ type: 'quote', text: `quote ${i}` }),
+      );
+    expect(f.result.current.sessions.map((s) => s.threadId)).toEqual([
+      'side-1',
+      'side-2',
+      'side-3',
     ]);
-    expect(f.result.current.sideChat?.referenceRequest?.reference).toEqual({
-      type: 'quote',
-      text: 'keep this',
-    });
-    await act(() => f.result.current.askInSideChat());
-    expect(f.copy).toHaveBeenCalledTimes(2);
+    expect(
+      new Set(f.copy.mock.calls.map((call) => call[1].requestId)).size,
+    ).toBe(3);
+    act(() => f.result.current.closeSideChat('side-2'));
+    expect(f.result.current.sessions[1].opened).toBe(false);
+    await act(() => f.result.current.openSideChat('side-2'));
+    expect(f.result.current.sessions[1].opened).toBe(true);
+    expect(f.copy).toHaveBeenCalledTimes(3);
     expect(f.stream.isLoading).toBe(true);
   });
-
-  it('retries an unknown network outcome with the same identity', async () => {
+  it('retries a lost response with the same request identity', async () => {
     const f = setup();
     f.copy.mockRejectedValueOnce(new Error('Response lost'));
     await act(async () => {
@@ -98,58 +82,99 @@ describe('side chat creation', () => {
     await act(() => f.result.current.askInSideChat());
     expect(f.copy.mock.calls[1]).toEqual(f.copy.mock.calls[0]);
   });
-
-  it('deduplicates overlapping entry points and uses a new identity only after explicit close', async () => {
+  it('deduplicates overlapping creation and retains both references', async () => {
     const f = setup();
-    let resolve: (value: { thread_id: string }) => void;
+    let resolve!: (value: { thread_id: string }) => void;
     f.copy.mockReturnValueOnce(
       new Promise((done) => {
         resolve = done;
       }),
     );
-    let first: Promise<void>;
-    let second: Promise<void>;
+    let pending!: Promise<void[]>;
     act(() => {
-      first = f.result.current.askInSideChat();
-      second = f.result.current.askInSideChat({
-        type: 'quote',
-        text: 'selection',
-      });
+      pending = Promise.all(
+        ['one', 'two'].map((text) =>
+          f.result.current.askInSideChat({ type: 'quote', text }),
+        ),
+      );
     });
-    expect(f.copy).toHaveBeenCalledTimes(1);
+    expect(f.copy).toHaveBeenCalledOnce();
     await act(async () => {
-      resolve!({ thread_id: 'side-1' });
-      await Promise.all([first, second]);
+      resolve({ thread_id: 'side-1' });
+      await pending;
     });
-    const original = f.copy.mock.calls[0][1].requestId;
-    act(() => f.result.current.requestCloseSideChat());
-    await act(() => f.result.current.askInSideChat());
-    expect(f.copy).toHaveBeenCalledTimes(2);
-    expect(f.copy.mock.calls[1][1].requestId).not.toBe(original);
+    expect(
+      f.result.current.sessions[0].referenceRequest?.references,
+    ).toHaveLength(2);
   });
-
-  it('does not mount a late fork into another source and can reuse it on return', async () => {
+  it('never lets a late creation steal focus after navigating away and back', async () => {
     const f = setup();
-    let resolve: (value: { thread_id: string }) => void;
+    let resolve!: (value: { thread_id: string }) => void;
     f.copy.mockReturnValueOnce(
       new Promise((done) => {
         resolve = done;
       }),
     );
-    let pending: Promise<void>;
+    let pending!: Promise<void>;
     act(() => {
       pending = f.result.current.askInSideChat();
     });
-    f.rerender({ stream: { ...f.stream, threadId: 'another-source' } });
+    f.rerender({
+      stream: { ...f.stream, conversationId: 'other', threadId: 'other' },
+    });
+    f.rerender({ stream: f.stream });
     await act(async () => {
-      resolve!({ thread_id: 'side-1' });
+      resolve({ thread_id: 'late' });
       await pending;
     });
-    expect(f.result.current.sideChat).toBeNull();
-    expect(f.result.current.opening).toBe(false);
-    f.rerender({ stream: f.stream });
-    await act(() => f.result.current.askInSideChat());
-    expect(f.result.current.sideChat?.threadId).toBe('side-1');
-    expect(f.copy).toHaveBeenCalledTimes(1);
+    expect(f.result.current.activeViewKey).toBeNull();
   });
+  it('restores authorized side chats, filtering ordinary editing branches', async () => {
+    const f = setup();
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    await act(() => f.result.current.askInSideChat());
+    const saved = localStorage.getItem(
+      'chatkit:side-chats:v1:["/api/ai","org",null,"assistant",null,"conversation"]',
+    );
+    expect(saved).toContain('side-1');
+    f.listThreads.mockResolvedValue([
+      record('side-1'),
+      record('edit', 'message-edit'),
+    ]);
+    act(() => f.result.current.reload());
+    await waitFor(() => expect(f.listThreads).toHaveBeenCalledTimes(2));
+    expect(f.result.current.sessions).toHaveLength(1);
+    f.unmount();
+    const restored = setup([record('side-1')]);
+    await waitFor(() =>
+      expect(restored.result.current.sessions[0]?.opened).toBe(true),
+    );
+  });
+});
+
+it('clears mounted side chats when access is revoked', async () => {
+  const f = setup();
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  await act(() => f.result.current.askInSideChat());
+  f.listThreads.mockRejectedValue(
+    Object.assign(new Error('Forbidden'), { status: 403 }),
+  );
+  act(() => f.result.current.reload());
+  await waitFor(() => expect(f.result.current.error).toBe('Forbidden'));
+  expect(f.result.current.sessions).toEqual([]);
+});
+
+it('does not retry a successful fork when saving its title fails', async () => {
+  const f = setup();
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  f.update.mockRejectedValue(new Error('Title could not be saved'));
+  await act(() => f.result.current.askInSideChat());
+  await waitFor(() =>
+    expect(f.result.current.error).toBe('Title could not be saved'),
+  );
+  expect(f.result.current.sessions).toHaveLength(1);
+  f.update.mockResolvedValue({});
+  await act(() => f.result.current.renameSideChat('side-1', 'Recovered'));
+  expect(f.result.current.sessions[0].title).toBe('Recovered');
+  expect(f.copy).toHaveBeenCalledOnce();
 });

@@ -1,5 +1,123 @@
 # @xpert-ai/chatkit-ui
 
+## 0.27.0
+
+### Minor Changes
+
+- da47ce6: Support direct server actions on message Widgets while preserving host callbacks for other actions.
+- e7b5d2b: Extract ChatKit's shadcn/Radix controls into a shared primitives package and reuse them in A2UI. Unify density, radius, semantic colors and themed portals; preserve Widget data bindings, actions and class-map overrides. Existing ChatKit UI exports remain compatible. Standalone A2UI consumers must use Tailwind 4 and import the shared stylesheet once.
+- e7b5d2b: Submit declared A2UI actions to the originating Agent conversation while preserving server actions and host callbacks. Restore submitted field values and read-only state from conversation history, and display readable submission receipts in messages and navigation.
+
+### Patch Changes
+
+- 91db121: Render single-choice A2UI widgets with a themed, keyboard-accessible dropdown.
+- Updated dependencies [da47ce6]
+- Updated dependencies [e7b5d2b]
+- Updated dependencies [91db121]
+- Updated dependencies [e7b5d2b]
+  - @xpert-ai/chatkit-types@0.24.0
+  - @xpert-ai/chatkit-primitives@0.2.0
+  - @xpert-ai/a2ui-react@0.18.0
+  - @xpert-ai/chatkit-web-shared@0.18.6
+
+## 0.26.1
+
+### Patch Changes
+
+- df6ab52: Automatically protect Assistant composer drafts with local browser storage and
+  restore exact multiline text and portable references after reloads. Keep pending
+  submissions recoverable until server acknowledgement, preserve newer input, and
+  isolate drafts by the existing service, organization, Assistant, and conversation
+  branch context without requiring additional host configuration.
+- 5721ef9: Keep terminal tool durations unknown when no persisted end time exists, so reopening a conversation cannot extend elapsed time. Preserve live timing for running steps and stable durations from authoritative receipts.
+- Updated dependencies [b2cbce1]
+  - @xpert-ai/chatkit-types@0.23.1
+
+## 0.26.0
+
+### Minor Changes
+
+- b0d05ef: Open Project Word and PDF files through the registered document plugins, and prevent writable Word files from falling back to the embedded editor. Preserve authorized file resolution and stale-context handling, and provide a shared plugin-required message.
+
+  Let resource cards contain their complete square thumbnails and use density-aware padding so document icons and covers stay inside the card.
+
+- 941768b: Show tool names and icons in child assistant runs and let users expand a call to inspect its published inputs, outputs and errors. Preserve explicit null values during streaming, provide a fallback tool icon, and remove the shadow from child assistant cards.
+
+### Patch Changes
+
+- f2e8545: Keep single-file resource deliveries in a compact horizontal row: a square cover extending below the card on the left, one title and file details in the middle, and open/download actions on the right. Reuse the same thumbnail surface for all file types and declared file icons when no cover is supplied, while preserving the existing row height. Lazy-load previews, release image URLs and retain file actions on preview failure. Preserve distinct file labels, access errors, download retry and existing multi-block cards.
+
+  Reuse ChatKit's shared Office file icons when a cover is missing or fails. Resolve MIME metadata through scoped SDK file grants without downloading document bytes, including for historical cards and direct file targets.
+
+- f2e8545: Prevent completed Workbench entry navigation from reopening the previous document after a plugin creates a presentation or the layout changes. New navigation requests and scope changes continue to apply normally.
+- Updated dependencies [941768b]
+  - @xpert-ai/chatkit-types@0.23.0
+  - @xpert-ai/chatkit-web-shared@0.18.5
+
+## 0.25.0
+
+### Minor Changes
+
+- 1e8c1e0: Open Project PPTX files through the registered file editor and retire the embedded writable PPTX editor. Keep ordinary native file routing and ignore editor-resolution results from a previous Project context.
+
+  Requires the matching Xpert server and PPTX Editor plugin. Upgrade the browser SDK dependency to `^0.27.0`, which provides `ContentClient.resolveFile`. Non-Project PPTX editing now directs users to the Project plugin workflow.
+
+### Patch Changes
+
+- 75b8fbf: Show the default Assistant face on its avatar background or the Assistant accent color. Scale avatars in the chat header and details panel with theme density and use proportional avatar corners for each radius preset.
+
+## 0.24.0
+
+### Minor Changes
+
+- 05200d7: Expose live MCP App tool declarations and route client-tool requests through authenticated view authorization and host approval. Add scoped browser draft recovery and separate owner consent for delegated analysis results, invalidating consent when the grant revision or credential/owner context changes.
+
+### Patch Changes
+
+- 05200d7: Upgrade @xpert-ai/xpert-sdk to ^0.26.0 and consume its published Workbench browser entry for local drafts. Keep storage budgets and offline-write policy in the trusted ChatKit host, and validate the installed runtime without a local SDK patch.
+- 62e03cc: Keep long project names within the Composer by constraining the context toolbar width and allowing its grid column to shrink on narrow screens.
+- Updated dependencies [05200d7]
+  - @xpert-ai/chatkit-types@0.22.0
+  - @xpert-ai/chatkit-web-shared@0.18.4
+
+## 0.23.1
+
+### Patch Changes
+
+- 66998c7: Open the scheduled task form from the active conversation menu on Assistants with the Scheduler capability to select a chat destination and repeat interval.
+
+## 0.23.0
+
+### Minor Changes
+
+- f6a53cd: Resolve generic conversation resource navigation through current host context. Open Project content in its native editor and accepted group references in their fixed-version presentation, with scope checks and stale-response protection.
+
+  Route group message links and the shared-resource menu through the same Workbench resolver. Preserve requester-only automatic navigation, replay suppression, and cancellation when a caller or host scope changes.
+
+  Require @xpert-ai/xpert-sdk ^0.23.0 for the published conversation resource contracts and legacy group-link normalization.
+
+- 0b4a728: Render server-filtered group tool-result snapshots with the existing Widget, resource card and historical MCP result components. Isolate copied results from the active Assistant's actions, resource scope and App bridge; tolerate older SDK and server versions.
+
+### Patch Changes
+
+- a5121dd: Upgrade @xpert-ai/xpert-sdk to ^0.24.0 so group resource cards and navigation retain provider-declared icons and use the published message navigation contract.
+- 1d547d0: Align composer menus with theme density, preview submenus on wide screens with a mouse, and place skills last in the slash palette with clearer descriptions and source labels.
+- 4b90001: Locate public group messages from Workbench views, loading older history as needed without navigating into a private Assistant runtime.
+- 903b547: Show group resource navigation as a single card with a title, resource context and an explicit Open action. Reuse the resource-card layout, remove the exact generated title fallback, and keep additional message text, history replay behavior and current-group authorization unchanged.
+
+  Render provider-declared resource type icons through the shared icon renderer, with a generic fallback for older links.
+
+- 0b4a728: Open group snapshot resource cards through accepted group Artifact references with fresh viewer authorization. Keep source navigation and actions isolated, clarify snapshot-only cards, and report missing or ambiguous grants inline.
+- f6d337c: Prepare an editable draft when selecting a starter prompt or prompt workflow. Include the workflow's requested skills and plugins and send the edited text and attachments when the user submits.
+
+  Show workflows with bound capabilities in the shortcuts above the composer.
+
+- 0b4a728: Add optional passive Widget presentation metadata and render group results as aligned, themed cards with expandable details and viewer-local timestamps. Improve responsive A2UI metric typography while keeping source actions disabled in group snapshots.
+- 1bb7fa3: Allow remote View OAuth popups to use their normal browser context without inheriting iframe sandbox restrictions. Keep the embedded View origin isolated and retain its existing scoped message bridge.
+- Updated dependencies [0b4a728]
+  - @xpert-ai/chatkit-types@0.21.0
+  - @xpert-ai/chatkit-web-shared@0.18.3
+
 ## 0.22.0
 
 ### Minor Changes

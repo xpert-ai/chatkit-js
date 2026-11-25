@@ -1,3 +1,4 @@
+import type { TChatActivityPresentation } from './activity-presentation.js';
 import type { TMessageContentFileActivity } from './file-activity-receipt.js';
 import type { TMessageContentResourceCard } from './resource-card.js';
 import type { ToolCall } from '@langchain/core/messages/tool';
@@ -90,6 +91,12 @@ export type TWidgetPresentation = {
 
 export type TMessageComponentWidgetItem = {
   name: string;
+  /** Action names handled by the server for this Widget. Other actions belong to the host. */
+  serverActions?: string[];
+  /** Action names submitted as user input to the owning conversation. */
+  agentActions?: string[];
+  /** Interaction requires an idle thread. */
+  requiresIdleThread?: boolean;
   /** Optional display-only provenance. Older clients may omit this footer. */
   presentation?: TWidgetPresentation;
   /**
@@ -342,6 +349,8 @@ export type TMessageComponentStep<T = unknown> = {
  */
 export type TChatEventMessage = {
   type?: string;
+  /** Runtime-only activities are omitted from the conversation transcript. */
+  presentation?: TChatActivityPresentation;
   title?: string;
   message?: string;
   status?: 'success' | 'fail' | 'running';

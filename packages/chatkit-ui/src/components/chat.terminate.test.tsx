@@ -75,7 +75,7 @@ it('retains the composer fallback for embeds without a header', async () => {
   mocks.stream.isLoading = true;
   renderChat({ header: { enabled: false } });
   expect(
-    await screen.findByRole('button', { name: 'threadControl.terminate' }),
+    await screen.findByRole('button', { name: 'threadControl.stop' }),
   ).toBeVisible();
   expect(screen.queryByRole('button', { name: 'chat.moreActions' })).toBeNull();
 });

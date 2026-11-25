@@ -110,11 +110,15 @@ describe('Chat plan mode and submission', () => {
     mocks.stream.threadId = 'thread-1';
     mocks.stream.activeRunId = 'run-1';
     mocks.stream.isLoading = true;
-    mocks.stream.pauseRun.mockRejectedValue(
+    mocks.stream.pauseRun.mockRejectedValueOnce(
       new Error('HTTP 409: workflow changed'),
     );
     renderChat();
     fireEvent.click(screen.getByRole('button', { name: 'stop' }));
+    await waitFor(() =>
+      expect(mocks.stream.pauseRun).toHaveBeenCalledWith('run-1'),
+    );
+    expect(mocks.stream.stop).not.toHaveBeenCalled();
     await screen.findByText('connection.actionUnconfirmed');
     setComposerText(
       screen.getByRole('textbox'),

@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   queryThread: null as string | null,
   isParentAvailable: false,
   getThread: vi.fn(),
+  createThread: vi.fn(),
+  deleteThread: vi.fn(),
+  createConversation: vi.fn(),
   getControlView: vi.fn(),
   watchActivity: vi.fn(),
   getRun: vi.fn(),
@@ -28,12 +31,15 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xpert-ai/xpert-sdk')>();
   class Client {
     threads = {
+      create: mocks.createThread,
+      delete: mocks.deleteThread,
       get: mocks.getThread,
       getControlView: mocks.getControlView,
       watchActivity: mocks.watchActivity,
       releaseDisplayPause: mocks.releaseDisplayPause,
     };
     conversations = {
+      create: mocks.createConversation,
       get: mocks.getConversation,
       search: mocks.searchConversations,
       searchMessages: mocks.searchMessages,
@@ -91,6 +97,7 @@ export function provider(
   initialThread?: string,
   apiKey = 'cs-x-test',
   projectId = 'project-1',
+  resumeContext?: Record<string, unknown>,
 ) {
   return (
     <StreamProvider
@@ -98,6 +105,7 @@ export function provider(
       apiUrl="https://api.example.test/api/ai"
       xpertId="assistant-1"
       projectId={projectId}
+      resumeContext={resumeContext}
       initialThread={initialThread}
       threadStateMode={mocks.queryThread ? 'url' : 'memory'}
     >
@@ -159,6 +167,16 @@ export function setupHistoryTests() {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.queryThread = null;
+    mocks.createThread
+      .mockReset()
+      .mockResolvedValue({
+        thread_id: 'new-thread',
+        metadata: { id: 'new-conversation' },
+      });
+    mocks.createConversation
+      .mockReset()
+      .mockResolvedValue({ id: 'new-conversation', threadId: 'new-thread' });
+    mocks.deleteThread.mockReset().mockResolvedValue(undefined);
     mocks.isParentAvailable = false;
     mocks.sendCommand.mockReset();
     mocks.getThread.mockImplementation(async (id: string) => ({

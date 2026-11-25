@@ -316,6 +316,7 @@ export function App({
                   : scopedInitialThread
               }
               locale={requestLocale}
+              resumeContext={navigation.session ? undefined : options?.request?.context}
               additionalContext={
                 workbenchEnabled ? workbenchRequestContext : undefined
               }

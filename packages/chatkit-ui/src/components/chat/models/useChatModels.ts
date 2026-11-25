@@ -127,8 +127,10 @@ export function useChatModels({
         if (
           error !== null &&
           typeof error === 'object' &&
-          Reflect.get(error, 'status') === 404
+          'status' in error &&
+          (error.status === 403 || error.status === 404)
         ) {
+          // Chat can use the published default without access to the model picker.
           return;
         }
         sendParentEvent?.('public_event', ['error', { error: toError(error) }]);

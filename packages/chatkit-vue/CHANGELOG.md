@@ -1,5 +1,38 @@
 # @xpert-ai/chatkit-vue
 
+## 0.18.6
+
+### Patch Changes
+
+- Updated dependencies [da47ce6]
+- Updated dependencies [e7b5d2b]
+  - @xpert-ai/chatkit-types@0.24.0
+  - @xpert-ai/chatkit-web-component@0.19.6
+
+## 0.18.5
+
+### Patch Changes
+
+- Updated dependencies [941768b]
+  - @xpert-ai/chatkit-types@0.23.0
+  - @xpert-ai/chatkit-web-component@0.19.5
+
+## 0.18.4
+
+### Patch Changes
+
+- Updated dependencies [05200d7]
+  - @xpert-ai/chatkit-types@0.22.0
+  - @xpert-ai/chatkit-web-component@0.19.4
+
+## 0.18.3
+
+### Patch Changes
+
+- Updated dependencies [0b4a728]
+  - @xpert-ai/chatkit-types@0.21.0
+  - @xpert-ai/chatkit-web-component@0.19.3
+
 ## 0.18.2
 
 ### Patch Changes

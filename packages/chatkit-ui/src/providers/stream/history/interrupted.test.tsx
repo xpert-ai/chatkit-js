@@ -85,7 +85,8 @@ describe('generic interrupted thread lifecycle', () => {
       status: 'interrupted',
       operation: inputOperation,
     });
-    render(provider('thread-1'));
+    const hostContext = { supportsConversationProjectMove: true };
+    render(provider('thread-1', undefined, undefined, hostContext));
     await waitFor(() =>
       expect(stream.pendingRequestUserInput?.id).toBe('input-call'),
     );
@@ -97,6 +98,7 @@ describe('generic interrupted thread lifecycle', () => {
       stream.submitRequestUserInput({ refunds: true });
     });
     expect(mocks.runStream).toHaveBeenCalledOnce();
+    expect(mocks.runStream.mock.calls[0]?.[2]?.context).toMatchObject(hostContext);
     expect(
       mocks.runStream.mock.calls[0]?.[2]?.input?.command?.resume
         ?.toolMessages?.[0],

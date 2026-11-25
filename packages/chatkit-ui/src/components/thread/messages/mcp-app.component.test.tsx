@@ -115,6 +115,40 @@ describe('McpAppMessage host controls', () => {
     mocks.teardown.mockResolvedValue(undefined);
   });
 
+  it('renders a restricted history reference and delivers settings fetched through the scoped App endpoint', async () => {
+    const settings = { sectionScope: 'commercial', title: 'Tender', formId: 'form-1' };
+    const result = { content: [{ type: 'text', text: JSON.stringify(settings) }] };
+    mocks.getResource.mockResolvedValueOnce({
+      uri: data.resourceUri,
+      text: '<!doctype html><html><body>Project settings</body></html>',
+      appInstanceToken: 'authorized-lease',
+      toolInput: settings,
+      toolResult: result,
+      toolInfo: { name: data.toolName, inputSchema: { type: 'object', properties: {} } },
+    });
+    await act(async () => {
+      render(<McpAppMessage data={{ ...data, appInstanceToken: undefined }} messageId="saved-message" />);
+    });
+    const iframe = asIframe(await screen.findByTitle('Example App'));
+    const post = vi.spyOn(getIframeWindow(iframe), 'postMessage');
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: iframe.contentWindow,
+        data: { jsonrpc: '2.0', method: 'ui/initialize', id: 'init', params: {} },
+      }));
+      window.dispatchEvent(new MessageEvent('message', {
+        source: iframe.contentWindow,
+        data: { jsonrpc: '2.0', method: 'ui/notifications/initialized' },
+      }));
+    });
+    expect(mocks.getResource).toHaveBeenCalledWith('app-1', expect.objectContaining({ messageId: 'saved-message', token: undefined }), expect.any(Object));
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: 'ui/notifications/tool-input', params: { arguments: settings } }), '*');
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: 'ui/notifications/tool-result', params: expect.objectContaining(result) }), '*');
+    expect(JSON.stringify(post.mock.calls)).not.toContain('authorized-lease');
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('preserves the iframe session when streamed component data is unchanged', async () => {
     const { rerender } = render(<McpAppMessage data={data} messageId="message-1" />);
     const iframe = await screen.findByTitle('Example App');

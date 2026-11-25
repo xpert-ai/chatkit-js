@@ -3,12 +3,16 @@ import {
   ChatMessageTypeEnum,
 } from '@xpert-ai/chatkit-types';
 import { describe, expect, it, vi } from 'vitest';
-import { createLangGraphEventState } from '../../langGraphEventMapper';
+import {
+  createLangGraphEventState,
+  type LangGraphEventContext,
+} from '../../langGraphEventMapper';
 import { applyStreamEvent } from '../../Stream';
 
 describe('conversation lifecycle stream events', () => {
   it('resolves the current conversation id when a new conversation starts', () => {
     const onConversationStart = vi.fn();
+    const context: LangGraphEventContext = { threadId: 'thread-new' };
 
     applyStreamEvent(
       {
@@ -24,7 +28,7 @@ describe('conversation lifecycle stream events', () => {
       vi.fn(),
       [],
       createLangGraphEventState(),
-      { threadId: 'thread-new' },
+      context,
       undefined,
       undefined,
       undefined,
@@ -40,6 +44,43 @@ describe('conversation lifecycle stream events', () => {
     );
 
     expect(onConversationStart).toHaveBeenCalledWith('conversation-new');
+    const sendEvent = vi.fn();
+    applyStreamEvent(
+      {
+        event: 'message',
+        data: JSON.stringify({
+          type: ChatMessageTypeEnum.MESSAGE,
+          data: {
+            type: 'component',
+            id: 'call-1',
+            data: {
+              category: 'Tool',
+              toolPresentation: 'redacted',
+              tool: 'uose-queryEntities',
+              status: 'success',
+            },
+          },
+        }),
+      },
+      vi.fn(),
+      vi.fn(),
+      sendEvent,
+      [],
+      createLangGraphEventState(),
+      context,
+    );
+    expect(sendEvent).toHaveBeenCalledWith('public_event', [
+      'log',
+      {
+        name: 'lg.tool.end',
+        data: {
+          toolCallId: 'call-1',
+          toolName: 'uose-queryEntities',
+          threadId: 'thread-new',
+          conversationId: 'conversation-new',
+        },
+      },
+    ]);
   });
 });
 

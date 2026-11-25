@@ -1,5 +1,36 @@
 # @xpert-ai/chatkit-types
 
+## 0.24.0
+
+### Minor Changes
+
+- da47ce6: Support direct server actions on message Widgets while preserving host callbacks for other actions.
+- e7b5d2b: Submit declared A2UI actions to the originating Agent conversation while preserving server actions and host callbacks. Restore submitted field values and read-only state from conversation history, and display readable submission receipts in messages and navigation.
+
+## 0.23.1
+
+### Patch Changes
+
+- b2cbce1: Expose the optional Workbench navigation requestId used by hosts to refocus an existing view at the same address. Cover returning from a native tab while preserving the view's maximized layout.
+
+## 0.23.0
+
+### Minor Changes
+
+- 941768b: Show tool names and icons in child assistant runs and let users expand a call to inspect its published inputs, outputs and errors. Preserve explicit null values during streaming, provide a fallback tool icon, and remove the shadow from child assistant cards.
+
+## 0.22.0
+
+### Minor Changes
+
+- 05200d7: Expose live MCP App tool declarations and route client-tool requests through authenticated view authorization and host approval. Add scoped browser draft recovery and separate owner consent for delegated analysis results, invalidating consent when the grant revision or credential/owner context changes.
+
+## 0.21.0
+
+### Minor Changes
+
+- 0b4a728: Add optional passive Widget presentation metadata and render group results as aligned, themed cards with expandable details and viewer-local timestamps. Improve responsive A2UI metric typography while keeping source actions disabled in group snapshots.
+
 ## 0.20.3
 
 ### Patch Changes

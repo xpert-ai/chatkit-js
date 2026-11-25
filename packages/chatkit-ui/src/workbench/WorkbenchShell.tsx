@@ -1,3 +1,6 @@
+import { openNativeTool } from './shell/open-native-tool';
+import { workbenchStorageScope } from './shell/workbench-storage-scope';
+import { useSideChatShortcut } from './side-chat/useSideChatShortcut';
 import { useFileEditorNavigation } from './content/useFileEditorNavigation';
 import { isNativeView } from './shell/native-view';
 import {
@@ -46,7 +49,6 @@ import type {
   WorkbenchAssistantContext,
   WorkbenchShellProps,
 } from './shell/types';
-import { isSideChatCloseConfirmationDisabled } from './side-chat/SideChatCloseDialog';
 import { useExecutionFocus } from './useExecutionFocus';
 import { useInitialLoading } from './useInitialLoading';
 import { useLocalExecutionNavigation } from './useLocalExecutionNavigation';
@@ -58,7 +60,7 @@ import { useWorkbenchResize } from './useWorkbenchResize';
 import { useWorkbenchViews } from './useWorkbenchViews';
 import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY, WorkbenchPanel } from './WorkbenchPanel';
-import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
+import { sideChatViewKey } from './side-chat/types';
 import { WorkbenchChatProvider } from './floating-chat/context';
 
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
@@ -156,16 +158,6 @@ function WorkbenchContent({
   const [hostEvent, setHostEvent] =
     React.useState<XpertRemoteViewHostEventMessage | null>(null);
 
-  const [sideChat, setSideChat] = React.useState<SideChatSession | null>(null);
-  const [sideChatOpening, setSideChatOpening] = React.useState(false);
-  const [sideChatCloseDialogOpen, setSideChatCloseDialogOpen] =
-    React.useState(false);
-
-  const [
-    sideChatCloseConfirmationDisabled,
-    setSideChatCloseConfirmationDisabled,
-  ] = React.useState(isSideChatCloseConfirmationDisabled);
-
   const contextsRef = React.useRef(
     new Map<string, WorkbenchAssistantContext>(),
   );
@@ -260,6 +252,20 @@ function WorkbenchContent({
     dismiss,
   } = useWorkbenchLayout(layoutKey, containerWidth, isNarrow);
 
+  const sideChats = useWorkbenchSideChat({
+    sideChatEnabled: sideChatEnabled && authenticated,
+    stream,
+    identity: options?.workbench?.preferencesKey ?? options?.sessionKey,
+    t,
+    activeViewKey,
+    setActiveViewKey,
+    setOpen,
+  });
+  const { askInSideChat } = sideChats;
+  useSideChatShortcut(rootRef, sideChatEnabled, askInSideChat, (message) =>
+    setNotification({ level: 'error', message }),
+  );
+
   const { scopedViews, selectView, closeView } = useWorkbenchViewTabs({
     views,
     queries: viewQueries,
@@ -284,7 +290,7 @@ function WorkbenchContent({
     (!restoring ||
       (containerWidth >= NARROW_BREAKPOINT &&
         (externalViewOpen ||
-          Boolean(sideChat) ||
+          sideChats.sessions.some((session) => session.opened) ||
           (viewsScope === viewScopeKey && (views.length > 0 || !expanded)))));
 
   const mainChatInWorkbench = open && expanded;
@@ -306,12 +312,11 @@ function WorkbenchContent({
     visitPreview(key);
   };
 
-  const { tabKeys, adjacentTab, replaceNewTab, insertTabBefore, createNewTab } =
+  const { tabKeys, adjacentTab, replaceNewTab, createNewTab } =
     useWorkbenchShellTabs({
       native,
       externalViewOpen,
-      sideChat,
-      sideChatOpening,
+      sideChats: sideChats.sessions,
       previews,
       scopedViews,
       newTabs,
@@ -324,7 +329,12 @@ function WorkbenchContent({
       closeNewTab,
       addNewTab,
       setOpen,
-      fallbackReady: open && !initialLoading && !loading && !error,
+      fallbackReady:
+        open &&
+        !initialLoading &&
+        !loading &&
+        !error &&
+        (!sideChatEnabled || !stream.conversationId || sideChats.ready),
     });
 
   React.useEffect(() => {
@@ -611,7 +621,7 @@ function WorkbenchContent({
     external: hasExternalRuns,
     enabled,
     assistantId: stream.assistantId,
-    sideChat: Boolean(sideChat),
+    sideChat: sideChats.sessions.some((session) => session.opened),
     remoteViewsEnabled,
     scopeReady: viewsScope === viewScopeKey,
     loading,
@@ -628,23 +638,6 @@ function WorkbenchContent({
     sideChatEnabled,
     t,
   });
-
-  const { askInSideChat, requestCloseSideChat, confirmCloseSideChat } =
-    useWorkbenchSideChat({
-      sideChatEnabled,
-      stream,
-      t,
-      setActiveViewKey,
-      setOpen,
-      setSideChatOpening,
-      setSideChat,
-      sideChat,
-      setSideChatCloseDialogOpen,
-      adjacentTab,
-      closeWorkbench,
-      sideChatCloseConfirmationDisabled,
-      setSideChatCloseConfirmationDisabled,
-    });
 
   const navigateResourceCard = useResourceCardNavigation(executeClientCommand);
   const resourceCardActions = useWorkbenchResourceCardActions({
@@ -699,6 +692,8 @@ function WorkbenchContent({
 
   const contextValue = React.useMemo<WorkbenchContextValue>(
     () => ({
+      storageScope: workbenchStorageScope(stream, options),
+      searchUrlTemplate: options?.workbench?.searchUrlTemplate,
       enabled,
       open,
       loading,
@@ -717,6 +712,7 @@ function WorkbenchContent({
       },
       sideChatEnabled,
       askInSideChat,
+      sideChats,
       externalAssistantsEnabled,
       openExternalAssistant,
       openGroupAssistant: stream.group
@@ -751,7 +747,7 @@ function WorkbenchContent({
         executeClientCommand(
           'workbench.navigation.open',
           { target: 'assistant.project', projectId, viewKey },
-          { key: viewKey },
+          { key: viewKey ?? 'chatkit.project-recovery' },
         ),
       toggle: () => {
         if (!available) return;
@@ -769,6 +765,9 @@ function WorkbenchContent({
       },
     }),
     [
+      options?.workbench?.preferencesKey,
+      options?.workbench?.searchUrlTemplate,
+      options?.sessionKey,
       openScheduleForm,
       artifactActions,
       removePreview,
@@ -784,6 +783,7 @@ function WorkbenchContent({
       stream.conversationId,
       t,
       askInSideChat,
+      sideChats,
       externalAssistantsEnabled,
       openExternalAssistant,
       hasExternalRuns,
@@ -830,47 +830,25 @@ function WorkbenchContent({
 
   const panel = (
     <WorkbenchPanel
-      onOpenProject={(projectId, viewKey) =>
-        executeClientCommand(
-          'workbench.navigation.open',
-          { target: 'assistant.project', projectId, viewKey },
-          { key: viewKey ?? 'chatkit.project-recovery' },
-        )
-      }
+      onOpenProject={contextValue.openProject}
       tabOrder={tabKeys}
       mainChatHost={mainChatInWorkbench ? chatHost.attach : undefined}
       native={native}
       sideChatEnabled={sideChatEnabled}
-      onOpenNative={(tool, fromTab) => {
-        if (tool === 'side-chat') {
-          const nextTab = fromTab
-            ? tabKeys
-                .slice(tabKeys.indexOf(fromTab) + 1)
-                .find((key) => key !== SIDE_CHAT_VIEW_KEY)
-            : undefined;
-          replaceNewTab(fromTab, SIDE_CHAT_VIEW_KEY);
-          void askInSideChat().catch((error: unknown) => {
-            if (requestScopeRef.current !== requestScope) return;
-            if (fromTab) {
-              // The pending side-chat tab may already have disappeared after failure.
-              insertTabBefore(fromTab, nextTab);
-              addNewTab(fromTab);
-              setActiveViewKey((current) =>
-                current === SIDE_CHAT_VIEW_KEY ? fromTab : current,
-              );
-            }
+      onOpenNative={openNativeTool({
+        native,
+        askInSideChat,
+        replaceNewTab,
+        setActiveViewKey,
+        setOpen,
+        onError: (error) => {
+          if (requestScopeRef.current === requestScope)
             setNotification({
               level: 'error',
               message: getErrorMessage(error, t('workbench.files.failed')),
             });
-          });
-        } else {
-          const key = native.openTool(tool);
-          replaceNewTab(fromTab, key);
-          setActiveViewKey(key);
-          setOpen(true);
-        }
-      }}
+        },
+      })}
       onOpenNativeFile={openWorkspaceFile}
       onCloseNative={(key) => {
         if (native.requestClose(key) && activeViewKey === key) {
@@ -925,8 +903,7 @@ function WorkbenchContent({
       onCloseView={closeEditorView}
       activeView={activeView}
       activeViewKey={activeViewKey}
-      sideChat={sideChat}
-      sideChatOpening={sideChatOpening}
+      sideChats={sideChats}
       externalViewOpen={externalViewOpen}
       externalRuns={externalRuns}
       groupRecord={stream.group ? groupRecord : undefined}
@@ -960,7 +937,11 @@ function WorkbenchContent({
       startPageLoading={showLoading}
       expanded={expanded}
       onClose={closeWorkbench}
-      onRequestCloseSideChat={requestCloseSideChat}
+      onRequestCloseSideChat={(id) => {
+        const key = sideChatViewKey(id);
+        sideChats.closeSideChat(id);
+        if (activeViewKey === key) setActiveViewKey(adjacentTab(key));
+      }}
       onToggleExpanded={() => setExpanded((current) => !current)}
       onReload={reload}
       onSelect={selectTab}
@@ -991,7 +972,9 @@ function WorkbenchContent({
             mainChatInWorkbench={mainChatInWorkbench}
             chatHost={chatHost}
             chat={chat}
-            sideChat={sideChat}
+            keepSideChatsMounted={sideChats.sessions.some(
+              (session) => session.visited,
+            )}
             externalViewOpen={externalViewOpen}
             expanded={expanded}
             containerWidth={containerWidth}
@@ -1008,9 +991,6 @@ function WorkbenchContent({
             activeViewKey={activeViewKey}
             adjacentTab={adjacentTab}
             setActiveViewKey={setActiveViewKey}
-            sideChatCloseDialogOpen={sideChatCloseDialogOpen}
-            setSideChatCloseDialogOpen={setSideChatCloseDialogOpen}
-            confirmCloseSideChat={confirmCloseSideChat}
           />
         </WorkbenchChatProvider>
       </ResourceCardContext.Provider>

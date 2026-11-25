@@ -1,4 +1,11 @@
 {
+    "widget": {
+        "actionFailed": "Could not submit this action.",
+        "actionTooLarge": "The submitted values are too large.",
+        "actionSent": "Submitted to the assistant.",
+        "actionStartsTurn": "Submitting this card sends your values to the assistant.",
+        "dialogTitle": "Details"
+    },
     "sharing": {
         "projectUnavailable": "Sharing project conversations is not supported yet.",
         "existingNotice": "This is your saved snapshot. Copying or opening it keeps the same link, messages and expiry.",
@@ -63,8 +70,8 @@
             "openUrl": "Open website",
             "invalidUrl": "Enter a valid HTTP or HTTPS URL without embedded credentials.",
             "urlHint": "Press Enter to open this website.",
-            "noResults": "No matching items.",
-            "tools": "Common tools",
+            "noResults": "No matches. Try another name, file path or URL.",
+            "tools": "Open",
             "noTools": "No common tools are available.",
             "dynamic": "Recommended",
             "noDynamic": "No recommended views",
@@ -78,7 +85,13 @@
             "moreTools": "More tools",
             "comingSoon": "Plugins and MCP Apps will be available here",
             "conversationRequired": "Start a conversation to use this tool",
-            "disabled": "Side chat is disabled"
+            "disabled": "Side chat is disabled",
+            "customize": "Customize",
+            "reset": "Restore defaults",
+            "pin": "Pin {{title}}",
+            "unpin": "Unpin {{title}}",
+            "moveUp": "Move {{title}} up",
+            "moveDown": "Move {{title}} down"
         },
         "browser": {
             "placeholder": "Search or enter URL",
@@ -90,7 +103,17 @@
             "history": "Recent websites",
             "noHistory": "No websites opened in this conversation yet.",
             "copyUrl": "Copy link",
-            "suggestions": "Address suggestions"
+            "suggestions": "Address suggestions",
+            "switchTab": "Switch to tab",
+            "searchWeb": "Search the web for {{query}}",
+            "clearHistory": "Clear history",
+            "kind": {
+                "action": "Action",
+                "chat": "Side chat",
+                "file": "File",
+                "website": "Website",
+                "query": "Recent search"
+            }
         },
         "messageUnavailable": "The requested message is unavailable in this branch.",
         "executionUnavailable": "The requested execution is unavailable in this conversation.",
@@ -127,7 +150,21 @@
                 "dontAskAgain": "Don't ask again",
                 "cancel": "Cancel",
                 "confirm": "Close side chat"
-            }
+            },
+            "list": "Side chats",
+            "create": "New side chat",
+            "empty": "Start a separate discussion here.",
+            "rename": "Rename {{title}}",
+            "name": "Chat name",
+            "save": "Save",
+            "cancel": "Cancel",
+            "idle": "Ready",
+            "busy": "Running",
+            "interrupted": "Needs input",
+            "error": "Failed",
+            "paused": "Paused",
+            "sendToExisting": "Send to existing side chat",
+            "numberedTitle": "Side chat {{number}}"
         },
         "errors": {
             "contextKeyRequired": "Context key is required.",
@@ -444,6 +481,13 @@
         "retryUpload": "Retry upload",
         "dropFilesTitle": "Drop files to upload",
         "dropFilesHint": "They will be attached to your next message.",
+        "attachmentError": {
+            "uploadFailed": "Upload failed. Please retry.",
+            "parseFailed": "File parsing failed. Select the file again to retry.",
+            "storageFull": "Storage is full. Check Plans and usage, increase your storage allowance or remove unused files, then retry.",
+            "http": "Upload failed (HTTP {{status}}). Retry later or contact your administrator if it continues.",
+            "remove": "Remove {{name}}"
+        },
         "attachmentStatus": {
             "uploaded": "Uploaded",
             "scanning": "Scanning",
@@ -1430,6 +1474,7 @@
         }
     },
     "connection": {
+        "retry": "Reconnect",
         "reconnecting": "Connection interrupted. Reconnecting…",
         "unavailable": "Updates are temporarily unavailable. Your progress is preserved.",
         "actionUnconfirmed": "Could not confirm the action. Please try again shortly."

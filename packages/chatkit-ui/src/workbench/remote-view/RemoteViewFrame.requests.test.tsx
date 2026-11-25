@@ -90,6 +90,67 @@ async function setup(localDrafts = false) {
 }
 
 describe('RemoteViewFrame request errors', () => {
+  it('allows a document action to finish after 30 seconds while retaining a bounded timeout', async () => {
+    const f = await setup();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let finish: (value: unknown) => void = () => {};
+    let signal: AbortSignal | undefined;
+    f.viewHosts.executeAction.mockImplementation((...args) => new Promise((resolve, reject) => {
+      finish = resolve;
+      signal = args[5].signal;
+      signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
+    }));
+    try {
+      f.send({ type: 'executeAction', requestId: 'slow-export', actionKey: 'approve', input: {} });
+      await act(() => vi.advanceTimersByTimeAsync(35_000));
+      expect(signal?.aborted).toBe(false);
+      expect(f.post.mock.calls.some(([message]) => message.type === 'error')).toBe(false);
+      await act(async () => finish({ exportVersionId: 'new-version' }));
+      expect(f.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'actionResult', requestId: 'slow-export' }), '*');
+
+      f.send({ type: 'executeAction', requestId: 'stalled-export', actionKey: 'approve', input: {} });
+      await act(() => vi.advanceTimersByTimeAsync(120_000));
+      expect(signal?.aborted).toBe(true);
+      expect(f.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', requestId: 'stalled-export' }), '*');
+    } finally {
+      f.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('allows a slow download body, keeps previews bounded, and cancels stalled downloads', async () => {
+    const f = await setup();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const expiresAt = '2099-01-01T00:00:00Z';
+    f.viewHosts.createFileAccessSession.mockResolvedValue({ sessionId: 'session', expiresAt });
+    f.viewHosts.createFileAccessGrant.mockResolvedValue({ url: '/content/bundle', fileName: 'bundle.zip', mimeType: 'application/zip', expiresAt });
+    let finish: (value: Blob) => void = () => {};
+    let signal: AbortSignal | undefined;
+    f.viewHosts.readFileAccess.mockImplementation((_url, options) => new Promise((resolve, reject) => {
+      finish = resolve;
+      signal = options.signal;
+      signal?.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true });
+    }));
+    try {
+      f.send({ type: 'requestFileAccess', requestId: 'slow-download', fileKey: 'bundle', purpose: 'download' });
+      await act(() => vi.advanceTimersByTimeAsync(65_000));
+      expect(signal?.aborted).toBe(false);
+      await act(async () => finish(await new Response(new Uint8Array([80, 75, 3, 4]), { headers: { 'Content-Type': 'application/zip' } }).blob()));
+      await vi.waitFor(() => expect(f.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'fileAccessResult', requestId: 'slow-download', result: expect.objectContaining({ url: 'data:application/zip;base64,UEsDBA==' }) }), '*'));
+      f.send({ type: 'requestFileAccess', requestId: 'stalled-preview', fileKey: 'preview', purpose: 'preview' });
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(signal?.aborted).toBe(true);
+      expect(f.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', requestId: 'stalled-preview' }), '*');
+      f.send({ type: 'requestFileAccess', requestId: 'stalled-download', fileKey: 'bundle', purpose: 'download' });
+      await act(() => vi.advanceTimersByTimeAsync(300_000));
+      expect(signal?.aborted).toBe(true);
+      expect(f.post).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', requestId: 'stalled-download' }), '*');
+    } finally {
+      f.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('requires a declared draft command and a current iframe scope before authorization', async () => {
     const f = await setup();
     f.send({ type: 'invokeClientCommand', requestId: 'draft-1', commandKey: 'workbench.content.draft',

@@ -204,45 +204,60 @@ describe('Chat hosted and custom models', () => {
     });
   });
 
-  it('treats a missing hosted model endpoint as an unsupported optional capability', async () => {
-    let rejectCatalog!: (reason?: unknown) => void;
-    mocks.stream.client.assistants.getModels.mockReturnValue(
-      new Promise((_resolve, reject) => {
-        rejectCatalog = reject;
-      }),
-    );
+  it.each([403, 404])(
+    'uses the assistant default when the optional model catalog returns %i',
+    async (status) => {
+      let rejectCatalog!: (reason?: unknown) => void;
+      mocks.stream.client.assistants.getModels.mockReturnValue(
+        new Promise((_resolve, reject) => {
+          rejectCatalog = reject;
+        }),
+      );
 
-    renderChat();
-    await waitFor(() =>
-      expect(mocks.stream.client.assistants.getModels).toHaveBeenCalledWith(
-        'assistant-1',
-        { signal: expect.any(AbortSignal) },
-      ),
-    );
+      renderChat();
+      await waitFor(() =>
+        expect(mocks.stream.client.assistants.getModels).toHaveBeenCalledWith(
+          'assistant-1',
+          { signal: expect.any(AbortSignal) },
+        ),
+      );
 
-    await act(async () => {
-      rejectCatalog({ status: 404 });
-      await Promise.resolve();
-    });
+      await act(async () => {
+        rejectCatalog({ status });
+        await Promise.resolve();
+      });
 
-    expect(mocks.parentSendEvent).not.toHaveBeenCalledWith('public_event', [
-      'error',
-      expect.any(Object),
-    ]);
-  });
-
-  it('still reports hosted model catalog failures other than not found', async () => {
-    mocks.stream.client.assistants.getModels.mockRejectedValue({ status: 500 });
-
-    renderChat();
-
-    await waitFor(() =>
-      expect(mocks.parentSendEvent).toHaveBeenCalledWith('public_event', [
+      expect(mocks.parentSendEvent).not.toHaveBeenCalledWith('public_event', [
         'error',
-        { error: expect.any(Error) },
-      ]),
-    );
-  });
+        expect.any(Object),
+      ]);
+      expect(
+        screen.queryByRole('button', { name: /chat\.modelPicker\.label/ }),
+      ).toBeNull();
+      setComposerText(screen.getByRole('textbox'), 'use the assistant default');
+      fireEvent.click(screen.getByRole('button', { name: 'send' }));
+      const payload = mocks.stream.submit.mock.calls[0]?.[0];
+      expect(payload?.input?.input).toBe('use the assistant default');
+      expect(payload.input.model).toBeUndefined();
+      expect(payload.state?.human?.model).toBeUndefined();
+    },
+  );
+
+  it.each([401, 500])(
+    'still reports a hosted model catalog failure with status %i',
+    async (status) => {
+      mocks.stream.client.assistants.getModels.mockRejectedValue({ status });
+
+      renderChat();
+
+      await waitFor(() =>
+        expect(mocks.parentSendEvent).toHaveBeenCalledWith('public_event', [
+          'error',
+          { error: expect.any(Error) },
+        ]),
+      );
+    },
+  );
 
   it('keeps a programmatic model selection made before the hosted catalog loads', async () => {
     let resolveCatalog!: (value: {

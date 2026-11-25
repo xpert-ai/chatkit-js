@@ -497,7 +497,7 @@ export function renderContentItem(
     if (isWidgetComponent(content)) {
       return (
         <div key={content.id ?? `widget-${index}`}>
-          <WidgetMessage messageId={messageId} data={content.data} />
+          <WidgetMessage messageId={messageId} widgetId={content.id} data={content.data} />
         </div>
       );
     }

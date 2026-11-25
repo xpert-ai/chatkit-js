@@ -37,7 +37,7 @@ export function useDataBinding(
 
       if (value.path) {
         const data = processor.getData(node, value.path, surfaceId);
-        return data !== null ? String(data) : null;
+        return data == null ? null : String(data);
       }
 
       return null;

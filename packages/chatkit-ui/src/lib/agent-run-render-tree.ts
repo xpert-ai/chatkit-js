@@ -17,6 +17,7 @@ import {
 } from './agent-runs';
 import { isNonTranscriptMessageContent } from './message-content-presentation';
 import { mergeAgentInvocationEntries } from './agent-invocation-presentation';
+import { resolveTerminalToolStep } from './terminal-tool-step';
 
 export type AssistantMessageWithAgentRuns = ChatkitMessage & {
   executionId?: string;
@@ -443,8 +444,13 @@ export function buildAssistantRenderTree(
     createAgentRunNode(nodes, run.id, run, baseOrder + index / 1000);
   });
 
-  for (const entry of entries) {
-    const target = getEntryRunTarget(entry, runs, rootExecutionId);
+  for (const original of entries) {
+    const target = getEntryRunTarget(original, runs, rootExecutionId);
+    const item = resolveTerminalToolStep(
+      original.item,
+      runs.find((run) => run.id === target?.executionId),
+    );
+    const entry = item === original.item ? original : { ...original, item };
     const shouldGroup =
       Boolean(target?.executionId) &&
       (!rootExecutionIds.has(target?.executionId) ||

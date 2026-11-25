@@ -1,3 +1,5 @@
+import { SideChatMenuButton } from './side-chat/SideChatMenuButton';
+import type { useWorkbenchSideChat } from './shell/side-chat/useWorkbenchSideChat';
 import * as React from 'react';
 import type {
   ArtifactIdentity,
@@ -38,7 +40,7 @@ export type WorkbenchContextValue = {
     messageId: string;
     participantId: string;
   }) => void;
-  openProject?: (projectId: string, viewKey: string) => Promise<unknown>;
+  openProject?: (projectId: string, viewKey?: string) => Promise<unknown>;
   openArtifact?: (
     resource: ArtifactIdentity,
     options: ArtifactOpenOptions,
@@ -57,6 +59,9 @@ export type WorkbenchContextValue = {
   disabledReason?: string;
   toggle: () => void;
   viewMenu?: Omit<WorkbenchViewMenuProps, 'children'>;
+  storageScope?: string;
+  searchUrlTemplate?: string;
+  sideChats?: ReturnType<typeof useWorkbenchSideChat>;
   sideChatEnabled: boolean;
   askInSideChat: (reference?: ChatKitReference) => Promise<void>;
   externalAssistantsEnabled?: boolean;
@@ -83,7 +88,7 @@ export function useWorkbench() {
 export function WorkbenchToggleButton() {
   const workbench = useWorkbench();
   const { t } = useChatkitTranslation();
-  if (!workbench.enabled || workbench.open) return null;
+  if (!workbench.enabled) return null;
 
   const label = t('workbench.open');
   const tooltip = workbench.disabledReason ?? label;
@@ -104,8 +109,17 @@ export function WorkbenchToggleButton() {
     </ToolbarButton>
   );
 
-  if (workbench.available && viewMenu?.views.length) {
-    return <WorkbenchViewMenu {...viewMenu}>{button}</WorkbenchViewMenu>;
+  if (viewMenu && (workbench.available || workbench.sideChatEnabled)) {
+    return (
+      <>
+        {!workbench.open && (
+          <WorkbenchViewMenu {...viewMenu}>{button}</WorkbenchViewMenu>
+        )}
+        {workbench.sideChatEnabled && workbench.sideChats && (
+          <SideChatMenuButton chats={workbench.sideChats} />
+        )}
+      </>
+    );
   }
 
   return (

@@ -14,6 +14,7 @@
  limitations under the License.
  */
 
+import { Button as PrimitiveButton } from "@xpert-ai/chatkit-primitives";
 import React, { useMemo, useCallback, type ReactNode } from "react";
 import { Types } from "@a2ui/lit/0.8";
 import { useTheme } from "../../context/ThemeContext.js";
@@ -46,13 +47,6 @@ export function Button({ node, surfaceId, children }: ButtonProps) {
   const themeClasses = useMemo(() => {
     return classMapToString(theme.components.Button);
   }, [theme]);
-
-  const variantClasses = useMemo(() => {
-    if (isPrimary) {
-      return "bg-primary text-primary-foreground hover:bg-primary/90";
-    }
-    return "border border-input bg-background hover:bg-accent hover:text-accent-foreground";
-  }, [isPrimary]);
 
   const handleClick = useCallback(() => {
     if (!action?.name) return;
@@ -93,12 +87,13 @@ export function Button({ node, surfaceId, children }: ButtonProps) {
   }, [action, processor, node, surfaceId, sendAction]);
 
   return (
-    <button
+    <PrimitiveButton
       type="button"
       onClick={handleClick}
-      className={cn(themeClasses, variantClasses)}
+      variant={isPrimary ? "default" : "outline"}
+      className={cn("[&_.text-foreground]:text-inherit", themeClasses)}
     >
       {children}
-    </button>
+    </PrimitiveButton>
   );
 }
