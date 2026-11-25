@@ -7,6 +7,7 @@ import type {
 import type { ConversationResourceTarget } from '@xpert-ai/xpert-sdk';
 import type {
   ChatKitReference,
+  ChatTaskSummaryResourceReference,
   FileChangeResource,
   FileChangeSetResource,
 } from '@xpert-ai/chatkit-types';
@@ -50,6 +51,10 @@ export type WorkbenchContextValue = {
   ) => boolean;
   openFileReview?: (
     resource: FileChangeResource | FileChangeSetResource,
+  ) => boolean;
+  openSummaryResource?: (
+    resource: ChatTaskSummaryResourceReference,
+    context: { conversationId?: string; title?: string; mimeType?: string },
   ) => boolean;
   enabled: boolean;
   open: boolean;

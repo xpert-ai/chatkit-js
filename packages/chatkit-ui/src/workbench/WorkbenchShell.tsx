@@ -32,7 +32,7 @@ import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { useStreamContext } from '../providers/Stream';
 import type { WorkbenchPreview } from './preview/types';
 import type { WorkbenchContextValue } from './context';
-import { useArtifactActions } from './artifact-preview/useArtifactActions';
+import { useOutputResourceActions } from './artifact-preview/useOutputResourceActions';
 import {
   collectExternalAssistantRuns,
   EXTERNAL_ASSISTANTS_VIEW_KEY,
@@ -671,13 +671,15 @@ function WorkbenchContent({
         message: t('workbench.files.pluginRequired'),
       }),
   });
-  const artifactActions = useArtifactActions({
+  const artifactActions = useOutputResourceActions({
     stream,
     enabled,
     authenticated,
     openPreview,
     openWorkspaceFile,
     unavailableMessage: t('workbench.files.failed'),
+    onError: () =>
+      setNotification({ level: 'error', message: t('workbench.files.failed') }),
     onAnnotate: async (reference) => {
       await parentMessenger.updateComposer({
         appendReferences: true,
