@@ -3,7 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [],
+  "linked": [["@xpert-ai/chatkit-*"]],
   "ignore": ["excel-echarts-chatkit*", "managed-chatkit*"],
   "access": "public",
   "baseBranch": "main",

@@ -153,7 +153,7 @@ test('CI test selection partitions the full scope without reentering the root te
   assert.ok(!full.includes('@xpert-ai/chatkit-ui5'));
 });
 
-test('Changesets versions a UI-only fix independently and still propagates incompatible dependency changes', async (t) => {
+async function createVersionFixture(t, manifests) {
   const cwd = await mkdtemp(join(tmpdir(), 'chatkit-version-test-'));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   await mkdir(join(cwd, '.changeset'));
@@ -176,7 +176,7 @@ test('Changesets versions a UI-only fix independently and still propagates incom
     join(cwd, 'pnpm-workspace.yaml'),
     "packages:\n  - 'packages/*'\n",
   );
-  for (const name of ['ui', 'types', 'browser-runner']) {
+  for (const [name, manifest] of Object.entries(manifests)) {
     const dir = join(cwd, 'packages', name);
     await mkdir(dir, { recursive: true });
     await writeFile(
@@ -184,9 +184,7 @@ test('Changesets versions a UI-only fix independently and still propagates incom
       JSON.stringify({
         name: `@xpert-ai/chatkit-${name}`,
         version: '1.0.0',
-        ...(name === 'ui'
-          ? { dependencies: { '@xpert-ai/chatkit-types': 'workspace:~' } }
-          : {}),
+        ...manifest,
       }),
     );
   }
@@ -195,27 +193,87 @@ test('Changesets versions a UI-only fix independently and still propagates incom
     dirname(require.resolve('@changesets/cli/package.json')),
     'bin.js',
   );
-  const version = async (name) =>
+  const readManifest = async (name) =>
     JSON.parse(
       await readFile(join(cwd, 'packages', name, 'package.json'), 'utf8'),
-    ).version;
-  await writeFile(
-    join(cwd, '.changeset/ui-fix.md'),
-    '---\n"@xpert-ai/chatkit-ui": patch\n---\n\nFix UI behavior.\n',
-  );
-  await execFileAsync(process.execPath, [cli, 'version'], { cwd });
-  assert.equal(await version('ui'), '1.0.1');
-  assert.equal(await version('types'), '1.0.0');
-  assert.equal(await version('browser-runner'), '1.0.0');
+    );
+  return {
+    readManifest,
+    version: async (name) => (await readManifest(name)).version,
+    release: async (releases) => {
+      const entries = Object.entries(releases)
+        .map(([name, type]) => `${JSON.stringify(name)}: ${type}`)
+        .join('\n');
+      await writeFile(
+        join(cwd, '.changeset/fixture-change.md'),
+        `---\n${entries}\n---\n\nUpdate fixture packages.\n`,
+      );
+      await execFileAsync(process.execPath, [cli, 'version'], { cwd });
+    },
+  };
+}
 
-  await writeFile(
-    join(cwd, '.changeset/types-change.md'),
-    '---\n"@xpert-ai/chatkit-types": minor\n---\n\nUpdate the shared contract.\n',
+test('Changesets aligns released ChatKit packages and affected dependents without releasing the whole group', async (t) => {
+  const { release, version, readManifest } = await createVersionFixture(t, {
+    ui: {
+      version: '0.27.2',
+      dependencies: { '@xpert-ai/chatkit-types': 'workspace:~' },
+    },
+    types: { version: '0.24.1' },
+    react: {
+      version: '0.18.6',
+      dependencies: { '@xpert-ai/chatkit-types': 'workspace:~' },
+    },
+    'browser-extension': {
+      version: '0.17.8',
+      private: true,
+      dependencies: { '@xpert-ai/chatkit-types': 'workspace:~' },
+    },
+    'browser-runner': { version: '0.17.0' },
+    assets: { version: '0.1.0' },
+    a2ui: { name: '@xpert-ai/a2ui-react', version: '0.18.0' },
+  });
+  await release({
+    '@xpert-ai/chatkit-ui': 'minor',
+    '@xpert-ai/chatkit-types': 'minor',
+    '@xpert-ai/a2ui-react': 'patch',
+  });
+  for (const name of ['ui', 'types', 'react', 'browser-extension']) {
+    assert.equal(await version(name), '0.28.0', name);
+  }
+  assert.equal(await version('browser-runner'), '0.17.0');
+  assert.equal(await version('assets'), '0.1.0');
+  assert.equal(await version('a2ui'), '0.18.1');
+  assert.equal((await readManifest('browser-extension')).private, true);
+  assert.equal(
+    (await readManifest('react')).dependencies['@xpert-ai/chatkit-types'],
+    'workspace:~',
   );
-  await execFileAsync(process.execPath, [cli, 'version'], { cwd });
-  assert.equal(await version('types'), '1.1.0');
-  assert.equal(await version('ui'), '1.0.2');
-  assert.equal(await version('browser-runner'), '1.0.0');
+});
+
+test('Changesets bases later patches on the highest linked version while leaving unaffected packages unchanged', async (t) => {
+  const { release, version } = await createVersionFixture(t, {
+    ui: {
+      version: '0.28.1',
+      dependencies: { '@xpert-ai/chatkit-types': 'workspace:~' },
+    },
+    types: { version: '0.28.3' },
+    'browser-runner': { version: '0.17.0' },
+  });
+  await release({ '@xpert-ai/chatkit-ui': 'patch' });
+  assert.equal(await version('ui'), '0.28.4');
+  assert.equal(await version('types'), '0.28.3');
+  assert.equal(await version('browser-runner'), '0.17.0');
+
+  await release({ '@xpert-ai/chatkit-types': 'minor' });
+  assert.equal(await version('types'), '0.29.0');
+  assert.equal(await version('ui'), '0.29.0');
+  assert.equal(await version('browser-runner'), '0.17.0');
+
+  await release({ '@xpert-ai/chatkit-browser-runner': 'patch' });
+  assert.equal(await version('browser-runner'), '0.29.1');
+  assert.equal(await version('types'), '0.29.0');
+  assert.equal(await version('ui'), '0.29.0');
 });
 
 test('pnpm builds the dependency closure once, without examples or recursive prebuild hooks', async (t) => {
