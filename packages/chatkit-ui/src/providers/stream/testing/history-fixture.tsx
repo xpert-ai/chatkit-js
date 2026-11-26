@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   listRuns: vi.fn(),
   joinStream: vi.fn(),
   runStream: vi.fn(),
+  createRun: vi.fn(),
   cancelRun: vi.fn(),
   pauseRun: vi.fn(),
   resumeRun: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock('@xpert-ai/xpert-sdk', async (importOriginal) => {
       searchMessages: mocks.searchMessages,
     };
     runs = {
+      create: mocks.createRun,
       get: mocks.getRun,
       list: mocks.listRuns,
       joinStream: mocks.joinStream,
@@ -167,12 +169,10 @@ export function setupHistoryTests() {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.queryThread = null;
-    mocks.createThread
-      .mockReset()
-      .mockResolvedValue({
-        thread_id: 'new-thread',
-        metadata: { id: 'new-conversation' },
-      });
+    mocks.createThread.mockReset().mockResolvedValue({
+      thread_id: 'new-thread',
+      metadata: { id: 'new-conversation' },
+    });
     mocks.createConversation
       .mockReset()
       .mockResolvedValue({ id: 'new-conversation', threadId: 'new-thread' });
@@ -212,6 +212,7 @@ export function setupHistoryTests() {
       pauseId: 'pause-token',
     }));
     mocks.runStream.mockReset().mockImplementation(async function* () {});
+    mocks.createRun.mockReset().mockResolvedValue({ run_id: 'run-1' });
   });
   afterEach(cleanup);
 }

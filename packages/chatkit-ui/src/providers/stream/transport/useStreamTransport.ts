@@ -3,7 +3,6 @@ import type { ReadRecovery } from '../connection/read-recovery';
 import type { Config } from '@xpert-ai/xpert-sdk';
 import { useCallback, useEffect, useRef } from 'react';
 import { resolveFollowUpConsumedIds } from '../../../lib/follow-up-consumed';
-import { getPendingSteerFollowUpIds } from '../../../lib/follow-ups';
 import { normalizeRequestContextAndConfig } from '../../../lib/request-options';
 import { applyThreadContextUsageEvent } from '../../../lib/thread-context-usage';
 import {
@@ -76,11 +75,7 @@ type StreamTransportOptions = Pick<
   Pick<ReturnType<typeof useStreamHost>, 'streamSendEvent'> &
   Pick<
     ReturnType<typeof useStreamFollowUpState>,
-    | 'flushSteerFollowUps'
-    | 'removePendingFollowUps'
-    | 'pendingFollowUpsRef'
-    | 'steerPriorityFollowUpIdsRef'
-    | 'markPendingFollowUpsAsQueued'
+    'flushSteerFollowUps' | 'removePendingFollowUps'
   > &
   Pick<
     ReturnType<typeof useRuntimeActivities<StateType>>,
@@ -135,9 +130,6 @@ export function useStreamTransport({
   handleInterrupt,
   conversationIdRef,
   reconcileLatestAssistantMessage,
-  pendingFollowUpsRef,
-  steerPriorityFollowUpIdsRef,
-  markPendingFollowUpsAsQueued,
   projectId,
 }: StreamTransportOptions) {
   const replayState = useRef(
@@ -488,16 +480,8 @@ export function useStreamTransport({
         if (abortRef.current === abortController) {
           abortRef.current = null;
           shouldStartFreshAssistantMessageAfterSteerRef.current = false;
-          const staleSteerIds = getPendingSteerFollowUpIds(
-            pendingFollowUpsRef.current,
-            steerPriorityFollowUpIdsRef.current,
-          );
-          if (staleSteerIds.length > 0) {
-            markPendingFollowUpsAsQueued(staleSteerIds, {
-              autoDrain: true,
-              queuedFromSteer: true,
-            });
-          }
+          // An accepted steer is server-owned, even after a disconnect or lost receipt.
+          // Admission failures and explicit server queue receipts are handled separately.
           setIsLoading(false);
           isLoadingRef.current = false;
         }
@@ -529,7 +513,6 @@ export function useStreamTransport({
       handleInterrupt,
       projectSelection,
       flushSteerFollowUps,
-      markPendingFollowUpsAsQueued,
       removePendingFollowUps,
       updateTodos,
       handleRuntimeActivityTrigger,

@@ -24,6 +24,7 @@ import type { ProjectSelection, StateType, StreamContextType } from './types';
 import { useStreamCredentials } from './auth/useStreamCredentials';
 import { useStreamFollowUpState } from './follow-ups/useStreamFollowUpState';
 import { useStreamFollowUps } from './follow-ups/useStreamFollowUps';
+import { useFollowUpRecovery } from './follow-ups/useFollowUpRecovery';
 import { useStreamHistoryMessages } from './history/useStreamHistoryMessages';
 import { useStreamThreadLoading } from './history/useStreamThreadLoading';
 import {
@@ -307,6 +308,28 @@ export const StreamSession = ({
     apiUrl,
   });
 
+  const readSubscriptionsEnabled =
+    runtimeActivitiesEnabled &&
+    !bindingChanged &&
+    host.historyLoad.status !== 'loading' &&
+    host.historyLoad.status !== 'error';
+  const readScopeKey = JSON.stringify([
+    assistantId,
+    projectId,
+    bindingKey,
+    credentials.runtimeOrganizationId,
+  ]);
+
+  useFollowUpRecovery({
+    ...connection,
+    ...credentials,
+    ...followUpState,
+    threadId: scope.threadId ?? null,
+    conversationId: scope.conversationId,
+    enabled: readSubscriptionsEnabled,
+    scopeKey: readScopeKey,
+  });
+
   useThreadActivitySubscription({
     ...connection,
     ...messages,
@@ -315,17 +338,8 @@ export const StreamSession = ({
     client: credentials.readClient,
     threadId: scope.threadId ?? null,
     conversationId: scope.conversationId,
-    enabled:
-      runtimeActivitiesEnabled &&
-      !bindingChanged &&
-      host.historyLoad.status !== 'loading' &&
-      host.historyLoad.status !== 'error',
-    scopeKey: JSON.stringify([
-      assistantId,
-      projectId,
-      bindingKey,
-      credentials.runtimeOrganizationId,
-    ]),
+    enabled: readSubscriptionsEnabled,
+    scopeKey: readScopeKey,
   });
 
   const submission = useStreamSubmission({
