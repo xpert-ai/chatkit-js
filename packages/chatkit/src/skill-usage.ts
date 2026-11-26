@@ -105,3 +105,46 @@ export function getMessageSkillUsages(message: {
   }
   return mergeChatSkillUsages(...groups);
 }
+
+/** Compatibility for the metadata-only component emitted before skill observations joined Tool summaries.
+ * Keep this at the history boundary: a tool name alone never makes a result invisible.
+ */
+export function isLegacySkillUsageComponent(value: unknown): boolean {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('type' in value) ||
+    value.type !== 'component' ||
+    !('data' in value) ||
+    !value.data ||
+    typeof value.data !== 'object'
+  )
+    return false;
+  const data = value.data;
+  if (
+    !('category' in data) ||
+    data.category !== 'Computer' ||
+    !('tool' in data) ||
+    data.tool !== 'read_skill_file' ||
+    !('status' in data) ||
+    data.status !== 'success' ||
+    !('taskSummary' in data) ||
+    summarySkillUsages(data.taskSummary).length === 0
+  )
+    return false;
+  // Never hide a widget, error, executable artifact, or an actual result on a legacy component.
+  return !Object.entries(data).some(
+    ([key, value]) =>
+      [
+        'type',
+        'input',
+        'output',
+        'message',
+        'error',
+        'data',
+        'artifact',
+        '_meta',
+        'widgets',
+      ].includes(key) && value != null,
+  );
+}
