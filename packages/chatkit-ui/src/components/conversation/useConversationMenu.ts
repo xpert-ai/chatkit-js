@@ -101,6 +101,27 @@ export function useConversationMenu(
         throw new Error('Conversation mismatch');
       setDetail(record);
       setDraft(record.title || target.title);
+      if (
+        context.setSidebar &&
+        typeof context.client.conversations.getSidebar === 'function'
+      ) {
+        try {
+          const sidebar = await context.client.conversations.getSidebar(
+            target.recordId,
+            { signal: controller.signal },
+          );
+          if (current()) setDetail({ ...record, sidebar });
+        } catch (error) {
+          // Older hosts and non-owner conversations retain their other actions.
+          const unavailable =
+            error instanceof Error &&
+            'status' in error &&
+            [403, 404, 405, 501].includes(Number(error.status));
+          if (current() && !unavailable)
+            setError(t('conversationMenu.loadFailed'));
+        }
+      }
+      if (!current()) return;
       if (typeof context.client.conversations.searchMessages === 'function') {
         const transcript = await readConversationTranscript(
           context.client,
@@ -220,6 +241,28 @@ export function useConversationMenu(
         context.navigate(attempt.result);
     });
   };
+  const changeSidebar = (field: 'pinned' | 'archived') => {
+    const policy = field === 'pinned' ? actions.pin : actions.archive;
+    if (
+      !policy.visible ||
+      policy.disabled ||
+      !detail?.sidebar ||
+      !context.setSidebar
+    )
+      return;
+    const value = !detail.sidebar[field];
+    // Close before the synchronous busy guard blocks Radix's selection close.
+    setOpen(false);
+    return run(async () => {
+      const epoch = lifetime.current;
+      const state = await context.setSidebar!(
+        target,
+        field === 'pinned' ? { pinned: value } : { archived: value },
+      );
+      if (epoch === lifetime.current)
+        setDetail((record) => record && { ...record, sidebar: state });
+    });
+  };
   const sideChat = () => {
     if (actions.sideChat.disabled || !actions.sideChat.visible) return;
     return run(async () => {
@@ -281,6 +324,7 @@ export function useConversationMenu(
     remove,
     branch,
     sideChat,
+    changeSidebar,
     exportTranscript,
     reload: load,
   };

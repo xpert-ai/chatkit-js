@@ -18,6 +18,9 @@ function setup() {
   initI18n();
   const client = new Client<StateType>({ apiUrl: 'https://api.example.com' });
   const search = vi.spyOn(client.conversations, 'search');
+  vi.spyOn(client.conversations, 'listSidebar').mockRejectedValue(
+    Object.assign(new Error('Older host'), { status: 404 }),
+  );
   vi.spyOn(client.projects, 'get').mockResolvedValue({
     id: 'other-project',
     name: 'Other project',

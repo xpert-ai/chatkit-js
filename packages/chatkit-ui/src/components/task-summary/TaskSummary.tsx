@@ -25,11 +25,13 @@ import { cn } from '../../lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { ToolbarButton } from '../ui/toolbar-button';
+import { SideChatMenuList } from '../../workbench/side-chat/SideChatMenuList';
 
 const PREVIEW_SIZE = 3;
 
 export type TaskSummaryProps = {
   summary: MergedTaskSummary;
+  sideChats?: React.ComponentProps<typeof SideChatMenuList>['chats'];
   historyError?: unknown;
   loadingSections?: Partial<Record<TaskSummarySection, boolean>>;
   loadedSectionCounts?: Record<TaskSummarySection, number>;
@@ -107,7 +109,10 @@ export function TaskSummaryTrigger({
         className="w-[min(20rem,calc(100vw-2rem))] max-h-[min(44rem,calc(100vh-5rem))] overflow-y-auto rounded-[var(--chat-panel-radius)] border-border/70 bg-popover p-0 shadow-lg"
         aria-label={t('taskSummary.title')}
       >
-        <TaskSummaryContent {...props} />
+        <TaskSummaryContent
+          {...props}
+          onSideChatOpened={() => setOpen(false)}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -137,6 +142,8 @@ export function TaskSummaryPanel({
 
 export function TaskSummaryContent({
   summary,
+  sideChats,
+  onSideChatOpened,
   historyError,
   loadingSections = {},
   loadedSectionCounts = {
@@ -151,7 +158,7 @@ export function TaskSummaryContent({
   onNavigateMessage,
   onFocusComposer,
   onOpenResource,
-}: TaskSummaryProps) {
+}: TaskSummaryProps & { onSideChatOpened?: () => void }) {
   const { t } = useChatkitTranslation();
   const [expanded, setExpanded] = React.useState<
     Partial<Record<TaskSummarySection, boolean>>
@@ -309,6 +316,10 @@ export function TaskSummaryContent({
           />
           {sectionAction('fileChanges', summary.totals.fileChanges)}
         </SummarySection>
+      )}
+
+      {sideChats && (
+        <SideChatMenuList chats={sideChats} onOpened={onSideChatOpened} />
       )}
 
       <SummarySection title={t('taskSummary.sections.sources')}>

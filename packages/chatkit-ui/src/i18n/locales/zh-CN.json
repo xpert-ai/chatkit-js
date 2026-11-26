@@ -70,8 +70,8 @@
             "openUrl": "打开网页",
             "invalidUrl": "请输入有效的 HTTP 或 HTTPS 网址，且不包含账号密码。",
             "urlHint": "按 Enter 打开此网页。",
-            "noResults": "没有匹配的内容。",
-            "tools": "常用工具",
+            "noResults": "没有匹配项。试试其他名称、文件路径或网址。",
+            "tools": "打开",
             "noTools": "暂无可用的常用工具。",
             "dynamic": "推荐",
             "noDynamic": "暂无推荐视图",
@@ -85,7 +85,13 @@
             "moreTools": "更多工具",
             "comingSoon": "插件与 MCP Apps 将在此接入",
             "conversationRequired": "开始对话后即可使用",
-            "disabled": "当前未启用侧边聊天"
+            "disabled": "当前未启用侧边聊天",
+            "customize": "自定义",
+            "reset": "恢复默认设置",
+            "pin": "固定 {{title}}",
+            "unpin": "取消固定 {{title}}",
+            "moveUp": "上移 {{title}}",
+            "moveDown": "下移 {{title}}"
         },
         "browser": {
             "placeholder": "搜索或输入网址",
@@ -97,7 +103,17 @@
             "history": "最近访问的网页",
             "noHistory": "当前对话还没有访问过网页。",
             "copyUrl": "复制链接",
-            "suggestions": "地址建议"
+            "suggestions": "地址建议",
+            "switchTab": "切换到标签",
+            "searchWeb": "搜索网页：{{query}}",
+            "clearHistory": "清除历史记录",
+            "kind": {
+                "action": "功能",
+                "chat": "侧聊",
+                "file": "文件",
+                "website": "网页",
+                "query": "最近搜索"
+            }
         },
         "messageUnavailable": "当前分支中找不到指定消息。",
         "executionUnavailable": "当前对话中找不到指定执行记录。",
@@ -134,7 +150,24 @@
                 "dontAskAgain": "不再询问",
                 "cancel": "取消",
                 "confirm": "关闭侧边聊天"
-            }
+            },
+            "list": "侧边聊天",
+            "create": "新建侧边聊天",
+            "empty": "在这里开始一个独立的讨论。",
+            "rename": "重命名 {{title}}",
+            "collapse": "收起侧边聊天：{{title}}",
+            "reopen": "重新打开侧边聊天：{{title}}",
+            "actions": "侧边聊天操作：{{title}}",
+            "name": "聊天名称",
+            "save": "保存",
+            "cancel": "取消",
+            "idle": "已就绪",
+            "busy": "运行中",
+            "interrupted": "等待输入",
+            "error": "失败",
+            "paused": "已暂停",
+            "sendToExisting": "发送到已有侧聊",
+            "numberedTitle": "侧边聊天 {{number}}"
         },
         "errors": {
             "contextKeyRequired": "必须提供上下文键。",
@@ -522,6 +555,11 @@
         }
     },
     "history": {
+        "pinned": "已置顶",
+        "archiveFilter": "会话状态",
+        "activeChats": "未归档会话",
+        "archivedChats": "已归档",
+        "archiveEmpty": "暂无已归档会话。归档的会话可在这里恢复。",
         "threadHistory": "消息历史",
         "title": "消息历史",
         "refresh": "刷新消息历史",
@@ -1493,6 +1531,10 @@
         "AskPrompt": "请先读取文档 {{resourceId}}（{{path}}）的最新内容，再提出需要人类确认的修改提案。要求：{{instruction}}"
     },
     "conversationMenu": {
+        "pin": "置顶聊天",
+        "unpin": "取消置顶",
+        "archive": "归档",
+        "unarchive": "取消归档",
         "addSchedule": "添加计划任务…",
         "actionsFor": "{{title}} 的会话操作",
         "rename": "重命名",

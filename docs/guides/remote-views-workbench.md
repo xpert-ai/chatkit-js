@@ -381,3 +381,21 @@ Missing provider or workspace mapping configuration returns a structured 400
 error so the SDK does not repeatedly retry it.
 
 See [Native Workbench tools and file views](./workbench-native-tools.md).
+
+## Start-page launcher and search preferences
+
+The new-tab page displays a centered search box, pinned launch actions, and recent files/websites. Its **More tools** menu includes authorized Workbench manifests and available native tools. Pin/unpin, move up/down in **Customize**, and **Reset** apply across open start tabs. Unavailable tools expose their reason; pages, slides or other plugin actions appear only when supplied by a real authorized manifest.
+
+Search combines available actions, side chats, open preview tabs, recent files, website history and saved queries. Matches are ranked exact-first, then prefix and substring, favoring an already open tab over duplicate history. Arrow keys, Enter, Escape and IME composition are supported. Enter on a plain query filters locally. An explicit web-search action is shown only when the host configures a URL template:
+
+```ts
+workbench: {
+  enabled: true,
+  preferencesKey: `user:${user.id}`, // stable, non-secret identity; change on account switch
+  searchUrlTemplate: 'https://www.google.com/search?q={query}',
+}
+```
+
+Pinned actions and the last 50 website/query entries persist locally per API, organization, identity, Assistant and Project. Without a host identity, storage is conversation-scoped. **Page options → Clear history** removes saved website/query history from all mounted address bars. Workspace file suggestions remain scoped to authorized current-session resources; file content and credential-bearing resource handles are not serialized. Web search is explicit, never sent automatically while typing.
+
+A synthetic UI preview for theme and interaction review is available at `/dev/workbench-start/` on the ChatKit development server. It uses the production start-page, search and side-chat menu components with clearly labeled example data; it does not run an Assistant or call platform APIs.

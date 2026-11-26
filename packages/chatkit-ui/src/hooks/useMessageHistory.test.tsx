@@ -13,6 +13,9 @@ const conversation = (id: string, projectId?: string): ChatConversation => ({
 function setup() {
   const client = new Client({ apiUrl: 'https://api.example.com' });
   const search = vi.spyOn(client.conversations, 'search');
+  const listSidebar = vi
+    .spyOn(client.conversations, 'listSidebar')
+    .mockRejectedValue(Object.assign(new Error('Older host'), { status: 404 }));
   const getProject = vi.spyOn(client.projects, 'get');
   getProject.mockRejectedValue(new Error('Unavailable'));
   const options = {
@@ -23,10 +26,100 @@ function setup() {
     query: '',
     scope: 'all' as const,
   };
-  return { search, getProject, options };
+  return { search, listSidebar, getProject, options };
 }
 
 describe('useMessageHistory', () => {
+  it('keeps service-session history available when personal preferences are unsupported', async () => {
+    const { options, listSidebar, search } = setup();
+    listSidebar.mockRejectedValue(
+      Object.assign(new Error('Personal preferences unavailable'), {
+        status: 501,
+      }),
+    );
+    search.mockResolvedValue({
+      items: [conversation('service history')],
+      total: 1,
+    });
+    const { result } = renderHook(() => useMessageHistory(options));
+    await waitFor(() => expect(result.current.threads).toHaveLength(1));
+    expect(result.current.sidebarSupported).toBe(false);
+  });
+  it('uses server pin ordering and separates archived pages, search, pagination and restoration refresh', async () => {
+    const { options, listSidebar, search } = setup();
+    listSidebar.mockImplementation(async (query) => ({
+      items: [
+        {
+          ...conversation(
+            query.archived ? 'archived' : query.offset ? 'older' : 'pinned',
+          ),
+          sidebar: {
+            pinned: !query.archived && !query.offset,
+            archived: !!query.archived,
+          },
+        },
+      ],
+      total: query.archived ? 1 : 2,
+    }));
+    const { result, rerender } = renderHook(
+      ({ archived }) =>
+        useMessageHistory({
+          ...options,
+          archived,
+          scope: 'no-project',
+          query: ' report ',
+        }),
+      { initialProps: { archived: false } },
+    );
+    await waitFor(() =>
+      expect(result.current.threads[0]?.sidebar?.pinned).toBe(true),
+    );
+    expect(listSidebar).toHaveBeenLastCalledWith(
+      {
+        assistantId: 'assistant-1',
+        projectId: null,
+        archived: false,
+        search: 'report',
+        limit: 50,
+        offset: 0,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.threads).toHaveLength(2));
+    rerender({ archived: true });
+    expect(result.current.threads).toEqual([]);
+    await waitFor(() =>
+      expect(result.current.threads[0]?.title).toBe('archived'),
+    );
+    expect(result.current.sidebarSupported).toBe(true);
+    listSidebar.mockResolvedValue({ items: [], total: 0 });
+    act(() => result.current.refresh());
+    await waitFor(() => expect(result.current.total).toBe(0));
+    expect(listSidebar.mock.calls.at(-1)?.[0]).toMatchObject({
+      archived: true,
+      offset: 0,
+    });
+    expect(search).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back on authorization failure or disguise an unsupported archive as active history', async () => {
+    const { options, listSidebar, search } = setup();
+    listSidebar.mockRejectedValue(
+      Object.assign(new Error('Forbidden'), { status: 403 }),
+    );
+    const { result, rerender } = renderHook(
+      ({ archived }) => useMessageHistory({ ...options, archived }),
+      { initialProps: { archived: false } },
+    );
+    await waitFor(() => expect(result.current.error).toBe(true));
+    listSidebar.mockRejectedValue(
+      Object.assign(new Error('Older host'), { status: 404 }),
+    );
+    rerender({ archived: true });
+    await waitFor(() => expect(result.current.error).toBe(true));
+    expect(search).not.toHaveBeenCalled();
+  });
   it('shows the last page immediately on reopen while refreshing it in the background', async () => {
     const { options, search } = setup();
     search.mockResolvedValueOnce({ items: [conversation('cached')], total: 1 });

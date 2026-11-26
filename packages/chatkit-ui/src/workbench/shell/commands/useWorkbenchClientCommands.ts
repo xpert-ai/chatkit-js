@@ -324,11 +324,9 @@ export function useWorkbenchClientCommands({
         void stream
           .submit(
             {
+              id: messageId,
               input,
               ...(requestOptions.state ? { state: requestOptions.state } : {}),
-              ...(message.clientMessageId
-                ? { id: message.clientMessageId }
-                : {}),
             },
             {
               ...(message.newThread ? { newThread: true } : {}),

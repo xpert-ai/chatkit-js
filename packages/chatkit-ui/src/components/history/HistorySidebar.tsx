@@ -17,6 +17,7 @@ import {
   Loader2,
   MessageSquare,
   Plus,
+  Pin,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -74,6 +75,8 @@ export type HistorySidebarProps = {
   projectFilter?: ThreadHistoryProject | null;
   onProjectFilterChange?: (project: ThreadHistoryProject) => void;
   hasCurrentProject?: boolean;
+  archived?: boolean;
+  onArchivedChange?: (archived: boolean) => void;
 };
 
 export function HistorySidebar({
@@ -105,6 +108,8 @@ export function HistorySidebar({
   onProjectFilterChange,
   hasCurrentProject = false,
   conversationActions,
+  archived = false,
+  onArchivedChange,
 }: HistorySidebarProps) {
   const { t, i18n } = useChatkitTranslation();
   const [internalOpen, setInternalOpen] = React.useState(false);
@@ -140,7 +145,7 @@ export function HistorySidebar({
   React.useEffect(() => {
     setCollapsed(new Set());
     setDeleteError(false);
-  }, [query, scope, projectFilter?.id, open]);
+  }, [query, scope, projectFilter?.id, open, archived]);
 
   const projectLabel = (thread: ThreadItem) =>
     thread.projectId
@@ -149,10 +154,13 @@ export function HistorySidebar({
       : t('history.scope.noProject');
   const groups = new Map<string, { name: string; threads: ThreadItem[] }>();
   for (const thread of threads) {
-    const key =
-      view === 'recent' ? 'recent' : (thread.projectId ?? 'no-project');
+    const key = thread.sidebar?.pinned
+      ? 'pinned'
+      : view === 'recent'
+        ? 'recent'
+        : (thread.projectId ?? 'no-project');
     const group = groups.get(key) ?? {
-      name: projectLabel(thread),
+      name: key === 'pinned' ? t('history.pinned') : projectLabel(thread),
       threads: [],
     };
     group.threads.push(thread);
@@ -251,6 +259,26 @@ export function HistorySidebar({
             />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
+            {onArchivedChange && (
+              <Select
+                value={archived ? 'archived' : 'active'}
+                onValueChange={(value) =>
+                  onArchivedChange(value === 'archived')
+                }
+              >
+                <SelectTrigger aria-label={t('history.archiveFilter')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">
+                    {t('history.activeChats')}
+                  </SelectItem>
+                  <SelectItem value="archived">
+                    {t('history.archivedChats')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {onScopeChange && (
               <Select
                 value={projectFilter ? 'selected-project' : scope}
@@ -372,121 +400,134 @@ export function HistorySidebar({
                       ? 'history.loadFailed'
                       : query.trim()
                         ? 'history.noResults'
-                        : 'history.empty',
+                        : archived
+                          ? 'history.archiveEmpty'
+                          : 'history.empty',
                 )}
               </div>
             ) : (
-              Array.from(groups, ([key, group], index) => (
-                <section
-                  key={key}
-                  className="mb-[calc(0.75rem*var(--chat-density-scale,1))] last:mb-0"
-                >
-                  {view === 'project' && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-expanded={!collapsed.has(key)}
-                      aria-controls={`${groupId}-${index}`}
-                      onClick={() =>
-                        setCollapsed((current) => {
-                          const next = new Set(current);
-                          if (next.has(key)) next.delete(key);
-                          else next.add(key);
-                          return next;
-                        })
-                      }
-                      className="mb-[calc(0.25rem*var(--chat-density-scale,1))] flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {collapsed.has(key) ? (
-                        <ChevronRight size={14} />
-                      ) : (
-                        <ChevronDown size={14} />
-                      )}
-                      <Folder size={14} className="shrink-0" />
-                      <span
-                        className="min-w-0 flex-1 truncate"
-                        title={group.name}
-                      >
-                        {group.name}
-                      </span>
-                      <span>{group.threads.length}</span>
-                    </Button>
-                  )}
-                  <ul
-                    id={`${groupId}-${index}`}
-                    hidden={view === 'project' && collapsed.has(key)}
+              Array.from(groups)
+                .sort(
+                  ([a], [b]) => Number(b === 'pinned') - Number(a === 'pinned'),
+                )
+                .map(([key, group], index) => (
+                  <section
+                    key={key}
+                    className="mb-[calc(0.75rem*var(--chat-density-scale,1))] last:mb-0"
                   >
-                    {group.threads.map((thread) => {
-                      const updatedAt = thread.lastMessageAt;
-                      const validDate =
-                        updatedAt && !Number.isNaN(updatedAt.getTime());
-                      const active = currentThreadId === thread.id;
-                      return (
-                        <HistoryThreadItem
-                          actions={
-                            conversationActions ? (
-                              <ConversationMenu
-                                context={conversationActions}
-                                target={
-                                  thread.recordId ===
-                                    conversationActions.activeConversationId &&
-                                  conversationActions.activeThreadId
-                                    ? {
-                                        ...thread,
-                                        id: conversationActions.activeThreadId,
-                                      }
-                                    : thread
-                                }
-                                placement="history"
-                              />
-                            ) : undefined
-                          }
-                          key={thread.recordId}
-                          thread={thread}
-                          active={active}
-                          disabled={disabled || Boolean(deletingId)}
-                          deleting={deletingId === thread.recordId}
-                          project={
-                            view === 'recent' && thread.projectId
-                              ? {
-                                  id: thread.projectId,
-                                  name: projectLabel(thread),
-                                }
-                              : undefined
-                          }
-                          projectSelected={
-                            projectFilter?.id === thread.projectId
-                          }
-                          onFilterProject={onProjectFilterChange}
-                          updatedLabel={
-                            validDate
-                              ? updatedAt.toDateString() ===
-                                new Date().toDateString()
-                                ? dateFormat.time.format(updatedAt)
-                                : dateFormat.compact.format(updatedAt)
-                              : undefined
-                          }
-                          updatedTitle={
-                            validDate
-                              ? dateFormat.full.format(updatedAt)
-                              : undefined
-                          }
-                          onSelect={() => {
-                            onSelectThread?.(thread);
-                            setOpen(false);
-                          }}
-                          onDelete={
-                            showDelete && onDeleteThread
-                              ? () => void deleteThread(thread)
-                              : undefined
-                          }
-                        />
-                      );
-                    })}
-                  </ul>
-                </section>
-              ))
+                    {(view === 'project' || key === 'pinned') && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-expanded={!collapsed.has(key)}
+                        aria-controls={`${groupId}-${index}`}
+                        onClick={() =>
+                          setCollapsed((current) => {
+                            const next = new Set(current);
+                            if (next.has(key)) next.delete(key);
+                            else next.add(key);
+                            return next;
+                          })
+                        }
+                        className="mb-[calc(0.25rem*var(--chat-density-scale,1))] flex w-full items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {collapsed.has(key) ? (
+                          <ChevronRight size={14} />
+                        ) : (
+                          <ChevronDown size={14} />
+                        )}
+                        {key === 'pinned' ? (
+                          <Pin size={14} className="shrink-0" />
+                        ) : (
+                          <Folder size={14} className="shrink-0" />
+                        )}
+                        <span
+                          className="min-w-0 flex-1 truncate"
+                          title={group.name}
+                        >
+                          {group.name}
+                        </span>
+                        <span>{group.threads.length}</span>
+                      </Button>
+                    )}
+                    <ul
+                      id={`${groupId}-${index}`}
+                      hidden={
+                        (view === 'project' || key === 'pinned') &&
+                        collapsed.has(key)
+                      }
+                    >
+                      {group.threads.map((thread) => {
+                        const updatedAt = thread.lastMessageAt;
+                        const validDate =
+                          updatedAt && !Number.isNaN(updatedAt.getTime());
+                        const active = currentThreadId === thread.id;
+                        return (
+                          <HistoryThreadItem
+                            actions={
+                              conversationActions ? (
+                                <ConversationMenu
+                                  context={conversationActions}
+                                  target={
+                                    thread.recordId ===
+                                      conversationActions.activeConversationId &&
+                                    conversationActions.activeThreadId
+                                      ? {
+                                          ...thread,
+                                          id: conversationActions.activeThreadId,
+                                        }
+                                      : thread
+                                  }
+                                  placement="history"
+                                />
+                              ) : undefined
+                            }
+                            key={thread.recordId}
+                            thread={thread}
+                            active={active}
+                            disabled={disabled || Boolean(deletingId)}
+                            deleting={deletingId === thread.recordId}
+                            project={
+                              view === 'recent' && thread.projectId
+                                ? {
+                                    id: thread.projectId,
+                                    name: projectLabel(thread),
+                                  }
+                                : undefined
+                            }
+                            projectSelected={
+                              projectFilter?.id === thread.projectId
+                            }
+                            onFilterProject={onProjectFilterChange}
+                            updatedLabel={
+                              validDate
+                                ? updatedAt.toDateString() ===
+                                  new Date().toDateString()
+                                  ? dateFormat.time.format(updatedAt)
+                                  : dateFormat.compact.format(updatedAt)
+                                : undefined
+                            }
+                            updatedTitle={
+                              validDate
+                                ? dateFormat.full.format(updatedAt)
+                                : undefined
+                            }
+                            onSelect={() => {
+                              onSelectThread?.(thread);
+                              setOpen(false);
+                            }}
+                            onDelete={
+                              showDelete && onDeleteThread
+                                ? () => void deleteThread(thread)
+                                : undefined
+                            }
+                          />
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))
             )}
             {hasMore && onLoadMore && (
               <div className="px-2 pb-2 pt-3 text-center">

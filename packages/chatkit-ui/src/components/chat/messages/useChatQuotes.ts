@@ -48,6 +48,8 @@ export function useChatQuotes({
       return;
     }
 
+    // Native selection menus move focus; keep the captured quote while the toolbar owns it.
+    if (document.activeElement?.closest('[data-chatkit-quote-actions]')) return;
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
       clearQuoteSelection();
@@ -151,21 +153,31 @@ export function useChatQuotes({
     composerInputRef.current?.focus();
   }, [clearQuoteSelection, quoteSelection]);
 
-  const handleAskInSideChat = React.useCallback(async () => {
-    if (!quoteSelection || !workbench.sideChatEnabled || !stream.threadId)
-      return;
-    setIsOpeningSideChat(true);
-    setSideChatError(null);
-    try {
-      await workbench.askInSideChat(quoteSelection.reference);
-      clearQuoteSelection();
-      window.getSelection()?.removeAllRanges();
-    } catch (error) {
-      setSideChatError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsOpeningSideChat(false);
-    }
-  }, [clearQuoteSelection, quoteSelection, stream.threadId, workbench]);
+  const handleAskInSideChat = React.useCallback(
+    async (threadId?: string) => {
+      if (!quoteSelection || !workbench.sideChatEnabled || !stream.threadId)
+        return;
+      setIsOpeningSideChat(true);
+      setSideChatError(null);
+      try {
+        if (threadId && workbench.sideChats)
+          await workbench.sideChats.openSideChat(
+            threadId,
+            quoteSelection.reference,
+          );
+        else await workbench.askInSideChat(quoteSelection.reference);
+        clearQuoteSelection();
+        window.getSelection()?.removeAllRanges();
+      } catch (error) {
+        setSideChatError(
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        setIsOpeningSideChat(false);
+      }
+    },
+    [clearQuoteSelection, quoteSelection, stream.threadId, workbench],
+  );
   return {
     clearQuoteSelection,
     quoteSelection,

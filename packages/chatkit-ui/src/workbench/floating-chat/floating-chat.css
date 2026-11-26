@@ -56,12 +56,14 @@
 }
 .chatkit-floating-chat-header .chatkit-floating-chat-title {
   width: auto;
+  aspect-ratio: auto;
   min-width: 0;
-  max-width: 70%;
+  max-width: calc(100% - 2 * var(--floating-chat-control) - 1rem);
   flex-shrink: 1;
   gap: calc(0.375rem * var(--chat-density-scale, 1));
   padding-inline: calc(0.5rem * var(--chat-density-scale, 1));
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--foreground);
 }
 .chatkit-floating-chat-menu {
   min-width: min(18rem, calc(100vw - 2rem));
@@ -143,9 +145,7 @@
 [data-chat-presentation='compact'] [data-chat-auxiliary],
 [data-chat-presentation='compact'] [data-slot='starter-prompt-suggestions'],
 [data-chat-presentation='compact'] [data-slot='scroll-to-bottom'],
-[data-chat-presentation='compact'] [data-slot='composer-context-surface'],
-[data-chat-presentation='compact'] [data-slot='composer-leading-actions'],
-[data-chat-presentation='compact'] [data-slot='composer-trailing-actions'] {
+[data-chat-presentation='compact'] [data-slot='composer-context-surface'] {
   display: none;
 }
 [data-chat-presentation='compact'] [data-slot='chatkit-chat-composer'],
@@ -155,21 +155,34 @@
 [data-chat-presentation='compact'] [data-slot='composer-editor-surface'] {
   min-height: calc(4rem * var(--chat-density-scale, 1));
   padding: calc(0.75rem * var(--chat-density-scale, 1));
-  padding-right: calc(4rem * var(--chat-density-scale, 1));
+  gap: calc(0.5rem * var(--chat-density-scale, 1));
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 [data-chat-presentation='compact'] [data-slot='composer-action-bar'] {
-  left: auto;
-  right: calc(0.75rem * var(--chat-density-scale, 1));
-  bottom: calc(0.75rem * var(--chat-density-scale, 1));
-  min-height: 0;
+  position: static;
+  min-height: var(--composer-action-size, 2.5rem);
 }
 [data-chat-presentation='compact'] [data-slot='composer-body'],
 [data-chat-presentation='compact']
   [data-slot='composer-body']
   > [role='textbox'] {
   min-height: calc(1.5rem * var(--chat-density-scale, 1));
+}
+
+[data-chat-presentation='compact'] [data-slot='composer-body'] {
+  max-height: min(30vh, calc(12rem * var(--chat-density-scale, 1)));
+  overflow-y: auto;
+}
+[data-chat-presentation='compact'] [data-slot='composer-input-shell'] {
+  /* The normal composer reserves its expanded footprint. Here the card grows
+     naturally with its draft, attachments and toolbar. */
+  min-height: 0 !important;
+}
+@container (max-width: 28rem) {
+  [data-chat-presentation='compact'] [data-slot='composer-model-picker-label'] {
+    display: none;
+  }
 }

@@ -1,3 +1,4 @@
+import { emitToolComponentEvent } from '../../tool-component-events';
 import type { Message } from '@langchain/core/messages';
 import type { ToolCall } from '@langchain/core/messages/tool';
 import {
@@ -200,6 +201,7 @@ export function applyStreamEvent(
 
     const message = payload.data;
     if (message.type === 'component') {
+      emitToolComponentEvent(message, eventContext, sendEvent);
       const runtimeActivityTrigger =
         resolveRuntimeActivityTriggerFromMessageComponent(message);
       if (runtimeActivityTrigger) {
@@ -270,6 +272,7 @@ export function applyStreamEvent(
     ) {
       const conversationId = eventData.id.trim();
       if (conversationId) {
+        if (eventContext) eventContext.conversationId = conversationId;
         onConversationStart?.(conversationId);
       }
       const acknowledged = eventData.userMessage;

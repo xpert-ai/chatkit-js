@@ -177,127 +177,88 @@ describe('WorkbenchShell', () => {
     },
   );
 
-  it('copies once per source thread and reuses the native side chat for later selections', async () => {
-    mocks.copyThread.mockResolvedValue({ thread_id: 'side-thread-1' });
-
-    function SideChatLauncher() {
+  it('keeps independent side-chat runtimes mounted across tab close and reopen', async () => {
+    mocks.copyThread
+      .mockResolvedValueOnce({ thread_id: 'side-thread-1' })
+      .mockResolvedValueOnce({ thread_id: 'side-thread-2' });
+    function Launcher() {
       const workbench = useWorkbench();
       return (
         <>
           <button
-            type="button"
             onClick={() =>
               void workbench.askInSideChat({
                 type: 'quote',
-                text: 'first selection',
+                text: 'First topic',
               })
             }
           >
             First
           </button>
           <button
-            type="button"
             onClick={() =>
               void workbench.askInSideChat({
                 type: 'quote',
-                text: 'second selection',
+                text: 'Second topic',
               })
             }
           >
             Second
           </button>
+          <button
+            onClick={() =>
+              void workbench.sideChats?.openSideChat('side-thread-1')
+            }
+          >
+            Reopen first
+          </button>
+          <button
+            onClick={() => workbench.sideChats?.closeSideChat('side-thread-1')}
+          >
+            Collapse first from summary
+          </button>
         </>
       );
     }
-
     render(
       <WorkbenchShell
-        options={{
-          ...baseOptions,
-          workbench: { sideChat: { enabled: true } },
-        }}
+        options={{ ...baseOptions, workbench: { sideChat: { enabled: true } } }}
         locale="en-US"
         onRequestContextChange={vi.fn()}
       >
-        <SideChatLauncher />
+        <Launcher />
       </WorkbenchShell>,
     );
     setObservedWidth(1200);
-
     fireEvent.click(screen.getByRole('button', { name: 'First' }));
-    expect(await screen.findByTestId('side-chat')).toBeInTheDocument();
-    expect(mocks.copyThread).toHaveBeenCalledTimes(1);
-    expect(mocks.copyThread).toHaveBeenCalledWith('thread-1', {
-      mode: 'latest-sealed-reply',
-      requestId: expect.any(String),
-    });
-    expect(mocks.sideChatProps?.referenceRequest?.reference?.text).toBe(
-      'first selection',
-    );
-
+    await screen.findByRole('tab', { name: 'First topic' });
     fireEvent.click(screen.getByRole('button', { name: 'Second' }));
-    await waitFor(() =>
-      expect(mocks.sideChatProps?.referenceRequest?.reference?.text).toBe(
-        'second selection',
-      ),
-    );
-    expect(mocks.copyThread).toHaveBeenCalledTimes(1);
-
-    // Collapsing the modal and moving between hosts must keep the running
-    // side chat mounted, without retaining a hidden modal pointer lock.
-    setObservedWidth(720);
-    expect(
-      screen.queryByRole('dialog', { hidden: true }),
-    ).not.toBeInTheDocument();
-    expect(document.body.style.pointerEvents).not.toBe('none');
-    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(mocks.sideChatMounts).toBe(1);
-    fireEvent.click(screen.getByLabelText('Show or hide sidebar'));
-    await waitFor(() =>
-      expect(
-        screen.queryByRole('dialog', { hidden: true }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(document.body.style.pointerEvents).not.toBe('none');
-    expect(mocks.sideChatUnmounts).toBe(0);
-    setObservedWidth(1200);
-    expect(screen.getByTestId('side-chat')).toBeInTheDocument();
-    expect(mocks.copyThread).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByLabelText('Close views: Side chat'));
-    expect(
-      screen.getByRole('alertdialog', { name: 'Close side chat?' }),
-    ).toBeInTheDocument();
-    expect(mocks.sideChatMounts).toBe(1);
-    expect(mocks.sideChatUnmounts).toBe(0);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(screen.getByTestId('side-chat')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Close views: Side chat'));
-    fireEvent.click(screen.getByRole('checkbox', { name: "Don't ask again" }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close side chat' }));
-
-    await waitFor(() =>
-      expect(screen.queryByTestId('side-chat')).not.toBeInTheDocument(),
-    );
-    expect(mocks.sideChatUnmounts).toBe(1);
-    expect(mocks.deleteThread).not.toHaveBeenCalled();
-    expect(
-      window.localStorage.getItem(SIDE_CHAT_CLOSE_CONFIRMATION_STORAGE_KEY),
-    ).toBe('true');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Second' }));
-    expect(await screen.findByTestId('side-chat')).toBeInTheDocument();
+    await screen.findByRole('tab', { name: 'Second topic' });
     expect(mocks.copyThread).toHaveBeenCalledTimes(2);
-
-    fireEvent.click(screen.getByLabelText('Close views: Side chat'));
-    await waitFor(() =>
-      expect(screen.queryByTestId('side-chat')).not.toBeInTheDocument(),
+    expect(mocks.sideChatMounts).toBe(2);
+    fireEvent.click(screen.getByLabelText('Close views: First topic'));
+    expect(
+      screen.queryByRole('tab', { name: 'First topic' }),
+    ).not.toBeInTheDocument();
+    expect(mocks.sideChatUnmounts).toBe(0);
+    expect(mocks.deleteThread).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen first' }));
+    expect(
+      await screen.findByRole('tab', { name: 'First topic' }),
+    ).toHaveAttribute('aria-selected', 'true');
+    expect(mocks.copyThread).toHaveBeenCalledTimes(2);
+    expect(mocks.sideChatMounts).toBe(2);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Collapse first from summary' }),
     );
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('tab', { name: 'First topic' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Second topic' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(mocks.sideChatUnmounts).toBe(0);
     expect(mocks.deleteThread).not.toHaveBeenCalled();
   });
 });

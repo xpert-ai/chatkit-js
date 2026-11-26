@@ -60,7 +60,8 @@ import { RemoteViewTab } from './remote-view/RemoteViewTab';
 import { resolveManifestText } from './manifest-text';
 import { WorkbenchBrowserPreview } from './browser-preview/WorkbenchBrowserPreview';
 import { SideChatView } from './side-chat/SideChatView';
-import { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
+import { sideChatViewKey, isSideChatView } from './side-chat/types';
+import type { useWorkbenchSideChat } from './shell/side-chat/useWorkbenchSideChat';
 import type { TerminalRestriction } from './native/terminal/terminal-restriction';
 
 export { SIDE_CHAT_VIEW_KEY, type SideChatSession } from './side-chat/types';
@@ -98,8 +99,7 @@ type WorkbenchPanelProps = {
   onCloseView?: (key: string) => void;
   activeView: XpertExtensionViewManifest | null;
   activeViewKey: string | null;
-  sideChat: SideChatSession | null;
-  sideChatOpening: boolean;
+  sideChats: ReturnType<typeof useWorkbenchSideChat>;
   externalViewOpen: boolean;
   externalRuns: ExternalAssistantRun[];
   groupRecord?: ReturnType<typeof useGroupExecutionRecord>;
@@ -121,7 +121,7 @@ type WorkbenchPanelProps = {
   startPageLoading?: boolean;
   expanded: boolean;
   onClose: () => void;
-  onRequestCloseSideChat: () => void;
+  onRequestCloseSideChat: (id: string) => void;
   onToggleExpanded: () => void;
   onReload: () => void;
   onSelect: (viewKey: string) => void;
@@ -162,8 +162,7 @@ export function WorkbenchPanel({
   onCloseView,
   activeView,
   activeViewKey,
-  sideChat,
-  sideChatOpening,
+  sideChats,
   externalViewOpen,
   externalRuns,
   groupRecord,
@@ -286,8 +285,7 @@ export function WorkbenchPanel({
         views.length > 0 ||
         previews.length > 0 ||
         newTabs.length > 0 ||
-        sideChat ||
-        sideChatOpening ||
+        sideChats.sessions.some((session) => session.opened) ||
         externalViewOpen ? (
           <WorkbenchTabs activeKey={activeViewKey} order={tabOrder}>
             {mainChatHost && (
@@ -330,23 +328,29 @@ export function WorkbenchPanel({
                 }}
               />
             )}
-            {(sideChat || sideChatOpening) && (
-              <WorkbenchTab
-                key={SIDE_CHAT_VIEW_KEY}
-                label={sideChat?.title ?? t('workbench.sideChat.title')}
-                icon={<MessageSquarePlus size={16} />}
-                selected={activeViewKey === SIDE_CHAT_VIEW_KEY}
-                onSelect={() => onSelect(SIDE_CHAT_VIEW_KEY)}
-                close={
-                  sideChat && activeViewKey === SIDE_CHAT_VIEW_KEY
-                    ? {
-                        label: `${t('workbench.close')}: ${t('workbench.sideChat.title')}`,
-                        onClick: onRequestCloseSideChat,
-                      }
-                    : undefined
-                }
-              />
-            )}
+            {sideChats.sessions
+              .filter((session) => session.opened)
+              .map((session) => (
+                <WorkbenchTab
+                  key={sideChatViewKey(session.threadId)}
+                  id={sideChatViewKey(session.threadId)}
+                  panelId={`${sideChatViewKey(session.threadId)}-panel`}
+                  label={session.title}
+                  icon={
+                    session.status === 'busy' ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <MessageSquarePlus size={16} />
+                    )
+                  }
+                  selected={activeViewKey === sideChatViewKey(session.threadId)}
+                  onSelect={() => onSelect(sideChatViewKey(session.threadId))}
+                  close={{
+                    label: `${t('workbench.close')}: ${session.title}`,
+                    onClick: () => onRequestCloseSideChat(session.threadId),
+                  }}
+                />
+              ))}
             {previews.map((preview) => (
               <PreviewTabs
                 key={preview.key}
@@ -445,7 +449,7 @@ export function WorkbenchPanel({
             active={
               visible &&
               activeViewKey !== MAIN_CHAT_VIEW_KEY &&
-              activeViewKey !== SIDE_CHAT_VIEW_KEY
+              !isSideChatView(activeViewKey)
             }
             onOpenChat={() => onSelect(MAIN_CHAT_VIEW_KEY)}
             onNewSideChat={
@@ -483,6 +487,14 @@ export function WorkbenchPanel({
             className="h-full min-h-0"
           >
             <WorkbenchStartPage
+              openTabs={previews.map((preview) => ({
+                key: preview.key,
+                title: preview.title,
+                detail: 'url' in preview ? preview.url : '',
+                kind: preview.kind === 'browser' ? 'website' : 'file',
+                opened: true,
+                onSelect: () => onSelect(preview.key),
+              }))}
               navigation={{ ...browserNavigation(key), onHome: undefined }}
               views={availableViews}
               openedViewKeys={views.map((view) => view.key)}
@@ -505,18 +517,28 @@ export function WorkbenchPanel({
             />
           </div>
         ))}
-        {sideChat && (
-          <div
-            hidden={activeViewKey !== SIDE_CHAT_VIEW_KEY}
-            className="h-full min-h-0"
-          >
-            <SideChatView
-              session={sideChat}
-              options={options}
-              stream={stream}
-            />
-          </div>
-        )}
+        {sideChats.sessions
+          .filter((session) => session.visited)
+          .map((session) => (
+            <div
+              key={session.threadId}
+              id={`${sideChatViewKey(session.threadId)}-panel`}
+              role="tabpanel"
+              aria-labelledby={sideChatViewKey(session.threadId)}
+              hidden={
+                !session.opened ||
+                activeViewKey !== sideChatViewKey(session.threadId)
+              }
+              className="h-full min-h-0"
+            >
+              <SideChatView
+                session={session}
+                options={options}
+                stream={stream}
+                onStatus={sideChats.updateStatus}
+              />
+            </div>
+          ))}
         {externalViewOpen && (
           <div
             role="tabpanel"
@@ -670,15 +692,9 @@ export function WorkbenchPanel({
         native?.tabs.some((tab) => tab.key === activeViewKey) ||
         newTabs.includes(activeViewKey ?? '') ||
         activePreview ? null : activeViewKey ===
-          EXTERNAL_ASSISTANTS_VIEW_KEY ? null : activeViewKey ===
-          SIDE_CHAT_VIEW_KEY ? (
-          !sideChat && sideChatOpening ? (
-            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 size={16} className="animate-spin" />
-              {t('workbench.loading')}
-            </div>
-          ) : null
-        ) : activeView ? null : loading && !error ? (
+          EXTERNAL_ASSISTANTS_VIEW_KEY ? null : isSideChatView(
+            activeViewKey,
+          ) ? null : activeView ? null : loading && !error ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" />
             {t('workbench.loading')}

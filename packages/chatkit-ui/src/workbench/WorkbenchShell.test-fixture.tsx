@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => ({
       },
       threads: {
         copy: vi.fn(),
+        update: vi.fn().mockResolvedValue({}),
         delete: vi.fn(),
       },
       workbench: {
@@ -68,7 +69,10 @@ const mocks = vi.hoisted(() => ({
         downloadFile: vi.fn(),
         saveFile: vi.fn(),
       },
-      conversations: { listTaskSummaryItems: vi.fn() },
+      conversations: {
+        listTaskSummaryItems: vi.fn(),
+        listThreads: vi.fn().mockResolvedValue([]),
+      },
       runs: { get: vi.fn() },
     },
     apiKey: 'cs-x-secret',

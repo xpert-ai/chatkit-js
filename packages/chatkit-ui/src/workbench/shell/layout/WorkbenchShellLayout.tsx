@@ -3,60 +3,54 @@ import type { useChatkitTranslation } from '../../../i18n/useChatkitTranslation'
 import { WorkbenchContext, type WorkbenchContextValue } from '../../context';
 import { NativeCloseDialog } from '../../native/NativeCloseDialog';
 import type { useNativeWorkbench } from '../../native/useNativeWorkbench';
-import { SideChatCloseDialog } from '../../side-chat/SideChatCloseDialog';
 import type { useInitialLoading } from '../../useInitialLoading';
 import type { useWorkbenchLayout } from '../../useWorkbenchLayout';
 import type { useWorkbenchPanelHost } from '../../useWorkbenchPanelHost';
 import type { useWorkbenchResize } from '../../useWorkbenchResize';
 import { WorkbenchFrame } from './WorkbenchFrame';
-import type { SideChatSession } from '../../side-chat/types';
-import type { useWorkbenchSideChat } from '../side-chat/useWorkbenchSideChat';
 import type { useWorkbenchShellTabs } from '../tabs/useWorkbenchShellTabs';
 
 type WorkbenchShellLayoutProps = Pick<
   ReturnType<typeof useWorkbenchShellTabs>,
   'adjacentTab'
-> &
-  Pick<ReturnType<typeof useWorkbenchSideChat>, 'confirmCloseSideChat'> & {
-    contextValue: WorkbenchContextValue;
-    rootRef: React.RefObject<HTMLDivElement | null>;
-    isNarrow: boolean;
-    workbenchSide: ReturnType<typeof useWorkbenchLayout>['workbenchSide'];
-    initialLoading: ReturnType<typeof useInitialLoading>;
-    t: ReturnType<typeof useChatkitTranslation>['t'];
-    notification: { level: 'success' | 'error'; message: string } | null;
-    open: boolean;
-    setNotification: React.Dispatch<
-      React.SetStateAction<{
-        level: 'success' | 'error';
-        message: string;
-      } | null>
-    >;
-    resizing: ReturnType<typeof useWorkbenchResize>['resizing'];
-    mainChatInWorkbench: boolean;
-    chatHost: ReturnType<typeof useWorkbenchPanelHost>;
-    chat: React.ReactNode;
-    sideChat: SideChatSession | null;
-    externalViewOpen: boolean;
-    expanded: ReturnType<typeof useWorkbenchLayout>['expanded'];
-    containerWidth: number;
-    resolvedPanelWidth: ReturnType<
-      typeof useWorkbenchLayout
-    >['resolvedPanelWidth'];
-    startResize: ReturnType<typeof useWorkbenchResize>['startResize'];
-    setPanelWidth: ReturnType<typeof useWorkbenchLayout>['setPanelWidth'];
-    setExpanded: ReturnType<typeof useWorkbenchLayout>['setExpanded'];
-    swapSides: ReturnType<typeof useWorkbenchLayout>['swapSides'];
-    panelHost: ReturnType<typeof useWorkbenchPanelHost>;
-    setOpen: ReturnType<typeof useWorkbenchLayout>['setOpen'];
-    closeWorkbench: () => void;
-    panel: React.ReactNode;
-    native: ReturnType<typeof useNativeWorkbench>;
-    activeViewKey: string | null;
-    setActiveViewKey: React.Dispatch<React.SetStateAction<string | null>>;
-    sideChatCloseDialogOpen: boolean;
-    setSideChatCloseDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  };
+> & {
+  contextValue: WorkbenchContextValue;
+  rootRef: React.RefObject<HTMLDivElement | null>;
+  isNarrow: boolean;
+  workbenchSide: ReturnType<typeof useWorkbenchLayout>['workbenchSide'];
+  initialLoading: ReturnType<typeof useInitialLoading>;
+  t: ReturnType<typeof useChatkitTranslation>['t'];
+  notification: { level: 'success' | 'error'; message: string } | null;
+  open: boolean;
+  setNotification: React.Dispatch<
+    React.SetStateAction<{
+      level: 'success' | 'error';
+      message: string;
+    } | null>
+  >;
+  resizing: ReturnType<typeof useWorkbenchResize>['resizing'];
+  mainChatInWorkbench: boolean;
+  chatHost: ReturnType<typeof useWorkbenchPanelHost>;
+  chat: React.ReactNode;
+  keepSideChatsMounted: boolean;
+  externalViewOpen: boolean;
+  expanded: ReturnType<typeof useWorkbenchLayout>['expanded'];
+  containerWidth: number;
+  resolvedPanelWidth: ReturnType<
+    typeof useWorkbenchLayout
+  >['resolvedPanelWidth'];
+  startResize: ReturnType<typeof useWorkbenchResize>['startResize'];
+  setPanelWidth: ReturnType<typeof useWorkbenchLayout>['setPanelWidth'];
+  setExpanded: ReturnType<typeof useWorkbenchLayout>['setExpanded'];
+  swapSides: ReturnType<typeof useWorkbenchLayout>['swapSides'];
+  panelHost: ReturnType<typeof useWorkbenchPanelHost>;
+  setOpen: ReturnType<typeof useWorkbenchLayout>['setOpen'];
+  closeWorkbench: () => void;
+  panel: React.ReactNode;
+  native: ReturnType<typeof useNativeWorkbench>;
+  activeViewKey: string | null;
+  setActiveViewKey: React.Dispatch<React.SetStateAction<string | null>>;
+};
 
 export function WorkbenchShellLayout({
   contextValue,
@@ -72,7 +66,7 @@ export function WorkbenchShellLayout({
   mainChatInWorkbench,
   chatHost,
   chat,
-  sideChat,
+  keepSideChatsMounted,
   externalViewOpen,
   expanded,
   containerWidth,
@@ -89,9 +83,6 @@ export function WorkbenchShellLayout({
   activeViewKey,
   adjacentTab,
   setActiveViewKey,
-  sideChatCloseDialogOpen,
-  setSideChatCloseDialogOpen,
-  confirmCloseSideChat,
 }: WorkbenchShellLayoutProps) {
   return (
     <WorkbenchContext.Provider value={contextValue}>
@@ -108,7 +99,7 @@ export function WorkbenchShellLayout({
         mainChatInWorkbench={mainChatInWorkbench}
         chatHost={chatHost}
         chat={chat}
-        keepPanelMounted={Boolean(sideChat) || externalViewOpen}
+        keepPanelMounted={keepSideChatsMounted || externalViewOpen}
         expanded={expanded}
         resolvedPanelWidth={resolvedPanelWidth}
         startResize={startResize}
@@ -144,11 +135,6 @@ export function WorkbenchShellLayout({
               }
             }
           }}
-        />
-        <SideChatCloseDialog
-          open={sideChatCloseDialogOpen}
-          onOpenChange={setSideChatCloseDialogOpen}
-          onConfirm={confirmCloseSideChat}
         />
       </WorkbenchFrame>
     </WorkbenchContext.Provider>

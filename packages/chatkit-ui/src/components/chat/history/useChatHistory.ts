@@ -27,6 +27,7 @@ export function useChatHistory({
   t,
 }: ChatHistoryOptions) {
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyArchived, setHistoryArchived] = React.useState(false);
   const [historyScope, updateHistoryScope] =
     React.useState<ThreadHistoryScope>('all');
   const [historyProjectFilter, setHistoryProjectFilter] =
@@ -40,13 +41,23 @@ export function useChatHistory({
     setHistoryProjectFilter(null);
   }, [stream.client, stream.assistantId]);
 
+  React.useEffect(() => {
+    setHistoryArchived(false);
+  }, [stream.client, stream.assistantId]);
+
   const [historyQuery, setHistoryQuery] = React.useState('');
   const effectiveHistoryScope =
     historyScope === 'current-project' && !activeProjectId
       ? 'all'
       : historyScope;
 
-  const { threads, updateThread, deleteThread, refreshThreads } = useThreads(
+  const {
+    threads,
+    updateThread,
+    updateThreadSidebar,
+    deleteThread,
+    refreshThreads,
+  } = useThreads(
     undefined,
     false, // Message history owns lazy browsing; this hook only manages mutations.
   );
@@ -62,6 +73,7 @@ export function useChatHistory({
       !missingConfig &&
       stream.isReady,
     query: historyQuery,
+    archived: historyArchived,
     scope: historyProjectFilter ? 'current-project' : effectiveHistoryScope,
   });
 
@@ -86,6 +98,9 @@ export function useChatHistory({
     currentThread,
     assistantStatusText,
     updateThread,
+    updateThreadSidebar,
+    historyArchived,
+    setHistoryArchived,
     historyOpen,
     setHistoryOpen,
     historyQuery,

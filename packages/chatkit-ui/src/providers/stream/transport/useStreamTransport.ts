@@ -233,6 +233,7 @@ export function useStreamTransport({
         const interrupts: unknown[] = [];
         const eventContext: LangGraphEventContext = {
           threadId: nextThreadId,
+          conversationId: conversationIdRef.current,
           input: scopedInput,
         };
         for await (const chunk of stream) {

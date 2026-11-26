@@ -1,5 +1,10 @@
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
-import type { ChatConversation, Client } from '@xpert-ai/xpert-sdk';
+import type {
+  ChatConversation,
+  Client,
+  ConversationSidebarPatch,
+  ConversationSidebarState,
+} from '@xpert-ai/xpert-sdk';
 import type { ThreadItem } from '../../hooks/useThreads';
 import type { ChatKitAIMessage } from '../../providers/stream/types';
 import { supportsConversationSharing } from '../sharing/share-client';
@@ -18,6 +23,10 @@ export type ConversationActionContext = {
   delete: (target: ThreadItem) => Promise<void>;
   navigate: (conversation: ChatConversation) => void;
   sideChat?: () => Promise<void>;
+  setSidebar?: (
+    target: ThreadItem,
+    patch: ConversationSidebarPatch,
+  ) => Promise<ConversationSidebarState>;
 };
 
 export type ConversationActionAvailability = {
@@ -67,6 +76,16 @@ export function getConversationActions(
           : undefined,
   });
   return {
+    pin: availability(
+      !!context.setSidebar &&
+        !!detail?.sidebar &&
+        typeof api?.updateSidebar === 'function',
+    ),
+    archive: availability(
+      !!context.setSidebar &&
+        !!detail?.sidebar &&
+        typeof api?.updateSidebar === 'function',
+    ),
     rename: availability(
       context.history?.showRename !== false &&
         typeof api?.update === 'function',
@@ -118,6 +137,7 @@ export function activeConversationTarget(
     // A conversation record can point at its original thread while a secondary branch is open.
     id: context.activeThreadId,
     title: known?.title || conversation?.title || title,
+    sidebar: known?.sidebar ?? conversation?.sidebar,
     projectId: conversation
       ? (conversation.projectId ?? null)
       : (known?.projectId ?? projectId ?? null),

@@ -16,7 +16,11 @@ export function ChatView({
   surface?: 'main' | 'side';
 }) {
   const workbench = useWorkbenchChat();
-  usePublishWorkbenchChat(surface !== 'side' ? view.workbench : undefined);
+  usePublishWorkbenchChat(
+    surface !== 'side' && view.workbench
+      ? { ...view.workbench, conversationMenu: view.header.conversationMenu }
+      : undefined,
+  );
   const presentation =
     surface !== 'side' && workbench?.floating ? workbench.mode : undefined;
   const compact = presentation === 'compact' || presentation === 'minimized';

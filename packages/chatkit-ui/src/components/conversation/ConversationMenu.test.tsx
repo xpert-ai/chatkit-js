@@ -114,10 +114,15 @@ function fixture() {
   };
 }
 
-async function open(placement: 'header' | 'history' = 'header') {
+async function open(placement: 'header' | 'history' | 'floating' = 'header') {
   fireEvent.keyDown(
     screen.getByRole('button', {
-      name: placement === 'header' ? 'More actions' : 'Actions for Report',
+      name:
+        placement === 'floating'
+          ? 'Conversation menu: Report'
+          : placement === 'header'
+            ? 'More actions'
+            : 'Actions for Report',
     }),
     { key: 'Enter' },
   );
@@ -125,6 +130,91 @@ async function open(placement: 'header' | 'history' = 'header') {
 }
 
 describe('shared conversation menu', () => {
+  it.each(['header', 'history', 'floating'] as const)(
+    'pins and archives through the shared %s menu while a run is active',
+    async (placement) => {
+      const f = fixture();
+      let state = { pinned: false, archived: false };
+      vi.spyOn(f.context.client.conversations, 'getSidebar').mockImplementation(
+        async () => state,
+      );
+      f.context.running = true;
+      const setSidebar = vi.fn(
+        async (
+          _target: ThreadItem,
+          patch: { pinned?: boolean; archived?: boolean },
+        ) => (state = { ...state, ...patch }),
+      );
+      render(
+        <ConversationMenu
+          context={{ ...f.context, setSidebar }}
+          target={f.target}
+          placement={placement}
+        />,
+      );
+      await open(placement);
+      fireEvent.click(
+        await screen.findByRole('menuitem', { name: 'Pin chat' }),
+      );
+      await waitFor(() =>
+        expect(setSidebar).toHaveBeenCalledWith(f.target, { pinned: true }),
+      );
+      await open(placement);
+      expect(
+        await screen.findByRole('menuitem', { name: 'Unpin chat' }),
+      ).toBeEnabled();
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Archive' }));
+      await waitFor(() =>
+        expect(setSidebar).toHaveBeenCalledWith(f.target, { archived: true }),
+      );
+      await open(placement);
+      fireEvent.click(
+        await screen.findByRole('menuitem', { name: 'Unarchive' }),
+      );
+      await waitFor(() =>
+        expect(state).toEqual({ pinned: true, archived: false }),
+      );
+      expect(f.context.delete).not.toHaveBeenCalled();
+      expect(f.context.navigate).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps other actions available when personal preferences are inaccessible', async () => {
+    const f = fixture();
+    vi.spyOn(f.context.client.conversations, 'getSidebar').mockRejectedValue(
+      new Error('Forbidden'),
+    );
+    render(
+      <ConversationMenu
+        context={{ ...f.context, setSidebar: vi.fn() }}
+        target={f.target}
+      />,
+    );
+    await open();
+    expect(
+      screen.queryByRole('menuitem', { name: 'Pin chat' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Rename' })).toBeEnabled();
+  });
+
+  it('reports rejected archive writes without claiming success or deleting the chat', async () => {
+    const f = fixture();
+    vi.spyOn(f.context.client.conversations, 'getSidebar').mockResolvedValue({
+      pinned: false,
+      archived: false,
+    });
+    const setSidebar = vi.fn().mockRejectedValue(new Error('Offline'));
+    render(
+      <ConversationMenu
+        context={{ ...f.context, setSidebar }}
+        target={f.target}
+      />,
+    );
+    await open();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(f.context.delete).not.toHaveBeenCalled();
+  });
   it.each([false, true])(
     'opens the schedule form for the active branch (running = %s)',
     async (running) => {
@@ -135,7 +225,10 @@ describe('shared conversation menu', () => {
         <WorkbenchContext.Provider
           value={{ ...disabledWorkbenchContext, openScheduleForm }}
         >
-          <ConversationMenu context={{ ...f.context, running }} target={f.target} />
+          <ConversationMenu
+            context={{ ...f.context, running }}
+            target={f.target}
+          />
         </WorkbenchContext.Provider>,
       );
       fireEvent.keyDown(screen.getByRole('button', { name: 'More actions' }), {
@@ -144,7 +237,10 @@ describe('shared conversation menu', () => {
       fireEvent.click(
         await screen.findByRole('menuitem', { name: 'Add scheduled task…' }),
       );
-      expect(openScheduleForm).toHaveBeenCalledWith(f.target.id, f.target.title);
+      expect(openScheduleForm).toHaveBeenCalledWith(
+        f.target.id,
+        f.target.title,
+      );
     },
   );
 
@@ -169,7 +265,7 @@ describe('shared conversation menu', () => {
     expect(next.messages).not.toHaveBeenCalled();
   });
 
-  it.each(['header', 'history'] as const)(
+  it.each(['header', 'history', 'floating'] as const)(
     'keeps copy/export and branch choices accessible on narrow screens from %s',
     async (placement) => {
       const f = fixture();
@@ -208,6 +304,19 @@ describe('shared conversation menu', () => {
         expect.stringContaining('Visible reply'),
       );
       fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(dialog).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {
+            name:
+              placement === 'floating'
+                ? 'Conversation menu: Report'
+                : placement === 'header'
+                  ? 'More actions'
+                  : 'Actions for Report',
+          }),
+        ).toHaveFocus(),
+      );
       await open(placement);
       fireEvent.click(
         screen.getByRole('menuitem', { name: 'Continue in new chat' }),
@@ -338,13 +447,19 @@ describe('shared conversation menu', () => {
     ).toHaveAttribute('aria-disabled', 'true');
     expect(f.context.delete).not.toHaveBeenCalled();
   });
-  it.each(['header', 'history'] as const)(
+  it.each(['header', 'history', 'floating'] as const)(
     'renames the correct conversation from the %s entry and restores focus',
     async (placement) => {
       const f = fixture();
       render(
         <ThemeProvider>
-          {placement === 'header' ? (
+          {placement === 'floating' ? (
+            <ConversationMenu
+              context={f.context}
+              target={f.target}
+              placement="floating"
+            />
+          ) : placement === 'header' ? (
             <ChatHeaderActions
               conversationMenu={{ context: f.context, target: f.target }}
             />
@@ -383,7 +498,11 @@ describe('shared conversation menu', () => {
         expect(
           screen.getByRole('button', {
             name:
-              placement === 'header' ? 'More actions' : 'Actions for Report',
+              placement === 'floating'
+                ? 'Conversation menu: Report'
+                : placement === 'header'
+                  ? 'More actions'
+                  : 'Actions for Report',
           }),
         ).toHaveFocus(),
       );

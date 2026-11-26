@@ -1,3 +1,4 @@
+import { WorkbenchContext, disabledWorkbenchContext } from '../context';
 import * as React from 'react';
 import {
   act,
@@ -10,7 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../providers/Theme';
 import { WorkbenchAddressBar } from './WorkbenchAddressBar';
 
-function setup(currentUrl?: string) {
+function setup(currentUrl?: string, searchUrlTemplate?: string) {
   const onOpen = vi.fn();
   const onReload = vi.fn();
   const onSelect = [vi.fn(), vi.fn(), vi.fn()];
@@ -51,7 +52,11 @@ function setup(currentUrl?: string) {
   }
   render(
     <ThemeProvider>
-      <Bar />
+      <WorkbenchContext.Provider
+        value={{ ...disabledWorkbenchContext, searchUrlTemplate }}
+      >
+        <Bar />
+      </WorkbenchContext.Provider>
     </ThemeProvider>,
   );
   return { input: screen.getByRole('combobox'), onSelect, onOpen, onReload };
@@ -136,4 +141,34 @@ describe('WorkbenchAddressBar', () => {
     });
     expect(writeText).toHaveBeenCalledWith('https://alpha.test/');
   });
+});
+
+it('makes explicit URL and web search actions keyboard selectable without submitting plain queries to the web', () => {
+  const { input, onOpen } = setup(
+    undefined,
+    'https://example.com/search?q={query}',
+  );
+  fireEvent.change(input, { target: { value: 'unmatched query' } });
+  fireEvent.submit(screen.getByRole('search'));
+  expect(onOpen).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, { key: 'ArrowDown' });
+  fireEvent.keyDown(input, { key: 'ArrowUp' });
+  expect(screen.getByRole('option', { selected: true })).toHaveTextContent(
+    'unmatched query',
+  );
+  fireEvent.submit(screen.getByRole('search'));
+  expect(onOpen).toHaveBeenCalledWith(
+    expect.objectContaining({
+      url: 'https://example.com/search?q=unmatched%20query',
+    }),
+  );
+  fireEvent.change(input, { target: { value: 'example.org/new' } });
+  fireEvent.keyDown(input, { key: 'ArrowDown' });
+  expect(screen.getByRole('option', { selected: true })).toHaveTextContent(
+    'https://example.org/new',
+  );
+  fireEvent.submit(screen.getByRole('search'));
+  expect(onOpen).toHaveBeenLastCalledWith(
+    expect.objectContaining({ url: 'https://example.org/new' }),
+  );
 });

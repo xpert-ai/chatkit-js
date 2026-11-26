@@ -56,41 +56,34 @@ function normalizeLog(
   const name = readString(payload, 'name');
   const data = Reflect.get(payload, 'data');
 
-  if (name === 'lg.tool.end' && isObject(data)) {
+  const type =
+    name === 'lg.tool.start'
+      ? 'assistant.tool.started'
+      : name === 'lg.tool.end'
+        ? 'assistant.tool.completed'
+        : name === 'lg.tool.error'
+          ? 'assistant.tool.failed'
+          : null;
+  if (type && isObject(data)) {
     const toolName = readString(data, 'toolName');
     if (!toolName) return null;
-    const toolCallId =
-      readString(data, 'toolCallId') ?? readString(data, 'tool_call_id');
+    const toolCallId = readString(data, 'toolCallId');
     const runId = readString(data, 'runId');
+    const eventThreadId = readString(data, 'threadId') ?? threadId;
     const durationMs = readFiniteNumber(data, 'durationMs');
     const receivedAt = new Date().toISOString();
     return {
-      id: createEventId('assistant.tool.completed', toolCallId ?? runId),
-      type: 'assistant.tool.completed',
+      id: toolCallId
+        ? [type, eventThreadId, runId, toolCallId].filter(Boolean).join(':')
+        : createEventId(type, runId),
+      type,
       source: 'chatkit',
       receivedAt,
       toolName,
       ...(toolCallId ? { toolCallId } : {}),
       ...(runId ? { runId } : {}),
-      ...(threadId ? { threadId } : {}),
+      ...(eventThreadId ? { threadId: eventThreadId } : {}),
       ...(durationMs !== undefined ? { durationMs } : {}),
-      data: sanitizeEventData(data),
-    };
-  }
-
-  if (name === 'component' && isObject(data)) {
-    const toolName = readString(data, 'tool') ?? readString(data, 'name');
-    if (!toolName) return null;
-    const toolCallId = readString(payload, 'id');
-    const receivedAt = new Date().toISOString();
-    return {
-      id: createEventId('assistant.tool.completed', toolCallId ?? toolName),
-      type: 'assistant.tool.completed',
-      source: 'chatkit',
-      receivedAt,
-      toolName,
-      ...(toolCallId ? { toolCallId } : {}),
-      ...(threadId ? { threadId } : {}),
       data: sanitizeEventData(data),
     };
   }
