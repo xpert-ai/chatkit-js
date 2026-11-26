@@ -2,6 +2,7 @@ import * as React from 'react';
 import type { ChatConversation, Client } from '@xpert-ai/xpert-sdk';
 import type { ThreadHistoryScope, ThreadItem } from './useThreads';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
+import { fetchSidebarHistory } from './conversation-sidebar-history';
 
 const PAGE_SIZE = 50;
 
@@ -10,6 +11,7 @@ type HistoryRequest = {
   assistantId: string;
   projectId: string | null | undefined;
   search: string;
+  archived: boolean;
 };
 
 type HistoryPage = {
@@ -21,6 +23,7 @@ type HistoryPage = {
   loadingMore: boolean;
   error: boolean;
   moreError: boolean;
+  sidebarSupported: boolean;
 };
 
 /** Keep browsing and search independent from the active conversation's metadata. */
@@ -31,6 +34,7 @@ export function useMessageHistory({
   enabled,
   query,
   scope,
+  archived = false,
 }: {
   client: Client;
   assistantId: string;
@@ -38,6 +42,7 @@ export function useMessageHistory({
   enabled: boolean;
   query: string;
   scope: ThreadHistoryScope;
+  archived?: boolean;
 }) {
   const { t } = useChatkitTranslation();
   const filterProjectId =
@@ -53,8 +58,9 @@ export function useMessageHistory({
       assistantId,
       projectId: filterProjectId,
       search,
+      archived,
     }),
-    [client, assistantId, filterProjectId, search],
+    [client, assistantId, filterProjectId, search, archived],
   );
   const [page, setPage] = React.useState<HistoryPage | null>(null);
   const pending = React.useRef<{
@@ -87,24 +93,22 @@ export function useMessageHistory({
         loadingMore: append,
         error: false,
         moreError: false,
+        sidebarSupported:
+          previous?.request === request ? previous.sidebarSupported : false,
       }));
       task.timer = setTimeout(() => {
-        void request.client.conversations
-          .search(
-            {
-              where: {
-                xpertId: request.assistantId,
-                ...(request.projectId === undefined
-                  ? {}
-                  : { projectId: request.projectId }),
-              },
-              search: request.search,
-              limit: PAGE_SIZE,
-              offset,
-              order: { updatedAt: 'DESC', id: 'DESC' },
-            },
-            { signal: task.controller.signal },
-          )
+        void fetchSidebarHistory(
+          request.client,
+          {
+            assistantId: request.assistantId,
+            projectId: request.projectId,
+            archived: request.archived,
+            search: request.search,
+            limit: PAGE_SIZE,
+            offset,
+          },
+          task.controller.signal,
+        )
           .then((result) => {
             if (task.controller.signal.aborted) return;
             const nextOffset = offset + result.items.length;
@@ -137,6 +141,7 @@ export function useMessageHistory({
                 loadingMore: false,
                 error: false,
                 moreError: false,
+                sidebarSupported: result.sidebarSupported,
               };
             });
           })
@@ -226,6 +231,7 @@ export function useMessageHistory({
               ? projectNames.names[record.projectId]
               : undefined,
           status: record.status ?? 'idle',
+          sidebar: record.sidebar,
           lastMessageAt: Number.isNaN(timestamp)
             ? undefined
             : new Date(timestamp),
@@ -237,6 +243,7 @@ export function useMessageHistory({
   return {
     threads,
     total: current?.total ?? 0,
+    sidebarSupported: current?.sidebarSupported ?? false,
     isLoading: current?.loading ?? enabled,
     isLoadingMore: current?.loadingMore ?? false,
     error: current?.error ?? false,

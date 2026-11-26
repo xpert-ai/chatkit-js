@@ -49,10 +49,9 @@ describe('Workbench initial start page', () => {
     expect(screen.getAllByRole('tab')).toHaveLength(1);
     expect(screen.getByRole('combobox')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Files / folders' }));
-    expect(await screen.findByRole('tab', { name: 'Open file' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    expect(
+      await screen.findByRole('tab', { name: 'Open file' }),
+    ).toHaveAttribute('aria-selected', 'true');
     expect(
       screen.queryByRole('tab', { name: 'New tab' }),
     ).not.toBeInTheDocument();
@@ -91,10 +90,9 @@ describe('Workbench initial start page', () => {
       screen.queryByRole('tab', { name: 'Documents' }),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      within(screen.getByRole('region', { name: 'Recommended' })).getByRole(
-        'button',
-        { name: 'Documents' },
-      ),
+      within(screen.getByRole('region', { name: 'Open' })).getByRole('button', {
+        name: 'Documents',
+      }),
     );
     expect(
       await screen.findByRole('tab', { name: 'Documents' }),

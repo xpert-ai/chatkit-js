@@ -70,8 +70,8 @@
             "openUrl": "Open website",
             "invalidUrl": "Enter a valid HTTP or HTTPS URL without embedded credentials.",
             "urlHint": "Press Enter to open this website.",
-            "noResults": "No matching items.",
-            "tools": "Common tools",
+            "noResults": "No matches. Try another name, file path or URL.",
+            "tools": "Open",
             "noTools": "No common tools are available.",
             "dynamic": "Recommended",
             "noDynamic": "No recommended views",
@@ -85,7 +85,13 @@
             "moreTools": "More tools",
             "comingSoon": "Plugins and MCP Apps will be available here",
             "conversationRequired": "Start a conversation to use this tool",
-            "disabled": "Side chat is disabled"
+            "disabled": "Side chat is disabled",
+            "customize": "Customize",
+            "reset": "Restore defaults",
+            "pin": "Pin {{title}}",
+            "unpin": "Unpin {{title}}",
+            "moveUp": "Move {{title}} up",
+            "moveDown": "Move {{title}} down"
         },
         "browser": {
             "placeholder": "Search or enter URL",
@@ -97,7 +103,17 @@
             "history": "Recent websites",
             "noHistory": "No websites opened in this conversation yet.",
             "copyUrl": "Copy link",
-            "suggestions": "Address suggestions"
+            "suggestions": "Address suggestions",
+            "switchTab": "Switch to tab",
+            "searchWeb": "Search the web for {{query}}",
+            "clearHistory": "Clear history",
+            "kind": {
+                "action": "Action",
+                "chat": "Side chat",
+                "file": "File",
+                "website": "Website",
+                "query": "Recent search"
+            }
         },
         "messageUnavailable": "The requested message is unavailable in this branch.",
         "executionUnavailable": "The requested execution is unavailable in this conversation.",
@@ -134,7 +150,24 @@
                 "dontAskAgain": "Don't ask again",
                 "cancel": "Cancel",
                 "confirm": "Close side chat"
-            }
+            },
+            "list": "Side chats",
+            "create": "New side chat",
+            "empty": "Start a separate discussion here.",
+            "rename": "Rename {{title}}",
+            "collapse": "Collapse side chat: {{title}}",
+            "reopen": "Reopen side chat: {{title}}",
+            "actions": "Side chat actions: {{title}}",
+            "name": "Chat name",
+            "save": "Save",
+            "cancel": "Cancel",
+            "idle": "Ready",
+            "busy": "Running",
+            "interrupted": "Needs input",
+            "error": "Failed",
+            "paused": "Paused",
+            "sendToExisting": "Send to existing side chat",
+            "numberedTitle": "Side chat {{number}}"
         },
         "errors": {
             "contextKeyRequired": "Context key is required.",
@@ -522,6 +555,11 @@
         }
     },
     "history": {
+        "pinned": "Pinned",
+        "archiveFilter": "Conversation status",
+        "activeChats": "Active chats",
+        "archivedChats": "Archived chats",
+        "archiveEmpty": "No archived chats. Archived chats stay here until you restore them.",
         "threadHistory": "Message history",
         "title": "Message history",
         "refresh": "Refresh message history",
@@ -1493,6 +1531,10 @@
         "AskPrompt": "Read the latest content of document {{resourceId}} ({{path}}), then propose changes for human approval. Instructions: {{instruction}}"
     },
     "conversationMenu": {
+        "pin": "Pin chat",
+        "unpin": "Unpin chat",
+        "archive": "Archive",
+        "unarchive": "Unarchive",
         "addSchedule": "Add scheduled task…",
         "actionsFor": "Actions for {{title}}",
         "rename": "Rename",

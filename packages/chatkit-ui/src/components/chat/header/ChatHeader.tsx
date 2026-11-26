@@ -3,11 +3,13 @@ import { cn } from '../../../lib/utils';
 import { SquarePen } from 'lucide-react';
 import { ToolbarButton } from '../../ui/toolbar-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
+import type { ConversationMenuProps } from '../../conversation/ConversationMenu';
 
 const toolbarSurfaceClass =
   'pointer-events-auto rounded-chat-panel bg-background px-[calc(0.5rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))]';
 
 export type ChatHeaderProps = {
+  conversationMenu?: Pick<ConversationMenuProps, 'context' | 'target'>;
   visible?: boolean;
   columnRef?: Ref<HTMLDivElement>;
   style?: CSSProperties;

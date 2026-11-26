@@ -13,7 +13,12 @@ export function useOpenTaskSummaryResource(
   conversationId?: string,
 ) {
   const messenger = React.useContext(ParentMessengerContext);
-  const { openArtifact, openHtmlArtifact, openFileReview } = useWorkbench();
+  const {
+    openArtifact,
+    openHtmlArtifact,
+    openFileReview,
+    openSummaryResource,
+  } = useWorkbench();
   return React.useCallback(
     (
       resource: ChatTaskSummaryResourceReference,
@@ -64,6 +69,19 @@ export function useOpenTaskSummaryResource(
         )
           return;
       }
+      if (
+        openSummaryResource?.(resource, {
+          conversationId,
+          title,
+          mimeType: outputs.find(
+            (item) =>
+              resource.type === 'workspace_file' &&
+              item.resource?.type === 'workspace_file' &&
+              item.resource.workspacePath === resource.workspacePath,
+          )?.mimeType,
+        })
+      )
+        return;
       messenger?.sendEvent('public_event', [
         'effect',
         {
@@ -83,6 +101,7 @@ export function useOpenTaskSummaryResource(
       openArtifact,
       openHtmlArtifact,
       openFileReview,
+      openSummaryResource,
       messenger,
     ],
   );

@@ -598,6 +598,11 @@ export type ChatKitWorkbenchOptions = {
    */
   viewRail?: { enabled?: boolean };
 
+  /** Stable, non-secret per-user key for local Workbench preferences/history. Change on account switch. */
+  preferencesKey?: string;
+  /** Optional HTTP(S) search URL containing {query}. Requests occur only on explicit submission. */
+  searchUrlTemplate?: string;
+
   /** Native side chat branched from the current thread. Disabled by default. */
   sideChat?: {
     enabled?: boolean;
@@ -677,8 +682,9 @@ export type ChatKitOptions = {
   goal?: ChatKitGoalAdapter;
 
   /**
-   * Optional compact thread summary surface. Disabled by default so existing
-   * integrations keep their current layout until they opt in.
+   * Compact thread summary surface, including the Workbench side-chat list.
+   * Enabled by default when Workbench side chats are available; otherwise opt-in.
+   * Set enabled to false to explicitly hide the summary surface.
    */
   taskSummary?: {
     enabled?: boolean;

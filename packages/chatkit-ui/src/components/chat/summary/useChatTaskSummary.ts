@@ -17,6 +17,7 @@ import type { useChatQuotes } from '../messages/useChatQuotes';
 import type { useChatViewport } from '../messages/useChatViewport';
 import type { useRuntimeCapabilitiesState } from '../runtime-capabilities';
 import type { useChatEnvironment } from '../session/useChatEnvironment';
+import { useWorkbench } from '../../../workbench/context';
 
 const TASK_SUMMARY_PANEL_WIDTH_REM = 20;
 
@@ -66,7 +67,10 @@ export function useChatTaskSummary({
   focusComposerAt,
   characterPresentation = false,
 }: ChatTaskSummaryOptions) {
-  const taskSummaryEnabled = options?.taskSummary?.enabled === true;
+  const workbench = useWorkbench();
+  const sideChats = workbench.sideChatEnabled ? workbench.sideChats : undefined;
+  const taskSummaryEnabled =
+    options?.taskSummary?.enabled ?? Boolean(sideChats);
   const taskSummaryConversationId = stream.conversationId ?? null;
   const [dockedHeaderHeight, setDockedHeaderHeight] = React.useState<
     number | null
@@ -349,6 +353,7 @@ export function useChatTaskSummary({
 
   const taskSummaryProps: TaskSummaryProps = {
     summary: taskSummary.summary,
+    sideChats,
     historyError: taskSummary.historyError,
     loadingSections: taskSummary.loadingSections,
     loadedSectionCounts: taskSummary.loadedSectionCounts,

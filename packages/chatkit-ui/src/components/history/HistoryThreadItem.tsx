@@ -1,4 +1,4 @@
-import { Loader2, Trash2 } from 'lucide-react';
+import { Loader2, Trash2, Pin } from 'lucide-react';
 import type { ThreadHistoryProject, ThreadItem } from '../../hooks/useThreads';
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { cn } from '../../lib/utils';
@@ -44,6 +44,13 @@ export function HistoryThreadItem({
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-[calc(0.5rem*var(--chat-density-scale,1))]">
+        {thread.sidebar?.pinned && (
+          <Pin
+            size={13}
+            className="shrink-0 text-muted-foreground"
+            aria-label={t('history.pinned')}
+          />
+        )}
         <Button
           type="button"
           variant="ghost"

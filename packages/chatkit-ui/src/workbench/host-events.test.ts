@@ -6,6 +6,62 @@ import {
 } from './host-events';
 
 describe('workbench host events', () => {
+  it.each([
+    ['lg.tool.start', 'assistant.tool.started'],
+    ['lg.tool.end', 'assistant.tool.completed'],
+    ['lg.tool.error', 'assistant.tool.failed'],
+  ])('preserves canonical scope and identity for %s', (name, type) => {
+    const event = new CustomEvent(CHATKIT_INTERNAL_PARENT_EVENT, {
+      detail: {
+        event: 'public_event',
+        data: [
+          'log',
+          {
+            name,
+            data: {
+              toolName: 'uose-getEntityNeighborhood',
+              toolCallId: 'call-1',
+              threadId: 'branch-1',
+              conversationId: 'conversation-1',
+            },
+          },
+        ],
+      },
+    });
+    const normalized = normalizeChatKitHostEvent(event, 'stale-branch');
+    expect(normalized).toMatchObject({
+      type,
+      threadId: 'branch-1',
+      toolCallId: 'call-1',
+      data: { conversationId: 'conversation-1' },
+    });
+    expect(normalizeChatKitHostEvent(event)?.id).toBe(normalized?.id);
+  });
+
+  it('does not overwrite lifecycle events with presentation component logs', () => {
+    for (const status of ['running', 'success', 'fail']) {
+      const event = new CustomEvent(CHATKIT_INTERNAL_PARENT_EVENT, {
+        detail: {
+          event: 'public_event',
+          data: [
+            'log',
+            {
+              name: 'component',
+              id: 'call-1',
+              data: {
+                category: 'Tool',
+                toolPresentation: 'redacted',
+                tool: 'uose-getEntityNeighborhood',
+                status,
+              },
+            },
+          ],
+        },
+      });
+      expect(normalizeChatKitHostEvent(event)).toBeNull();
+    }
+  });
+
   it('normalizes completed tool logs', () => {
     const event = new CustomEvent(CHATKIT_INTERNAL_PARENT_EVENT, {
       detail: {

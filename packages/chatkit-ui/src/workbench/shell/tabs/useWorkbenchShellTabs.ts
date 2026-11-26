@@ -11,17 +11,15 @@ import { useWorkbenchTabOrder } from '../../useWorkbenchTabOrder';
 import type { useWorkbenchViews } from '../../useWorkbenchViews';
 import type { useWorkbenchViewTabs } from '../../useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY } from '../../WorkbenchPanel';
-import {
-  SIDE_CHAT_VIEW_KEY,
-  type SideChatSession,
-} from '../../side-chat/types';
+import { sideChatViewKey, type SideChatSession } from '../../side-chat/types';
 
 type WorkbenchShellTabsOptions = {
   native: ReturnType<typeof useNativeWorkbench>;
   externalViewOpen: boolean;
-  sideChat: SideChatSession | null;
-  sideChatOpening: boolean;
+  sideChats: SideChatSession[];
+  onCloseSideChat: (id: string) => void;
   previews: ReturnType<typeof useWorkbenchPages>['previews'];
+  storePreview: ReturnType<typeof useWorkbenchPages>['openPreview'];
   scopedViews: ReturnType<typeof useWorkbenchViewTabs>['scopedViews'];
   newTabs: ReturnType<typeof useWorkbenchPages>['newTabs'];
   startPageScope: string;
@@ -39,9 +37,10 @@ type WorkbenchShellTabsOptions = {
 export function useWorkbenchShellTabs({
   native,
   externalViewOpen,
-  sideChat,
-  sideChatOpening,
+  sideChats,
+  onCloseSideChat,
   previews,
+  storePreview,
   scopedViews,
   newTabs,
   startPageScope,
@@ -59,20 +58,14 @@ export function useWorkbenchShellTabs({
     () => [
       ...native.tabs.map((tab) => tab.key),
       ...(externalViewOpen ? [EXTERNAL_ASSISTANTS_VIEW_KEY] : []),
-      ...(sideChat || sideChatOpening ? [SIDE_CHAT_VIEW_KEY] : []),
+      ...sideChats
+        .filter((session) => session.opened)
+        .map((session) => sideChatViewKey(session.threadId)),
       ...previews.map((preview) => preview.key),
       ...scopedViews.map((view) => view.key),
       ...newTabs,
     ],
-    [
-      native.tabs,
-      externalViewOpen,
-      sideChat,
-      sideChatOpening,
-      previews,
-      scopedViews,
-      newTabs,
-    ],
+    [native.tabs, externalViewOpen, sideChats, previews, scopedViews, newTabs],
   );
 
   const {
@@ -93,6 +86,15 @@ export function useWorkbenchShellTabs({
     setActiveViewKey(key);
     setOpen(true);
   }, [addNewTab, setActiveViewKey, setOpen]);
+
+  const openPreview = React.useCallback(
+    (preview: Parameters<typeof storePreview>[0]) => {
+      storePreview(preview);
+      setActiveViewKey(preview.key);
+      setOpen(true);
+    },
+    [storePreview, setActiveViewKey, setOpen],
+  );
 
   // Wait for scope restoration and manifests before choosing the empty-panel fallback.
   React.useEffect(() => {
@@ -153,5 +155,21 @@ export function useWorkbenchShellTabs({
     },
     [tabKeys],
   );
-  return { tabKeys, adjacentTab, replaceNewTab, insertTabBefore, createNewTab };
+  const closeSideChatTab = React.useCallback(
+    (id: string) => {
+      const key = sideChatViewKey(id);
+      onCloseSideChat(id);
+      if (activeViewKey === key) setActiveViewKey(adjacentTab(key));
+    },
+    [activeViewKey, adjacentTab, onCloseSideChat, setActiveViewKey],
+  );
+  return {
+    tabKeys,
+    adjacentTab,
+    replaceNewTab,
+    insertTabBefore,
+    createNewTab,
+    openPreview,
+    closeSideChatTab,
+  };
 }

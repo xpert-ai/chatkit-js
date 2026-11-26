@@ -41,6 +41,9 @@ type AssistantHeaderProps = Pick<
     | 'assistantStatusText'
     | 'currentThread'
     | 'updateThread'
+    | 'updateThreadSidebar'
+    | 'historyArchived'
+    | 'setHistoryArchived'
     | 'historyOpen'
     | 'setHistoryOpen'
     | 'messageHistory'
@@ -130,6 +133,9 @@ export function getAssistantHeaderProps({
   handleMinimizeToPet,
   restoreHeaderFocus,
   messageHistory,
+  updateThreadSidebar,
+  historyArchived,
+  setHistoryArchived,
   historyQuery,
   setHistoryQuery,
   effectiveHistoryScope,
@@ -170,6 +176,11 @@ export function getAssistantHeaderProps({
       if (isCurrentConversationView()) messageHistory.refresh();
     },
     delete: handleDeleteThread,
+    setSidebar: async (target, patch) => {
+      const state = await updateThreadSidebar(target.recordId, patch);
+      if (isCurrentConversationView()) messageHistory.refresh();
+      return state;
+    },
     navigate: (record) => {
       setHistoryOpen(false);
       handleSelectThread({
@@ -203,6 +214,9 @@ export function getAssistantHeaderProps({
       null,
     ).rename;
   return {
+    conversationMenu: target
+      ? { context: conversationActions, target }
+      : undefined,
     visible: surface === 'main' && options?.header?.enabled !== false,
     columnRef: chatColumnRef,
     style: chatColumnStyle,
@@ -316,6 +330,12 @@ export function getAssistantHeaderProps({
             onCloseAutoFocus={restoreHeaderFocus}
             threads={messageHistory.threads}
             total={messageHistory.total}
+            archived={historyArchived}
+            onArchivedChange={
+              messageHistory.sidebarSupported || historyArchived
+                ? setHistoryArchived
+                : undefined
+            }
             query={historyQuery}
             onQueryChange={setHistoryQuery}
             hasMore={messageHistory.hasMore}

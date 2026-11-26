@@ -1,6 +1,6 @@
 /**
  * LangGraph Event to ChatKit Event Mapping
- * 
+ *
  * | LangGraph Event          | ChatKit Event               | log.name                | log.data                              |
  * | ------------------------ | --------------------------- | ----------------------- | ------------------------------------- |
  * | `ON_CONVERSATION_START`  | `chatkit.log`               | `lg.conversation.start` | `{runId, threadId, inputSummary}`     |
@@ -22,6 +22,7 @@ type RecordLike = Record<string, unknown>;
 
 export type LangGraphEventContext = {
   threadId?: string | null;
+  conversationId?: string | null;
   input?: unknown;
 };
 
@@ -94,7 +95,10 @@ const truncate = (value: string, maxLength: number): string => {
   return `${value.slice(0, maxLength - 3)}...`;
 };
 
-const summarizeValue = (value: unknown, maxLength = MAX_PREVIEW_LENGTH): string | undefined => {
+const summarizeValue = (
+  value: unknown,
+  maxLength = MAX_PREVIEW_LENGTH,
+): string | undefined => {
   if (value == null) return undefined;
   if (typeof value === 'string') return truncate(value, maxLength);
   const json = safeJsonStringify(value);
@@ -108,7 +112,10 @@ const isAssistantMessageType = (value?: string): boolean => {
   return normalized === 'ai' || normalized === 'assistant';
 };
 
-const extractTaggedValue = (tags: string[] | undefined, prefixes: string[]): string | undefined => {
+const extractTaggedValue = (
+  tags: string[] | undefined,
+  prefixes: string[],
+): string | undefined => {
   if (!tags || tags.length === 0) return undefined;
   for (const tag of tags) {
     for (const prefix of prefixes) {
@@ -128,7 +135,13 @@ const extractRunId = (
   if (executionId) return executionId;
   const meta = isRecord(data?.metadata) ? data?.metadata : null;
   return (
-    pickString(data, ['runId', 'run_id', 'executionId', 'execution_id', 'id']) ??
+    pickString(data, [
+      'runId',
+      'run_id',
+      'executionId',
+      'execution_id',
+      'id',
+    ]) ??
     pickString(meta, ['runId', 'run_id', 'executionId', 'execution_id']) ??
     extractTaggedValue(tags, ['run_id:', 'run_id=', 'runId:', 'runId='])
   );
@@ -144,7 +157,12 @@ const extractThreadId = (
   return (
     pickString(data, ['threadId', 'thread_id']) ??
     pickString(meta, ['threadId', 'thread_id']) ??
-    extractTaggedValue(tags, ['thread_id:', 'thread_id=', 'threadId:', 'threadId='])
+    extractTaggedValue(tags, [
+      'thread_id:',
+      'thread_id=',
+      'threadId:',
+      'threadId=',
+    ])
   );
 };
 
@@ -187,10 +205,7 @@ const emitLog = (
   sendEvent('public_event', ['log', createLogPayload(name, data)]);
 };
 
-const emitError = (
-  sendEvent: ParentMessenger['sendEvent'],
-  error: Error,
-) => {
+const emitError = (sendEvent: ParentMessenger['sendEvent'], error: Error) => {
   sendEvent('public_event', ['error', { error }]);
 };
 
@@ -231,7 +246,9 @@ const extractRetrieverTopK = (data: RecordLike | null): number | undefined =>
 const extractRetrieverHits = (data: RecordLike | null): unknown =>
   data?.hits ?? data?.documents ?? data?.docs ?? data?.results;
 
-const extractChatEventPayload = (data: RecordLike | null): Record<string, unknown> | undefined => {
+const extractChatEventPayload = (
+  data: RecordLike | null,
+): Record<string, unknown> | undefined => {
   if (!data) return undefined;
   return data;
   // const eventRecord = isRecord(data.event) ? data.event : data;
@@ -253,8 +270,17 @@ const extractChatEventPayload = (data: RecordLike | null): Record<string, unknow
   // return Object.keys(payload).length > 0 ? payload : undefined;
 };
 
-const extractToolKey = (runKey: string, data: RecordLike | null, toolName?: string): string => {
-  const toolCallId = pickString(data, ['tool_call_id', 'toolCallId', 'id', 'call_id']);
+const extractToolKey = (
+  runKey: string,
+  data: RecordLike | null,
+  toolName?: string,
+): string => {
+  const toolCallId = pickString(data, [
+    'tool_call_id',
+    'toolCallId',
+    'id',
+    'call_id',
+  ]);
   const identity = toolCallId ?? toolName ?? 'unknown';
   return `${runKey}:${identity}`;
 };
@@ -262,10 +288,12 @@ const extractToolKey = (runKey: string, data: RecordLike | null, toolName?: stri
 const buildBaseLogData = (
   runId: string | undefined,
   threadId: string | undefined,
+  conversationId?: string | null,
 ): Record<string, unknown> => {
   const data: Record<string, unknown> = {};
   if (runId) data.runId = runId;
   if (threadId) data.threadId = threadId;
+  if (conversationId) data.conversationId = conversationId;
   return data;
 };
 
@@ -303,21 +331,28 @@ export const mapLangGraphEventToChatKit = ({
     }
     case ChatMessageEventTypeEnum.ON_CONVERSATION_START: {
       const inputSummary = summarizeValue(
-        record?.input ?? record?.inputs ?? record?.message ?? record?.messages ?? context?.input,
+        record?.input ??
+          record?.inputs ??
+          record?.message ??
+          record?.messages ??
+          context?.input,
       );
       emitLog(sendEvent, 'lg.conversation.start', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         ...(inputSummary ? { inputSummary } : {}),
       });
       return;
     }
     case ChatMessageEventTypeEnum.ON_CONVERSATION_END: {
       const outputSummary = summarizeValue(
-        record?.output ?? record?.outputs ?? record?.result ?? record?.finalOutput,
+        record?.output ??
+          record?.outputs ??
+          record?.result ??
+          record?.finalOutput,
       );
       const usage = isRecord(record?.usage) ? record?.usage : undefined;
       emitLog(sendEvent, 'lg.conversation.end', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         ...(outputSummary ? { outputSummary } : {}),
         ...(usage ? { usage } : {}),
       });
@@ -333,7 +368,7 @@ export const mapLangGraphEventToChatKit = ({
           ? 'lg.agent.start'
           : 'lg.agent.end',
         {
-          ...buildBaseLogData(runId, threadId),
+          ...buildBaseLogData(runId, threadId, context?.conversationId),
           ...(agentId ? { agentId } : {}),
           ...(node ? { node } : {}),
         },
@@ -377,7 +412,7 @@ export const mapLangGraphEventToChatKit = ({
           ? 'lg.tool.start'
           : 'lg.tool.end',
         {
-          ...buildBaseLogData(runId, threadId),
+          ...buildBaseLogData(runId, threadId, context?.conversationId),
           ...(toolName ? { toolName } : {}),
           ...(toolCallId ? { toolCallId } : {}),
           ...(argsPreview ? { argsPreview } : {}),
@@ -389,11 +424,18 @@ export const mapLangGraphEventToChatKit = ({
     }
     case ChatMessageEventTypeEnum.ON_TOOL_ERROR: {
       const toolName = extractToolName(record);
+      const toolCallId = pickString(record, [
+        'tool_call_id',
+        'toolCallId',
+        'id',
+        'call_id',
+      ]);
       const error = coerceError(record?.error ?? record?.message ?? data);
       emitError(sendEvent, error);
       emitLog(sendEvent, 'lg.tool.error', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         ...(toolName ? { toolName } : {}),
+        ...(toolCallId ? { toolCallId } : {}),
         error: serializeError(error),
       });
       return;
@@ -409,7 +451,7 @@ export const mapLangGraphEventToChatKit = ({
           ? 'lg.retriever.start'
           : 'lg.retriever.end',
         {
-          ...buildBaseLogData(runId, threadId),
+          ...buildBaseLogData(runId, threadId, context?.conversationId),
           ...(query ? { query } : {}),
           ...(topK != null ? { topK } : {}),
           ...(hitsPreview ? { hitsPreview } : {}),
@@ -421,7 +463,7 @@ export const mapLangGraphEventToChatKit = ({
       const error = coerceError(record?.error ?? record?.message ?? data);
       emitError(sendEvent, error);
       emitLog(sendEvent, 'lg.retriever.error', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         error: serializeError(error),
       });
       return;
@@ -429,7 +471,7 @@ export const mapLangGraphEventToChatKit = ({
     case ChatMessageEventTypeEnum.ON_CHAT_EVENT: {
       const eventPayload = extractChatEventPayload(record);
       emitLog(sendEvent, 'lg.chat.event', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         ...(eventPayload ?? {}),
       });
       return;
@@ -439,7 +481,7 @@ export const mapLangGraphEventToChatKit = ({
       const resumable =
         typeof record?.resumable === 'boolean' ? record?.resumable : true;
       emitLog(sendEvent, 'lg.interrupt', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         ...(reason ? { reason } : {}),
         resumable,
       });
@@ -449,7 +491,7 @@ export const mapLangGraphEventToChatKit = ({
       const error = coerceError(record?.error ?? record?.message ?? data);
       emitError(sendEvent, error);
       emitLog(sendEvent, 'lg.run.error', {
-        ...buildBaseLogData(runId, threadId),
+        ...buildBaseLogData(runId, threadId, context?.conversationId),
         error: serializeError(error),
       });
       return;

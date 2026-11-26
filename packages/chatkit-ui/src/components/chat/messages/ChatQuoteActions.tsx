@@ -26,6 +26,7 @@ export function ChatQuoteActions({
   return (
     quoteSelection && (
       <div
+        data-chatkit-quote-actions=""
         className="pointer-events-none fixed z-50 flex flex-col items-center gap-1"
         style={{
           top: `${quoteSelection.top}px`,
@@ -33,7 +34,7 @@ export function ChatQuoteActions({
           transform: 'translateX(-50%)',
         }}
       >
-        <div className="pointer-events-auto flex overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
+        <div className="pointer-events-auto flex overflow-hidden rounded-chat-panel border bg-popover text-popover-foreground shadow-lg">
           <Button
             type="button"
             size="sm"
@@ -67,9 +68,27 @@ export function ChatQuoteActions({
               {t('composer.askInSideChat')}
             </Button>
           )}
+          {!!workbench.sideChats?.sessions.length && (
+            <select
+              aria-label={t('workbench.sideChat.sendToExisting')}
+              className="max-w-40 rounded-chat-item bg-popover px-[calc(0.5rem*var(--chat-density-scale,1))] text-sm text-popover-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              value=""
+              disabled={isOpeningSideChat}
+              onChange={(event) => void handleAskInSideChat(event.target.value)}
+            >
+              <option value="" disabled>
+                {t('workbench.sideChat.sendToExisting')}
+              </option>
+              {workbench.sideChats.sessions.map((session) => (
+                <option key={session.threadId} value={session.threadId}>
+                  {session.title}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         {sideChatError && (
-          <div className="pointer-events-auto max-w-72 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow">
+          <div className="pointer-events-auto max-w-72 rounded-chat-panel bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow">
             {sideChatError}
           </div>
         )}

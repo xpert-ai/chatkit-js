@@ -34,6 +34,50 @@ function openSidebar(props: React.ComponentProps<typeof HistorySidebar> = {}) {
 }
 
 describe('HistorySidebar', () => {
+  it('places pinned chats first and exposes a recoverable archived view', async () => {
+    const onArchivedChange = vi.fn();
+    const { rerender } = openSidebar({
+      onArchivedChange,
+      threads: [
+        {
+          id: 'recent',
+          recordId: 'recent',
+          title: 'Recent chat',
+          status: 'idle',
+        },
+        {
+          id: 'pinned',
+          recordId: 'pinned',
+          title: 'Older pinned chat',
+          status: 'idle',
+          sidebar: { pinned: true, archived: false },
+        },
+      ],
+    });
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent(
+      'Older pinned chat',
+    );
+    fireEvent.keyDown(
+      screen.getByRole('combobox', { name: 'Conversation status' }),
+      { key: 'ArrowDown' },
+    );
+    fireEvent.click(
+      await screen.findByRole('option', { name: 'Archived chats' }),
+    );
+    expect(onArchivedChange).toHaveBeenCalledWith(true);
+    rerender(
+      <HistorySidebar
+        open
+        archived
+        onArchivedChange={onArchivedChange}
+        threads={[]}
+      />,
+    );
+    expect(screen.getByText(/No archived chats/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Conversation status' }),
+    ).toHaveTextContent('Archived chats');
+  });
   it('keeps the nested scope menu connected to radius and density while open', async () => {
     const onScopeChange = vi.fn();
     const { rerender } = render(

@@ -121,17 +121,33 @@ function Panel() {
       viewQueries={{}}
       views={[]}
       activeView={null}
-      activeViewKey={SIDE_CHAT_VIEW_KEY}
-      sideChat={{
-        sourceThreadId: 'thread-B',
-        threadId: 'side-thread-B',
-        title: 'Side chat',
-        referenceRequest: {
-          id: 'quote',
-          reference: { type: 'quote', text: 'Selected text' },
-        },
+      activeViewKey={`${SIDE_CHAT_VIEW_KEY}:side-thread-B`}
+      sideChats={{
+        sessions: [
+          {
+            opened: true,
+            visited: true,
+
+            sourceThreadId: 'thread-B',
+            threadId: 'side-thread-B',
+            title: 'Side chat',
+            referenceRequest: {
+              id: 'quote',
+              reference: { type: 'quote', text: 'Selected text' },
+            },
+          },
+        ],
+        activeId: undefined,
+        opening: false,
+        ready: true,
+        error: null,
+        askInSideChat: async () => {},
+        openSideChat: async () => {},
+        closeSideChat: () => {},
+        renameSideChat: async () => {},
+        updateStatus: () => {},
+        reload: () => {},
       }}
-      sideChatOpening={false}
       externalViewOpen={false}
       externalRuns={[]}
       workbenchMessages={[]}

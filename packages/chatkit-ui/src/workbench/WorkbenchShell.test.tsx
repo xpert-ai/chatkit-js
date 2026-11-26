@@ -140,7 +140,7 @@ describe('WorkbenchShell', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Side chat' }));
       expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
         'Documents',
-        'Side chat',
+        'New tab',
         'New tab',
       ]);
       await act(async () => {
@@ -150,7 +150,7 @@ describe('WorkbenchShell', () => {
       const tabs = screen.getAllByRole('tab');
       expect(tabs.map((tab) => tab.textContent)).toEqual([
         'Documents',
-        result === 'resolve' ? 'Side chat' : 'New tab',
+        result === 'resolve' ? 'Side chat 1' : 'New tab',
         'New tab',
       ]);
       expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
@@ -255,11 +255,11 @@ describe('WorkbenchShell', () => {
     expect(
       screen.queryByRole('button', { name: 'No menu view' }),
     ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More tools' }));
     fireEvent.click(
-      within(screen.getByRole('region', { name: 'Recommended' })).getByRole(
-        'button',
-        { name: 'Studio' },
-      ),
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Studio',
+      }),
     );
     expect(screen.getByRole('tab', { name: 'Studio' })).toHaveAttribute(
       'aria-selected',
@@ -273,17 +273,14 @@ describe('WorkbenchShell', () => {
       screen.queryByRole('tab', { name: 'New tab' }),
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
-    expect(
-      within(screen.getByRole('region', { name: 'Recommended' })).queryByRole(
-        'button',
-        { name: 'Documents' },
-      ),
-    ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Open' })).getByRole('button', {
+        name: 'Documents',
+      }),
+    );
     expect(screen.getAllByRole('tab', { name: 'Documents' })).toHaveLength(1);
     expect(source).toBeVisible();
     expect(mocks.remoteUnmounts).toBe(0);
-    fireEvent.click(screen.getByRole('button', { name: 'Close new tab' }));
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
     fireEvent.click(
@@ -291,10 +288,9 @@ describe('WorkbenchShell', () => {
     );
     fireEvent.click(screen.getByRole('tab', { name: 'New tab' }));
     fireEvent.click(
-      within(screen.getByRole('region', { name: 'Recommended' })).getByRole(
-        'button',
-        { name: 'Documents' },
-      ),
+      within(screen.getByRole('region', { name: 'Open' })).getByRole('button', {
+        name: 'Documents',
+      }),
     );
     expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute(
       'aria-selected',
@@ -362,7 +358,7 @@ describe('WorkbenchShell', () => {
       'https://example.test/a.html',
     );
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(screen.getByRole('heading', { name: 'Common tools' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Open' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
     expect(screen.getByRole('tab', { name: 'a.html' })).toHaveAttribute(

@@ -7,17 +7,27 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPortal } from 'react-dom';
+import { Client } from '@xpert-ai/xpert-sdk';
 import { ThemeProvider } from '../../providers/Theme';
 import { initI18n } from '../../i18n';
 import { useWorkbenchPanelHost } from '../useWorkbenchPanelHost';
-import { WorkbenchChatProvider, usePublishWorkbenchChat } from './context';
+import {
+  WorkbenchChatProvider,
+  usePublishWorkbenchChat,
+  type WorkbenchChatMetadata,
+} from './context';
 import { FloatingChat } from './FloatingChat';
 
 const observers = new Set<() => void>();
 const openChat = vi.fn();
 const newSideChat = vi.fn();
+let conversationMenu: WorkbenchChatMetadata['conversationMenu'];
 function Content() {
-  usePublishWorkbenchChat({ title: 'Review bid', running: false });
+  usePublishWorkbenchChat({
+    title: 'Review bid',
+    running: false,
+    conversationMenu,
+  });
   return <input role="textbox" aria-label="Draft" defaultValue="Keep draft" />;
 }
 function Surface() {
@@ -120,6 +130,7 @@ beforeEach(() => {
   openChat.mockReset();
   newSideChat.mockReset();
   observers.clear();
+  conversationMenu = undefined;
   vi.stubGlobal(
     'PointerEvent',
     class extends MouseEvent {
@@ -151,7 +162,68 @@ afterEach(async () => {
 });
 
 describe('FloatingChat interactions', () => {
-  it('reveals the header upward without moving the input, including after dragging', () => {
+  it('publishes live conversation actions without remounting the draft or toggling the card', async () => {
+    const client = new Client({ apiUrl: 'https://example.invalid' });
+    vi.spyOn(client.conversations, 'get').mockResolvedValue({
+      id: 'record',
+      threadId: 'thread',
+      title: 'Review bid',
+      projectId: 'project',
+    });
+    vi.spyOn(client.conversations, 'searchMessages').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+    const rename = vi.fn().mockResolvedValue(undefined);
+    conversationMenu = {
+      context: {
+        client,
+        scopeKey: 'test',
+        ready: true,
+        running: false,
+        activeConversationId: 'record',
+        activeThreadId: 'thread',
+        branchEnabled: true,
+        rename,
+        delete: vi.fn(),
+        navigate: vi.fn(),
+      },
+      target: {
+        recordId: 'record',
+        id: 'thread',
+        title: 'Review bid',
+        status: 'idle',
+        projectId: 'project',
+      },
+    };
+    const { bounds } = setup();
+    const draft = screen.getByLabelText('Draft');
+    const trigger = screen.getByLabelText('Conversation menu: Review bid');
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', { name: 'Rename' }),
+      ).not.toHaveAttribute('aria-disabled'),
+    );
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    fireEvent.change(
+      await screen.findByRole('textbox', { name: 'Conversation title' }),
+      { target: { value: 'Updated' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+    await waitFor(() =>
+      expect(rename).toHaveBeenCalledWith(
+        expect.objectContaining({ recordId: 'record', id: 'thread' }),
+        'Updated',
+      ),
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(bounds).toHaveAttribute('data-floating-chat-mode', 'compact');
+    expect(screen.getByLabelText('Draft')).toBe(draft);
+    expect(draft).toHaveValue('Keep draft');
+  });
+
+  it('keeps the header and input stable across focus changes, including after dragging', () => {
     const { surface, header, focus, measure } = setup();
     const inputTop = () =>
       surface.getBoundingClientRect().top + (header.hidden ? 0 : 48);
@@ -164,7 +236,7 @@ describe('FloatingChat interactions', () => {
     for (let i = 0; i < 2; i++) {
       act(() => screen.getByText('Business page').focus());
       measure();
-      expect(header).not.toBeVisible();
+      expect(header).toBeVisible();
       expect(inputTop()).toBe(moved);
       focus();
       expect(header).toBeVisible();
@@ -176,13 +248,13 @@ describe('FloatingChat interactions', () => {
     expect(inputTop()).toBe(moved);
   });
 
-  it('shows the compact header only while focused and keeps it visible for its menu', async () => {
+  it('keeps the compact header visible and lets its menu own Escape', async () => {
     const { header, bounds, focus } = setup();
-    expect(header).not.toBeVisible();
+    expect(header).toBeVisible();
     focus();
     expect(header).toBeVisible();
     fireEvent.blur(window);
-    expect(header).not.toBeVisible();
+    expect(header).toBeVisible();
     fireEvent.focus(window);
     expect(header).toBeVisible();
     fireEvent.keyDown(screen.getByLabelText('Conversation menu: Review bid'), {
@@ -201,7 +273,7 @@ describe('FloatingChat interactions', () => {
     expect(bounds).toHaveAttribute('data-floating-chat-mode', 'compact');
     expect(header).toBeVisible();
     act(() => screen.getByText('Business page').focus());
-    await waitFor(() => expect(header).not.toBeVisible());
+    await waitFor(() => expect(header).toBeVisible());
   });
 
   it('opens the current conversation or starts a side chat without expanding on menu clicks', async () => {
@@ -211,7 +283,7 @@ describe('FloatingChat interactions', () => {
       key: 'Enter',
     });
     fireEvent.click(
-      await screen.findByRole('menuitem', { name: 'Review bid' }),
+      await screen.findByRole('menuitem', { name: 'Open conversation tab' }),
     );
     expect(openChat).toHaveBeenCalledOnce();
     await waitFor(() =>
