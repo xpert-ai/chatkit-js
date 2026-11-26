@@ -38,5 +38,14 @@ into the public context.
   through `../Stream.tsx`. The shared fixture only supplies mocks and setup;
   individual suites retain their assertions.
 
+Accepted or unconfirmed steer inputs remain server-owned. Stream completion,
+disconnects, and lost HTTP responses never convert them into queued executions;
+only an explicit admission rejection or a persisted server receipt returning an
+unconsumed input to queue permits that fallback. Follow-up receipt
+recovery independently reads the selected branch, pages beyond the first result
+set, and retries transient failures through the shared read coordinator. Pending
+or missing receipts keep their state until confirmed; navigation cancels reads,
+and reconnecting alone never resends an unconfirmed input.
+
 Follow the file-size guidance in the repository's `AGENTS.md` during review;
 no dedicated line-count gate is required.

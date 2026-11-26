@@ -36,6 +36,7 @@ import type {
 } from '../types';
 import {
   createAbortError,
+  isRunAdmissionRejected,
   normalizeSubmissionError,
   UnconfirmedRunError,
 } from './errors';
@@ -221,10 +222,14 @@ export function useStreamSubmission({
             await sendSteerFollowUp(activeThreadId, pending.request, options);
           } catch (followUpError) {
             setError(followUpError);
-            markPendingFollowUpsAsQueued([pending.id], {
-              autoDrain: true,
-              queuedFromSteer: true,
-            });
+            // A lost response can hide an accepted input. Only an explicit
+            // rejection is safe to turn into a new queued execution.
+            if (isRunAdmissionRejected(followUpError)) {
+              markPendingFollowUpsAsQueued([pending.id], {
+                autoDrain: true,
+                queuedFromSteer: true,
+              });
+            }
           }
         }
         return;

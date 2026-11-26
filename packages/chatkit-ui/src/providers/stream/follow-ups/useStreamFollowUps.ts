@@ -17,6 +17,7 @@ import type { useStreamMessages } from '../messages/useStreamMessages';
 import type { useStreamRunState } from '../runs/useStreamRunState';
 import type { useStreamScope } from '../scope/useStreamScope';
 import { mergeStreamRequestContext } from '../transport/request-options';
+import { isRunAdmissionRejected } from '../transport/errors';
 import type { StreamSubmitOptions } from '../types';
 import type { useStreamFollowUpState } from './useStreamFollowUpState';
 
@@ -205,10 +206,12 @@ export function useStreamFollowUps({
         });
       } catch (followUpError) {
         setError(followUpError);
-        markPendingFollowUpsAsQueued([id], {
-          autoDrain: true,
-          queuedFromSteer: true,
-        });
+        if (isRunAdmissionRejected(followUpError)) {
+          markPendingFollowUpsAsQueued([id], {
+            autoDrain: true,
+            queuedFromSteer: true,
+          });
+        }
       }
     },
     [
