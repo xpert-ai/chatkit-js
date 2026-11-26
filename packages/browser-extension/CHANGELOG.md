@@ -1,5 +1,16 @@
 # @xpert-ai/chatkit-browser-extension
 
+## 0.28.0
+
+### Patch Changes
+
+- Updated dependencies [014c1fc]
+- Updated dependencies [aaca869]
+  - @xpert-ai/chatkit-types@0.28.0
+  - @xpert-ai/chatkit-web-shared@0.28.0
+  - @xpert-ai/chatkit-host-automation@0.28.0
+  - @xpert-ai/chatkit-web-component@0.28.0
+
 ## 0.17.8
 
 ### Patch Changes
