@@ -1,5 +1,15 @@
 # @xpert-ai/chatkit-ui
 
+## 0.29.0
+
+### Minor Changes
+
+- 8ac3393: Open writable XLSX, XLS, CSV and TSV workspace files in the installed spreadsheet plugin for Project and standalone Assistant scopes. Remove the built-in writable spreadsheet editor and Univer dependencies while retaining read-only previews. Require @xpert-ai/xpert-sdk ^0.30.0 for standalone Assistant ContentClient.resolveFile and the corresponding host/plugin release.
+
+### Patch Changes
+
+- 665be10: Prevent duplicate execution of steer follow-ups after stream disconnects or lost acknowledgements. Reconcile persisted receipts across reconnects and paginated history, preserve explicit server queue fallbacks, and ignore stale responses after switching conversations or threads.
+
 ## 0.28.0
 
 ### Minor Changes
