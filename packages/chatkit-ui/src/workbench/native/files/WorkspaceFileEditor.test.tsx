@@ -3,7 +3,6 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { Client } from '@xpert-ai/xpert-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -38,19 +37,6 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-const officeSaved = vi.fn();
-vi.mock('../office/spreadsheet/SpreadsheetEditor', () => ({
-  default: React.forwardRef(function MockOffice(
-    { onDirty }: { onDirty: () => void },
-    ref,
-  ) {
-    React.useImperativeHandle(ref, () => ({
-      exportFile: async () => new Blob(['edited office']),
-      markSaved: officeSaved,
-    }));
-    return <button onClick={() => onDirty()}>Edit office</button>;
-  }),
-}));
 function setup(path = 'note.txt') {
   const client = new Client({ apiUrl: 'http://example.test/api/ai' });
   vi.spyOn(client.workbench, 'readFile').mockResolvedValue({
@@ -129,55 +115,13 @@ describe('workspace file saving', () => {
   });
 });
 
-it('acknowledges Office edits only after the server accepts the exported bytes', async () => {
-  officeSaved.mockClear();
-  const { client, register, download } = setup('workbook.xlsx');
-  let acceptSave!: (result: { filePath: string }) => void;
-  const pendingSave = new Promise<{ filePath: string }>((resolve) => {
-    acceptSave = resolve;
-  });
-  const persist = vi
-    .spyOn(client.workbench, 'saveBinaryFile')
-    .mockRejectedValueOnce(new Error('Save failed'))
-    .mockReturnValueOnce(pendingSave)
-    .mockResolvedValue({ filePath: 'workbook.xlsx' });
-  fireEvent.click(await screen.findByText('Edit office'));
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
-  expect(officeSaved).not.toHaveBeenCalled();
-  expect(register.mock.calls.at(-1)?.[1].dirty).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(persist).toHaveBeenCalledTimes(2));
-  expect(officeSaved).not.toHaveBeenCalled();
-  expect(register.mock.calls.at(-1)?.[1].dirty).toBe(true);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
-  expect(await persist.mock.calls[1][2].text()).toBe('edited office');
-  await act(async () => {
-    acceptSave({ filePath: 'workbook.xlsx' });
-    await pendingSave;
-  });
-  // markSaved runs before React commits the parent's clean-state effect.
-  // Wait for the registered handle and toolbar, not just the editor callback.
-  await waitFor(() => {
-    expect(officeSaved).toHaveBeenCalledOnce();
-    expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false);
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-  });
-  expect(officeSaved).toHaveBeenCalledWith(persist.mock.calls[1][2]);
-  // The next conflict check compares against the successfully saved file.
-  download.mockResolvedValue(new Blob(['edited office']));
-  fireEvent.click(screen.getByText('Edit office'));
-  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => {
-    expect(officeSaved).toHaveBeenCalledTimes(2);
-    expect(register.mock.calls.at(-1)?.[1].dirty).toBe(false);
-  });
-});
-
-it('requires the native plugin for editable DOCX instead of opening a second editor', async () => {
-  const { client } = setup('document.docx');
-  const persist = vi.spyOn(client.workbench, 'saveBinaryFile');
-  expect(await screen.findByText(/document editor plugin/i)).toBeVisible();
-  expect(screen.queryByText('Edit office')).not.toBeInTheDocument();
-  expect(persist).not.toHaveBeenCalled();
-});
+it.each(['docx', 'xlsx', 'xls', 'csv', 'tsv'])(
+  'requires the registered plugin for editable %s',
+  async (extension) => {
+    const { client } = setup(`document.${extension}`);
+    const persist = vi.spyOn(client.workbench, 'saveBinaryFile');
+    expect(await screen.findByText(/document editor plugin/i)).toBeVisible();
+    expect(screen.queryByText('Edit office')).not.toBeInTheDocument();
+    expect(persist).not.toHaveBeenCalled();
+  },
+);

@@ -35,10 +35,19 @@ export function useFileEditorNavigation(options: {
     };
   }, []);
   return (file: XpertWorkspaceFile, fromTab?: string) => {
-    if (!['pptx', 'docx', 'pdf'].includes(fileKind(file.filePath, file.mimeType)))
+    if (
+      !['pptx', 'docx', 'pdf', 'spreadsheet'].includes(
+        fileKind(file.filePath, file.mimeType),
+      )
+    )
       return options.native(file, fromTab);
     const { assistantId, projectId, api } = options;
-    if (!assistantId || !projectId || !options.ready) {
+    if (
+      !assistantId ||
+      (!projectId &&
+        fileKind(file.filePath, file.mimeType) !== 'spreadsheet') ||
+      !options.ready
+    ) {
       options.failed();
       return;
     }
@@ -47,7 +56,7 @@ export function useFileEditorNavigation(options: {
     const isCurrent = () => alive.current && scope.current === context;
     void (async () => {
       const resolved = await api.resolveFile(
-        { assistantId, projectId },
+        { assistantId, ...(projectId ? { projectId } : {}) },
         { path: file.filePath },
       );
       if (!isCurrent()) return;

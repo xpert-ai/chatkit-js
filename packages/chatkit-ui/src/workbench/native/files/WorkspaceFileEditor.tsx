@@ -12,12 +12,7 @@ import type { FileEditorHandle } from '../useNativeWorkbench';
 import { downloadBlob } from '../../../lib/files/download';
 import { fileName } from './workspace-file-utils';
 import { canWriteWorkspaceFile } from './workspace-file-access';
-import {
-  editableKinds,
-  fileKind,
-  sameFileBytes,
-  type BinaryEditorHandle,
-} from '../../../lib/files/file-types';
+import { fileKind, sameFileBytes } from '../../../lib/files/file-types';
 
 const OfficeFilePreview = React.lazy(
   () => import('../../../components/file-preview/OfficeFilePreview'),
@@ -28,10 +23,6 @@ const MarkdownEditor = React.lazy(
 const CodeEditor = React.lazy(
   () => import('../../../components/code-editor/CodeEditor'),
 );
-const SpreadsheetEditor = React.lazy(
-  () => import('../office/spreadsheet/SpreadsheetEditor'),
-);
-
 export function WorkspaceFileEditor({
   client,
   scope,
@@ -50,8 +41,8 @@ export function WorkspaceFileEditor({
   const { t } = useChatkitTranslation();
   const kind = fileKind(file.filePath, file.mimeType);
   const [canWrite, setCanWrite] = React.useState(false);
-  const editable = canWrite && kind !== 'docx' && editableKinds.includes(kind);
   const textFile = kind === 'text' || kind === 'markdown' || kind === 'html';
+  const editable = canWrite && textFile;
   const [source, setSource] = React.useState<Blob | null>(null);
   const baseline = React.useRef<Blob | null>(null);
   const [text, setText] = React.useState('');
@@ -64,7 +55,6 @@ export function WorkspaceFileEditor({
   const [preview, setPreview] = React.useState(false);
   const [url, setUrl] = React.useState('');
   const [version, retry] = React.useReducer((n) => n + 1, 0);
-  const editor = React.useRef<BinaryEditorHandle>(null);
   const lifetime = React.useRef<AbortController | null>(null);
   const scopeKey = JSON.stringify(scope);
   React.useEffect(() => {
@@ -148,21 +138,11 @@ export function WorkspaceFileEditor({
       });
       if (!(await sameFileBytes(baseline.current, fresh)))
         throw new Error(t('workbench.files.conflict'));
-      if (textFile) {
-        await client.workbench.saveFile(scope, file.filePath, text, {
-          signal: abort?.signal,
-        });
-        baseline.current = new Blob([text]);
-        originalText.current = text;
-      } else {
-        const blob = await editor.current?.exportFile();
-        if (!blob) throw new Error(t('workbench.files.loading'));
-        await client.workbench.saveBinaryFile(scope, file.filePath, blob, {
-          signal: abort?.signal,
-        });
-        baseline.current = blob;
-        if (!abort?.signal.aborted) editor.current?.markSaved?.(blob);
-      }
+      await client.workbench.saveFile(scope, file.filePath, text, {
+        signal: abort?.signal,
+      });
+      baseline.current = new Blob([text]);
+      originalText.current = text;
       if (!abort?.signal.aborted) {
         setDirty(false);
         onSaved();
@@ -195,18 +175,8 @@ export function WorkspaceFileEditor({
   const saveFromToolbar = () => {
     void save().catch(() => undefined);
   };
-  const markDirty = React.useCallback((value = true) => setDirty(value), []);
-  const editorProps = source
-    ? {
-        blob: source,
-        name: fileName(file.filePath),
-        onDirty: markDirty,
-        onSave: editable ? saveFromToolbar : undefined,
-        readOnly: !editable,
-      }
-    : null;
   const content = () => {
-    if (!source || !editorProps) return null;
+    if (!source) return null;
     if (textFile) {
       if (preview && kind === 'html')
         return (
@@ -244,7 +214,7 @@ export function WorkspaceFileEditor({
         />
       );
     }
-    if ((!canWrite && kind === 'docx') || (!editable && ['spreadsheet', 'pptx'].includes(kind)))
+    if (!canWrite && ['docx', 'spreadsheet', 'pptx'].includes(kind))
       return (
         <OfficeFilePreview
           blob={source}
@@ -254,7 +224,6 @@ export function WorkspaceFileEditor({
       );
     switch (kind) {
       case 'spreadsheet':
-        return <SpreadsheetEditor ref={editor} {...editorProps} />;
       case 'docx':
       case 'pptx':
         return (
@@ -318,10 +287,7 @@ export function WorkspaceFileEditor({
           onClick={() => {
             void (
               dirty
-                ? textFile
-                  ? Promise.resolve(new Blob([text], { type: 'text/plain' }))
-                  : (editor.current?.exportFile() ??
-                    Promise.reject(new Error(t('workbench.files.loading'))))
+                ? Promise.resolve(new Blob([text], { type: 'text/plain' }))
                 : client.workbench.downloadFile(scope, file.filePath)
             )
               .then((blob) => downloadBlob(blob, fileName(file.filePath)))

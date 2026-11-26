@@ -20,19 +20,33 @@ function options() {
   };
 }
 describe('Document plugin navigation', () => {
-  it.each(['pptx', 'docx', 'pdf'])('uses the authorized plugin for %s', async (extension) => {
-    const o = options(),
-      hook = renderHook(() => useFileEditorNavigation(o));
-    hook.result.current({ ...file, filePath: `report.${extension}` });
-    await waitFor(() =>
-      expect(o.navigate).toHaveBeenCalledWith({
-        target: 'workbench.view',
-        viewKey: 'editor',
-        selectionId: 'item',
-      }),
+  it('opens spreadsheet files from a published Assistant without a Project', async () => {
+    const o = { ...options(), projectId: undefined };
+    const hook = renderHook(() => useFileEditorNavigation(o));
+    hook.result.current({ ...file, filePath: 'data.csv' });
+    await waitFor(() => expect(o.navigate).toHaveBeenCalled());
+    expect(o.api.resolveFile).toHaveBeenCalledWith(
+      { assistantId: 'a' },
+      { path: 'data.csv' },
     );
     expect(o.native).not.toHaveBeenCalled();
   });
+  it.each(['pptx', 'docx', 'pdf', 'xlsx', 'xls', 'csv', 'tsv'])(
+    'uses the authorized plugin for %s',
+    async (extension) => {
+      const o = options(),
+        hook = renderHook(() => useFileEditorNavigation(o));
+      hook.result.current({ ...file, filePath: `report.${extension}` });
+      await waitFor(() =>
+        expect(o.navigate).toHaveBeenCalledWith({
+          target: 'workbench.view',
+          viewKey: 'editor',
+          selectionId: 'item',
+        }),
+      );
+      expect(o.native).not.toHaveBeenCalled();
+    },
+  );
   it('does not navigate a result after a Project switch', async () => {
     const o = options();
     let resolve!: (value: { viewKey: string }) => void;
