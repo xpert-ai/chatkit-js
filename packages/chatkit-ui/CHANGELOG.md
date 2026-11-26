@@ -1,5 +1,30 @@
 # @xpert-ai/chatkit-ui
 
+## 0.28.0
+
+### Minor Changes
+
+- 014c1fc: Support multiple independent side chats per conversation, with a persistent chat list, restoration, renaming and quote routing. Upgrade the Workbench start page with customizable pinned actions and unified keyboard-accessible search across actions, chats, open tabs and recent history. Add optional per-user preference scope and explicit web-search URL configuration.
+
+  Thread renaming requires the matching platform title-only thread update endpoint.
+
+### Patch Changes
+
+- fc9f338: Connect shared and floating conversation menus to SDK-backed pin/archive preferences. Add pinned ordering and recoverable archived history with project filtering, pagination, and compatibility with older hosts.
+- fc9f338: Upgrade the Workbench floating conversation with a persistent title bar, an upward-opening conversation action menu, right-aligned status and minimize controls, and full composer tools and attachments in compact mode. Preserve drafts, focus, and conversation action scope across presentation changes.
+- ab7e47b: Use the assistant's default model when a member cannot access the model picker.
+- e1c1ff6: Allow the server to name new side chats without treating their temporary labels as manual renames. Refresh titles when a side reply completes and share the result between summary rows and Workbench tabs. Keep temporary labels while awaiting a title and preserve compatibility with older servers.
+- aaca869: Unify the Workbench side-chat list, creation, status and rename controls in the task summary panel and remove the separate header button. Opening or creating a chat closes the summary popover and activates its Workbench tab; docked summaries remain available. Keep the New View entry and default to the unified summary for side-chat-enabled hosts unless explicitly disabled.
+
+  Use compact summary rows with a persistent chat icon, trailing status indicator and collapse/reopen action. Highlight the whole row, keep rename in the context menu and F2 shortcut, and use the same adjacent-tab selection when collapsing from the summary or the tab strip. Collapsing retains the thread and draft; it does not archive the conversation.
+
+- e26f89e: Open workspace files and URLs from task summary outputs through the Workbench's existing file editor and browser navigation. Preserve versioned artifact handling and host fallback when the Workbench cannot handle a resource; report invalid paths and URLs instead of silently ignoring clicks.
+- 775238b: Preserve the client message ID when submitting messages from Workbench views so optimistic review requests reconcile with persisted messages instead of appearing twice.
+- Updated dependencies [014c1fc]
+- Updated dependencies [aaca869]
+  - @xpert-ai/chatkit-types@0.28.0
+  - @xpert-ai/chatkit-web-shared@0.28.0
+
 ## 0.27.2
 
 ### Patch Changes

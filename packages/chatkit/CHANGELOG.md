@@ -1,5 +1,19 @@
 # @xpert-ai/chatkit-types
 
+## 0.28.0
+
+### Minor Changes
+
+- 014c1fc: Support multiple independent side chats per conversation, with a persistent chat list, restoration, renaming and quote routing. Upgrade the Workbench start page with customizable pinned actions and unified keyboard-accessible search across actions, chats, open tabs and recent history. Add optional per-user preference scope and explicit web-search URL configuration.
+
+  Thread renaming requires the matching platform title-only thread update endpoint.
+
+### Patch Changes
+
+- aaca869: Unify the Workbench side-chat list, creation, status and rename controls in the task summary panel and remove the separate header button. Opening or creating a chat closes the summary popover and activates its Workbench tab; docked summaries remain available. Keep the New View entry and default to the unified summary for side-chat-enabled hosts unless explicitly disabled.
+
+  Use compact summary rows with a persistent chat icon, trailing status indicator and collapse/reopen action. Highlight the whole row, keep rename in the context menu and F2 shortcut, and use the same adjacent-tab selection when collapsing from the summary or the tab strip. Collapsing retains the thread and draft; it does not archive the conversation.
+
 ## 0.24.1
 
 ### Patch Changes
