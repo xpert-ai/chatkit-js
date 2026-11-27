@@ -19,6 +19,7 @@ import { normalizeChatkitAvatar } from '../../../../ui/chatkit-avatar';
 import { IconDefinitionRenderer } from '../../../../ui/icon-definition';
 import { normalizeToolToken } from '../grouping/categories';
 import { toolActivityIcons } from './activity-icons';
+import { CommandToolIcon } from './CommandToolIcon';
 import type { PartialStepData } from '../types';
 
 function createToolsetIconUrl(
@@ -220,11 +221,13 @@ function getStepTypeIcon(type: unknown): LucideIcon | null {
 
 export function ToolStepIcon({
   data,
+  animated = false,
   className,
   organizationId,
   apiUrl,
 }: {
   data: PartialStepData;
+  animated?: boolean;
   className?: string;
   organizationId?: string;
   apiUrl?: string;
@@ -243,6 +246,18 @@ export function ToolStepIcon({
   React.useEffect(() => {
     setFailedIconUrl(null);
   }, [iconUrl]);
+
+  // Activity is the event's semantic contract; legacy SVG metadata must not
+  // override the command silhouette used by the containing activity group.
+  if (data.presentation?.activity?.kind === 'command') {
+    return (
+      <CommandToolIcon
+        animated={animated}
+        className={className}
+        data-slot="tool-step-icon"
+      />
+    );
+  }
 
   if (data.icon) {
     return (

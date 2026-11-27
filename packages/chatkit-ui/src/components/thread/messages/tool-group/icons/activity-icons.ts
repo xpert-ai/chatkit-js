@@ -6,20 +6,23 @@ import {
   ListTodo,
   PanelsTopLeft,
   Search,
-  SquareTerminal,
   Wrench,
 } from 'lucide-react';
 import type { ToolActivityKind } from '@xpert-ai/chatkit-types';
+import { CommandTerminalIcon } from './CommandTerminalIcon';
 
 export const toolActivityIcons = {
   skill: Wrench,
   file: FileText,
   data: Database,
   browser: Globe,
-  command: SquareTerminal,
+  command: CommandTerminalIcon,
   search: Search,
   content: PanelsTopLeft,
   task: ListTodo,
-} satisfies Record<ToolActivityKind, typeof Wrench>;
+} satisfies Record<
+  ToolActivityKind,
+  typeof Wrench | typeof CommandTerminalIcon
+>;
 export const MixedToolActivityIcon = Blocks;
 export const UnknownToolActivityIcon = Wrench;

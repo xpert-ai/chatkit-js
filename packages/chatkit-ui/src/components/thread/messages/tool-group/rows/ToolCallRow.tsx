@@ -30,6 +30,7 @@ type ToolCallRowProps = {
   organizationId?: string;
   apiUrl?: string;
   onInteract?: () => void;
+  isGroupExpanded?: boolean;
 };
 
 function areToolCallRowPropsEqual(
@@ -43,7 +44,8 @@ function areToolCallRowPropsEqual(
     previous.isThreadPaused === next.isThreadPaused &&
     previous.organizationId === next.organizationId &&
     previous.apiUrl === next.apiUrl &&
-    previous.onInteract === next.onInteract
+    previous.onInteract === next.onInteract &&
+    previous.isGroupExpanded === next.isGroupExpanded
   );
 }
 
@@ -54,6 +56,7 @@ function ToolCallRowContent({
   organizationId,
   apiUrl,
   onInteract,
+  isGroupExpanded = true,
 }: ToolCallRowProps) {
   const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
@@ -109,6 +112,9 @@ function ToolCallRowContent({
         {status ? (
           <ToolStepIcon
             data={data}
+            animated={
+              status === 'running' && !isPaused && !hasError && isGroupExpanded
+            }
             organizationId={organizationId}
             apiUrl={apiUrl}
             className={cn(

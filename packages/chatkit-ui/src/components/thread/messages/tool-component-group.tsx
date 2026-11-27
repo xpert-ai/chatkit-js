@@ -15,6 +15,7 @@ import {
   toolActivityIcons,
 } from './tool-group/icons/activity-icons';
 import { ToolCallRow } from './tool-group/rows/ToolCallRow';
+import { CommandToolIcon } from './tool-group/icons/CommandToolIcon';
 import type { ToolStepRunState } from './tool-group/types';
 import { getToolGroupStatus } from './tool-group/status/group-status';
 import { useToolDisclosure } from './tool-group/status/useToolDisclosure';
@@ -77,7 +78,14 @@ export function ToolComponentGroup({
         onClick={toggleExpanded}
       >
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-muted-foreground">
-          <ActivityIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+          {activity.kind === 'command' ? (
+            <CommandToolIcon
+              className="h-4 w-4 shrink-0"
+              animated={status === 'running' && !paused && !isExpanded}
+            />
+          ) : (
+            <ActivityIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+          )}
           <span className="truncate">{summary}</span>
           <span className="shrink-0 text-xs">
             · {t('message.toolGroup.callCount', { count: items.length })}
@@ -123,6 +131,7 @@ export function ToolComponentGroup({
             organizationId={organizationId}
             apiUrl={apiUrl}
             onInteract={retainGroup}
+            isGroupExpanded={isExpanded}
           />
         ))}
       </ul>
