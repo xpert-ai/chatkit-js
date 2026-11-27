@@ -44,8 +44,12 @@ describe('AssistantMessage tool components', () => {
     expect(
       screen.getByText('Context automatically compressed'),
     ).toBeInTheDocument();
-    expect(screen.getByText('Processed 1 tool')).toBeInTheDocument();
-    expect(screen.queryByText('Processed 2 tools')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Tool calls.*1 call.*Processed/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders skipped context compression as a no-op status row', () => {
@@ -179,7 +183,7 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     const toggle = screen.getByRole('button', {
-      name: /Processed 1 file, 1 search/,
+      name: /Tool calls.*2 calls.*Processed/,
     });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -206,12 +210,12 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     const toggle = screen.getByRole('button', {
-      name: /Processed 1 file, 1 command/,
+      name: /Tool calls.*2 calls.*Processing/,
     });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(
-      screen.queryByRole('button', { name: /Processing/ }),
+      screen.queryByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByText('Ran pnpm test')).toBeInTheDocument();
     expect(screen.getByText('Read ai.tsx')).toBeInTheDocument();
@@ -219,76 +223,80 @@ describe('AssistantMessage tool components', () => {
 
   it('uses text content to break consecutive tool component groups', () => {
     renderAssistant([
-      createToolComponent('first-tool'),
-      createToolComponent('second-tool'),
+      createToolComponent('first-tool', { title: 'First operation' }),
+      createToolComponent('second-tool', { title: 'Second operation' }),
       { type: 'text', text: 'The assistant answered between tools.' },
-      createToolComponent('third-tool'),
-      createToolComponent('fourth-tool'),
+      createToolComponent('third-tool', { title: 'Third operation' }),
+      createToolComponent('fourth-tool', { title: 'Fourth operation' }),
     ]);
 
     expect(
-      screen.getAllByRole('button', { name: /Processed 2 tools/ }),
+      screen.getAllByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
     ).toHaveLength(2);
     const toggles = screen.getAllByRole('button', {
-      name: /Processed 2 tools/,
+      name: /Tool calls.*2 calls.*Processed/,
     });
     expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
     expect(toggles[1]).toHaveAttribute('aria-expanded', 'true');
     expect(
       screen.getByText('The assistant answered between tools.'),
     ).toBeInTheDocument();
-    expect(screen.queryByText('first-tool')).not.toBeInTheDocument();
-    expect(screen.getByText('third-tool')).toBeInTheDocument();
+    expect(screen.getByText('First operation')).not.toBeVisible();
+    expect(screen.getByText('Third operation')).toBeInTheDocument();
   });
 
   it('collapses a tool group when a later non-group item appears', () => {
     renderAssistant([
-      createToolComponent('first-tool'),
-      createToolComponent('second-tool'),
+      createToolComponent('first-tool', { title: 'First operation' }),
+      createToolComponent('second-tool', { title: 'Second operation' }),
       { type: 'text', text: 'Tools are done for now.' },
     ]);
 
-    const toggle = screen.getByRole('button', { name: /Processed 2 tools/ });
+    const toggle = screen.getByRole('button', {
+      name: /Tool calls.*2 calls.*Processed/,
+    });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('first-tool')).not.toBeInTheDocument();
+    expect(screen.getByText('First operation')).not.toBeVisible();
     expect(screen.getByText('Tools are done for now.')).toBeInTheDocument();
   });
 
   it('ignores empty text and reasoning items between consecutive tool components', () => {
     renderAssistant([
-      createToolComponent('first-tool'),
+      createToolComponent('first-tool', { title: 'First operation' }),
       { type: 'text', text: '   ' },
       { type: 'reasoning', text: '' },
-      createToolComponent('second-tool'),
+      createToolComponent('second-tool', { title: 'Second operation' }),
     ]);
 
     expect(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
+      screen.getByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText('first-tool')).toBeInTheDocument();
-    expect(screen.getByText('second-tool')).toBeInTheDocument();
+    expect(screen.getByText('First operation')).toBeInTheDocument();
+    expect(screen.getByText('Second operation')).toBeInTheDocument();
   });
 
   it('keeps each grouped tool component expandable with input and output details', () => {
     renderAssistant([
       createToolComponent('read_file', {
+        title: 'Read file',
         input: {
           path: 'packages/chatkit-ui/src/components/thread/messages/ai.tsx',
         },
         output: 'file contents',
       }),
-      createToolComponent('run_command'),
+      createToolComponent('run_command', { title: 'Run command' }),
     ]);
 
-    const toolToggle = screen.getByRole('button', { name: /read_file/ });
+    const toolToggle = screen.getByRole('button', { name: /Read file/ });
     expect(toolToggle).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(toolToggle);
 
     expect(toolToggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Input')).toBeInTheDocument();
-    expect(screen.getByText(/JSON · Object\(1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/JSON · 1 items · \d+ bytes/)).toBeInTheDocument();
+    expect(screen.getByText('Object(1)')).toBeInTheDocument();
     expect(
       screen.getByText(
         /packages\/chatkit-ui\/src\/components\/thread\/messages\/ai.tsx/,
@@ -301,6 +309,7 @@ describe('AssistantMessage tool components', () => {
   it('keeps tool text output while hiding model-facing image artifacts', () => {
     renderAssistant([
       createToolComponent('knowledge_document_view_images', {
+        title: 'View images',
         output: {
           message: 'The image will be attached to the next model step.',
         },
@@ -323,9 +332,7 @@ describe('AssistantMessage tool components', () => {
       }),
     ]);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /knowledge_document_view_images/ }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /View images/ }));
 
     expect(screen.queryByTestId('tool-output-attachments')).toBeNull();
     expect(
@@ -333,7 +340,7 @@ describe('AssistantMessage tool components', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the stable tool name before the input label when the row uses a summary title', () => {
+  it('keeps the technical name out of the inline detail header', () => {
     renderAssistant([
       createToolComponent('bom_lifecycle_save_observation', {
         title: 'Completed technical agreement extraction',
@@ -350,22 +357,26 @@ describe('AssistantMessage tool components', () => {
       }),
     );
 
-    expect(screen.getByText('Input').parentElement).toHaveTextContent(
-      'bom_lifecycle_save_observation·Input',
-    );
+    expect(
+      screen.queryByText('bom_lifecycle_save_observation'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Input')).toBeVisible();
   });
 
   it('preserves expanded tool row state when appending to the same group', () => {
     const firstTool = createToolComponent('read_file', {
+      title: 'Read file',
       input: {
         path: 'packages/chatkit-ui/src/components/thread/messages/ai.tsx',
       },
       output: 'file contents',
     });
-    const secondTool = createToolComponent('run_command');
+    const secondTool = createToolComponent('run_command', {
+      title: 'Run command',
+    });
     const { rerender } = renderAssistant([firstTool]);
 
-    fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Read file/ }));
 
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('file contents')).toBeInTheDocument();
@@ -383,12 +394,12 @@ describe('AssistantMessage tool components', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
+      screen.getByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
     ).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('file contents')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /run_command/ }).closest('li'),
+      screen.getByRole('button', { name: /Run command/ }).closest('li'),
     ).toHaveClass('ck-tool-call-row-enter');
   });
 
@@ -403,31 +414,35 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     const toolToggle = screen.getByRole('button', {
-      name: /Updating project tasks/,
+      name: /Update project tasks/,
     });
 
-    expect(toolToggle).toBeDisabled();
-    expect(toolToggle).not.toHaveAttribute('aria-expanded');
-    expect(screen.queryByText('Output')).not.toBeInTheDocument();
+    expect(toolToggle).toBeEnabled();
+    fireEvent.click(toolToggle);
+    expect(screen.getByText('Waiting for tool output…')).toBeVisible();
+    expect(
+      screen.queryByText('Updating project tasks', { selector: 'pre' }),
+    ).not.toBeInTheDocument();
   });
 
   it('copies grouped tool input and output values', async () => {
     renderAssistant([
       createToolComponent('updateProjectTasks', {
+        title: 'Update tasks',
         input: { tasks: [{ id: 'task-1' }] },
         output: [{ id: 'task-1', status: 'done' }],
       }),
       createToolComponent('dispatchRunnableTasks'),
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /updateProjectTasks/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Update tasks/ }));
 
-    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
+    const copyButtons = screen.getAllByRole('button', { name: 'Copy preview' });
     fireEvent.click(copyButtons[0]);
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith(
-        JSON.stringify({ tasks: [{ id: 'task-1' }] }, null, 2),
+        JSON.stringify({ tasks: [{}] }, null, 2),
       );
     });
 
@@ -440,7 +455,7 @@ describe('AssistantMessage tool components', () => {
     });
   });
 
-  it('uses localized message before title for running tool labels', () => {
+  it('keeps the localized action title stable while running', () => {
     chatkitLanguage.value = 'zh-CN';
 
     renderAssistant([
@@ -455,8 +470,8 @@ describe('AssistantMessage tool components', () => {
       createToolComponent('dispatchRunnableTasks'),
     ]);
 
-    expect(screen.getByText('正在更新项目任务')).toBeInTheDocument();
-    expect(screen.queryByText('更新项目任务')).not.toBeInTheDocument();
+    expect(screen.getByText('更新项目任务')).toBeInTheDocument();
+    expect(screen.queryByText('正在更新项目任务')).not.toBeInTheDocument();
   });
 
   it('uses localized title before message for completed tool labels', () => {
@@ -496,18 +511,22 @@ describe('AssistantMessage tool components', () => {
   it('renders json string outputs with tree and raw views', () => {
     renderAssistant([
       createToolComponent('read_json', {
+        title: 'Read JSON',
         output: '{"status":"ok","items":[{"id":1}]}',
       }),
-      createToolComponent('run_command'),
+      createToolComponent('run_command', { title: 'Run command' }),
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /read_json/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Read JSON/ }));
 
-    expect(screen.getByText(/JSON · Object\(2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/JSON · 2 items · \d+ bytes/)).toBeInTheDocument();
+    expect(screen.getByText('Object(2)')).toBeInTheDocument();
     expect(screen.getByText('status:')).toBeInTheDocument();
     expect(screen.getByText('"ok"')).toBeInTheDocument();
 
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Raw' }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Raw' }), {
+      key: 'Enter',
+    });
 
     expect(screen.getByText(/"items": \[/)).toBeInTheDocument();
   });
@@ -515,20 +534,26 @@ describe('AssistantMessage tool components', () => {
   it('labels grouped tool errors before rendering the error details', () => {
     renderAssistant([
       createToolComponent('read_file', {
+        title: 'Read file',
         error: 'Permission denied',
         status: 'fail',
       }),
-      createToolComponent('run_command'),
+      createToolComponent('run_command', { title: 'Run command' }),
     ]);
 
     expect(
-      screen.getByRole('button', { name: /Processed 2 tools/ }),
+      screen.getByRole('button', {
+        name: /Tool calls.*2 calls.*Partially failed/,
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Processing failed 2 tools/ }),
+      screen.queryByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /read_file/ }));
+    expect(screen.getByRole('button', { name: /Read file/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
 
     expect(screen.getByText('Error')).toBeInTheDocument();
     expect(screen.getByText('Permission denied')).toBeInTheDocument();
@@ -537,12 +562,12 @@ describe('AssistantMessage tool components', () => {
   it('renders a single tool component with the grouped tool UI', () => {
     renderAssistant([
       createToolComponent('read_file', {
-        type: 'files',
         title: 'Read file',
+        type: 'files',
       }),
     ]);
 
-    const toggle = screen.getByRole('button', { name: /Processed 1 file/ });
+    const toggle = screen.getByRole('button', { name: /Tool calls.*1 call/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Read file')).toBeInTheDocument();
   });

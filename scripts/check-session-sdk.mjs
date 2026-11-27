@@ -75,11 +75,20 @@ export async function checkSessionSdk(
     },
   });
   assert.equal(
+    typeof client.conversations.getToolDetail,
+    'function',
+    'Installed SDK must include conversations.getToolDetail; install the paired tool-timeline SDK release',
+  );
+  assert.equal(
     typeof client.viewHosts.getLocalDraftBinding,
     'function',
     'Installed SDK must authorize local drafts through ViewHostsClient.getLocalDraftBinding',
   );
-  for (const method of ['getControlView', 'getCapabilities', 'submitWidgetAction'])
+  for (const method of [
+    'getControlView',
+    'getCapabilities',
+    'submitWidgetAction',
+  ])
     assert.equal(
       typeof client.threads[method],
       'function',

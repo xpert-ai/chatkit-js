@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import {
   REQUEST_USER_INPUT_RESULT_PURPOSE_PLAN_CLARIFICATION,
   REQUEST_USER_INPUT_RESULT_TYPE,
@@ -6,11 +6,7 @@ import {
   type TMessageContentComponent,
 } from '@xpert-ai/chatkit-types';
 import { describe, expect, it } from 'vitest';
-import {
-  createToolComponent,
-  renderAssistant,
-  writeTextMock,
-} from './ai.test-fixture';
+import { createToolComponent, renderAssistant } from './ai.test-fixture';
 
 describe('AssistantMessage tool components', () => {
   it('renders computer web search sources in grouped tool details', () => {
@@ -44,12 +40,12 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     expect(
-      screen.getByRole('button', { name: /Processed 1 search/ }),
+      screen.getByRole('button', { name: /Tool calls.*1 call/ }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Codex \/goal/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Web Search/ }));
 
-    expect(screen.queryByText('Input')).not.toBeInTheDocument();
+    expect(screen.getByText('Input')).toBeInTheDocument();
     expect(screen.getByText('Sources')).toBeInTheDocument();
     const link = screen.getByRole('link', {
       name: /Technical Research - Codex \/goal/,
@@ -78,9 +74,9 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     expect(
-      screen.queryByRole('button', { name: /Processed 1 search/ }),
+      screen.queryByRole('button', { name: /Tool calls.*1 call/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText('https://docs.xpertai.cn')).toBeInTheDocument();
+    expect(screen.getByText('Web Fetch')).toBeInTheDocument();
   });
 
   it('falls back to raw output when web search sources are missing', () => {
@@ -96,7 +92,7 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     expect(
-      screen.getByRole('button', { name: /Processed 1 search/ }),
+      screen.getByRole('button', { name: /Tool calls.*1 call/ }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Web Search/ }));
@@ -142,7 +138,7 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     expect(
-      screen.getByRole('button', { name: /Processed 1 knowledge result/ }),
+      screen.getByRole('button', { name: /Tool calls.*1 call/ }),
     ).toBeInTheDocument();
     expect(screen.queryByText('Query')).not.toBeInTheDocument();
 
@@ -262,7 +258,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('您对技术栈有偏好吗？')).toBeInTheDocument();
     expect(screen.getByText('Angular')).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Processed 1 tool/ }),
+      screen.queryByRole('button', { name: /Tool calls.*1 call/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -298,13 +294,13 @@ describe('AssistantMessage tool components', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('产品展示官网 (Recommended)')).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Processed 1 tool/ }),
+      screen.queryByRole('button', { name: /Tool calls.*1 call/ }),
     ).not.toBeInTheDocument();
   });
 
   it('does not group across widget components', () => {
     renderAssistant([
-      createToolComponent('first-tool'),
+      createToolComponent('first-tool', { title: 'First operation' }),
       {
         id: 'widget-1',
         type: 'component',
@@ -314,18 +310,20 @@ describe('AssistantMessage tool components', () => {
           widgets: [],
         },
       },
-      createToolComponent('second-tool'),
+      createToolComponent('second-tool', { title: 'Second operation' }),
     ]);
 
-    const toggles = screen.getAllByRole('button', { name: /Processed 1 tool/ });
+    const toggles = screen.getAllByRole('button', {
+      name: /Tool calls.*1 call/,
+    });
     expect(toggles).toHaveLength(2);
     expect(toggles[0]).toHaveAttribute('aria-expanded', 'false');
     expect(toggles[1]).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.click(toggles[0]);
 
-    expect(screen.getByText('first-tool')).toBeInTheDocument();
-    expect(screen.getByText('second-tool')).toBeInTheDocument();
+    expect(screen.getByText('First operation')).toBeInTheDocument();
+    expect(screen.getByText('Second operation')).toBeInTheDocument();
   });
 
   it('treats component messages with an empty category as tool components', () => {
@@ -343,12 +341,15 @@ describe('AssistantMessage tool components', () => {
     ]);
 
     expect(
-      screen.getByRole('button', { name: /Processed 1 tool/ }),
+      screen.getByRole('button', { name: /Tool calls.*1 call/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText('host_page_snapshot')).toBeInTheDocument();
+    expect(screen.queryByText('host_page_snapshot')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Tool call Completed/ }),
+    ).toBeVisible();
   });
 
-  it('summarizes grouped tool components by category priority', () => {
+  it('uses generic grouping for historical calls without activity declarations', () => {
     renderAssistant([
       createToolComponent('read-files', { type: 'files' }),
       createToolComponent('search-code', { type: 'web_search' }),
@@ -357,124 +358,36 @@ describe('AssistantMessage tool components', () => {
 
     expect(
       screen.getByRole('button', {
-        name: /Processed 1 file, 1 search, 1 command/,
+        name: /Tool calls.*3 calls/,
       }),
     ).toBeInTheDocument();
   });
 
-  it('renders sandbox_shell tools as expandable shell output cards', async () => {
-    const { container } = renderAssistant([
-      createToolComponent('shell-success', {
+  it('uses bounded generic details for declared commands and preserves the real exit code', () => {
+    renderAssistant([
+      createToolComponent('shell', {
         tool: 'sandbox_shell',
-        title: 'sandbox_shell',
-        input: { command: 'git diff --stat' },
-        output: {
-          stdout:
-            '.../semantic-analysis.service.spec.ts | 95 ++++++++++++++++\n4 files changed, 273 insertions(+), 7 deletions(-)',
-          exit_code: 0,
-        },
-      }),
-      createToolComponent('shell-running', {
-        tool: 'sandbox_shell',
-        title: 'sandbox_shell',
-        input: { command: 'sleep 1' },
-        status: 'running',
-        end_date: undefined,
-      }),
-      createToolComponent('shell-fail', {
-        tool: 'sandbox_shell',
-        title: 'sandbox_shell',
-        input: { cmd: 'pnpm test' },
-        output: {
-          stderr: 'Tests failed',
-          exit_code: 2,
-        },
+        title: 'Run command',
         status: 'fail',
+        presentation: {
+          version: 1,
+          activity: { kind: 'command', action: 'execute' },
+          target: 'pnpm test',
+        },
+        input: { command: 'pnpm test' },
+        output: { stdout: 'line\n'.repeat(100), exit_code: 2 },
+        error: 'Tests failed',
       }),
     ]);
-
     expect(
-      screen.getByRole('button', { name: /Processed 3 commands/ }),
-    ).toBeInTheDocument();
+      screen.getByRole('button', { name: /Run commands.*1 call/ }),
+    ).toBeVisible();
+    expect(screen.getAllByText('Tests failed').length).toBeGreaterThan(0);
+    expect(screen.getByText('exit_code:')).toBeVisible();
+    expect(screen.getByText('2')).toBeVisible();
+    expect(screen.queryByText('sandbox_shell')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Ran git diff --stat/ }),
-    ).toHaveAttribute('aria-expanded', 'false');
-    expect(
-      screen.getByRole('button', { name: /Running sleep 1/ }),
-    ).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('Shell')).not.toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /Ran git diff --stat/ }),
-    );
-
-    expect(screen.getByText('Shell')).toBeInTheDocument();
-    expect(screen.getByText('$ git diff --stat')).toBeInTheDocument();
-    expect(screen.getByText('Exit code 0')).toBeInTheDocument();
-
-    const cards = container.querySelectorAll(
-      '[data-slot="sandbox-shell-tool-call"]',
-    );
-    expect(cards).toHaveLength(1);
-    expect(cards[0]).toHaveClass(
-      'max-h-64',
-      'bg-muted/60',
-      'in-data-[density=compact]:max-h-52',
-      'in-data-[density=compact]:px-2',
-      'in-data-[density=spacious]:max-h-80',
-      'in-data-[density=spacious]:px-4',
-    );
-
-    const command = container.querySelector(
-      '[data-slot="sandbox-shell-command"]',
-    );
-    expect(command).toHaveClass(
-      'whitespace-pre-wrap',
-      'break-words',
-      'text-[0.8125rem]',
-      'line-clamp-2',
-      'leading-5',
-      'in-data-[density=compact]:text-xs',
-      'in-data-[density=compact]:leading-4',
-      'in-data-[density=spacious]:text-sm',
-      'in-data-[density=spacious]:leading-6',
-    );
-
-    const output = container.querySelector(
-      '[data-slot="sandbox-shell-output"]',
-    );
-    expect(output?.parentElement).toHaveClass('overflow-auto');
-    expect(output).toHaveClass(
-      'whitespace-pre',
-      'text-muted-foreground/85',
-      'in-data-[density=compact]:text-xs',
-      'in-data-[density=spacious]:text-sm',
-    );
-    expect(output).toHaveTextContent('4 files changed');
-
-    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
-    expect(copyButtons).toHaveLength(2);
-    expect(copyButtons[0]).toHaveClass('opacity-0', 'rounded-chat-item');
-    fireEvent.click(copyButtons[0]);
-    await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith('git diff --stat');
-    });
-    fireEvent.click(copyButtons[1]);
-    await waitFor(() => {
-      expect(writeTextMock).toHaveBeenCalledWith(
-        expect.stringContaining('4 files changed'),
-      );
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /Ran pnpm test/ }));
-
-    expect(
-      screen.getByRole('button', { name: /Ran pnpm test/ }),
-    ).not.toHaveClass('text-destructive');
-    expect(screen.getByText('$ pnpm test')).toBeInTheDocument();
-    expect(screen.getByText('Exit code 2')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /^sandbox_shell$/ }),
-    ).not.toBeInTheDocument();
+      screen.getAllByRole('button', { name: 'View full content' }).length,
+    ).toBeGreaterThan(0);
   });
 });

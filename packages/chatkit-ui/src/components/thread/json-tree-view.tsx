@@ -159,11 +159,11 @@ function JsonTreeNode({
           className={cn(
             'min-w-0 wrap-break-word',
             typeof value === 'string'
-              ? 'text-emerald-700'
+              ? 'text-emerald-700 dark:text-emerald-400'
               : typeof value === 'number'
-                ? 'text-blue-700'
+                ? 'text-blue-700 dark:text-blue-400'
                 : typeof value === 'boolean'
-                  ? 'text-purple-700'
+                  ? 'text-purple-700 dark:text-purple-400'
                   : 'text-muted-foreground',
           )}
         >
@@ -176,7 +176,9 @@ function JsonTreeNode({
   const entries = isArray
     ? value.map((item, index) => [String(index), item] as const)
     : Object.entries(value);
-  const summary = isArray ? `Array(${value.length})` : `Object(${entries.length})`;
+  const summary = isArray
+    ? `Array(${value.length})`
+    : `Object(${entries.length})`;
 
   return (
     <div className="min-w-0">

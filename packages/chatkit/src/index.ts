@@ -18,6 +18,8 @@ export * from './pet.js';
 export * from './task-summary.js';
 export * from './skill-usage.js';
 export * from './tool-output.js';
+export * from './tool-timeline.js';
+export * from './tool-value-preview.js';
 export * from './chatkit.js';
 export * from './commands.js';
 export * from './workbench-file.js';

@@ -18,6 +18,7 @@ import { cn } from '../../../../../lib/utils';
 import { normalizeChatkitAvatar } from '../../../../ui/chatkit-avatar';
 import { IconDefinitionRenderer } from '../../../../ui/icon-definition';
 import { normalizeToolToken } from '../grouping/categories';
+import { toolActivityIcons } from './activity-icons';
 import type { PartialStepData } from '../types';
 
 function createToolsetIconUrl(
@@ -232,7 +233,11 @@ export function ToolStepIcon({
   const usesToolsetAvatar = !data.icon && shouldUseToolsetAvatar(data.toolset);
   const avatar = useToolsetAvatar(data.toolset_id, usesToolsetAvatar, apiUrl);
   const iconUrl = createToolsetIconUrl(data.toolset, organizationId, apiUrl);
-  const FallbackIcon = isPreview ? Wrench : CircleHelp;
+  const FallbackIcon = data.presentation?.activity
+    ? toolActivityIcons[data.presentation.activity.kind]
+    : isPreview
+      ? Wrench
+      : CircleHelp;
   const [failedIconUrl, setFailedIconUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {

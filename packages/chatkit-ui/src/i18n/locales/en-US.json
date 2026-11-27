@@ -1157,9 +1157,13 @@
         },
         "toolGroup": {
             "status": {
-                "running": "Processing",
-                "success": "Processed",
-                "fail": "Processing failed"
+                "running": "Running",
+                "success": "Completed",
+                "fail": "Failed",
+                "partial": "Partially failed",
+                "unknown": "Status unknown",
+                "canceled": "Canceled",
+                "paused": "Awaiting input"
             },
             "inputTitle": "Input",
             "outputTitle": "Output",
@@ -1225,6 +1229,111 @@
                     "one": "{{count}} tool",
                     "other": "{{count}} tools"
                 }
+            },
+            "paused": "Paused",
+            "failedCount": "{{count}} failed",
+            "callStatus": {
+                "running": "Running",
+                "success": "Completed",
+                "fail": "Failed",
+                "paused": "Paused",
+                "unknown": "Status unknown",
+                "canceled": "Canceled"
+            },
+            "detailsTitle": "Tool call details",
+            "inputUnavailable": "Input was not recorded for this call.",
+            "outputUnavailable": "Output was not recorded for this call.",
+            "outputPending": "Waiting for tool output…",
+            "outputPaused": "Paused; waiting to resume.",
+            "emptyValue": "Empty content",
+            "callCount_one": "{{count}} call",
+            "callCount_other": "{{count}} calls",
+            "activity": {
+                "kinds": {
+                    "skill": "Skill reading",
+                    "file": "File operations",
+                    "data": "Data operations",
+                    "browser": "Browser operations",
+                    "command": "Command execution",
+                    "search": "Search",
+                    "content": "Content operations",
+                    "task": "Task operations"
+                },
+                "actions": {
+                    "skill": {
+                        "read": "Read skills"
+                    },
+                    "file": {
+                        "read": "Read files",
+                        "write": "Write files",
+                        "list": "List files",
+                        "search": "Search files",
+                        "delete": "Delete files",
+                        "move": "Move files",
+                        "copy": "Copy files"
+                    },
+                    "data": {
+                        "discover": "Discover data",
+                        "query": "Query data",
+                        "validate": "Validate data",
+                        "register": "Register data"
+                    },
+                    "browser": {
+                        "navigate": "Open pages",
+                        "read": "Read pages",
+                        "interact": "Interact with pages",
+                        "capture": "Capture pages"
+                    },
+                    "command": {
+                        "execute": "Run commands"
+                    },
+                    "search": {
+                        "search": "Search"
+                    },
+                    "content": {
+                        "create": "Create content",
+                        "update": "Update content",
+                        "save": "Save content",
+                        "read": "Read content",
+                        "list": "List content"
+                    },
+                    "task": {
+                        "create": "Create tasks",
+                        "update": "Update tasks",
+                        "read": "Inspect tasks"
+                    }
+                },
+                "unknown": "Tool calls",
+                "mixed": "Tool activity",
+                "other": "other tools",
+                "combine": "{{first}} and {{second}}"
+            },
+            "details": {
+                "close": "Close tool details",
+                "snapshot": "Content snapshot from this call",
+                "unavailable": "Full content unavailable",
+                "retry": "Retry",
+                "loading": "Loading details…",
+                "text": "Text",
+                "items": "{{count}} items",
+                "lines": "{{count}} lines",
+                "bytes": "{{count}} bytes",
+                "copyPreview": "Copy preview",
+                "summaryOnly": "Content is collapsed. Open it when needed.",
+                "truncated": "Showing a partial preview.",
+                "open": "View full content",
+                "pending": "Full content will be available when the call finishes.",
+                "notPublic": "This tool has not shared this content.",
+                "callInfo": "Call information",
+                "range": "{{start}}–{{end}} / {{total}} characters",
+                "restoreSize": "Restore size",
+                "expandSize": "Expand view",
+                "previous": "Previous page",
+                "next": "Next page",
+                "copyFull": "Copy full content",
+                "copying": "Copying…",
+                "copied": "Copied",
+                "error": "Copy failed. Retry"
             }
         }
     },

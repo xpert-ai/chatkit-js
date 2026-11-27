@@ -7,7 +7,7 @@ import {
   type HITLReviewDisplay,
 } from './review-display.js';
 export * from './review-display.js';
-import { type ToolCall } from '@langchain/core/messages/tool';
+import type { ToolCall } from '@langchain/core/messages';
 import type {
   RequestUserInputForm,
   UserInputValues,

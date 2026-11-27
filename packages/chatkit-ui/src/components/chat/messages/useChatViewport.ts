@@ -230,6 +230,17 @@ export function useChatViewport({
       isPointerDownRef.current = true;
     };
 
+    // Inspecting a tool is an explicit reading action, including keyboard clicks.
+    // Do not let the next streamed event pull its expanded details out of view.
+    const handleTimelineInteraction = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[data-tool-timeline]')
+      ) {
+        disableAutoFollow();
+      }
+    };
+
     const handleTouchStart = (event: TouchEvent) => {
       lastTouchYRef.current = event.touches[0]?.clientY ?? null;
     };
@@ -254,6 +265,7 @@ export function useChatViewport({
 
     updateAutoScrollState();
     viewport.addEventListener('wheel', handleWheel, { passive: true });
+    viewport.addEventListener('click', handleTimelineInteraction);
     viewport.addEventListener('pointerdown', handlePointerDown, {
       passive: true,
     });
@@ -275,6 +287,7 @@ export function useChatViewport({
     return () => {
       cancelPendingAutoScroll();
       viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('click', handleTimelineInteraction);
       viewport.removeEventListener('pointerdown', handlePointerDown);
       viewport.removeEventListener('scroll', updateAutoScrollState);
       viewport.removeEventListener('touchstart', handleTouchStart);

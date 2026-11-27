@@ -144,6 +144,32 @@ export function IconDefinitionRenderer({
       /^<svg(?=[\s>])(?![^>]*\sxmlns\s*=)/i,
       '<svg xmlns="http://www.w3.org/2000/svg"',
     );
+    const imageUrl = imageMarkup
+      ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(imageMarkup)}`
+      : icon.value;
+
+    // An isolated SVG image cannot inherit the row's color. Explicit currentColor
+    // icons use their alpha as a mask, preserving isolation and theme inheritance.
+    if (imageMarkup && icon.color === 'currentColor') {
+      return (
+        <span
+          {...accessibilityProps}
+          className={cn(
+            'inline-block h-4 w-4 shrink-0 align-middle',
+            className,
+          )}
+          data-slot={dataSlot}
+          style={{
+            ...style,
+            backgroundColor: 'currentColor',
+            maskImage: `url("${imageUrl}")`,
+            maskSize: 'contain',
+            maskPosition: 'center',
+            maskRepeat: 'no-repeat',
+          }}
+        />
+      );
+    }
     return (
       <img
         alt={decorative ? '' : (icon.alt ?? '')}
@@ -153,11 +179,7 @@ export function IconDefinitionRenderer({
           className,
         )}
         data-slot={dataSlot}
-        src={
-          imageMarkup
-            ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(imageMarkup)}`
-            : icon.value
-        }
+        src={imageUrl}
         style={style}
       />
     );

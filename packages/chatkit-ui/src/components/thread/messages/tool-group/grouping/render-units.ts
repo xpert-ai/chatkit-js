@@ -9,6 +9,7 @@ import { isNonTranscriptMessageContent } from '../../../../../lib/message-conten
 import { getComponentMessageRenderer } from '../../component-message-renderers';
 import { getToolStepData } from '../status/step-status';
 import type { ToolComponentRenderUnit } from '../types';
+import { toolExecutionScope } from './activities';
 
 type PendingToolComponent = {
   item: TMessageContentComponent;
@@ -104,6 +105,12 @@ export function buildToolComponentRenderUnits(
       isGroupableStepComponent(item) &&
       options?.shouldGroupComponent?.(item) !== false
     ) {
+      if (
+        pendingTools.length &&
+        toolExecutionScope(pendingTools[0].item) !== toolExecutionScope(item)
+      ) {
+        flushPendingTools(units, pendingTools);
+      }
       pendingTools.push({ item, index });
       return;
     }

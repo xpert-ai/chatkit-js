@@ -46,7 +46,7 @@ describe('AssistantMessage tool components', () => {
     const { container } = renderAssistant([
       createToolComponent('run-command', {
         type: 'program',
-        title: 'run-command',
+        title: 'Run command',
         status: 'success',
       }),
     ]);
@@ -79,12 +79,12 @@ describe('AssistantMessage tool components', () => {
     renderAssistant([
       createToolComponent('run-command', {
         type: 'program',
-        title: 'run-command',
+        title: 'Run command',
         status: 'success',
       }),
     ]);
 
-    expect(screen.getByRole('button', { name: /run-command/ })).toHaveClass(
+    expect(screen.getByRole('button', { name: /Run command/ })).toHaveClass(
       'text-xs',
       'leading-5',
       'in-data-[density=compact]:text-[11px]',
@@ -98,13 +98,13 @@ describe('AssistantMessage tool components', () => {
     renderAssistant([
       createToolComponent('run-command', {
         type: 'program',
-        title: 'run-command',
+        title: 'Run command',
         status: 'running',
         end_date: undefined,
       }),
     ]);
 
-    expect(screen.getByText('run-command')).toHaveClass(
+    expect(screen.getByText('Run command')).toHaveClass(
       'ck-tool-call-running-text',
     );
   });
@@ -113,7 +113,7 @@ describe('AssistantMessage tool components', () => {
     const { container } = renderAssistant([
       createToolComponent('run-command', {
         type: 'program',
-        title: 'run-command',
+        title: 'Run command',
         status: 'running',
         end_date: undefined,
       }),
@@ -222,7 +222,7 @@ describe('AssistantMessage tool components', () => {
     ).toBeInTheDocument();
   });
 
-  it('marks stale running tools as failed without inventing a duration when the thread is idle', () => {
+  it('marks stale running tools as unknown without inventing a duration when the thread is idle', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
     vi.setSystemTime(new Date('2026-04-24T12:24:54.398Z'));
 
@@ -252,10 +252,12 @@ describe('AssistantMessage tool components', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: /Processed 1 task/ }),
+      screen.getByRole('button', {
+        name: /Tool calls.*1 call.*Status unknown/,
+      }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Processing failed 1 task/ }),
+      screen.queryByRole('button', { name: /Processed 1 task/ }),
     ).not.toBeInTheDocument();
     expect(screen.getByText('Writing todos')).toBeInTheDocument();
     expect(screen.queryByText('write_todos')).not.toBeInTheDocument();
@@ -301,7 +303,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.queryByText('1.5s')).not.toBeInTheDocument();
 
     fireEvent.click(row);
-    expect(screen.getByText('Paused')).toBeInTheDocument();
+    expect(screen.getAllByText('Paused')).toHaveLength(2);
     expect(screen.queryByText('Running')).not.toBeInTheDocument();
   });
 
