@@ -1,12 +1,22 @@
 import * as React from 'react';
 
-import * as Dialog from '@radix-ui/react-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogBody,
+  DialogTrigger,
+} from '../../ui/dialog';
+import { useTheme } from '../../../providers/Theme';
+import { getSurfaceThemeStyle } from '../../../lib/theme-surfaces';
 import type {
   ToolOutputAttachmentPreviewRequest,
   ToolOutputImageAttachment,
   ToolOutputPresentation,
 } from '@xpert-ai/chatkit-types';
-import { ImageIcon, Loader2, RefreshCw, X } from 'lucide-react';
+import { ImageIcon, Loader2, RefreshCw } from 'lucide-react';
 import { isEqual } from 'lodash-es';
 
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
@@ -14,8 +24,8 @@ import {
   parseToolOutputAttachmentPreview,
   toolOutputAttachmentKey,
 } from '../../../lib/tool-output-attachments';
-import { cn } from '../../../lib/utils';
 import { ParentMessengerContext } from '../../../providers/ParentMessenger';
+import { Button } from '../../ui/button';
 
 type PreviewState =
   | { status: 'loading' }
@@ -112,6 +122,7 @@ function ToolOutputImageAttachmentCard({
   executionId?: string;
 }) {
   const { t } = useChatkitTranslation();
+  const theme = useTheme({ optional: true });
   const { state, fail, retry } = useToolOutputAttachmentPreview({
     attachment,
     toolCallId,
@@ -128,15 +139,7 @@ function ToolOutputImageAttachmentCard({
   const sourceLabel = t(
     `message.toolGroup.attachments.sources.${attachment.source}`,
   );
-  const description = [
-    sourceLabel,
-    dimensions,
-    t('message.toolGroup.attachments.modelDetail', {
-      detail: attachment.modelDetail,
-    }),
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const description = [sourceLabel, dimensions].filter(Boolean).join(' · ');
   const previewStyle: React.CSSProperties = {
     aspectRatio:
       attachment.width && attachment.height
@@ -147,7 +150,7 @@ function ToolOutputImageAttachmentCard({
   if (state.status === 'loading') {
     return (
       <div
-        className="flex max-h-64 w-full max-w-96 min-w-0 items-center justify-center rounded-lg border border-border bg-background"
+        className="flex max-h-64 w-full max-w-96 min-w-0 items-center justify-center rounded-chat-panel border border-border bg-background"
         style={previewStyle}
         aria-label={t('message.toolGroup.attachments.loading', { title })}
       >
@@ -162,7 +165,7 @@ function ToolOutputImageAttachmentCard({
   if (state.status === 'error') {
     return (
       <div
-        className="flex max-h-64 w-full max-w-96 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-background px-3 text-center"
+        className="flex max-h-64 w-full max-w-96 min-w-0 flex-col items-center justify-center gap-2 rounded-chat-panel border border-dashed border-border bg-background px-3 text-center"
         style={previewStyle}
       >
         <ImageIcon
@@ -172,24 +175,25 @@ function ToolOutputImageAttachmentCard({
         <span className="line-clamp-2 text-[11px] text-muted-foreground">
           {t('message.toolGroup.attachments.unavailable')}
         </span>
-        <button
-          type="button"
-          className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="pointer-coarse:min-h-11"
           onClick={retry}
         >
           <RefreshCw className="h-3 w-3" aria-hidden="true" />
           {t('message.toolGroup.attachments.retry')}
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild>
+    <Dialog>
+      <DialogTrigger asChild>
         <button
           type="button"
-          className="group w-full max-w-96 min-w-0 overflow-hidden rounded-lg border border-border bg-background text-left shadow-sm transition-colors hover:border-ring/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="group w-full max-w-96 min-w-0 overflow-hidden rounded-chat-panel border border-border bg-background text-left shadow-sm transition-colors hover:border-ring/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           aria-label={t('message.toolGroup.attachments.open', { title })}
         >
           <span
@@ -205,50 +209,35 @@ function ToolOutputImageAttachmentCard({
               onError={fail}
             />
           </span>
-          <span className="block border-t border-border px-3 py-2 text-xs font-medium leading-4 text-foreground">
+          <span className="block border-t border-border px-3 py-[calc(0.375rem*var(--chat-density-scale,1))] text-xs font-medium leading-4 text-foreground">
             <span className="line-clamp-1">{title}</span>
-            <span className="block truncate text-muted-foreground">
-              {description}
-            </span>
           </span>
         </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/80 data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-[81] flex max-h-[92vh] w-[min(92vw,1200px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl',
-            'focus:outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-          )}
-        >
-          <div className="flex min-w-0 items-start justify-between gap-3 border-b border-border px-4 py-3">
-            <div className="min-w-0">
-              <Dialog.Title className="truncate text-sm font-semibold text-foreground">
-                {title}
-              </Dialog.Title>
-              <Dialog.Description className="mt-0.5 text-xs text-muted-foreground">
-                {description}
-              </Dialog.Description>
-            </div>
-            <Dialog.Close
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              aria-label={t('message.toolGroup.attachments.close')}
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </Dialog.Close>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto bg-black/95 p-4">
-            <img
-              className="mx-auto h-auto max-h-[calc(92vh-6rem)] max-w-full object-contain"
-              src={state.previewUrl}
-              alt={attachment.alt ?? title}
-              referrerPolicy="no-referrer"
-              onError={fail}
-            />
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </DialogTrigger>
+      <DialogContent
+        layout="sectioned"
+        className="max-h-[92dvh] min-w-0"
+        style={{
+          ...(theme ? getSurfaceThemeStyle(theme.theme) : {}),
+          width: 'min(92vw, 75rem)',
+        }}
+        closeLabel={t('message.toolGroup.attachments.close')}
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogBody className="min-h-0 overflow-auto bg-muted/30">
+          <img
+            className="mx-auto h-auto max-h-[75dvh] max-w-full object-contain"
+            src={state.previewUrl}
+            alt={attachment.alt ?? title}
+            referrerPolicy="no-referrer"
+            onError={fail}
+          />
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 

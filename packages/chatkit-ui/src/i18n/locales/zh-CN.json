@@ -1176,6 +1176,8 @@
             "copied": "已复制",
             "separator": "，",
             "attachments": {
+                "imageCount": "{{count}} 张图像",
+                "callDetails": "参数与结果",
                 "imageTitle": "图片 {{index}}",
                 "loading": "正在加载{{title}}",
                 "unavailable": "图片预览不可用",
@@ -1250,6 +1252,7 @@
             "callCount_other": "{{count}} 次调用",
             "activity": {
                 "kinds": {
+                    "image": "图像查看",
                     "skill": "技能读取",
                     "file": "文件操作",
                     "data": "数据操作",
@@ -1260,6 +1263,9 @@
                     "task": "任务操作"
                 },
                 "actions": {
+                    "image": {
+                        "view": "查看图像"
+                    },
                     "skill": {
                         "read": "读取技能"
                     },

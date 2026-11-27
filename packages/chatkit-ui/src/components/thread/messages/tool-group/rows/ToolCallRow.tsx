@@ -9,6 +9,7 @@ import {
   isSandboxShellStep,
 } from '../../sandbox-shell-tool-call';
 import { ToolCallDetails } from '../details/ToolCallDetails';
+import { ToolImageDetails } from '../details/ToolImageDetails';
 import { getToolActivityLabel } from '../grouping/categories';
 import { ToolStepIcon } from '../icons/ToolStepIcon';
 import {
@@ -85,7 +86,11 @@ function ToolCallRowContent({
     status,
     isPaused,
   });
-  const [isExpanded, toggleExpanded] = useToolDisclosure(hasError);
+  const images =
+    status === 'success' && !hasError ? data.presentation?.images : undefined;
+  const [isExpanded, toggleExpanded] = useToolDisclosure(
+    hasError || Boolean(images?.length),
+  );
   const stateLabel = t(
     `message.toolGroup.callStatus.${isPaused ? 'paused' : hasError ? 'fail' : (status ?? 'running')}`,
   );
@@ -169,13 +174,23 @@ function ToolCallRowContent({
         aria-label={t('message.toolGroup.detailsTitle')}
         tabIndex={0}
       >
-        {isExpanded && (
-          <ToolCallDetails
-            content={content}
-            isThreadPaused={isThreadPaused}
-            status={status}
-          />
-        )}
+        {isExpanded &&
+          (images?.length ? (
+            isGroupExpanded && (
+              <ToolImageDetails
+                content={content}
+                images={images}
+                isThreadPaused={isThreadPaused}
+                status={status}
+              />
+            )
+          ) : (
+            <ToolCallDetails
+              content={content}
+              isThreadPaused={isThreadPaused}
+              status={status}
+            />
+          ))}
       </div>
     </li>
   );

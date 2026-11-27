@@ -1,8 +1,10 @@
 import type { LocalizedText } from './localized-text.js';
+import type { ToolOutputImageAttachment } from './tool-output.js';
 
 /** Presentation semantics, independent of component routing and execution status. */
 export const TOOL_ACTIVITY_ACTIONS = {
   skill: ['read'],
+  image: ['view'],
   file: ['read', 'write', 'list', 'search', 'delete', 'move', 'copy'],
   data: ['discover', 'query', 'validate', 'register'],
   browser: ['navigate', 'read', 'interact', 'capture'],
@@ -66,6 +68,8 @@ export type ToolCallPresentation = {
   version: 1;
   activity?: ToolActivity;
   target?: string;
+  /** Explicit participant-visible immutable images; never inferred from private artifacts. */
+  images?: ToolOutputImageAttachment[];
   input?: ToolValuePresentation;
   output?: ToolValuePresentation;
   error?: ToolValuePresentation;

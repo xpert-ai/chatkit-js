@@ -3,6 +3,7 @@ import {
   Database,
   FileText,
   Globe,
+  Images,
   ListTodo,
   PanelsTopLeft,
   Search,
@@ -13,6 +14,7 @@ import { CommandTerminalIcon } from './CommandTerminalIcon';
 
 export const toolActivityIcons = {
   skill: Wrench,
+  image: Images,
   file: FileText,
   data: Database,
   browser: Globe,

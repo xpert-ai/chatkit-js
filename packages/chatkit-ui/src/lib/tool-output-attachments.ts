@@ -20,7 +20,7 @@ const toolOutputImageAnchorsSchema = z
   })
   .strict();
 
-const toolOutputImageAttachmentSchema = z
+export const toolOutputImageAttachmentSchema = z
   .object({
     type: z.literal('image'),
     artifactId: boundedId,

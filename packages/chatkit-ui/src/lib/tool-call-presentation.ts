@@ -3,6 +3,7 @@ import {
   type ToolCallPresentation,
 } from '@xpert-ai/chatkit-types';
 import { z } from 'zod';
+import { toolOutputImageAttachmentSchema } from './tool-output-attachments';
 
 const detail = z
   .object({
@@ -37,6 +38,7 @@ const presentation = z
     version: z.literal(1),
     activity: z.unknown().optional(),
     target: z.string().max(160).optional(),
+    images: z.array(toolOutputImageAttachmentSchema).min(1).max(20).optional(),
     input: value.optional(),
     output: value.optional(),
     error: value.optional(),

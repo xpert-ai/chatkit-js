@@ -1176,6 +1176,10 @@
             "copied": "Copied",
             "separator": ", ",
             "attachments": {
+                "imageCount": "{{count}} images",
+                "imageCount_one": "{{count}} image",
+                "imageCount_other": "{{count}} images",
+                "callDetails": "Parameters and result",
                 "imageTitle": "Image {{index}}",
                 "loading": "Loading {{title}}",
                 "unavailable": "Preview unavailable",
@@ -1250,6 +1254,7 @@
             "callCount_other": "{{count}} calls",
             "activity": {
                 "kinds": {
+                    "image": "Image viewing",
                     "skill": "Skill reading",
                     "file": "File operations",
                     "data": "Data operations",
@@ -1260,6 +1265,9 @@
                     "task": "Task operations"
                 },
                 "actions": {
+                    "image": {
+                        "view": "View images"
+                    },
                     "skill": {
                         "read": "Read skills"
                     },

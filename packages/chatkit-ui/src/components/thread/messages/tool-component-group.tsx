@@ -19,6 +19,7 @@ import { CommandToolIcon } from './tool-group/icons/CommandToolIcon';
 import type { ToolStepRunState } from './tool-group/types';
 import { getToolGroupStatus } from './tool-group/status/group-status';
 import { useToolDisclosure } from './tool-group/status/useToolDisclosure';
+import { getToolStepData } from './tool-group/status/step-status';
 
 export { getToolActivityLabel } from './tool-group/grouping/categories';
 export { buildToolComponentRenderUnits } from './tool-group/grouping/render-units';
@@ -62,6 +63,17 @@ export function ToolComponentGroup({
   const retainGroup = React.useCallback(() => setExpanded(true), [setExpanded]);
   const activity = toolGroupActivity(items);
   const summary = toolGroupActivityTitle(activity, t);
+  const imageCount = new Set(
+    items.flatMap((item) => {
+      const data = getToolStepData(item);
+      return data.status === 'success' && !data.error
+        ? (data.presentation?.images ?? []).map(
+            (image) =>
+              `${image.artifactId}:${image.artifactVersionId}:${image.sha256}`,
+          )
+        : [];
+    }),
+  ).size;
   const ActivityIcon = activity.kind
     ? toolActivityIcons[activity.kind]
     : activity.kinds.length
@@ -90,6 +102,14 @@ export function ToolComponentGroup({
           <span className="shrink-0 text-xs">
             · {t('message.toolGroup.callCount', { count: items.length })}
           </span>
+          {imageCount > 0 && (
+            <span className="shrink-0 text-xs">
+              ·{' '}
+              {t('message.toolGroup.attachments.imageCount', {
+                count: imageCount,
+              })}
+            </span>
+          )}
           <span
             className={cn(
               'shrink-0 text-xs',
