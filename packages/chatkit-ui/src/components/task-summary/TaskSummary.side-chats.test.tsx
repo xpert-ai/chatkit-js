@@ -62,6 +62,9 @@ function setupProps(): TaskSummaryProps & {
       error: null,
       askInSideChat: vi.fn().mockResolvedValue(undefined),
       openSideChat: vi.fn().mockResolvedValue(undefined),
+      archiveSideChat: vi.fn().mockResolvedValue(undefined),
+      deleteSideChat: vi.fn().mockResolvedValue(undefined),
+      mutatingIds: [],
       renameSideChat: vi.fn().mockResolvedValue(undefined),
       closeSideChat: vi.fn(),
       updateStatus: vi.fn(),
@@ -212,9 +215,12 @@ describe('Side chats in the task summary', () => {
     fireEvent.click(
       screen.getByRole('menuitem', { name: 'Rename Check the API' }),
     );
-    fireEvent.change(await screen.findByRole('textbox', { name: 'Chat name' }), {
-      target: { value: 'API review' },
-    });
+    fireEvent.change(
+      await screen.findByRole('textbox', { name: 'Chat name' }),
+      {
+        target: { value: 'API review' },
+      },
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(screen.queryByRole('textbox')).not.toBeInTheDocument(),
@@ -261,4 +267,22 @@ describe('Side chats in the task summary', () => {
       'true',
     );
   });
+});
+
+it('lists archived chats in their own section and restores through the server action', async () => {
+  const props = setupProps();
+  props.sideChats.sessions[1].archived = true;
+  render(<TaskSummaryPanel {...props} />, { wrapper: ThemeProvider });
+  expect(screen.getByText('Archived (1)')).toBeInTheDocument();
+  fireEvent.click(screen.getByText('Archived (1)'));
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Restore side chat: Check the API' }),
+  );
+  await waitFor(() =>
+    expect(props.sideChats.archiveSideChat).toHaveBeenCalledWith(
+      'side-2',
+      false,
+    ),
+  );
+  expect(props.sideChats.openSideChat).not.toHaveBeenCalled();
 });

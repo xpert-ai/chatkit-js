@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
+import { WorkbenchTabContextMenu } from './WorkbenchTabMenu';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
@@ -25,53 +26,57 @@ export function WorkbenchTab({
   children?: ReactNode;
 }) {
   const { t } = useChatkitTranslation();
+  const buttonRef = useRef<HTMLButtonElement>(null);
   return (
-    <div
-      data-slot="workbench-tab"
-      className={cn(
-        'flex h-9 max-w-64 shrink-0 items-center rounded-[var(--chat-item-radius)] transition-colors',
-        selected
-          ? 'bg-muted text-foreground'
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-      )}
-    >
-      <button
-        type="button"
-        role="tab"
-        id={id}
-        aria-controls={panelId}
-        aria-selected={selected}
-        title={label}
-        onClick={onSelect}
-        className="flex h-full min-w-0 items-center gap-2 rounded-[var(--chat-item-radius)] px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      >
-        <span
-          className="flex size-4 shrink-0 items-center justify-center"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-        <span className="truncate">{label}</span>
-        {dirty && (
-          <span
-            role="img"
-            aria-label={t('workbench.files.unsavedLabel')}
-            title={t('workbench.files.unsavedLabel')}
-            className="size-1.5 shrink-0 rounded-full bg-current"
-          />
+    <WorkbenchTabContextMenu focusRef={buttonRef}>
+      <div
+        data-slot="workbench-tab"
+        className={cn(
+          'flex h-9 max-w-64 shrink-0 items-center rounded-[var(--chat-item-radius)] transition-colors',
+          selected
+            ? 'bg-muted text-foreground'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
         )}
-        {children}
-      </button>
-      {close && (
+      >
         <button
+          ref={buttonRef}
           type="button"
-          onClick={close.onClick}
-          aria-label={close.label}
-          className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          role="tab"
+          id={id}
+          aria-controls={panelId}
+          aria-selected={selected}
+          title={label}
+          onClick={onSelect}
+          className="flex h-full min-w-0 items-center gap-2 rounded-[var(--chat-item-radius)] px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          <X size={14} aria-hidden="true" />
+          <span
+            className="flex size-4 shrink-0 items-center justify-center"
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
+          <span className="truncate">{label}</span>
+          {dirty && (
+            <span
+              role="img"
+              aria-label={t('workbench.files.unsavedLabel')}
+              title={t('workbench.files.unsavedLabel')}
+              className="size-1.5 shrink-0 rounded-full bg-current"
+            />
+          )}
+          {children}
         </button>
-      )}
-    </div>
+        {close && (
+          <button
+            type="button"
+            onClick={close.onClick}
+            aria-label={close.label}
+            className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-[var(--chat-item-radius)] text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    </WorkbenchTabContextMenu>
   );
 }

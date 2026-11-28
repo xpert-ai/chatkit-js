@@ -141,6 +141,13 @@
         "entryUnavailable": "Remote view content is unavailable.",
         "missingAssistant": "An assistant is required to load views.",
         "retry": "Retry",
+        "tabMenu": {
+            "rename": "Rename",
+            "close": "Close",
+            "closeOthers": "Close other tabs",
+            "closeRight": "Close tabs to the right",
+            "closeAll": "Close all tabs"
+        },
         "sideChat": {
             "title": "Side chat",
             "threadRequired": "Start a conversation before opening a side chat.",
@@ -167,7 +174,16 @@
             "error": "Failed",
             "paused": "Paused",
             "sendToExisting": "Send to existing side chat",
-            "numberedTitle": "Side chat {{number}}"
+            "numberedTitle": "{{title}} {{number}}",
+            "archive": "Archive",
+            "restore": "Restore side chat",
+            "restoreNamed": "Restore side chat: {{title}}",
+            "archived": "Archived ({{count}})",
+            "delete": "Permanently delete…",
+            "deleteTitle": "Permanently delete side chat",
+            "deleteConfirm": "Permanently delete",
+            "deleteDescription": "Delete “{{title}}” and its editing branches? This cannot be undone. The main conversation and other side chats will be kept.",
+            "actionPending": "An action on this side chat is already in progress."
         },
         "errors": {
             "contextKeyRequired": "Context key is required.",

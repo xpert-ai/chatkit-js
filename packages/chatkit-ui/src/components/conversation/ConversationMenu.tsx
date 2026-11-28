@@ -25,6 +25,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ToolbarButton } from '../ui/toolbar-button';
 import {
+  menuItemHighlightClassName,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -52,8 +53,10 @@ import type {
 import { visibleMessageText } from './conversation-transcript';
 import { useConversationMenu } from './useConversationMenu';
 
-export const conversationMenuItemClassName =
-  'min-h-[calc(2.25rem*var(--chat-density-scale,1))] gap-[calc(0.5rem*var(--chat-density-scale,1))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.375rem*var(--chat-density-scale,1))]';
+export const conversationMenuItemClassName = cn(
+  'min-h-[calc(2.25rem*var(--chat-density-scale,1))] gap-[calc(0.5rem*var(--chat-density-scale,1))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.375rem*var(--chat-density-scale,1))]',
+  menuItemHighlightClassName,
+);
 
 export type ConversationMenuProps = {
   context: ConversationActionContext;

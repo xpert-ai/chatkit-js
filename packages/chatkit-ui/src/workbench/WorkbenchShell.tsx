@@ -62,7 +62,6 @@ import { useWorkbenchViewTabs } from './useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY, WorkbenchPanel } from './WorkbenchPanel';
 import { sideChatViewKey } from './side-chat/types';
 import { WorkbenchChatProvider } from './floating-chat/context';
-
 import { useWorkbenchClientCommands } from './shell/commands/useWorkbenchClientCommands';
 import { WorkbenchShellLayout } from './shell/layout/WorkbenchShellLayout';
 import { WORKBENCH_NARROW_BREAKPOINT as NARROW_BREAKPOINT } from './shell/layout/WorkbenchFrame';
@@ -71,7 +70,6 @@ import { useWorkbenchShellTabs } from './shell/tabs/useWorkbenchShellTabs';
 export { useWorkbench, WorkbenchToggleButton } from './context';
 export { buildWorkbenchRequestContext } from './shell/commands/request-context';
 export { type WorkbenchAssistantContext } from './shell/types';
-
 export function WorkbenchShell(props: WorkbenchShellProps) {
   const runtime = useWorkbenchRuntime();
   return runtime ? (
@@ -310,11 +308,11 @@ function WorkbenchContent({
     createNewTab,
     openPreview,
     closeSideChatTab,
+    sideChatActions,
   } = useWorkbenchShellTabs({
     native,
     externalViewOpen,
-    sideChats: sideChats.sessions,
-    onCloseSideChat: sideChats.closeSideChat,
+    sideChats,
     previews,
     storePreview,
     scopedViews,
@@ -713,7 +711,7 @@ function WorkbenchContent({
       },
       sideChatEnabled,
       askInSideChat,
-      sideChats: { ...sideChats, closeSideChat: closeSideChatTab },
+      sideChats: sideChatActions,
       externalAssistantsEnabled,
       openExternalAssistant,
       openGroupAssistant: stream.group
@@ -853,11 +851,13 @@ function WorkbenchContent({
       })}
       onOpenNativeFile={openWorkspaceFile}
       onCloseNative={(key) => {
-        if (native.requestClose(key) && activeViewKey === key) {
+        const closed = native.requestClose(key);
+        if (closed && activeViewKey === key) {
           const next = adjacentTab(key);
           setActiveViewKey(next);
           if (!next) closeWorkbench();
         }
+        return closed;
       }}
       visible={open}
       previews={previews}
@@ -905,7 +905,7 @@ function WorkbenchContent({
       onCloseView={closeEditorView}
       activeView={activeView}
       activeViewKey={activeViewKey}
-      sideChats={sideChats}
+      sideChats={sideChatActions}
       externalViewOpen={externalViewOpen}
       externalRuns={externalRuns}
       groupRecord={stream.group ? groupRecord : undefined}
@@ -919,9 +919,11 @@ function WorkbenchContent({
       onCloseExternal={() => {
         groupRecord.select(null);
         setExternalSession(null);
-        const next = adjacentTab(EXTERNAL_ASSISTANTS_VIEW_KEY);
-        setActiveViewKey(next);
-        if (!next) closeWorkbench();
+        if (activeViewKey === EXTERNAL_ASSISTANTS_VIEW_KEY) {
+          const next = adjacentTab(EXTERNAL_ASSISTANTS_VIEW_KEY);
+          setActiveViewKey(next);
+          if (!next) closeWorkbench();
+        }
       }}
       options={options}
       stream={stream}

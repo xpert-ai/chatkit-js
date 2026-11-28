@@ -1,13 +1,17 @@
 import * as React from 'react';
 import { ContextMenu } from 'radix-ui';
+import { useTheme as usePrimitiveTheme } from '@xpert-ai/chatkit-primitives';
+import { menuItemHighlightClassName } from '../../components/ui/dropdown-menu';
+import type { TabMenuAction } from '../WorkbenchTabMenu';
 import {
-  Archive,
+  PanelRightClose,
+  PanelRightOpen,
   ArchiveRestore,
   CircleAlert,
   CircleHelp,
   CirclePause,
   LoaderCircle,
-  MessageCircle,
+  MessagesSquare,
   Pencil,
   Plus,
 } from 'lucide-react';
@@ -25,6 +29,7 @@ type Props = {
   onClose: () => void;
   onRename: () => void;
   onCreate: () => void;
+  actions?: TabMenuAction[];
 };
 
 export function SideChatSummaryRow({
@@ -35,19 +40,29 @@ export function SideChatSummaryRow({
   onClose,
   onRename,
   onCreate,
+  actions = [],
 }: Props) {
   const { t } = useChatkitTranslation();
   const { theme } = useTheme();
+  const primitiveTheme = usePrimitiveTheme();
   const buttonRef = React.useRef<HTMLButtonElement>(null);
-  const renaming = React.useRef(false);
+  const pendingAction = React.useRef<(() => void) | null>(null);
   const status = session.status ?? 'idle';
   const statusLabel = t(`workbench.sideChat.${status}`);
   const closed = session.opened === false;
   const actionLabel = t(
-    closed ? 'workbench.sideChat.reopen' : 'workbench.sideChat.collapse',
+    session.archived
+      ? 'workbench.sideChat.restoreNamed'
+      : closed
+        ? 'workbench.sideChat.reopen'
+        : 'workbench.sideChat.collapse',
     { title: session.title },
   );
-  const ActionIcon = closed ? ArchiveRestore : Archive;
+  const ActionIcon = session.archived
+    ? ArchiveRestore
+    : closed
+      ? PanelRightOpen
+      : PanelRightClose;
   const StatusIcon =
     status === 'busy'
       ? LoaderCircle
@@ -59,10 +74,12 @@ export function SideChatSummaryRow({
             ? CirclePause
             : null;
   const rename = () => {
-    renaming.current = true;
+    pendingAction.current = onRename;
   };
-  const menuItemClass =
-    'flex cursor-default items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-sm outline-none focus:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50';
+  const menuItemClass = cn(
+    'flex cursor-default items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-sm outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:text-destructive',
+    menuItemHighlightClassName,
+  );
 
   return (
     <ContextMenu.Root>
@@ -89,7 +106,7 @@ export function SideChatSummaryRow({
               }
             }}
           >
-            <MessageCircle
+            <MessagesSquare
               aria-hidden="true"
               strokeWidth={1.75}
               className="size-[max(14px,calc(1rem*var(--chat-density-scale,1)))] shrink-0"
@@ -133,7 +150,7 @@ export function SideChatSummaryRow({
           </button>
         </div>
       </ContextMenu.Trigger>
-      <ContextMenu.Portal>
+      <ContextMenu.Portal container={primitiveTheme?.portalContainer}>
         <ContextMenu.Content
           aria-label={t('workbench.sideChat.actions', { title: session.title })}
           style={getSurfaceThemeStyle(theme)}
@@ -141,22 +158,39 @@ export function SideChatSummaryRow({
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             // Wait for the menu focus trap to release before mounting the input.
-            if (renaming.current) onRename();
-            else buttonRef.current?.focus();
-            renaming.current = false;
+            buttonRef.current?.focus();
+            const action = pendingAction.current;
+            pendingAction.current = null;
+            action?.();
           }}
         >
           <ContextMenu.Item className={menuItemClass} onSelect={rename}>
             <Pencil size={16} aria-hidden="true" />
             {t('workbench.sideChat.rename', { title: session.title })}
           </ContextMenu.Item>
-          <ContextMenu.Item
-            className={menuItemClass}
-            onSelect={closed ? onOpen : onClose}
-          >
-            <ActionIcon size={16} aria-hidden="true" />
-            {actionLabel}
-          </ContextMenu.Item>
+          {!session.archived && (
+            <ContextMenu.Item
+              className={menuItemClass}
+              onSelect={closed ? onOpen : onClose}
+            >
+              <ActionIcon size={16} aria-hidden="true" />
+              {actionLabel}
+            </ContextMenu.Item>
+          )}
+          {actions.map((action) => (
+            <ContextMenu.Item
+              key={action.id}
+              className={menuItemClass}
+              data-variant={action.variant}
+              disabled={action.disabled}
+              onSelect={() => {
+                pendingAction.current = action.run;
+              }}
+            >
+              {action.icon}
+              {action.label}
+            </ContextMenu.Item>
+          ))}
           <ContextMenu.Item
             className={menuItemClass}
             disabled={creating}

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { WorkbenchTabKeyContext } from './WorkbenchTabMenu';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useChatkitTranslation } from '../i18n/useChatkitTranslation';
 import { ToolbarButton } from '../components/ui/toolbar-button';
@@ -183,7 +184,18 @@ export function WorkbenchTabs({
           aria-label={t('workbench.views')}
           className="flex w-max min-w-full items-center gap-1"
         >
-          {orderedChildren}
+          {React.Children.map(orderedChildren, (child) =>
+            React.isValidElement(child) ? (
+              <WorkbenchTabKeyContext.Provider
+                key={child.key}
+                value={String(child.key)}
+              >
+                {child}
+              </WorkbenchTabKeyContext.Provider>
+            ) : (
+              child
+            ),
+          )}
         </div>
       </div>
       {edges.overflow && arrow(1)}

@@ -6,19 +6,25 @@ import type { WorkbenchRuntime } from '../../WorkbenchRuntime';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 const record = (id: string, purpose = 'side-chat') => ({
   thread_id: id,
-  metadata: { purpose, parent_thread_id: 'source', title: id },
+  metadata: {
+    purpose,
+    parent_thread_id: 'source',
+    forked_from_message_id: 'main-reply',
+    title: id,
+    titleSource: undefined as string | undefined,
+    archived: undefined as boolean | undefined,
+  },
   status: 'idle',
 });
 function setup(records: ReturnType<typeof record>[] = []) {
   let index = 0;
-  const copy = vi
-    .fn()
-    .mockImplementation(async () => ({
-      thread_id: `side-${++index}`,
-      metadata: { titleSource: 'default' },
-    }));
+  const copy = vi.fn().mockImplementation(async () => ({
+    thread_id: `side-${++index}`,
+    metadata: { titleSource: 'default' },
+  }));
   const listThreads = vi.fn().mockResolvedValue(records);
   const update = vi.fn().mockResolvedValue({});
+  const remove = vi.fn().mockResolvedValue(undefined);
   const stream = {
     apiUrl: '/api/ai',
     organizationId: 'org',
@@ -26,7 +32,10 @@ function setup(records: ReturnType<typeof record>[] = []) {
     conversationId: 'conversation',
     threadId: 'source',
     isLoading: true,
-    client: { threads: { copy, update }, conversations: { listThreads } },
+    client: {
+      threads: { copy, update, delete: remove },
+      conversations: { listThreads },
+    },
   } as unknown as WorkbenchRuntime;
   const hook = renderHook(
     ({ stream }) => {
@@ -48,7 +57,7 @@ function setup(records: ReturnType<typeof record>[] = []) {
     },
     { initialProps: { stream } },
   );
-  return { ...hook, stream, copy, listThreads, update };
+  return { ...hook, stream, copy, listThreads, update, remove };
 }
 beforeEach(() => localStorage.clear());
 describe('multiple side chats', () => {
@@ -152,6 +161,23 @@ describe('multiple side chats', () => {
     await waitFor(() =>
       expect(restored.result.current.sessions[0]?.opened).toBe(true),
     );
+    expect(restored.result.current.sessions[0].inheritedMessagesEndId).toBe(
+      'main-reply',
+    );
+  });
+});
+
+it('captures the inherited-message boundary before mounting a newly copied side chat', async () => {
+  const f = setup();
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  f.copy.mockResolvedValueOnce(record('side-1'));
+  await act(() => f.result.current.askInSideChat());
+  expect(f.result.current.sessions[0].inheritedMessagesEndId).toBe(
+    'main-reply',
+  );
+  expect(f.copy).toHaveBeenCalledWith('source', {
+    mode: 'latest-sealed-reply',
+    requestId: expect.any(String),
   });
 });
 
@@ -212,5 +238,301 @@ it('keeps labels working on servers without automatic-title support', async () =
   await act(() => f.result.current.askInSideChat());
   expect(f.update).toHaveBeenCalledWith('legacy', {
     metadata: { title: 'Side chat 1' },
+  });
+});
+
+it('numbers side chats from the main title, including quoted selections and closed chats', async () => {
+  const f = setup();
+  f.rerender({
+    stream: {
+      ...f.stream,
+      conversation: {
+        title: 'Deployment review',
+      } as WorkbenchRuntime['conversation'],
+    },
+  });
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  await act(() =>
+    f.result.current.askInSideChat({
+      type: 'quote',
+      text: 'Selected paragraph',
+    }),
+  );
+  expect(f.result.current.sessions[0].title).toBe('Deployment review 1');
+  act(() => f.result.current.closeSideChat('side-1'));
+  await act(() => f.result.current.askInSideChat());
+  expect(f.result.current.sessions[1].title).toBe('Deployment review 2');
+  expect(f.update).not.toHaveBeenCalled();
+});
+
+it('retains the initial label on default-title refresh, then accepts an automatic title', async () => {
+  const f = setup();
+  await waitFor(() => expect(f.result.current.ready).toBe(true));
+  await act(() => f.result.current.askInSideChat());
+  f.listThreads.mockResolvedValue([
+    {
+      ...record('side-1'),
+      metadata: {
+        ...record('side-1').metadata,
+        title: 'Server default',
+        titleSource: 'default',
+      },
+    },
+  ]);
+  act(() => f.result.current.reload());
+  await waitFor(() => expect(f.listThreads).toHaveBeenCalledTimes(2));
+  expect(f.result.current.sessions[0].title).toBe('Side chat 1');
+  f.unmount();
+  const restored = setup([
+    {
+      ...record('side-1'),
+      metadata: {
+        ...record('side-1').metadata,
+        title: 'Server default',
+        titleSource: 'default',
+      },
+    },
+  ]);
+  await waitFor(() => expect(restored.result.current.ready).toBe(true));
+  expect(restored.result.current.sessions[0].title).toBe('Side chat 1');
+});
+
+it('numbers restored default titles by creation order and keeps custom titles unchanged', async () => {
+  const dated = (
+    id: string,
+    day: string,
+    titleSource: string,
+    title: string,
+  ) => ({
+    ...record(id),
+    created_at: `2026-11-${day}T00:00:00Z`,
+    metadata: { ...record(id).metadata, titleSource, title },
+  });
+  const first = dated('first', '01', 'default', 'Side chat');
+  const manual = dated('manual', '02', 'manual', 'My chosen title');
+  const generated = dated('generated', '03', 'generated', 'Generated title');
+  const last = dated('last', '04', 'default', 'Side chat');
+  const f = setup([
+    last,
+    record('edit', 'message-edit'),
+    generated,
+    first,
+    manual,
+  ]);
+  f.rerender({
+    stream: {
+      ...f.stream,
+      conversation: {
+        title: 'Deployment review',
+      } as WorkbenchRuntime['conversation'],
+    },
+  });
+  const titles = () =>
+    Object.fromEntries(
+      f.result.current.sessions.map((s) => [s.threadId, s.title]),
+    );
+  await waitFor(() =>
+    expect(titles()).toEqual({
+      first: 'Deployment review 1',
+      manual: 'My chosen title',
+      generated: 'Generated title',
+      last: 'Deployment review 4',
+    }),
+  );
+  await act(() => f.result.current.openSideChat('first'));
+  act(() => f.result.current.closeSideChat('first'));
+  const expected = titles();
+  f.listThreads.mockResolvedValue([manual, first, last, generated]);
+  act(() => f.result.current.reload());
+  await waitFor(() =>
+    expect(f.result.current.sessions.map((s) => s.threadId)).toEqual([
+      'manual',
+      'first',
+      'last',
+      'generated',
+    ]),
+  );
+  expect(titles()).toEqual(expected);
+  expect(f.update).not.toHaveBeenCalled();
+});
+
+describe('side-chat archive and delete lifecycle', () => {
+  it('archives on the server, restores after reload, and reopens on unarchive', async () => {
+    let records = [record('side-1')];
+    const f = setup(records);
+    f.listThreads.mockImplementation(async () => records);
+    f.update.mockImplementation(async (id, { metadata }) => {
+      records = records.map((item) =>
+        item.thread_id === id
+          ? { ...item, metadata: { ...item.metadata, ...metadata } }
+          : item,
+      );
+      return records[0];
+    });
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    await act(() => f.result.current.openSideChat('side-1'));
+    await act(() => f.result.current.archiveSideChat('side-1'));
+    expect(f.update).toHaveBeenCalledWith('side-1', {
+      metadata: { archived: true },
+    });
+    expect(f.result.current.sessions[0]).toMatchObject({
+      archived: true,
+      opened: false,
+      visited: false,
+    });
+    await act(() => f.result.current.openSideChat('side-1'));
+    expect(f.result.current.sessions[0].opened).toBe(false);
+    f.unmount();
+    const restored = setup(records);
+    await waitFor(() => expect(restored.result.current.ready).toBe(true));
+    expect(restored.result.current.sessions[0]).toMatchObject({
+      archived: true,
+      opened: false,
+    });
+    restored.listThreads.mockImplementation(async () => records);
+    restored.update.mockImplementation(async () => {
+      records = [
+        {
+          ...records[0],
+          metadata: { ...records[0].metadata, archived: false },
+        },
+      ];
+      return records[0];
+    });
+    await act(() => restored.result.current.archiveSideChat('side-1', false));
+    expect(restored.update).toHaveBeenCalledWith('side-1', {
+      metadata: { archived: false },
+    });
+    expect(restored.result.current.sessions[0]).toMatchObject({
+      archived: false,
+      opened: true,
+      visited: true,
+    });
+    expect(restored.result.current.activeId).toBe('side-1');
+  });
+
+  it('keeps a failed delete intact, then deletes only the requested root and retains numbering', async () => {
+    let records = ['first', 'second'].map((id) => ({
+      ...record(id),
+      metadata: { ...record(id).metadata, titleSource: 'default' },
+    }));
+    const f = setup(records);
+    f.listThreads.mockImplementation(async () => records);
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    await act(() => f.result.current.openSideChat('first'));
+    f.remove.mockRejectedValueOnce(new Error('Delete failed'));
+    await act(async () => {
+      await expect(f.result.current.deleteSideChat('first')).rejects.toThrow(
+        'Delete failed',
+      );
+    });
+    expect(f.result.current.sessions[0].opened).toBe(true);
+    expect(f.result.current.mutatingIds).toEqual([]);
+    f.remove.mockImplementation(async (id) => {
+      records = records.filter((r) => r.thread_id !== id);
+    });
+    await act(() => f.result.current.deleteSideChat('first'));
+    expect(f.remove).toHaveBeenLastCalledWith('first');
+    expect(f.result.current.sessions).toMatchObject([
+      { threadId: 'second', title: 'Side chat 2', sequence: 2 },
+    ]);
+    f.copy.mockResolvedValueOnce({
+      thread_id: 'third',
+      metadata: { titleSource: 'default' },
+    });
+    await act(() => f.result.current.askInSideChat());
+    expect(
+      f.result.current.sessions.find((s) => s.threadId === 'third')?.title,
+    ).toBe('Side chat 3');
+    const calls = f.remove.mock.calls.length;
+    await act(() => f.result.current.deleteSideChat('source'));
+    expect(f.remove).toHaveBeenCalledTimes(calls);
+  });
+
+  it('ignores a stale list response arriving after archive', async () => {
+    const f = setup([record('side-1')]);
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    let resolve!: (value: ReturnType<typeof record>[]) => void;
+    f.listThreads.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    act(() => f.result.current.reload());
+    await waitFor(() => expect(f.listThreads).toHaveBeenCalledTimes(2));
+    f.listThreads.mockResolvedValue([
+      {
+        ...record('side-1'),
+        metadata: { ...record('side-1').metadata, archived: true },
+      },
+    ]);
+    await act(() => f.result.current.archiveSideChat('side-1'));
+    await act(async () => resolve([record('side-1')]));
+    expect(f.result.current.sessions[0].archived).toBe(true);
+  });
+
+  it('prevents overlapping archive/delete operations and leaves the tab unchanged on failure', async () => {
+    const f = setup([record('side-1')]);
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    await act(() => f.result.current.openSideChat('side-1'));
+    let reject!: (error: Error) => void;
+    f.update.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = f.result.current
+        .archiveSideChat('side-1')
+        .catch((error) => error);
+    });
+    expect(f.result.current.mutatingIds).toEqual(['side-1']);
+    await act(async () => {
+      await expect(f.result.current.deleteSideChat('side-1')).rejects.toThrow();
+    });
+    expect(f.remove).not.toHaveBeenCalled();
+    await act(async () => {
+      reject(new Error('Permission denied'));
+      await pending;
+    });
+    expect(f.result.current.sessions[0]).toMatchObject({
+      opened: true,
+      archived: false,
+    });
+    expect(f.result.current.mutatingIds).toEqual([]);
+  });
+
+  it('does not apply a late restore to another conversation', async () => {
+    const f = setup([
+      {
+        ...record('side-1'),
+        metadata: { ...record('side-1').metadata, archived: true },
+      },
+    ]);
+    await waitFor(() => expect(f.result.current.ready).toBe(true));
+    let resolve!: () => void;
+    f.update.mockImplementationOnce(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      pending = f.result.current.archiveSideChat('side-1', false);
+    });
+    f.listThreads.mockResolvedValue([]);
+    f.rerender({
+      stream: { ...f.stream, conversationId: 'other', threadId: 'other' },
+    });
+    await act(async () => {
+      resolve();
+      await pending;
+    });
+    expect(f.result.current.sessions).toEqual([]);
+    expect(f.result.current.activeViewKey).toBeNull();
   });
 });

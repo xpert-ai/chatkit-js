@@ -222,7 +222,7 @@ export function TaskSummaryContent({
     return (
       <button
         type="button"
-        className="chatkit-summary-action mt-1 flex w-full items-center text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        className="chatkit-summary-action mt-1 flex w-full items-center text-left text-sm text-muted-foreground transition-colors hover:bg-menu-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         disabled={loading}
         onClick={() =>
           canLoadMore ? void onLoadSection(section) : toggleSection(section)
@@ -245,7 +245,7 @@ export function TaskSummaryContent({
     return (
       <button
         type="button"
-        className="chatkit-summary-action mt-1 flex w-full items-center text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+        className="chatkit-summary-action mt-1 flex w-full items-center text-left text-sm text-muted-foreground transition-colors hover:bg-menu-hover hover:text-foreground"
         onClick={() =>
           setExpandedLocal((state) => ({
             ...state,
@@ -521,7 +521,7 @@ function SummaryButton({
       className={cn(
         'chatkit-summary-row flex w-full min-w-0 items-start text-left transition-colors',
         onClick &&
-          'hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'hover:bg-menu-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         !onClick && 'cursor-default',
       )}
     >

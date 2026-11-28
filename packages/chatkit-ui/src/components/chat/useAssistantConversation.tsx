@@ -80,6 +80,7 @@ export function useAssistantConversation({
   clientSecret = '',
   isClientSecretInitializing = false,
   surface = 'main',
+  inheritedMessagesEndId,
   referenceRequest,
   activeProjectId: configuredProjectId,
   projectSelection,
@@ -173,7 +174,7 @@ export function useAssistantConversation({
 
   const files = useChatFiles({ ...draft, ...session, referenceRequest });
   const viewportRef = React.useRef<HTMLDivElement>(null);
-  const messages = React.useMemo(
+  const allMessages = React.useMemo(
     () =>
       mergeCompletedCalls(
         session.stream.messages ?? [],
@@ -187,6 +188,22 @@ export function useAssistantConversation({
     ],
   );
 
+  // History loads the newest lineage pages first. Once the fork boundary
+  // is loaded, hide its prefix and stop paging into the inherited main conversation.
+  const inheritedMessageCount =
+    surface === 'side' && inheritedMessagesEndId
+      ? allMessages.findIndex(
+          (message) => message.id === inheritedMessagesEndId,
+        ) + 1
+      : 0;
+  const messages = React.useMemo(
+    () =>
+      inheritedMessageCount
+        ? allMessages.slice(inheritedMessageCount)
+        : allMessages,
+    [allMessages, inheritedMessageCount],
+  );
+
   const quotes = useChatQuotes({
     ...session,
     ...files,
@@ -197,6 +214,7 @@ export function useAssistantConversation({
   });
 
   const viewport = useChatViewport({
+    historyBoundaryReached: inheritedMessageCount > 0,
     messagePresentation,
     ...session,
     ...assistant,
@@ -342,7 +360,7 @@ export function useAssistantConversation({
     resourcesEnabled,
     runtimeResources,
     options,
-    messages,
+    messages: allMessages,
   });
 
   const pendingFollowUps = React.useMemo(
@@ -419,6 +437,7 @@ export function useAssistantConversation({
   const hasPendingTodos = Boolean(session.stream.todos?.items.length);
   const layoutMaxWidth = options?.layout?.maxWidth;
   const summary = useChatTaskSummary({
+    surface,
     characterPresentation,
     ...session,
     ...runtime,
@@ -659,6 +678,7 @@ export function useAssistantConversation({
       </>
     ),
     transcript: getAssistantTranscriptProps({
+      surface,
       ...session,
       ...conversation,
       ...viewport,
@@ -671,6 +691,8 @@ export function useAssistantConversation({
       ...runtime,
       ...branch,
       ...submission,
+      handleRetry: (index) =>
+        submission.handleRetry(index + inheritedMessageCount),
       isInitialComposer: isInitialComposer,
       chatColumnStyle: chatColumnStyle,
       errorMessage: errorMessage,

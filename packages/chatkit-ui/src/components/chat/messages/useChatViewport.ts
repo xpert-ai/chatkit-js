@@ -26,6 +26,7 @@ type ChatViewportOptions = Pick<
   Pick<ReturnType<typeof useChatQuotes>, 'clearQuoteSelection'> & {
     messagePresentation?: ChatKitOptions['messagePresentation'];
     messages: ReturnType<typeof useStreamContext>['messages'];
+    historyBoundaryReached?: boolean;
     viewportRef: React.RefObject<HTMLDivElement | null>;
   };
 
@@ -35,6 +36,7 @@ export function useChatViewport({
   messageNavigationEnabled,
   messagePresentation,
   messages,
+  historyBoundaryReached = false,
   i18n,
   stream,
   viewportRef,
@@ -108,7 +110,8 @@ export function useChatViewport({
     historyMessagePagination?.isLoadingMore,
   );
 
-  const canLoadMoreMessages = Boolean(historyMessagePagination?.hasMore);
+  const canLoadMoreMessages =
+    !historyBoundaryReached && Boolean(historyMessagePagination?.hasMore);
   const cancelPendingAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
       cancelAnimationFrame(autoScrollFrameRef.current);

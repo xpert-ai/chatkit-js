@@ -72,6 +72,7 @@ type AssistantTranscriptProps = Pick<
     options: ChatKitOptions | null | undefined;
     messagePresentation?: ChatKitOptions['messagePresentation'];
     currentThreadIsRunning: boolean;
+    surface?: 'main' | 'side';
   };
 
 import type { ChatTranscriptProps } from './ChatTranscript';
@@ -116,6 +117,7 @@ export function getAssistantTranscriptProps({
   setEditingMessageId,
   saveEditedMessage,
   setMessageNavigationAnchor,
+  surface = 'main',
 }: AssistantTranscriptProps): ChatTranscriptProps {
   const needsUserInput = Boolean(
     stream.pendingHITLRequest || stream.pendingRequestUserInput,
@@ -159,6 +161,7 @@ export function getAssistantTranscriptProps({
         <ThreadHistoryStatus
           state={stream.historyLoad}
           isEmpty={
+            surface !== 'side' &&
             Boolean(stream.threadId) &&
             messages.length === 0 &&
             !stream.isLoading

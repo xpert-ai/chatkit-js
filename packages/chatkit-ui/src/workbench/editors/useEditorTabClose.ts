@@ -37,7 +37,7 @@ export function useEditorTabClose({
     closeWorkbench,
   };
   return React.useCallback(
-    (key: string) => {
+    async (key: string) => {
       const finish = () => {
         const {
           closeView,
@@ -57,12 +57,12 @@ export function useEditorTabClose({
       };
       if (!editors.isDirty(key)) {
         finish();
-        return;
+        return true;
       }
-      void editors.prepare(key).then((ready) => {
-        if (ready) finish();
-        else onError();
-      });
+      const ready = await editors.prepare(key);
+      if (ready) finish();
+      else onError();
+      return ready;
     },
     [
       editors,

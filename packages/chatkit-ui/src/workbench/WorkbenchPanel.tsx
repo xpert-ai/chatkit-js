@@ -1,3 +1,10 @@
+import {
+  WorkbenchTabMenuProvider,
+  type WorkbenchMenuTab,
+} from './WorkbenchTabMenu';
+import { SideChatRenameDialog } from './side-chat/SideChatRenameDialog';
+import { useSideChatLifecycleActions } from './side-chat/useSideChatLifecycleActions';
+import { Pencil } from 'lucide-react';
 import { ProjectViewRecovery } from './remote-view/ProjectViewRecovery';
 import { contentViewKey } from './content/tab-identity';
 import { workspaceFileScope } from './native/files/workspace-file-access';
@@ -44,7 +51,7 @@ import {
 import {
   Loader2,
   RotateCcw,
-  MessageSquarePlus,
+  MessagesSquare,
   MessageSquare,
   Bot,
   Globe,
@@ -81,7 +88,7 @@ type WorkbenchPanelProps = {
   native?: ReturnType<typeof useNativeWorkbench>;
   onOpenNative?: (tool: NativeTool, fromTab?: string) => void;
   onOpenNativeFile?: (file: XpertWorkspaceFile, fromTab?: string) => void;
-  onCloseNative?: (key: string) => void;
+  onCloseNative?: (key: string) => void | boolean;
   sideChatEnabled?: boolean;
   previews: WorkbenchPreview[];
   newTabs: string[];
@@ -96,7 +103,7 @@ type WorkbenchPanelProps = {
   visible: boolean;
   views: XpertExtensionViewManifest[];
   availableViews?: XpertExtensionViewManifest[];
-  onCloseView?: (key: string) => void;
+  onCloseView?: (key: string) => void | boolean | Promise<void | boolean>;
   activeView: XpertExtensionViewManifest | null;
   activeViewKey: string | null;
   sideChats: ReturnType<typeof useWorkbenchSideChat>;
@@ -269,7 +276,48 @@ export function WorkbenchPanel({
       onHome: () => onNavigateBrowser?.(key, null),
     };
   };
-  return (
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const lifecycle = useSideChatLifecycleActions(sideChats, (message) =>
+    onNotify('error', message),
+  );
+  const renaming = sideChats.sessions.find(
+    (session) => session.threadId === renamingId,
+  );
+  const menuTabs: WorkbenchMenuTab[] = [
+    ...(mainChatHost ? [{ key: MAIN_CHAT_VIEW_KEY }] : []),
+    ...(native?.tabs.map((tab) => ({
+      key: tab.key,
+      close: onCloseNative ? () => onCloseNative(tab.key) : undefined,
+    })) ?? []),
+    ...(externalViewOpen
+      ? [{ key: EXTERNAL_ASSISTANTS_VIEW_KEY, close: onCloseExternal }]
+      : []),
+    ...sideChats.sessions
+      .filter((session) => session.opened)
+      .map((session) => ({
+        key: sideChatViewKey(session.threadId),
+        close: () => onRequestCloseSideChat(session.threadId),
+        actions: [
+          {
+            id: 'rename',
+            label: t('workbench.tabMenu.rename'),
+            icon: <Pencil size={16} />,
+            run: () => setRenamingId(session.threadId),
+          },
+          ...lifecycle.actions(session),
+        ],
+      })),
+    ...previews.map((preview) => ({
+      key: preview.key,
+      close: () => onClosePreview(preview.key),
+    })),
+    ...views.map((view) => ({
+      key: view.key,
+      close: onCloseView ? () => onCloseView(view.key) : undefined,
+    })),
+    ...newTabs.map((key) => ({ key, close: () => onCloseNewTab(key) })),
+  ];
+  const panel = (
     <div
       className="flex h-full min-h-0 flex-col bg-background"
       style={getSurfaceThemeStyle(theme)}
@@ -340,7 +388,7 @@ export function WorkbenchPanel({
                     session.status === 'busy' ? (
                       <Loader2 size={16} className="animate-spin" />
                     ) : (
-                      <MessageSquarePlus size={16} />
+                      <MessagesSquare size={16} />
                     )
                   }
                   selected={activeViewKey === sideChatViewKey(session.threadId)}
@@ -377,9 +425,13 @@ export function WorkbenchPanel({
                   selected={selected}
                   onSelect={() => onSelect(view.key)}
                   onClose={
-                    selected
-                      ? () => (onCloseView ? onCloseView(view.key) : onClose())
-                      : undefined
+                    onCloseView
+                      ? () => {
+                          void onCloseView(view.key);
+                        }
+                      : selected
+                        ? onClose
+                        : undefined
                   }
                 />
               );
@@ -728,5 +780,24 @@ export function WorkbenchPanel({
         )}
       </div>
     </div>
+  );
+  return (
+    <WorkbenchTabMenuProvider
+      scope={terminalScope}
+      tabs={menuTabs}
+      order={tabOrder}
+      onError={(message) => onNotify('error', message)}
+    >
+      {renaming && (
+        <SideChatRenameDialog
+          key={renaming.threadId}
+          title={renaming.title}
+          onSave={(title) => sideChats.renameSideChat(renaming.threadId, title)}
+          onClose={() => setRenamingId(null)}
+        />
+      )}
+      {panel}
+      {lifecycle.dialog}
+    </WorkbenchTabMenuProvider>
   );
 }

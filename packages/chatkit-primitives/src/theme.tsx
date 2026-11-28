@@ -34,6 +34,7 @@ const inheritedTokens = [
   'secondary-foreground',
   'muted',
   'muted-foreground',
+  'menu-hover',
   'accent',
   'accent-foreground',
   'destructive',

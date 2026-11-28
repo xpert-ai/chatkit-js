@@ -34,7 +34,13 @@ function Surface({
   return (
     <div
       ref={ref}
-      style={{ '--primary': color, overflow: 'hidden' } as React.CSSProperties}
+      style={
+        {
+          '--primary': color,
+          '--menu-hover': color,
+          overflow: 'hidden',
+        } as React.CSSProperties
+      }
     >
       <PrimitiveThemeProvider
         rootRef={ref}
@@ -52,6 +58,24 @@ function Surface({
 }
 
 describe('shared surface themes', () => {
+  it('carries each surface menu hover token into its portal and updates it live', async () => {
+    const view = render(
+      <Surface name="menu" color="#112233" radius="sharp" density="compact" />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('menu').style.getPropertyValue('--menu-hover'),
+      ).toBe('#112233'),
+    );
+    view.rerender(
+      <Surface name="menu" color="#445566" radius="round" density="spacious" />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('menu').style.getPropertyValue('--menu-hover'),
+      ).toBe('#445566'),
+    );
+  });
   it('disables non-native controls with their form scope and preserves their value', () => {
     const onValueChange = () => {
       throw new Error('Disabled slider changed');

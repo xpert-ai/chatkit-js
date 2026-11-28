@@ -11,12 +11,16 @@ import {
 } from '../../../lib/task-summary';
 import { useChatTaskSummary } from './useChatTaskSummary';
 
+const historyRequest = vi.hoisted(() => vi.fn());
 vi.mock('../../../hooks/useTaskSummary', () => ({
-  useTaskSummary: () => ({
-    summary: mergeTaskSummary(null, collectLiveTaskSummary({ messages: [] })),
-    retryHistory: vi.fn(),
-    loadSection: vi.fn(),
-  }),
+  useTaskSummary: (input: { conversationId: string | null }) => {
+    historyRequest(input);
+    return {
+      summary: mergeTaskSummary(null, collectLiveTaskSummary({ messages: [] })),
+      retryHistory: vi.fn(),
+      loadSection: vi.fn(),
+    };
+  },
 }));
 vi.mock('../../../hooks/useOpenTaskSummaryResource', () => ({
   useOpenTaskSummaryResource: () => vi.fn(),
@@ -59,6 +63,9 @@ describe('Unified summary availability', () => {
     activeId: undefined,
     askInSideChat: vi.fn(),
     openSideChat: vi.fn(),
+    archiveSideChat: async () => {},
+    deleteSideChat: async () => {},
+    mutatingIds: [],
     renameSideChat: vi.fn(),
     closeSideChat: vi.fn(),
     updateStatus: vi.fn(),
@@ -90,5 +97,18 @@ describe('Unified summary availability', () => {
         sideChatEnabled ? sideChats : undefined,
       );
     },
+  );
+});
+
+it('keeps side-chat summary history isolated from the main conversation', () => {
+  const input = {
+    ...options(),
+    surface: 'side' as const,
+    options: { taskSummary: { enabled: true } } as Options['options'],
+  };
+  const { result } = renderHook(() => useChatTaskSummary(input));
+  expect(result.current.taskSummaryAvailable).toBe(true);
+  expect(historyRequest).toHaveBeenLastCalledWith(
+    expect.objectContaining({ conversationId: null }),
   );
 });

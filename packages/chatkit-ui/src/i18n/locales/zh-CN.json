@@ -141,6 +141,13 @@
         "entryUnavailable": "远程视图内容不可用。",
         "missingAssistant": "需要 Assistant 才能加载视图。",
         "retry": "重试",
+        "tabMenu": {
+            "rename": "重命名",
+            "close": "关闭",
+            "closeOthers": "关闭其他标签页",
+            "closeRight": "关闭右侧标签页",
+            "closeAll": "关闭所有标签页"
+        },
         "sideChat": {
             "title": "侧边聊天",
             "threadRequired": "请先开始主对话，再打开侧边聊天。",
@@ -167,7 +174,16 @@
             "error": "失败",
             "paused": "已暂停",
             "sendToExisting": "发送到已有侧聊",
-            "numberedTitle": "侧边聊天 {{number}}"
+            "numberedTitle": "{{title}} {{number}}",
+            "archive": "归档",
+            "restore": "恢复侧边聊天",
+            "restoreNamed": "恢复侧边聊天：{{title}}",
+            "archived": "已归档（{{count}}）",
+            "delete": "永久删除…",
+            "deleteTitle": "永久删除侧边聊天",
+            "deleteConfirm": "永久删除",
+            "deleteDescription": "删除“{{title}}”及其编辑分支？此操作无法撤销。主对话和其他侧边聊天会保留。",
+            "actionPending": "此侧边聊天正在执行其他操作。"
         },
         "errors": {
             "contextKeyRequired": "必须提供上下文键。",

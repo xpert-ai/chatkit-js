@@ -3,12 +3,17 @@ import {
   unavailableResourceCardActions,
 } from '../../resource-cards/context';
 import * as React from 'react';
+import { SideChatHeaderContext } from './SideChatHeaderActions';
 import type { ChatKitOptions } from '@xpert-ai/chatkit-types';
 import { StreamProvider, useStreamContext } from '../../providers/Stream';
 import type { WorkbenchRuntime } from '../WorkbenchRuntime';
 import { Chat } from '../../components/chat';
-import { WorkbenchContext, disabledWorkbenchContext } from '../context';
-import type { SideChatSession } from './types';
+import {
+  WorkbenchContext,
+  disabledWorkbenchContext,
+  useWorkbench,
+} from '../context';
+import { sideChatViewKey, type SideChatSession } from './types';
 
 export function SideChatView({
   session,
@@ -25,6 +30,22 @@ export function SideChatView({
     selectedThreadId?: string | null,
   ) => void;
 }) {
+  const parentWorkbench = useWorkbench();
+  const outputWorkbench = React.useMemo(
+    () => ({
+      ...disabledWorkbenchContext,
+      openArtifact: parentWorkbench.openArtifact,
+      openHtmlArtifact: parentWorkbench.openHtmlArtifact,
+      openFileReview: parentWorkbench.openFileReview,
+      openSummaryResource: parentWorkbench.openSummaryResource,
+    }),
+    [
+      parentWorkbench.openArtifact,
+      parentWorkbench.openHtmlArtifact,
+      parentWorkbench.openFileReview,
+      parentWorkbench.openSummaryResource,
+    ],
+  );
   const [initialThread] = React.useState(
     session.selectedThreadId ?? session.threadId,
   );
@@ -33,9 +54,14 @@ export function SideChatView({
     return {
       ...options,
       initialThread,
-      header: { ...options.header, enabled: false },
+      header: {
+        ...options.header,
+        enabled: true,
+        identity: { enabled: false },
+        character: { enabled: false },
+      },
       history: { ...options.history, enabled: false },
-      taskSummary: { ...options.taskSummary, enabled: false },
+      taskSummary: { ...options.taskSummary, enabled: true },
       workbench: {
         ...options.workbench,
         enabled: false,
@@ -47,30 +73,33 @@ export function SideChatView({
   }, [options, initialThread]);
 
   return (
-    <ResourceCardContext.Provider value={unavailableResourceCardActions}>
-      <WorkbenchContext.Provider value={disabledWorkbenchContext}>
-        <StreamProvider
-          apiKey={stream.apiKey ?? ''}
-          getClientSecret={stream.refreshClientSecret}
-          organizationId={stream.organizationId}
-          apiUrl={stream.apiUrl}
-          xpertId={stream.assistantId}
-          projectId={stream.projectId}
-          initialThread={initialThread}
-          threadStateMode="memory"
-          hostIntegration={false}
-        >
-          <SideChatStatus id={session.threadId} onStatus={onStatus} />
-          <Chat
-            className="h-full"
-            clientSecret={stream.apiKey}
-            options={sideChatOptions}
-            surface="side"
-            referenceRequest={session.referenceRequest}
-          />
-        </StreamProvider>
-      </WorkbenchContext.Provider>
-    </ResourceCardContext.Provider>
+    <SideChatHeaderContext.Provider value={sideChatViewKey(session.threadId)}>
+      <ResourceCardContext.Provider value={unavailableResourceCardActions}>
+        <WorkbenchContext.Provider value={outputWorkbench}>
+          <StreamProvider
+            apiKey={stream.apiKey ?? ''}
+            getClientSecret={stream.refreshClientSecret}
+            organizationId={stream.organizationId}
+            apiUrl={stream.apiUrl}
+            xpertId={stream.assistantId}
+            projectId={stream.projectId}
+            initialThread={initialThread}
+            threadStateMode="memory"
+            hostIntegration={false}
+          >
+            <SideChatStatus id={session.threadId} onStatus={onStatus} />
+            <Chat
+              className="h-full"
+              clientSecret={stream.apiKey}
+              options={sideChatOptions}
+              surface="side"
+              inheritedMessagesEndId={session.inheritedMessagesEndId}
+              referenceRequest={session.referenceRequest}
+            />
+          </StreamProvider>
+        </WorkbenchContext.Provider>
+      </ResourceCardContext.Provider>
+    </SideChatHeaderContext.Provider>
   );
 }
 
