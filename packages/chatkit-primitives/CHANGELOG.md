@@ -1,5 +1,11 @@
 # @xpert-ai/chatkit-primitives
 
+## 0.30.0
+
+### Patch Changes
+
+- aa597db: Unify menu hover, keyboard focus and submenu highlights through the semantic `--menu-hover` CSS variable. Preserve the active theme in portaled menus and retain destructive action colors, including when a custom accent blends into the menu background.
+
 ## 0.2.0
 
 ### Minor Changes
