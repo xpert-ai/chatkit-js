@@ -1028,6 +1028,10 @@
         "langGraphMessages": "LangGraph 消息..."
     },
     "message": {
+        "humanText": {
+            "showMore": "展示更多",
+            "showLess": "收起"
+        },
         "bubbles": {
             "completed": "已完成",
             "failed": "本次请求未能完成。",

@@ -60,6 +60,7 @@ import {
 import { AssistantMessage, AssistantStreamingIndicator } from './messages/ai';
 import { MessageActions } from './MessageActions';
 import { MessageTimestamp } from './MessageTimestamp';
+import { HumanMessageText } from './HumanMessageText';
 import { MessageEditor } from './MessageEditor';
 import { Button } from '../ui/button';
 import {
@@ -118,6 +119,23 @@ function formatMessageContent(
   }
 
   return '';
+}
+
+function renderMessageText(content: TranscriptContent) {
+  return Array.isArray(content) ? (
+    content.map((part, index) => (
+      <p
+        key={`${part.type}-${index}`}
+        className="wrap-break-word text-sm leading-relaxed"
+      >
+        {formatMessageContent(part)}
+      </p>
+    ))
+  ) : (
+    <span className="wrap-break-word text-sm leading-relaxed">
+      {formatMessageContent(content)}
+    </span>
+  );
 }
 
 export type MessageListProps = {
@@ -659,19 +677,12 @@ export function MessageList({
                           )}
                           {widgetAction ? (
                             <WidgetActionReceipt action={widgetAction} />
-                          ) : Array.isArray(message.content) ? (
-                            message.content.map((part, partIndex) => (
-                              <p
-                                key={`${part.type}-${partIndex}`}
-                                className="wrap-break-word text-sm leading-relaxed"
-                              >
-                                {formatMessageContent(part)}
-                              </p>
-                            ))
+                          ) : isHumanMessage ? (
+                            <HumanMessageText key={message.id}>
+                              {renderMessageText(message.content)}
+                            </HumanMessageText>
                           ) : (
-                            <span className="wrap-break-word text-sm leading-relaxed">
-                              {formatMessageContent(message.content)}
-                            </span>
+                            renderMessageText(message.content)
                           )}
                         </SendTransitionContent>
                       )}

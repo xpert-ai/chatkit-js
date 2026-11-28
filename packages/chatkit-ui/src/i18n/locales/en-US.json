@@ -1028,6 +1028,10 @@
         "langGraphMessages": "LangGraph Messages..."
     },
     "message": {
+        "humanText": {
+            "showMore": "Show more",
+            "showLess": "Show less"
+        },
         "bubbles": {
             "completed": "Completed",
             "failed": "This request could not be completed.",
