@@ -3,22 +3,38 @@ import type { AddressSuggestion } from './WorkbenchAddressBar';
 export function rankSuggestions(
   items: AddressSuggestion[],
   query: string,
-  historyOnly = false,
+  mode: 'all' | 'websites' | 'recent' = 'all',
 ): AddressSuggestion[] {
   const needle = query.trim().toLocaleLowerCase();
   const unique = new Map<string, AddressSuggestion>();
   for (const item of items) {
-    if (historyOnly && !item.history) continue;
+    if (mode === 'websites' && !item.history) continue;
+    if (
+      mode === 'recent' &&
+      !item.history &&
+      item.kind !== 'website' &&
+      item.kind !== 'query'
+    )
+      continue;
     const identity =
       item.kind === 'website' || item.history ? `url:${item.detail}` : item.key;
     const previous = unique.get(identity);
-    if (
+    const preferred =
       !previous ||
       (item.opened && !previous.opened) ||
       (Boolean(item.opened) === Boolean(previous.opened) &&
         (item.updatedAt ?? 0) > (previous.updatedAt ?? 0))
-    )
-      unique.set(identity, item);
+        ? item
+        : previous;
+    unique.set(
+      identity,
+      mode === 'recent' && previous
+        ? {
+            ...preferred,
+            updatedAt: Math.max(item.updatedAt ?? 0, previous.updatedAt ?? 0),
+          }
+        : preferred,
+    );
   }
   const score = (item: AddressSuggestion) => {
     const title = item.title.toLocaleLowerCase();
@@ -34,7 +50,7 @@ export function rankSuggestions(
     .sort(
       (a, b) =>
         score(a) - score(b) ||
-        Number(!!b.opened) - Number(!!a.opened) ||
+        (mode === 'recent' ? 0 : Number(!!b.opened) - Number(!!a.opened)) ||
         (b.updatedAt ?? 0) - (a.updatedAt ?? 0),
     )
     .slice(0, 12);

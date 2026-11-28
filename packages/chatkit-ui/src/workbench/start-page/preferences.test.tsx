@@ -118,3 +118,54 @@ it('restores only an authorized editing branch within its side-chat lineage', ()
   expect(sideChatSelection(threads, 'root', 'foreign')).toBe('root');
   expect(sideChatSelection(threads, 'root', 'revoked')).toBe('root');
 });
+
+it('orders recent websites and queries by time without including launchers or files', () => {
+  const ranked = rankSuggestions(
+    [
+      {
+        key: 'open',
+        title: 'Open website',
+        kind: 'website',
+        detail: 'https://old.test/',
+        opened: true,
+        updatedAt: 1,
+        onSelect: () => {},
+      },
+      {
+        key: 'query',
+        title: 'timeline',
+        kind: 'query',
+        updatedAt: 3,
+        onSelect: () => {},
+      },
+      {
+        key: 'website',
+        title: 'Website',
+        kind: 'website',
+        detail: 'https://new.test/',
+        updatedAt: 2,
+        onSelect: () => {},
+      },
+      {
+        key: 'file',
+        title: 'File',
+        kind: 'file',
+        updatedAt: 4,
+        onSelect: () => {},
+      },
+      { key: 'action', title: 'Terminal', kind: 'action', onSelect: () => {} },
+      {
+        key: 'recent-open',
+        title: 'Recent visit to open website',
+        kind: 'website',
+        detail: 'https://old.test/',
+        updatedAt: 9,
+        onSelect: () => {},
+      },
+    ],
+    '',
+    'recent',
+  );
+  expect(ranked.map((item) => item.key)).toEqual(['open', 'query', 'website']);
+  expect(ranked[0]).toMatchObject({ opened: true, updatedAt: 9 });
+});

@@ -67,6 +67,35 @@ function setup(
 }
 
 describe('WorkbenchStartPage', () => {
+  it('keeps a new start page clear when there is no website or query history', () => {
+    setup({ recent: [] });
+    fireEvent.focus(screen.getByRole('combobox'));
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Open' })).toBeVisible();
+  });
+
+  it('shows recent websites only in the search dropdown and preserves file shortcuts', () => {
+    const website = parsePreview(
+      'browser',
+      { url: 'https://example.test/', title: 'Example website' },
+      '/api/ai',
+    );
+    if (!website) throw new Error('Invalid website fixture');
+    const props = setup({
+      recent: [
+        { preview: website, openedAt: Date.now() },
+        { preview, openedAt: 1 },
+      ],
+    });
+    expect(
+      screen.queryByRole('button', { name: /Example website/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Report.pdf/ })).toBeVisible();
+    fireEvent.focus(screen.getByRole('combobox'));
+    fireEvent.click(screen.getByRole('option', { name: /Example website/ }));
+    expect(props.onOpenPreview).toHaveBeenCalledWith(website);
+  });
+
   it('disables a terminal known to be unavailable while keeping other tools usable', () => {
     setup({
       conversationReady: true,

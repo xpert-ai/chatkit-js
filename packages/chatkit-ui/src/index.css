@@ -158,6 +158,8 @@
   --spacing-composer-inset: 2px;
   --shadow-composer-shell:
     0px 12px 24px -8px rgba(0, 0, 0, 0.02), 0px 2px 4px -4px rgba(0, 0, 0, 0.02);
+  --shadow-workbench-search:
+    0px 2px 4px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.04);
   --font-heading: var(--font-sans);
 }
 
