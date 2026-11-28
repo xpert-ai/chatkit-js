@@ -1,5 +1,40 @@
 # @xpert-ai/chatkit-ui
 
+## 0.30.0
+
+### Minor Changes
+
+- 5528297: Add explicitly declared image-viewing activities and immutable participant-visible image previews to tool timelines. Load thumbnails on expansion, keep parameters secondary, and use themed image dialogs with distinct call and image counts.
+- bf26cfc: Add validated activity declarations, bounded input/output previews and immutable tool-detail references. Render deterministic activity groups, descriptive call summaries and lazy, themed full-content dialogs through the Xpert SDK while preserving legacy calls and result cards.
+
+  Release with the SDK tool-detail API and matching Xpert server support. Undeclared historical calls retain a generic activity label.
+
+- aa597db: Add task/output and more-action menus to side chats, along with shared Workbench tab context menus for closing the current, other, right-hand or all tabs while respecting editor close guards. Use a distinct side-chat icon and stable numbered default titles based on the main conversation.
+
+  Support archiving, restoring and permanently deleting side chats from their menus. Archived chats remain accessible in the task summary, and deletion requires confirmation with retryable errors. These operations require matching platform support for side-chat archive metadata and deletion of editing branches.
+
+  Show only the side chat's own messages while retaining inherited conversation context for the assistant. Remove the empty side-chat placeholder and correct rename-dialog spacing, alignment and focus-ring clipping across themes and viewport sizes.
+
+### Patch Changes
+
+- 7cd155f: Unify command group and row icons with a static terminal shape and a state-driven
+  code-thinking sprite animation. Respect disclosure, reduced motion, page
+  visibility, and terminal states, with a static fallback if the sprite fails to load.
+- 45aae74: Hide validated legacy skill-only metadata cards while retaining skill provenance and normal read activity. Leave existing component categories and native result rendering unchanged.
+- ec9cf64: Keep the Assistant avatar and open Workbench view in place when a hosted chat renews its session credentials.
+- bf26cfc: Improve the tool timeline with nested inline details, explicit execution states, compact input previews, and accessible disclosure controls. Preserve manual expansion choices during streaming and distinguish pending, empty, and unrecorded output.
+- 42554d9: Refine the Workbench new-tab page with a narrower centered content column, density-aware search and shortcut sizing, softer search borders and diffuse shadows shared across idle and focus states. Show recent websites and search queries directly when focusing an empty search, without a separate page-options menu or duplicate website list. Typing searches all available tools, files and tabs. Compact the launcher menu with proportional icons, shared hover colors and stacked customization controls, while preserving tool pinning and ordering. Hide empty recent-file sections.
+- bf26cfc: Allow isolated SVG tool icons explicitly declaring currentColor to inherit the row's theme and status colors while preserving multicolor icons.
+- bf26cfc: Update the Xpert SDK dependency to 0.31.0, including scoped, paginated tool-detail reads.
+- Updated dependencies [aa597db]
+- Updated dependencies [45aae74]
+- Updated dependencies [5528297]
+- Updated dependencies [bf26cfc]
+  - @xpert-ai/chatkit-primitives@0.30.0
+  - @xpert-ai/chatkit-types@0.30.0
+  - @xpert-ai/chatkit-web-shared@0.30.0
+  - @xpert-ai/a2ui-react@0.18.1
+
 ## 0.29.0
 
 ### Minor Changes

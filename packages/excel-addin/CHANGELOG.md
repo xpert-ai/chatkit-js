@@ -1,5 +1,15 @@
 # @xpert-ai/chatkit-excel-addin
 
+## 0.30.0
+
+### Patch Changes
+
+- Updated dependencies [45aae74]
+- Updated dependencies [5528297]
+- Updated dependencies [bf26cfc]
+  - @xpert-ai/chatkit-types@0.30.0
+  - @xpert-ai/chatkit-react@0.30.0
+
 ## 0.28.0
 
 ### Patch Changes

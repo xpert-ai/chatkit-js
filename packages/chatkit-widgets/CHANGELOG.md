@@ -1,5 +1,12 @@
 # @xpert-ai/a2ui-react
 
+## 0.18.1
+
+### Patch Changes
+
+- Updated dependencies [aa597db]
+  - @xpert-ai/chatkit-primitives@0.30.0
+
 ## 0.18.0
 
 ### Minor Changes

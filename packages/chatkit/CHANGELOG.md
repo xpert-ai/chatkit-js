@@ -1,5 +1,15 @@
 # @xpert-ai/chatkit-types
 
+## 0.30.0
+
+### Minor Changes
+
+- 45aae74: Hide validated legacy skill-only metadata cards while retaining skill provenance and normal read activity. Leave existing component categories and native result rendering unchanged.
+- 5528297: Add explicitly declared image-viewing activities and immutable participant-visible image previews to tool timelines. Load thumbnails on expansion, keep parameters secondary, and use themed image dialogs with distinct call and image counts.
+- bf26cfc: Add validated activity declarations, bounded input/output previews and immutable tool-detail references. Render deterministic activity groups, descriptive call summaries and lazy, themed full-content dialogs through the Xpert SDK while preserving legacy calls and result cards.
+
+  Release with the SDK tool-detail API and matching Xpert server support. Undeclared historical calls retain a generic activity label.
+
 ## 0.28.0
 
 ### Minor Changes
