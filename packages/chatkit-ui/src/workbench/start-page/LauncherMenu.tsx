@@ -5,7 +5,6 @@ import {
   ArrowDown,
   MoreHorizontal,
   Pin,
-  RotateCcw,
   Settings2,
 } from 'lucide-react';
 import {
@@ -87,7 +86,11 @@ export function LauncherMenu({
       (pins.includes(b.id) ? pins.indexOf(b.id) : 100),
   );
   const control =
-    'inline-flex items-center justify-center rounded-chat-item p-[calc(0.5rem*var(--chat-density-scale,1))] text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring';
+    'inline-flex size-[max(1.75rem,calc(1.75rem*var(--chat-density-scale,1)))] shrink-0 items-center justify-center rounded-chat-item text-muted-foreground hover:bg-[var(--menu-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-35 [@media(pointer:coarse)]:size-11';
+  const row =
+    'flex min-h-[max(1.75rem,calc(1.75rem*var(--chat-density-scale,1)))] min-w-0 items-center gap-[calc(0.5rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.625rem*var(--chat-density-scale,1))] py-[calc(0.25rem*var(--chat-density-scale,1))] text-left focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [@media(pointer:coarse)]:min-h-11';
+  const icon =
+    'size-[max(0.75rem,calc(0.875rem*var(--chat-density-scale,1)))] shrink-0';
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -96,20 +99,23 @@ export function LauncherMenu({
           className={control}
           aria-label={t('workbench.start.moreTools')}
         >
-          <MoreHorizontal size={20} />
+          <MoreHorizontal className={icon} />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
         style={getSurfaceThemeStyle(theme)}
-        className="w-80 max-w-[calc(100vw-2rem)] rounded-chat-panel p-2"
+        className="flex max-h-[min(28rem,var(--radix-popover-content-available-height))] w-[clamp(16rem,calc(18rem*var(--chat-density-scale,1)),22.5rem)] max-w-[calc(100vw-2rem)] flex-col rounded-chat-panel border-border/60 p-[calc(0.25rem*var(--chat-density-scale,1))] text-[length:max(0.75rem,calc(0.875rem*var(--chat-density-scale,1)))] leading-[max(1rem,calc(1.25rem*var(--chat-density-scale,1)))]"
       >
-        <div className="max-h-80 overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto overscroll-contain">
           {sorted.map((action) => (
-            <div key={action.id} className="flex items-center gap-1">
+            <div
+              key={action.id}
+              className="flex items-center rounded-chat-item hover:bg-[var(--menu-hover)] focus-within:bg-[var(--menu-hover)]"
+            >
               <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-[calc(0.75rem*var(--chat-density-scale,1))] rounded-chat-item px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-left text-sm hover:bg-muted disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring"
+                className={`${row} flex-1 disabled:opacity-50`}
                 disabled={action.disabled}
                 title={action.reason}
                 onClick={() => {
@@ -117,11 +123,15 @@ export function LauncherMenu({
                   setOpen(false);
                 }}
               >
-                <span className="shrink-0">{action.icon}</span>
+                <span
+                  className={`${icon} flex items-center justify-center [&>*]:max-h-full [&>*]:max-w-full`}
+                >
+                  {action.icon}
+                </span>
                 <span className="min-w-0">
                   <span className="block truncate">{action.title}</span>
                   {action.reason && (
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="block text-[length:max(0.75rem,calc(0.75rem*var(--chat-density-scale,1)))] leading-snug text-muted-foreground">
                       {action.reason}
                     </span>
                   )}
@@ -143,7 +153,7 @@ export function LauncherMenu({
                       save(next);
                     }}
                   >
-                    <ArrowUp size={14} />
+                    <ArrowUp className={icon} />
                   </button>
                   <button
                     type="button"
@@ -159,7 +169,7 @@ export function LauncherMenu({
                       save(next);
                     }}
                   >
-                    <ArrowDown size={14} />
+                    <ArrowDown className={icon} />
                   </button>
                 </>
               )}
@@ -182,29 +192,29 @@ export function LauncherMenu({
                 }
               >
                 <Pin
-                  size={16}
+                  className={`${icon} rotate-45`}
                   fill={pins.includes(action.id) ? 'currentColor' : 'none'}
                 />
               </button>
             </div>
           ))}
         </div>
-        <div className="mt-2 border-t pt-2">
+        <div className="shrink-0">
+          <div className="mx-[calc(0.5rem*var(--chat-density-scale,1))] my-[calc(0.25rem*var(--chat-density-scale,1))] border-t border-border/60" />
           <button
             type="button"
-            className={`${control} gap-2 text-sm`}
+            className={`${row} w-full hover:bg-[var(--menu-hover)]`}
             aria-pressed={customize}
             onClick={() => setCustomize(!customize)}
           >
-            <Settings2 size={16} />
+            <Settings2 className={icon} />
             {t('workbench.start.customize')}
           </button>
           <button
             type="button"
-            className={`${control} gap-2 text-sm`}
+            className={`${row} w-full text-muted-foreground hover:bg-[var(--menu-hover)]`}
             onClick={() => save(null)}
           >
-            <RotateCcw size={16} />
             {t('workbench.start.reset')}
           </button>
         </div>

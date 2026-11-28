@@ -14,6 +14,7 @@ import {
 } from '../../src/workbench/context';
 import type { SideChatSession } from '../../src/workbench/side-chat/types';
 import type { useWorkbenchSideChat } from '../../src/workbench/shell/side-chat/useWorkbenchSideChat';
+import { LayoutPreview } from './LayoutPreview';
 import { FloatingChatPreview } from './FloatingChatPreview';
 import '../../src/i18n';
 import '../../src/index.css';
@@ -271,4 +272,10 @@ function Preview() {
     </ThemeProvider>
   );
 }
-createRoot(document.getElementById('root')!).render(<Preview />);
+createRoot(document.getElementById('root')!).render(
+  new URLSearchParams(location.search).has('layout') ? (
+    <LayoutPreview />
+  ) : (
+    <Preview />
+  ),
+);

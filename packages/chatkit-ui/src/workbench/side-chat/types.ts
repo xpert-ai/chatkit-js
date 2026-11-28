@@ -9,9 +9,13 @@ export const isSideChatView = (key: string | null) =>
 export type SideChatSession = {
   sourceThreadId: string;
   threadId: string;
+  /** Last inherited message; retained in execution context but hidden in this view. */
+  inheritedMessagesEndId?: string;
   /** Selected editing branch; the side-chat identity remains the root thread. */
   selectedThreadId?: string;
   title: string;
+  sequence?: number;
+  archived?: boolean;
   status?: import('@xpert-ai/xpert-sdk').ThreadStatus;
   updatedAt?: string;
   /** A closed tab remains discoverable; visited runtimes retain their drafts. */

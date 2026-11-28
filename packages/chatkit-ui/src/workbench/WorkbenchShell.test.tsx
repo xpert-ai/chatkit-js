@@ -408,9 +408,11 @@ describe('WorkbenchShell', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
     });
     expect(screen.getByRole('button', { name: 'Forward' })).toBeEnabled();
+    fireEvent.focus(screen.getByRole('combobox'));
     expect(
-      screen.getByRole('button', { name: /a.html Website/ }),
+      screen.getByRole('option', { name: /a.html/ }),
     ).toBeVisible();
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
     fireEvent.click(screen.getByRole('button', { name: 'Forward' }));
     expect(screen.getByRole('combobox')).toHaveValue(
       'https://example.test/a.html',
@@ -477,8 +479,18 @@ describe('WorkbenchShell', () => {
     expect(frame).not.toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
     let recent = screen.getByRole('region', { name: 'Recently opened' });
+    expect(within(recent).getAllByRole('button')).toHaveLength(1);
+    expect(
+      within(recent).queryByRole('button', { name: /site.html/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.focus(screen.getByRole('combobox'));
+    expect(screen.getByRole('option', { name: /site.html/ })).toBeVisible();
+    expect(
+      screen.queryByRole('option', { name: /Report/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
     expect(within(recent).getAllByRole('button')[0]).toHaveTextContent(
-      'site.html',
+      'Report',
     );
     fireEvent.click(
       within(recent).getByRole('button', { name: /Report File/ }),
@@ -496,7 +508,7 @@ describe('WorkbenchShell', () => {
     ).toBe(frame);
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
     recent = screen.getByRole('region', { name: 'Recently opened' });
-    expect(within(recent).getAllByRole('button')).toHaveLength(2);
+    expect(within(recent).getAllByRole('button')).toHaveLength(1);
     expect(within(recent).getAllByRole('button')[0]).toHaveTextContent(
       'Report',
     );
@@ -549,10 +561,11 @@ describe('WorkbenchShell', () => {
       await screen.findByRole('tab', { name: 'Documents' });
       fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
       expect(
-        screen.getByRole('region', { name: 'Recently opened' }),
-      ).toHaveTextContent(
-        'Files and websites opened in this conversation will appear here.',
-      );
+        screen.queryByRole('region', { name: 'Recently opened' }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Private file File/ }),
+      ).not.toBeInTheDocument();
       expect(
         screen.queryByRole('tab', { name: 'Private file' }),
       ).not.toBeInTheDocument();

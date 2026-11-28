@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import {
   Folder,
   Terminal,
-  MessageSquarePlus,
+  MessagesSquare,
   Layers,
   Loader2,
 } from 'lucide-react';
@@ -48,7 +48,7 @@ export function launcherActions(options: {
             icon: options.sideChatOpening ? (
               <Loader2 size={21} className="animate-spin" />
             ) : (
-              <MessageSquarePlus size={21} />
+              <MessagesSquare size={21} />
             ),
             disabled:
               options.sideChatOpening ||

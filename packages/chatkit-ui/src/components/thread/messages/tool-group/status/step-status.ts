@@ -1,18 +1,27 @@
 import type { TMessageContentComponent } from '@xpert-ai/chatkit-types';
-import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleHelp,
+  CircleSlash,
+  Loader2,
+  XCircle,
+} from 'lucide-react';
 import type { PartialStepData, StepStatus, ToolStepRunState } from '../types';
+import { parseToolCallPresentation } from '../../../../../lib/tool-call-presentation';
 
 export const toolStatusConfig = {
+  unknown: { iconClass: 'text-muted-foreground', icon: CircleHelp },
+  canceled: { iconClass: 'text-muted-foreground', icon: CircleSlash },
   success: {
-    iconClass: 'border-green-500 text-green-700',
+    iconClass: 'text-muted-foreground',
     icon: CheckCircle2,
   },
   fail: {
-    iconClass: 'border-red-500 text-red-700',
+    iconClass: 'text-destructive',
     icon: XCircle,
   },
   running: {
-    iconClass: 'border-blue-500 text-blue-700',
+    iconClass: 'text-primary',
     icon: Loader2,
   },
 };
@@ -31,13 +40,14 @@ export function getToolStepData(
   const data = (content.data ?? {}) as PartialStepData;
   const category = normalizeStepCategory(data.category);
 
-  if (category === data.category) {
+  if (category === data.category && data.presentation === undefined) {
     return data;
   }
 
   return {
     ...data,
     category,
+    presentation: parseToolCallPresentation(data.presentation),
   };
 }
 
@@ -63,8 +73,8 @@ export function getEffectiveToolStepStatus(
     isThreadKnownIdle(isThreadRunning) &&
     !isPausedToolStep(data, isThreadPaused)
   ) {
-    return 'fail';
+    return 'unknown';
   }
 
-  return data.status;
+  return data.status ?? 'unknown';
 }

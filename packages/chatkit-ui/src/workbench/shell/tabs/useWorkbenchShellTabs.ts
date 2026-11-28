@@ -11,13 +11,13 @@ import { useWorkbenchTabOrder } from '../../useWorkbenchTabOrder';
 import type { useWorkbenchViews } from '../../useWorkbenchViews';
 import type { useWorkbenchViewTabs } from '../../useWorkbenchViewTabs';
 import { MAIN_CHAT_VIEW_KEY } from '../../WorkbenchPanel';
-import { sideChatViewKey, type SideChatSession } from '../../side-chat/types';
+import { sideChatViewKey } from '../../side-chat/types';
+import type { useWorkbenchSideChat } from '../side-chat/useWorkbenchSideChat';
 
 type WorkbenchShellTabsOptions = {
   native: ReturnType<typeof useNativeWorkbench>;
   externalViewOpen: boolean;
-  sideChats: SideChatSession[];
-  onCloseSideChat: (id: string) => void;
+  sideChats: ReturnType<typeof useWorkbenchSideChat>;
   previews: ReturnType<typeof useWorkbenchPages>['previews'];
   storePreview: ReturnType<typeof useWorkbenchPages>['openPreview'];
   scopedViews: ReturnType<typeof useWorkbenchViewTabs>['scopedViews'];
@@ -38,7 +38,6 @@ export function useWorkbenchShellTabs({
   native,
   externalViewOpen,
   sideChats,
-  onCloseSideChat,
   previews,
   storePreview,
   scopedViews,
@@ -58,14 +57,21 @@ export function useWorkbenchShellTabs({
     () => [
       ...native.tabs.map((tab) => tab.key),
       ...(externalViewOpen ? [EXTERNAL_ASSISTANTS_VIEW_KEY] : []),
-      ...sideChats
+      ...sideChats.sessions
         .filter((session) => session.opened)
         .map((session) => sideChatViewKey(session.threadId)),
       ...previews.map((preview) => preview.key),
       ...scopedViews.map((view) => view.key),
       ...newTabs,
     ],
-    [native.tabs, externalViewOpen, sideChats, previews, scopedViews, newTabs],
+    [
+      native.tabs,
+      externalViewOpen,
+      sideChats.sessions,
+      previews,
+      scopedViews,
+      newTabs,
+    ],
   );
 
   const {
@@ -158,12 +164,27 @@ export function useWorkbenchShellTabs({
   const closeSideChatTab = React.useCallback(
     (id: string) => {
       const key = sideChatViewKey(id);
-      onCloseSideChat(id);
-      if (activeViewKey === key) setActiveViewKey(adjacentTab(key));
+      sideChats.closeSideChat(id);
+      setActiveViewKey((active) =>
+        active === key ? adjacentTab(key) : active,
+      );
     },
-    [activeViewKey, adjacentTab, onCloseSideChat, setActiveViewKey],
+    [adjacentTab, sideChats.closeSideChat, setActiveViewKey],
   );
+  const sideChatActions = {
+    ...sideChats,
+    closeSideChat: closeSideChatTab,
+    archiveSideChat: async (id: string, archived = true) => {
+      await sideChats.archiveSideChat(id, archived);
+      if (archived) closeSideChatTab(id);
+    },
+    deleteSideChat: async (id: string) => {
+      await sideChats.deleteSideChat(id);
+      closeSideChatTab(id);
+    },
+  };
   return {
+    sideChatActions,
     tabKeys,
     adjacentTab,
     replaceNewTab,

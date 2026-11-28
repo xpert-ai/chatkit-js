@@ -17,6 +17,8 @@ export type ChatProps = {
   options?: ChatKitOptions | null;
   isClientSecretInitializing?: boolean;
   surface?: 'main' | 'side';
+  /** Side-chat transcript boundary only; never trims the stream or execution context. */
+  inheritedMessagesEndId?: string;
   referenceRequest?: ChatReferenceRequest | null;
   activeProjectId?: string;
   projectSelection?: ProjectSelection;

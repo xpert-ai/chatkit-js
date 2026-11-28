@@ -101,7 +101,7 @@ describe('tool output image display', () => {
     );
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Prepare construction image' }),
+      screen.getByRole('button', { name: /Prepare construction image/ }),
     );
 
     expect(

@@ -2,6 +2,10 @@
 @source "./";
 
 @theme inline {
+  --color-menu-hover: var(
+    --menu-hover,
+    color-mix(in oklab, var(--muted) 60%, transparent)
+  );
   --radius-chat-panel: var(--chat-panel-radius, var(--radius, 0.625rem));
   --radius-chat-item: var(--chat-item-radius, var(--radius, 0.375rem));
   --radius-chat-avatar: var(--chat-avatar-radius, 20%);

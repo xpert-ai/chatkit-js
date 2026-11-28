@@ -141,6 +141,13 @@
         "entryUnavailable": "Remote view content is unavailable.",
         "missingAssistant": "An assistant is required to load views.",
         "retry": "Retry",
+        "tabMenu": {
+            "rename": "Rename",
+            "close": "Close",
+            "closeOthers": "Close other tabs",
+            "closeRight": "Close tabs to the right",
+            "closeAll": "Close all tabs"
+        },
         "sideChat": {
             "title": "Side chat",
             "threadRequired": "Start a conversation before opening a side chat.",
@@ -167,7 +174,16 @@
             "error": "Failed",
             "paused": "Paused",
             "sendToExisting": "Send to existing side chat",
-            "numberedTitle": "Side chat {{number}}"
+            "numberedTitle": "{{title}} {{number}}",
+            "archive": "Archive",
+            "restore": "Restore side chat",
+            "restoreNamed": "Restore side chat: {{title}}",
+            "archived": "Archived ({{count}})",
+            "delete": "Permanently delete…",
+            "deleteTitle": "Permanently delete side chat",
+            "deleteConfirm": "Permanently delete",
+            "deleteDescription": "Delete “{{title}}” and its editing branches? This cannot be undone. The main conversation and other side chats will be kept.",
+            "actionPending": "An action on this side chat is already in progress."
         },
         "errors": {
             "contextKeyRequired": "Context key is required.",
@@ -1157,9 +1173,13 @@
         },
         "toolGroup": {
             "status": {
-                "running": "Processing",
-                "success": "Processed",
-                "fail": "Processing failed"
+                "running": "Running",
+                "success": "Completed",
+                "fail": "Failed",
+                "partial": "Partially failed",
+                "unknown": "Status unknown",
+                "canceled": "Canceled",
+                "paused": "Awaiting input"
             },
             "inputTitle": "Input",
             "outputTitle": "Output",
@@ -1172,6 +1192,10 @@
             "copied": "Copied",
             "separator": ", ",
             "attachments": {
+                "imageCount": "{{count}} images",
+                "imageCount_one": "{{count}} image",
+                "imageCount_other": "{{count}} images",
+                "callDetails": "Parameters and result",
                 "imageTitle": "Image {{index}}",
                 "loading": "Loading {{title}}",
                 "unavailable": "Preview unavailable",
@@ -1225,6 +1249,115 @@
                     "one": "{{count}} tool",
                     "other": "{{count}} tools"
                 }
+            },
+            "paused": "Paused",
+            "failedCount": "{{count}} failed",
+            "callStatus": {
+                "running": "Running",
+                "success": "Completed",
+                "fail": "Failed",
+                "paused": "Paused",
+                "unknown": "Status unknown",
+                "canceled": "Canceled"
+            },
+            "detailsTitle": "Tool call details",
+            "inputUnavailable": "Input was not recorded for this call.",
+            "outputUnavailable": "Output was not recorded for this call.",
+            "outputPending": "Waiting for tool output…",
+            "outputPaused": "Paused; waiting to resume.",
+            "emptyValue": "Empty content",
+            "callCount_one": "{{count}} call",
+            "callCount_other": "{{count}} calls",
+            "activity": {
+                "kinds": {
+                    "image": "Image viewing",
+                    "skill": "Skill reading",
+                    "file": "File operations",
+                    "data": "Data operations",
+                    "browser": "Browser operations",
+                    "command": "Command execution",
+                    "search": "Search",
+                    "content": "Content operations",
+                    "task": "Task operations"
+                },
+                "actions": {
+                    "image": {
+                        "view": "View images"
+                    },
+                    "skill": {
+                        "read": "Read skills"
+                    },
+                    "file": {
+                        "read": "Read files",
+                        "write": "Write files",
+                        "list": "List files",
+                        "search": "Search files",
+                        "delete": "Delete files",
+                        "move": "Move files",
+                        "copy": "Copy files"
+                    },
+                    "data": {
+                        "discover": "Discover data",
+                        "query": "Query data",
+                        "validate": "Validate data",
+                        "register": "Register data"
+                    },
+                    "browser": {
+                        "navigate": "Open pages",
+                        "read": "Read pages",
+                        "interact": "Interact with pages",
+                        "capture": "Capture pages"
+                    },
+                    "command": {
+                        "execute": "Run commands"
+                    },
+                    "search": {
+                        "search": "Search"
+                    },
+                    "content": {
+                        "create": "Create content",
+                        "update": "Update content",
+                        "save": "Save content",
+                        "read": "Read content",
+                        "list": "List content"
+                    },
+                    "task": {
+                        "create": "Create tasks",
+                        "update": "Update tasks",
+                        "read": "Inspect tasks"
+                    }
+                },
+                "unknown": "Tool calls",
+                "mixed": "Tool activity",
+                "other": "other tools",
+                "combine": "{{first}} and {{second}}"
+            },
+            "details": {
+                "close": "Close tool details",
+                "snapshot": "Content snapshot from this call",
+                "unavailable": "Full content unavailable",
+                "retry": "Retry",
+                "loading": "Loading details…",
+                "text": "Text",
+                "items": "{{count}} items",
+                "lines": "{{count}} lines",
+                "bytes": "{{count}} bytes",
+                "copyPreview": "Copy preview",
+                "summaryOnly": "Content is collapsed. Open it when needed.",
+                "truncated": "Showing a partial preview.",
+                "open": "View full content",
+                "pending": "Full content will be available when the call finishes.",
+                "notPublic": "This tool has not shared this content.",
+                "callInfo": "Call information",
+                "range": "{{start}}–{{end}} / {{total}} characters",
+                "restoreSize": "Restore size",
+                "expandSize": "Expand view",
+                "previous": "Previous page",
+                "next": "Next page",
+                "copyFull": "Copy full content",
+                "copying": "Copying…",
+                "copied": "Copied",
+                "error": "Copy failed. Retry"
             }
         }
     },

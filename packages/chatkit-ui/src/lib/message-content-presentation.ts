@@ -1,5 +1,6 @@
 import {
   hasRuntimePresentation,
+  isLegacySkillUsageComponent,
   isFileActivityContent,
   isResourceCardContent,
 } from '@xpert-ai/chatkit-types';
@@ -14,6 +15,7 @@ export function isNonTranscriptMessageContent(value: unknown) {
       value.type === 'agent_event' &&
       'data' in value &&
       hasRuntimePresentation(value.data)) ||
+    isLegacySkillUsageComponent(value) ||
     isResourceCardContent(value) ||
     // File receipts remain in the message and feed the FileActivity projection.
     isFileActivityContent(value) ||

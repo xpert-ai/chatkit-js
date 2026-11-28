@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { File, Globe, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
+import { File, Loader2, MessageSquare, RefreshCw } from 'lucide-react';
 import type {
   XpertExtensionViewManifest,
   XpertWorkspaceFile,
@@ -127,7 +127,10 @@ export function WorkbenchStartPage({
       onSelect: () => onOpenFile?.(file),
     })),
   ];
-  const recentMatches = recent.filter(({ preview }) =>
+  const recentDocuments = recent.filter(
+    ({ preview }) => preview.kind !== 'browser',
+  );
+  const recentMatches = recentDocuments.filter(({ preview }) =>
     `${preview.title} ${'url' in preview ? preview.url : ''}`
       .toLocaleLowerCase(locale)
       .includes(needle),
@@ -137,10 +140,10 @@ export function WorkbenchStartPage({
   );
   const sectionId = React.useId();
   const tile =
-    'flex min-w-0 flex-col items-start gap-[calc(1rem*var(--chat-density-scale,1))] rounded-chat-panel bg-muted/60 p-[calc(1.25rem*var(--chat-density-scale,1))] text-left text-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring';
+    'flex min-w-0 flex-col items-start gap-[calc(0.75rem*var(--chat-density-scale,1))] rounded-chat-panel bg-muted/60 p-[calc(1.25rem*var(--chat-density-scale,1))] text-left text-sm hover:bg-muted disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring';
   return (
-    <div className="h-full overflow-y-auto overscroll-contain">
-      <div className="mx-auto w-full max-w-4xl px-[calc(1.5rem*var(--chat-density-scale,1))] py-[clamp(2rem,12vh,8rem)]">
+    <div className="h-full overflow-y-auto overscroll-contain [container-type:size]">
+      <div className="mx-auto w-[calc(100%-2rem)] max-w-xl pb-[calc(2rem*var(--chat-density-scale,1))] pt-[clamp(3rem,24cqh,14rem)]">
         <WorkbenchAddressBar
           variant="start"
           value={query}
@@ -176,7 +179,7 @@ export function WorkbenchStartPage({
           aria-labelledby={`${sectionId}-tools`}
           className="mt-[calc(2rem*var(--chat-density-scale,1))]"
         >
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-[calc(0.5rem*var(--chat-density-scale,1))] flex items-center justify-between">
             <h2
               id={`${sectionId}-tools`}
               className="text-sm text-muted-foreground"
@@ -201,7 +204,7 @@ export function WorkbenchStartPage({
               <LauncherMenu actions={actions} pins={pins} save={save} />
             </div>
           </div>
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-[calc(0.75rem*var(--chat-density-scale,1))]">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-[calc(0.5rem*var(--chat-density-scale,1))]">
             {shortcuts.map((action) => (
               <button
                 key={action.id}
@@ -211,7 +214,9 @@ export function WorkbenchStartPage({
                 title={action.reason}
                 onClick={action.run}
               >
-                {action.icon}
+                <span className="flex size-[max(1rem,calc(1rem*var(--chat-density-scale,1)))] shrink-0 items-center justify-center [&>*]:max-h-full [&>*]:max-w-full">
+                  {action.icon}
+                </span>
                 <span className="w-full truncate">{action.title}</span>
                 {action.reason && (
                   <span className="text-xs text-muted-foreground">
@@ -222,59 +227,60 @@ export function WorkbenchStartPage({
             ))}
           </div>
         </section>
-        <section aria-labelledby={`${sectionId}-recent`} className="mt-8">
-          <h2
-            id={`${sectionId}-recent`}
-            className="mb-3 text-sm text-muted-foreground"
+        {(recentDocuments.length > 0 || recentFiles.length > 0) && (
+          <section
+            aria-labelledby={`${sectionId}-recent`}
+            className="mt-[calc(2rem*var(--chat-density-scale,1))]"
           >
-            {t('workbench.start.recent')}
-          </h2>
-          {fileMatches.map(({ file }) => (
-            <button
-              key={file.filePath}
-              type="button"
-              className="flex w-full items-center gap-3 rounded-chat-item p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => onOpenFile?.(file)}
+            <h2
+              id={`${sectionId}-recent`}
+              className="mb-3 text-sm text-muted-foreground"
             >
-              <File size={16} className="shrink-0" />
-              <span className="truncate" title={file.filePath}>
-                {file.filePath}
-              </span>
-            </button>
-          ))}
-          {recentMatches.map(({ preview }) => (
-            <button
-              key={preview.key}
-              aria-label={`${preview.title} ${t(preview.kind === 'browser' ? 'workbench.start.website' : 'workbench.start.file')}`}
-              type="button"
-              className="flex w-full items-center gap-3 rounded-chat-item p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => onOpenPreview(preview)}
-            >
-              {preview.kind === 'browser' ? (
-                <Globe size={16} className="shrink-0" />
-              ) : (
+              {t('workbench.start.recent')}
+            </h2>
+            {fileMatches.map(({ file }) => (
+              <button
+                key={file.filePath}
+                type="button"
+                className="flex w-full items-center gap-3 rounded-chat-item p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => onOpenFile?.(file)}
+              >
                 <File size={16} className="shrink-0" />
-              )}
-              <span className="min-w-0 truncate" title={preview.title}>
-                {preview.title}
-              </span>
-              {'url' in preview && (
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {preview.url}
+                <span className="truncate" title={file.filePath}>
+                  {file.filePath}
                 </span>
-              )}
-            </button>
-          ))}
-          {!recentMatches.length && !fileMatches.length && (
-            <p className="text-sm text-muted-foreground">
-              {t(
-                needle
-                  ? 'workbench.start.noResults'
-                  : 'workbench.start.noRecent',
-              )}
-            </p>
-          )}
-        </section>
+              </button>
+            ))}
+            {recentMatches.map(({ preview }) => (
+              <button
+                key={preview.key}
+                aria-label={`${preview.title} ${t('workbench.start.file')}`}
+                type="button"
+                className="flex w-full items-center gap-3 rounded-chat-item p-3 text-left text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => onOpenPreview(preview)}
+              >
+                <File size={16} className="shrink-0" />
+                <span className="min-w-0 truncate" title={preview.title}>
+                  {preview.title}
+                </span>
+                {'url' in preview && (
+                  <span className="min-w-0 truncate text-muted-foreground">
+                    {preview.url}
+                  </span>
+                )}
+              </button>
+            ))}
+            {!recentMatches.length && !fileMatches.length && (
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  needle
+                    ? 'workbench.start.noResults'
+                    : 'workbench.start.noRecent',
+                )}
+              </p>
+            )}
+          </section>
+        )}
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import {
 import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { useTheme } from '../../providers/Theme';
 import { getSurfaceThemeStyle } from '../../lib/theme-surfaces';
+import { cn } from '../../lib/utils';
 import { resolveWorkbenchAddress } from './workbench-address';
 import type { UrlWorkbenchPreview } from '../preview/types';
 
@@ -102,7 +103,7 @@ export function WorkbenchAddressBar({
     kind: entry.kind,
     history: entry.kind === 'website',
     updatedAt: entry.at,
-    icon: entry.kind === 'query' ? <Search size={16} /> : <History size={16} />,
+    icon: entry.kind === 'query' ? <Search size={16} /> : <Globe size={16} />,
     onSelect: () => {
       const resolved = resolveWorkbenchAddress(entry.value, apiUrl);
       if (entry.kind === 'website' && resolved.kind === 'url')
@@ -113,10 +114,11 @@ export function WorkbenchAddressBar({
       }
     },
   }));
+  const recentSuggestions = variant === 'start' && !value.trim();
   const ranked = rankSuggestions(
     [...suggestions, ...remembered],
     value,
-    historyOnly,
+    historyOnly ? 'websites' : recentSuggestions ? 'recent' : 'all',
   );
   const webSearch =
     value.trim() && workbench.searchUrlTemplate?.includes('{query}')
@@ -150,7 +152,8 @@ export function WorkbenchAddressBar({
       icon: <Search size={16} />,
       onSelect: () => openAddress(webSearch.preview),
     });
-  const showSuggestions = expanded;
+  const showSuggestions =
+    expanded && (!recentSuggestions || matches.length > 0);
   const selected = active >= 0 ? matches[active] : undefined;
   React.useEffect(() => {
     if (showSuggestions)
@@ -206,6 +209,79 @@ export function WorkbenchAddressBar({
       setExpanded(true);
     }
   };
+  const pageMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={iconButton}
+          aria-label={t('workbench.browser.more')}
+        >
+          <MoreVertical size={17} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        style={getSurfaceThemeStyle(theme)}
+        className="min-w-48 rounded-[var(--chat-panel-radius,var(--radius))]"
+        onCloseAutoFocus={(event) => {
+          if (focusHistory.current) {
+            event.preventDefault();
+            input.current?.focus();
+            focusHistory.current = false;
+          }
+        }}
+      >
+        {navigation?.onHome && (
+          <DropdownMenuItem onSelect={navigation.onHome}>
+            <House />
+            {t('workbench.browser.home')}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onSelect={() => {
+            focusHistory.current = true;
+            setHistoryOnly(true);
+            setActive(-1);
+            onChange('');
+            setExpanded(true);
+          }}
+        >
+          <History />
+          {t('workbench.browser.history')}
+        </DropdownMenuItem>
+        {history.entries.length > 0 && (
+          <DropdownMenuItem onSelect={history.clear}>
+            <History />
+            {t('workbench.browser.clearHistory')}
+          </DropdownMenuItem>
+        )}
+        {currentUrl && (
+          <>
+            <DropdownMenuItem
+              onSelect={async () => {
+                try {
+                  await navigator.clipboard.writeText(currentUrl);
+                  setCopied(true);
+                } catch {
+                  setError(t('workbench.files.copyFailed'));
+                }
+              }}
+            >
+              <Copy />
+              {t('workbench.browser.copyUrl')}
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href={currentUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink />
+                {t('workbench.preview.openExternal')}
+              </a>
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
   return (
     <div className="relative z-20 shrink-0" style={getSurfaceThemeStyle(theme)}>
       <div
@@ -257,17 +333,29 @@ export function WorkbenchAddressBar({
         <form
           role="search"
           aria-label={t('workbench.start.search')}
-          className="relative mx-1 min-w-0 flex-1"
+          className={`relative min-w-0 flex-1 ${variant === 'compact' ? 'mx-1' : ''}`}
           onSubmit={(event) => {
             event.preventDefault();
             submit();
           }}
         >
           <div
-            className={`flex items-center rounded-chat-panel border ${variant === 'start' ? 'min-h-[calc(3.5rem*var(--chat-density-scale,1))] px-4 shadow-sm border-border' : 'h-9'} ${focused ? 'border-ring bg-muted/30' : 'hover:bg-muted/30'}`}
+            className={cn(
+              'flex items-center rounded-chat-panel border',
+              variant === 'start'
+                ? 'min-h-[max(2.75rem,calc(3rem*var(--chat-density-scale,1)))] gap-[calc(0.5rem*var(--chat-density-scale,1))] px-[calc(1rem*var(--chat-density-scale,1))] bg-background shadow-workbench-search transition-colors'
+                : 'h-9',
+              variant === 'start'
+                ? focused
+                  ? 'border-border/80'
+                  : 'border-border/50 hover:border-border/70'
+                : focused
+                  ? 'border-ring bg-muted/30'
+                  : 'hover:bg-muted/30',
+            )}
           >
             {variant === 'start' && (
-              <Search size={20} className="shrink-0 text-muted-foreground" />
+              <Search className="size-[max(1rem,calc(1rem*var(--chat-density-scale,1)))] shrink-0 text-muted-foreground" />
             )}
             <Input
               ref={input}
@@ -284,12 +372,14 @@ export function WorkbenchAddressBar({
               autoComplete="off"
               spellCheck={false}
               value={value}
-              className={`h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 ${focused || variant === 'start' ? 'text-left' : 'text-center'}`}
+              className={`h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 ${focused || variant === 'start' ? 'text-left' : 'text-center'}`}
               onFocus={(event) => {
                 setFocused(true);
                 setExpanded(true);
+                setActive(-1);
                 event.target.select();
               }}
+              onClick={() => setExpanded(true)}
               onBlur={() => {
                 setFocused(false);
                 setExpanded(false);
@@ -346,7 +436,7 @@ export function WorkbenchAddressBar({
               id={id}
               role="listbox"
               aria-label={t('workbench.browser.suggestions')}
-              className="absolute inset-x-0 top-full mt-1 max-h-80 overflow-y-auto rounded-[var(--chat-panel-radius,var(--radius))] border bg-popover p-1.5 text-popover-foreground shadow-lg"
+              className="absolute inset-x-0 top-full mt-2 max-h-[min(20rem,45dvh)] overflow-y-auto rounded-[var(--chat-panel-radius,var(--radius))] border bg-popover p-1.5 text-popover-foreground shadow-lg"
             >
               {!matches.length && address.kind === 'search' && (
                 <p
@@ -367,7 +457,7 @@ export function WorkbenchAddressBar({
                   role="option"
                   aria-selected={index === active}
                   aria-disabled={item.disabled || undefined}
-                  className={`flex cursor-pointer items-center gap-3 rounded-[var(--chat-item-radius,var(--radius))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.625rem*var(--chat-density-scale,1))] text-sm ${index === active ? 'bg-muted' : 'hover:bg-muted/60'}`}
+                  className={`flex cursor-pointer items-center gap-3 rounded-[var(--chat-item-radius,var(--radius))] px-[calc(0.75rem*var(--chat-density-scale,1))] py-[calc(0.5rem*var(--chat-density-scale,1))] text-sm ${index === active ? 'bg-muted' : 'hover:bg-muted/60'}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     if (item.disabled) return;
@@ -381,105 +471,52 @@ export function WorkbenchAddressBar({
                     item.onSelect();
                   }}
                 >
-                  <span className="shrink-0 text-muted-foreground">
+                  <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>*]:max-h-full [&>*]:max-w-full">
                     {item.icon ?? <Globe size={16} />}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1',
+                      recentSuggestions && 'flex items-baseline gap-2',
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'block truncate font-medium',
+                        recentSuggestions &&
+                          item.detail &&
+                          'max-w-[60%] shrink-0',
+                      )}
+                    >
                       <SearchMatch text={item.title} query={value} />
                     </span>
                     {item.detail && (
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span
+                        className={cn(
+                          'block truncate text-muted-foreground',
+                          recentSuggestions ? 'text-sm' : 'text-xs',
+                        )}
+                      >
+                        {recentSuggestions && '— '}
                         {item.detail}
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {item.opened
-                      ? t('workbench.browser.switchTab')
-                      : item.kind
-                        ? t(`workbench.browser.kind.${item.kind}`)
-                        : ''}
-                  </span>
+                  {!recentSuggestions && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {item.opened
+                        ? t('workbench.browser.switchTab')
+                        : item.kind
+                          ? t(`workbench.browser.kind.${item.kind}`)
+                          : ''}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </form>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={iconButton}
-              aria-label={t('workbench.browser.more')}
-            >
-              <MoreVertical size={17} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            style={getSurfaceThemeStyle(theme)}
-            className="min-w-48 rounded-[var(--chat-panel-radius,var(--radius))]"
-            onCloseAutoFocus={(event) => {
-              if (focusHistory.current) {
-                event.preventDefault();
-                input.current?.focus();
-                focusHistory.current = false;
-              }
-            }}
-          >
-            {navigation?.onHome && (
-              <DropdownMenuItem onSelect={navigation.onHome}>
-                <House />
-                {t('workbench.browser.home')}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              onSelect={() => {
-                focusHistory.current = true;
-                setHistoryOnly(true);
-                setActive(-1);
-                onChange('');
-                setExpanded(true);
-              }}
-            >
-              <History />
-              {t('workbench.browser.history')}
-            </DropdownMenuItem>
-            {history.entries.length > 0 && (
-              <DropdownMenuItem onSelect={history.clear}>
-                <History />
-                {t('workbench.browser.clearHistory')}
-              </DropdownMenuItem>
-            )}
-            {currentUrl && (
-              <>
-                <DropdownMenuItem
-                  onSelect={async () => {
-                    try {
-                      await navigator.clipboard.writeText(currentUrl);
-                      setCopied(true);
-                    } catch {
-                      setError(t('workbench.files.copyFailed'));
-                    }
-                  }}
-                >
-                  <Copy />
-                  {t('workbench.browser.copyUrl')}
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a
-                    href={currentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink />
-                    {t('workbench.preview.openExternal')}
-                  </a>
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {variant !== 'start' && pageMenu}
       </div>
       {error && (
         <p role="alert" className="border-b px-4 py-2 text-xs text-destructive">

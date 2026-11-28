@@ -4,12 +4,22 @@ import * as React from 'react';
 import { useChatkitTranslation } from '../../../i18n/useChatkitTranslation';
 import { cn } from '../../../lib/utils';
 import {
-  getToolGroupCategoryCounts,
-  TOOL_GROUP_CATEGORY_ORDER,
-} from './tool-group/grouping/categories';
+  distinctToolCalls,
+  toolCallIdentity,
+  toolGroupActivity,
+  toolGroupActivityTitle,
+} from './tool-group/grouping/activities';
+import {
+  MixedToolActivityIcon,
+  UnknownToolActivityIcon,
+  toolActivityIcons,
+} from './tool-group/icons/activity-icons';
 import { ToolCallRow } from './tool-group/rows/ToolCallRow';
-import { toolStatusConfig } from './tool-group/status/step-status';
+import { CommandToolIcon } from './tool-group/icons/CommandToolIcon';
 import type { ToolStepRunState } from './tool-group/types';
+import { getToolGroupStatus } from './tool-group/status/group-status';
+import { useToolDisclosure } from './tool-group/status/useToolDisclosure';
+import { getToolStepData } from './tool-group/status/step-status';
 
 export { getToolActivityLabel } from './tool-group/grouping/categories';
 export { buildToolComponentRenderUnits } from './tool-group/grouping/render-units';
@@ -25,7 +35,7 @@ export {
 } from './tool-group/types';
 
 export function ToolComponentGroup({
-  items,
+  items: updates,
   hasFollowingItem,
   isThreadRunning,
   isThreadPaused,
@@ -40,64 +50,111 @@ export function ToolComponentGroup({
   apiUrl?: string;
 }) {
   const { t } = useChatkitTranslation();
+  const items = React.useMemo(() => distinctToolCalls(updates), [updates]);
   const contentId = React.useId();
-  const [isExpanded, setIsExpanded] = React.useState(!hasFollowingItem);
-  const categoryCounts = getToolGroupCategoryCounts(items);
-  const categorySummary = TOOL_GROUP_CATEGORY_ORDER.flatMap((category) => {
-    const count = categoryCounts[category] ?? 0;
-    if (count === 0) return [];
-
-    return [
-      t(
-        `message.toolGroup.categories.${category}.${count === 1 ? 'one' : 'other'}`,
-        { count },
-      ),
-    ];
-  }).join(t('message.toolGroup.separator'));
-  const summary = `${t('message.toolGroup.status.success')} ${categorySummary}`;
-  const config = toolStatusConfig.success;
-  const StatusIcon = config.icon;
-
-  React.useEffect(() => {
-    setIsExpanded(!hasFollowingItem);
-  }, [hasFollowingItem]);
+  const { status, paused, failedCount } = getToolGroupStatus(
+    items,
+    isThreadRunning,
+    isThreadPaused,
+  );
+  const [isExpanded, toggleExpanded, setExpanded] = useToolDisclosure(
+    !hasFollowingItem || failedCount > 0,
+  );
+  const retainGroup = React.useCallback(() => setExpanded(true), [setExpanded]);
+  const activity = toolGroupActivity(items);
+  const summary = toolGroupActivityTitle(activity, t);
+  const imageCount = new Set(
+    items.flatMap((item) => {
+      const data = getToolStepData(item);
+      return data.status === 'success' && !data.error
+        ? (data.presentation?.images ?? []).map(
+            (image) =>
+              `${image.artifactId}:${image.artifactVersionId}:${image.sha256}`,
+          )
+        : [];
+    }),
+  ).size;
+  const ActivityIcon = activity.kind
+    ? toolActivityIcons[activity.kind]
+    : activity.kinds.length
+      ? MixedToolActivityIcon
+      : UnknownToolActivityIcon;
 
   return (
-    <div className="px-1 py-1">
+    <div data-tool-timeline className="px-1 py-1">
       <button
         type="button"
-        className="group/tool-group inline-flex max-w-full items-center gap-1 text-left opacity-60 hover:opacity-100 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group/tool-group inline-flex min-h-7 max-w-full items-center gap-2 rounded-chat-item text-left text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={isExpanded}
         aria-controls={contentId}
-        onClick={() => setIsExpanded((prev) => !prev)}
+        onClick={toggleExpanded}
       >
-        <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
-          <StatusIcon className={cn('h-4 w-4 shrink-0', config.iconClass)} />
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-muted-foreground">
+          {activity.kind === 'command' ? (
+            <CommandToolIcon
+              className="h-4 w-4 shrink-0"
+              animated={status === 'running' && !paused && !isExpanded}
+            />
+          ) : (
+            <ActivityIcon aria-hidden="true" className="h-4 w-4 shrink-0" />
+          )}
           <span className="truncate">{summary}</span>
+          <span className="shrink-0 text-xs">
+            · {t('message.toolGroup.callCount', { count: items.length })}
+          </span>
+          {imageCount > 0 && (
+            <span className="shrink-0 text-xs">
+              ·{' '}
+              {t('message.toolGroup.attachments.imageCount', {
+                count: imageCount,
+              })}
+            </span>
+          )}
+          <span
+            className={cn(
+              'shrink-0 text-xs',
+              status === 'running' && 'ck-tool-call-running-text',
+            )}
+          >
+            {t(
+              paused
+                ? 'message.toolGroup.paused'
+                : `message.toolGroup.status.${status}`,
+            )}
+          </span>
+          {failedCount > 0 && (
+            <span className="shrink-0 text-xs text-destructive">
+              {t('message.toolGroup.failedCount', { count: failedCount })}
+            </span>
+          )}
         </span>
         <ChevronRight
           aria-hidden="true"
           className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/tool-group:opacity-100 group-focus-visible/tool-group:opacity-100',
-            isExpanded && 'rotate-90 opacity-100',
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none',
+            isExpanded && 'rotate-90',
           )}
         />
       </button>
 
-      {isExpanded && (
-        <ul id={contentId} className="mt-2 space-y-1.5 overflow-y-auto pr-1">
-          {items.map((item, index) => (
-            <ToolCallRow
-              key={item.id ?? `tool-item-${index}`}
-              content={item}
-              isThreadRunning={isThreadRunning}
-              isThreadPaused={isThreadPaused}
-              organizationId={organizationId}
-              apiUrl={apiUrl}
-            />
-          ))}
-        </ul>
-      )}
+      <ul
+        id={contentId}
+        hidden={!isExpanded}
+        className="ml-2 mt-2 space-y-2 border-l border-border/70 py-1 pl-4 in-data-[density=compact]:space-y-1 in-data-[density=compact]:pl-3 in-data-[density=spacious]:space-y-3"
+      >
+        {items.map((item, index) => (
+          <ToolCallRow
+            key={toolCallIdentity(item) || `tool-item-${index}`}
+            content={item}
+            isThreadRunning={isThreadRunning}
+            isThreadPaused={isThreadPaused}
+            organizationId={organizationId}
+            apiUrl={apiUrl}
+            onInteract={retainGroup}
+            isGroupExpanded={isExpanded}
+          />
+        ))}
+      </ul>
     </div>
   );
 }

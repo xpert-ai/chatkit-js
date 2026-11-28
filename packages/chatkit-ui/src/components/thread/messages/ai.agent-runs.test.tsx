@@ -161,7 +161,7 @@ describe('AssistantMessage tool components', () => {
     expect(screen.getByText('A found the source.')).toBeInTheDocument();
     expect(screen.getByText('A finished.')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Processed 1 file/ }),
+      screen.getByRole('button', { name: /Tool calls.*1 call/ }),
     ).toBeInTheDocument();
   });
 
@@ -496,7 +496,7 @@ describe('AssistantMessage tool components', () => {
       'true',
     );
     expect(
-      screen.getByRole('button', { name: /Processed 1 file, 1 command/ }),
+      screen.getByRole('button', { name: /Tool calls.*2 calls.*Processed/ }),
     ).toBeInTheDocument();
   });
 

@@ -32,6 +32,7 @@ type Attempt = {
   requestId: string;
   pending?: Promise<string>;
   automaticTitle?: boolean;
+  inheritedMessagesEndId?: string;
   references: ChatKitReference[];
 };
 
@@ -75,11 +76,23 @@ export function useWorkbenchSideChat({
     typeof generation.current | null
   >(null);
   const attempts = React.useRef(new Map<string, Attempt>());
+  const mutationVersion = React.useRef(0);
+  const pendingMutations = React.useRef(new Set<string>());
+  const [mutatingIds, setMutatingIds] = React.useState<string[]>([]);
   const sessions =
     state.scope === scope && sideChatEnabled ? state.sessions : [];
   const current = React.useRef(sessions);
   current.current = sessions;
   const [revision, reload] = React.useReducer((n: number) => n + 1, 0);
+  const defaultTitle = React.useCallback(
+    (number: number) =>
+      t('workbench.sideChat.numberedTitle', {
+        title:
+          stream.conversation?.title?.trim() || t('workbench.sideChat.title'),
+        number,
+      }),
+    [stream.conversation?.title, t],
+  );
   const update = React.useCallback(
     (change: (sessions: SideChatSession[]) => SideChatSession[]) => {
       setState((old) =>
@@ -108,6 +121,7 @@ export function useWorkbenchSideChat({
     async function refresh() {
       if (refreshing) return;
       refreshing = true;
+      const version = mutationVersion.current;
       const requestedIds = new Set(
         current.current.map((session) => session.threadId),
       );
@@ -118,12 +132,23 @@ export function useWorkbenchSideChat({
         );
         const records = sideChatRecords(
           threads,
-          t('workbench.sideChat.title'),
-          new Map(
-            current.current.map((session) => [session.threadId, session.title]),
-          ),
+          defaultTitle,
+          new Map([
+            ...Object.entries(saved.titles),
+            ...current.current.map((session): [string, string] => [
+              session.threadId,
+              session.title,
+            ]),
+          ]),
+          new Map([
+            ...Object.entries(saved.sequences),
+            ...current.current.flatMap((session): [string, number][] =>
+              session.sequence ? [[session.threadId, session.sequence]] : [],
+            ),
+          ]),
         );
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || version !== mutationVersion.current)
+          return;
         setState((old) => {
           const previous = old.scope === scope ? old.sessions : [];
           const byId = new Map(
@@ -140,9 +165,11 @@ export function useWorkbenchSideChat({
                 existing?.selectedThreadId ?? saved.selected[record.threadId],
               ),
               opened:
-                existing?.opened ?? saved.opened.includes(record.threadId),
+                !record.archived &&
+                (existing?.opened ?? saved.opened.includes(record.threadId)),
               visited:
-                existing?.visited ?? saved.opened.includes(record.threadId),
+                !record.archived &&
+                (existing?.visited ?? saved.opened.includes(record.threadId)),
             };
           });
           // A creation may finish after this list request started.
@@ -164,7 +191,7 @@ export function useWorkbenchSideChat({
         });
         if (
           saved.active &&
-          records.some((r) => r.threadId === saved.active) &&
+          records.some((r) => r.threadId === saved.active && !r.archived) &&
           !current.current.length
         )
           setActiveViewKey((key) => key ?? sideChatViewKey(saved.active!));
@@ -202,6 +229,7 @@ export function useWorkbenchSideChat({
     stream.client,
     stream.conversationId,
     revision,
+    defaultTitle,
     t,
   ]);
 
@@ -217,6 +245,15 @@ export function useWorkbenchSideChat({
           .filter((s) => s.selectedThreadId)
           .map((s) => [s.threadId, s.selectedThreadId!]),
       ),
+      Object.fromEntries(sessions.map((s) => [s.threadId, s.title])),
+      {
+        ...readSideChatLayout(scope).sequences,
+        ...Object.fromEntries(
+          sessions.flatMap((s) =>
+            s.sequence ? [[s.threadId, s.sequence]] : [],
+          ),
+        ),
+      },
     );
   }, [scope, state.ready, sessions, activeViewKey]);
 
@@ -224,7 +261,9 @@ export function useWorkbenchSideChat({
     async (id: string, reference?: ChatKitReference) => {
       if (
         !sideChatEnabled ||
-        !current.current.some((session) => session.threadId === id)
+        !current.current.some(
+          (session) => session.threadId === id && !session.archived,
+        )
       )
         return;
       update((list) =>
@@ -275,16 +314,13 @@ export function useWorkbenchSideChat({
         return;
       }
       setOpeningContext(context);
-      const title = reference
-        ? (reference.type === 'thread'
-            ? reference.label || reference.threadId
-            : reference.text
-          )
-            .trim()
-            .slice(0, 64)
-        : t('workbench.sideChat.numberedTitle', {
-            number: current.current.length + 1,
-          });
+      const sequence =
+        Math.max(
+          0,
+          ...Object.values(readSideChatLayout(scope).sequences),
+          ...current.current.map((s) => s.sequence ?? 0),
+        ) + 1;
+      const title = defaultTitle(sequence);
       const request = attempt;
       request.pending = stream.client.threads
         .copy(source, {
@@ -293,6 +329,10 @@ export function useWorkbenchSideChat({
         })
         .then((thread) => {
           request.automaticTitle = thread.metadata?.titleSource === 'default';
+          request.inheritedMessagesEndId = sideChatRecords(
+            [thread],
+            title,
+          )[0]?.inheritedMessagesEndId;
           return thread.thread_id;
         });
       try {
@@ -328,7 +368,9 @@ export function useWorkbenchSideChat({
             {
               sourceThreadId: source,
               threadId: id,
+              inheritedMessagesEndId: request.inheritedMessagesEndId,
               title,
+              sequence,
               status: 'idle',
               opened: true,
               visited: true,
@@ -359,6 +401,7 @@ export function useWorkbenchSideChat({
       stream.client,
       stream.threadId,
       stream.conversationId,
+      defaultTitle,
       sideChatEnabled,
       setOpen,
       t,
@@ -406,6 +449,58 @@ export function useWorkbenchSideChat({
     },
     [update],
   );
+  const mutateSideChat = React.useCallback(
+    async (id: string, archived?: boolean) => {
+      if (!current.current.some((session) => session.threadId === id)) return;
+      const context = generation.current;
+      const key = JSON.stringify([scope, id]);
+      if (pendingMutations.current.has(key))
+        throw new Error(t('workbench.sideChat.actionPending'));
+      pendingMutations.current.add(key);
+      setMutatingIds((ids) => [...ids, id]);
+      mutationVersion.current++;
+      try {
+        if (archived === undefined) await stream.client.threads.delete(id);
+        else await stream.client.threads.update(id, { metadata: { archived } });
+        if (!alive.current || generation.current !== context) return;
+        mutationVersion.current++;
+        update((list) =>
+          archived === undefined
+            ? list.filter((session) => session.threadId !== id)
+            : list.map((session) =>
+                session.threadId === id
+                  ? {
+                      ...session,
+                      archived,
+                      opened: !archived,
+                      visited: !archived,
+                    }
+                  : session,
+              ),
+        );
+        if (archived === false) {
+          setActiveViewKey(sideChatViewKey(id));
+          setOpen(true);
+        }
+        reload();
+      } catch (error) {
+        throw sideChatError(error);
+      } finally {
+        pendingMutations.current.delete(key);
+        if (alive.current)
+          setMutatingIds((ids) => ids.filter((item) => item !== id));
+      }
+    },
+    [scope, stream.client, update, setActiveViewKey, setOpen, t],
+  );
+  const archiveSideChat = React.useCallback(
+    (id: string, archived = true) => mutateSideChat(id, archived),
+    [mutateSideChat],
+  );
+  const deleteSideChat = React.useCallback(
+    (id: string) => mutateSideChat(id),
+    [mutateSideChat],
+  );
   return {
     sessions,
     opening: openingContext === generation.current,
@@ -418,6 +513,9 @@ export function useWorkbenchSideChat({
     openSideChat,
     closeSideChat,
     renameSideChat,
+    archiveSideChat,
+    deleteSideChat,
+    mutatingIds,
     updateStatus,
     reload,
   };

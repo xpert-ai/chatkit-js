@@ -1,3 +1,5 @@
+import { WorkbenchTabMenuProvider } from '../../../workbench/WorkbenchTabMenu';
+import { SideChatHeaderContext } from '../../../workbench/side-chat/SideChatHeaderActions';
 import {
   act,
   fireEvent,
@@ -16,6 +18,53 @@ import {
 
 describe('Chat header identity', () => {
   setupChatTest();
+
+  it('shows side-chat summary and its own menu without main conversation controls', async () => {
+    mocks.stream.threadId = 'side';
+    mocks.stream.conversationId = 'conversation';
+    const rename = vi.fn();
+    const view = render(
+      <WorkbenchTabMenuProvider
+        tabs={[
+          {
+            key: 'side',
+            close: vi.fn(),
+            actions: [{ id: 'rename', label: 'Rename side chat', run: rename }],
+          },
+        ]}
+        onError={vi.fn()}
+      >
+        <SideChatHeaderContext.Provider value="side">
+          <Chat
+            surface="side"
+            clientSecret="secret"
+            options={{
+              ...baseChatOptions,
+              header: { enabled: true },
+              taskSummary: { enabled: true },
+            }}
+          />
+        </SideChatHeaderContext.Provider>
+      </WorkbenchTabMenuProvider>,
+    );
+    await act(async () => {});
+    expect(
+      screen.getByRole('button', { name: 'taskSummary.open' }),
+    ).toBeVisible();
+    expect(
+      view.container.querySelector(
+        '[data-slot="chatkit-conversation-heading"]',
+      ),
+    ).toBeNull();
+    fireEvent.keyDown(
+      screen.getByRole('button', { name: 'More actions' }),
+      { key: 'Enter' },
+    );
+    fireEvent.click(
+      await screen.findByRole('menuitem', { name: 'Rename side chat' }),
+    );
+    await waitFor(() => expect(rename).toHaveBeenCalledOnce());
+  });
 
   it('keeps the active conversation title beside New chat when identity is hidden', async () => {
     const title = 'A long current conversation title';

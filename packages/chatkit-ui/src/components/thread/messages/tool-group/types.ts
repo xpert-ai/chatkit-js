@@ -7,7 +7,7 @@ import type { ComponentMessagePartialStepData } from '../component-message-rende
 /** Partial step data: during streaming, fields arrive incrementally */
 export type PartialStepData = ComponentMessagePartialStepData;
 
-export type StepStatus = NonNullable<PartialStepData['status']>;
+export type StepStatus = NonNullable<PartialStepData['status']> | 'unknown';
 
 export type ToolStepRunState = boolean | undefined;
 

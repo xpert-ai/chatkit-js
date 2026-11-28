@@ -12,6 +12,7 @@ export type WorkbenchRuntime = Pick<
   | 'organizationId'
   | 'threadId'
   | 'conversationId'
+  | 'conversation'
   | 'messages'
   | 'runtimeScopeReady'
   | 'historyLoad'

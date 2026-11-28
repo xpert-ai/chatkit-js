@@ -11,7 +11,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../providers/Theme';
 import { WorkbenchAddressBar } from './WorkbenchAddressBar';
 
-function setup(currentUrl?: string, searchUrlTemplate?: string) {
+function setup(
+  currentUrl?: string,
+  searchUrlTemplate?: string,
+  variant: 'compact' | 'start' = 'compact',
+) {
   const onOpen = vi.fn();
   const onReload = vi.fn();
   const onSelect = [vi.fn(), vi.fn(), vi.fn()];
@@ -19,6 +23,7 @@ function setup(currentUrl?: string, searchUrlTemplate?: string) {
     const [value, setValue] = React.useState(currentUrl ?? '');
     return (
       <WorkbenchAddressBar
+        variant={variant}
         value={value}
         onChange={setValue}
         apiUrl="/api/ai"
@@ -171,4 +176,44 @@ it('makes explicit URL and web search actions keyboard selectable without submit
   expect(onOpen).toHaveBeenLastCalledWith(
     expect.objectContaining({ url: 'https://example.org/new' }),
   );
+});
+
+it('opens recent websites on start-page focus and searches all suggestions when typing', () => {
+  const { input, onSelect } = setup(undefined, undefined, 'start');
+  expect(
+    screen.queryByRole('button', { name: 'Page options' }),
+  ).not.toBeInTheDocument();
+  fireEvent.focus(input);
+  expect(screen.getAllByRole('option')).toHaveLength(2);
+  expect(
+    screen.queryByRole('option', { name: /Project notes/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.keyDown(input, { key: 'ArrowDown' });
+  expect(screen.getByRole('option', { selected: true })).toHaveTextContent(
+    'Alpha',
+  );
+  fireEvent.submit(screen.getByRole('search'));
+  expect(onSelect[0]).toHaveBeenCalledOnce();
+  fireEvent.change(input, { target: { value: 'Beta' } });
+  expect(screen.getAllByRole('option')).toHaveLength(1);
+  fireEvent.change(input, { target: { value: '' } });
+  expect(screen.getAllByRole('option')).toHaveLength(2);
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  fireEvent.click(input);
+  expect(screen.getAllByRole('option')).toHaveLength(2);
+});
+
+it('includes remembered queries alongside recent websites and restores a selected query', () => {
+  const { input, onSelect, onOpen } = setup(undefined, undefined, 'start');
+  fireEvent.change(input, { target: { value: 'Project' } });
+  fireEvent.keyDown(input, { key: 'ArrowDown' });
+  fireEvent.submit(screen.getByRole('search'));
+  expect(onSelect[2]).toHaveBeenCalledOnce();
+  fireEvent.change(input, { target: { value: '' } });
+  expect(screen.getAllByRole('option')).toHaveLength(3);
+  fireEvent.click(screen.getByRole('option', { name: 'Project' }));
+  expect(input).toHaveValue('Project');
+  expect(screen.getByRole('option', { name: /Project notes/ })).toBeVisible();
+  expect(onOpen).not.toHaveBeenCalled();
 });

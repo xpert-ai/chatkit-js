@@ -48,6 +48,7 @@ type ChatTaskSummaryOptions = Pick<
     chatColumnRef: React.RefObject<HTMLDivElement | null>;
     layoutMaxWidth: string | number | undefined;
     characterPresentation?: boolean;
+    surface?: 'main' | 'side';
   };
 
 export function useChatTaskSummary({
@@ -66,6 +67,7 @@ export function useChatTaskSummary({
   layoutMaxWidth,
   focusComposerAt,
   characterPresentation = false,
+  surface = 'main',
 }: ChatTaskSummaryOptions) {
   const workbench = useWorkbench();
   const sideChats = workbench.sideChatEnabled ? workbench.sideChats : undefined;
@@ -209,7 +211,7 @@ export function useChatTaskSummary({
       taskSummaryEnabled &&
       taskSummaryOpen &&
       stream.runtimeScopeReady !== false,
-    conversationId: taskSummaryConversationId,
+    conversationId: surface === 'side' ? null : taskSummaryConversationId,
     client: stream.client,
     live: liveTaskSummary,
     refreshVersion: stream.historyMessageLoadVersion,

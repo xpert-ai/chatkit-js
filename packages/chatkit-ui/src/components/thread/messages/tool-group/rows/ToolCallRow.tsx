@@ -3,15 +3,13 @@ import { ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { useChatkitTranslation } from '../../../../../i18n/useChatkitTranslation';
 import { cn } from '../../../../../lib/utils';
-import {
-  getComponentMessageRenderer,
-  hasComponentMessageRendererDetails,
-} from '../../component-message-renderers';
+import { getComponentMessageRenderer } from '../../component-message-renderers';
 import {
   getSandboxShellActivityLabel,
   isSandboxShellStep,
 } from '../../sandbox-shell-tool-call';
 import { ToolCallDetails } from '../details/ToolCallDetails';
+import { ToolImageDetails } from '../details/ToolImageDetails';
 import { getToolActivityLabel } from '../grouping/categories';
 import { ToolStepIcon } from '../icons/ToolStepIcon';
 import {
@@ -19,6 +17,7 @@ import {
   getToolStepData,
   isPausedToolStep,
 } from '../status/step-status';
+import { useToolDisclosure } from '../status/useToolDisclosure';
 import { useToolStepDurationLabel } from '../status/useToolStepDuration';
 import type { ToolStepRunState } from '../types';
 
@@ -31,6 +30,8 @@ type ToolCallRowProps = {
   isThreadPaused?: boolean;
   organizationId?: string;
   apiUrl?: string;
+  onInteract?: () => void;
+  isGroupExpanded?: boolean;
 };
 
 function areToolCallRowPropsEqual(
@@ -43,7 +44,9 @@ function areToolCallRowPropsEqual(
     previous.isThreadRunning === next.isThreadRunning &&
     previous.isThreadPaused === next.isThreadPaused &&
     previous.organizationId === next.organizationId &&
-    previous.apiUrl === next.apiUrl
+    previous.apiUrl === next.apiUrl &&
+    previous.onInteract === next.onInteract &&
+    previous.isGroupExpanded === next.isGroupExpanded
   );
 }
 
@@ -53,6 +56,8 @@ function ToolCallRowContent({
   isThreadPaused,
   organizationId,
   apiUrl,
+  onInteract,
+  isGroupExpanded = true,
 }: ToolCallRowProps) {
   const { i18n, t } = useChatkitTranslation();
   const data = getToolStepData(content);
@@ -66,109 +71,127 @@ function ToolCallRowContent({
   const isSandboxShell = isSandboxShellStep(data);
   const detailsId = React.useId();
   const renderer = getComponentMessageRenderer(content, data);
-  const label = isSandboxShell
-    ? getSandboxShellActivityLabel(data, status, i18n.language, t)
-    : (renderer?.getTitle?.(content, data, i18n.language) ??
-      getToolActivityLabel(content, i18n.language, status));
+  const label =
+    isSandboxShell && !data.presentation
+      ? getSandboxShellActivityLabel(
+          data,
+          status === 'unknown' ? undefined : status,
+          i18n.language,
+          t,
+        )
+      : (renderer?.getTitle?.(content, data, i18n.language) ??
+        getToolActivityLabel(content, i18n.language, status));
 
-  const hasCustomDetails =
-    data.error === undefined &&
-    hasComponentMessageRendererDetails(renderer, content, data);
-  const hasDetails =
-    isSandboxShell ||
-    data.input !== undefined ||
-    data.error !== undefined ||
-    data.output !== undefined ||
-    data.artifact !== undefined ||
-    hasCustomDetails;
   const durationLabel = useToolStepDurationLabel(data, {
     status,
     isPaused,
   });
-  const [isExpanded, setIsExpanded] = React.useState(false);
-
-  React.useEffect(() => {
-    if (
-      status === 'running' &&
-      (data.output !== undefined || data.artifact !== undefined)
-    ) {
-      setIsExpanded(true);
-    }
-  }, [data.artifact, data.output, status]);
+  const images =
+    status === 'success' && !hasError ? data.presentation?.images : undefined;
+  const [isExpanded, toggleExpanded] = useToolDisclosure(
+    hasError || Boolean(images?.length),
+  );
+  const stateLabel = t(
+    `message.toolGroup.callStatus.${isPaused ? 'paused' : hasError ? 'fail' : (status ?? 'running')}`,
+  );
+  const inputPreview = data.presentation?.target;
 
   return (
     <li className="ck-tool-call-row-enter min-w-0">
       <button
         type="button"
         className={cn(
-          'group/tool-call flex w-full min-w-0 items-center gap-2 text-left text-muted-foreground',
+          'group/tool-call flex min-h-6 w-full min-w-0 items-center gap-2 rounded-chat-item text-left text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           TOOL_CALL_ROW_TEXT_CLASS,
-          hasDetails && 'cursor-pointer hover:text-foreground',
           hasError &&
             !isSandboxShell &&
             'text-destructive hover:text-destructive',
         )}
-        aria-expanded={hasDetails ? isExpanded : undefined}
-        aria-controls={hasDetails ? detailsId : undefined}
-        disabled={!hasDetails}
+        aria-expanded={isExpanded}
+        aria-controls={detailsId}
         onClick={() => {
-          if (hasDetails) setIsExpanded((prev) => !prev);
+          toggleExpanded();
+          onInteract?.();
         }}
       >
         {status ? (
           <ToolStepIcon
             data={data}
+            animated={
+              status === 'running' && !isPaused && !hasError && isGroupExpanded
+            }
             organizationId={organizationId}
             apiUrl={apiUrl}
             className={cn(
               'h-3.5 w-3.5 shrink-0',
-              hasError && !isSandboxShell
-                ? 'text-destructive'
-                : 'text-muted-foreground',
+              hasError ? 'text-destructive' : 'text-muted-foreground',
             )}
           />
         ) : (
           <span className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         )}
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span
+            className={cn(
+              'min-w-0 truncate',
+              status === 'running' && !isPaused && 'ck-tool-call-running-text',
+            )}
+            title={label}
+          >
+            {label}
+          </span>
+          {inputPreview && (
+            <code className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+              {inputPreview}
+            </code>
+          )}
+        </span>
         <span
           className={cn(
-            'min-w-0 truncate',
-            status === 'running' && !isPaused && 'ck-tool-call-running-text',
+            'ml-auto shrink-0 text-[11px]',
+            hasError ? 'text-destructive' : 'text-muted-foreground',
           )}
-          title={label}
         >
-          {label}
+          {stateLabel}
         </span>
-        {data.toolPresentation === 'redacted' &&
-        data.tool &&
-        data.tool !== label ? (
-          <code
-            className="min-w-0 truncate text-[11px] text-muted-foreground"
-            title={data.tool}
-          >
-            {data.tool}
-          </code>
-        ) : null}
         {durationLabel ? (
           <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/80">
             {durationLabel}
           </span>
         ) : null}
-        {hasDetails ? (
-          <ChevronRight
-            aria-hidden="true"
-            className={cn(
-              'h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] group-hover/tool-call:opacity-100 group-focus-visible/tool-call:opacity-100',
-              isExpanded && 'rotate-90',
-            )}
-          />
-        ) : null}
+        <ChevronRight
+          aria-hidden="true"
+          className={cn(
+            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none',
+            isExpanded && 'rotate-90',
+          )}
+        />
       </button>
-      {hasDetails && isExpanded ? (
-        <div id={detailsId}>
-          <ToolCallDetails content={content} isThreadPaused={isThreadPaused} />
-        </div>
-      ) : null}
+      <div
+        id={detailsId}
+        hidden={!isExpanded}
+        role="region"
+        aria-label={t('message.toolGroup.detailsTitle')}
+        tabIndex={0}
+      >
+        {isExpanded &&
+          (images?.length ? (
+            isGroupExpanded && (
+              <ToolImageDetails
+                content={content}
+                images={images}
+                isThreadPaused={isThreadPaused}
+                status={status}
+              />
+            )
+          ) : (
+            <ToolCallDetails
+              content={content}
+              isThreadPaused={isThreadPaused}
+              status={status}
+            />
+          ))}
+      </div>
     </li>
   );
 }

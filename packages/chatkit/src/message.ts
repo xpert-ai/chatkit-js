@@ -1,13 +1,14 @@
 import type { TChatActivityPresentation } from './activity-presentation.js';
 import type { TMessageContentFileActivity } from './file-activity-receipt.js';
 import type { TMessageContentResourceCard } from './resource-card.js';
-import type { ToolCall } from '@langchain/core/messages/tool';
+import type { ToolCall } from '@langchain/core/messages';
 import type { Types } from '@a2ui/lit/0.8';
 import type { FollowUpBehavior } from './options';
 import type { ChatKitCommandSource } from './commands';
 import type { LocalizedText } from './localized-text';
 import type { TChatTaskSummaryContribution } from './task-summary';
 import type { ImageDetail, ToolMessageArtifact } from './tool-output';
+import type { ToolCallPresentation } from './tool-timeline';
 import {
   CHAT_EVENT_TYPE_FOLLOW_UP_CONSUMED,
   ChatMessageEventTypeEnum,
@@ -331,9 +332,11 @@ export type TMessageComponentStep<T = unknown> = {
   icon?: IconDefinition;
   /** Inputs and outputs are safe previews, not executable tool results. */
   toolPresentation?: 'redacted';
+  /** Persisted semantics and bounded participant-visible detail references. */
+  presentation?: ToolCallPresentation;
   title: string;
   message: string;
-  status: 'success' | 'fail' | 'running';
+  status: 'success' | 'fail' | 'running' | 'canceled';
   created_date: Date | string;
   end_date: Date | string;
   error?: string;

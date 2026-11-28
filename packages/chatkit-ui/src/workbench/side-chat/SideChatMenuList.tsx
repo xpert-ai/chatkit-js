@@ -5,6 +5,7 @@ import { useChatkitTranslation } from '../../i18n/useChatkitTranslation';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { SideChatSummaryRow } from './SideChatSummaryRow';
+import { useSideChatLifecycleActions } from './useSideChatLifecycleActions';
 
 export function SideChatMenuList({
   chats,
@@ -18,6 +19,8 @@ export function SideChatMenuList({
   const [title, setTitle] = React.useState('');
   const [error, setError] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const lifecycle = useSideChatLifecycleActions(chats, setError);
+  const archived = chats.sessions.filter((session) => session.archived);
   async function run(action: () => Promise<void>) {
     setError('');
     try {
@@ -51,27 +54,58 @@ export function SideChatMenuList({
         </Button>
       </div>
       <div className="chatkit-summary-items max-h-64 overflow-y-auto">
-        {chats.sessions.map((session) => (
-          <SideChatSummaryRow
-            key={session.threadId}
-            session={session}
-            active={chats.activeId === session.threadId}
-            creating={chats.opening}
-            onOpen={() => void run(() => chats.openSideChat(session.threadId))}
-            onClose={() => chats.closeSideChat(session.threadId)}
-            onRename={() => {
-              setEditing(session.threadId);
-              setTitle(session.title);
-            }}
-            onCreate={() => void run(chats.askInSideChat)}
-          />
-        ))}
+        {chats.sessions
+          .filter((session) => !session.archived)
+          .map((session) => (
+            <SideChatSummaryRow
+              key={session.threadId}
+              session={session}
+              active={chats.activeId === session.threadId}
+              creating={chats.opening}
+              actions={lifecycle.actions(session)}
+              onOpen={() =>
+                void run(() => chats.openSideChat(session.threadId))
+              }
+              onClose={() => chats.closeSideChat(session.threadId)}
+              onRename={() => {
+                setEditing(session.threadId);
+                setTitle(session.title);
+              }}
+              onCreate={() => void run(chats.askInSideChat)}
+            />
+          ))}
         {!chats.sessions.length && (
           <p className="px-2 py-2 text-xs text-muted-foreground">
             {t(chats.ready ? 'workbench.sideChat.empty' : 'workbench.loading')}
           </p>
         )}
       </div>
+      {archived.length > 0 && (
+        <details className="mt-2 border-t border-border/70 pt-2">
+          <summary className="cursor-pointer rounded-chat-item px-2 py-1 text-sm text-muted-foreground hover:bg-menu-hover">
+            {t('workbench.sideChat.archived', { count: archived.length })}
+          </summary>
+          {archived.map((session) => (
+            <SideChatSummaryRow
+              key={session.threadId}
+              session={session}
+              active={false}
+              creating={chats.opening}
+              actions={lifecycle.actions(session)}
+              onOpen={() =>
+                void run(() => chats.archiveSideChat(session.threadId, false))
+              }
+              onClose={() => {}}
+              onRename={() => {
+                setEditing(session.threadId);
+                setTitle(session.title);
+              }}
+              onCreate={() => void run(chats.askInSideChat)}
+            />
+          ))}
+        </details>
+      )}
+      {lifecycle.dialog}
       {editing && (
         <form
           className="flex gap-2 p-2"

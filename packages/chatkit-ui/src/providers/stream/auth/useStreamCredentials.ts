@@ -156,6 +156,10 @@ export function useStreamCredentials({
     [refreshClientSecret],
   );
 
+  // Hosted sessions bind the transport to their credential resolver. Only a
+  // standalone key identifies a client directly; hosted keys rotate in place.
+  const standaloneApiKey =
+    isParentAvailable && getClientSecret ? undefined : apiKey;
   const client = useMemo(
     () =>
       new Client<StateType>({
@@ -181,7 +185,7 @@ export function useStreamCredentials({
       fetchWithClientSecretRefresh,
       locale,
       runtimeOrganizationId,
-      apiKey,
+      standaloneApiKey,
     ],
   );
 
@@ -212,7 +216,7 @@ export function useStreamCredentials({
       fetchWithClientSecretRefresh,
       locale,
       runtimeOrganizationId,
-      apiKey,
+      standaloneApiKey,
     ],
   );
 

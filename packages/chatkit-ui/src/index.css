@@ -93,6 +93,12 @@
   --sidebar-ring: oklch(0.552 0.016 285.938);
 }
 
+/* One highlight color for menus and task-summary rows, resolved in either scheme. */
+:root,
+.dark {
+  --menu-hover: color-mix(in oklab, var(--muted) 60%, transparent);
+}
+
 @theme inline {
   --font-sans: 'Geist Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -152,6 +158,8 @@
   --spacing-composer-inset: 2px;
   --shadow-composer-shell:
     0px 12px 24px -8px rgba(0, 0, 0, 0.02), 0px 2px 4px -4px rgba(0, 0, 0, 0.02);
+  --shadow-workbench-search:
+    0px 2px 4px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.04);
   --font-heading: var(--font-sans);
 }
 
@@ -202,15 +210,15 @@
   color: transparent;
   background-image: linear-gradient(
     100deg,
-    color-mix(in oklab, var(--muted-foreground) 48%, transparent) 0%,
-    color-mix(in oklab, var(--muted-foreground) 48%, transparent) 30%,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 30%,
     var(--muted-foreground) 38%,
     var(--foreground) 46%,
     var(--primary) 50%,
     var(--foreground) 54%,
     var(--muted-foreground) 62%,
-    color-mix(in oklab, var(--muted-foreground) 48%, transparent) 70%,
-    color-mix(in oklab, var(--muted-foreground) 48%, transparent) 100%
+    var(--muted-foreground) 70%,
+    var(--muted-foreground) 100%
   );
   background-size: 250% 100%;
   background-position: 100% 50%;

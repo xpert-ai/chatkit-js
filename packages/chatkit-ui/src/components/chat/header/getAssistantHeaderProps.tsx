@@ -96,6 +96,7 @@ type AssistantHeaderProps = Pick<
   };
 
 import type { ChatHeaderProps } from './ChatHeader';
+import { SideChatHeaderActions } from '../../../workbench/side-chat/SideChatHeaderActions';
 export function getAssistantHeaderProps({
   surface,
   options,
@@ -217,13 +218,14 @@ export function getAssistantHeaderProps({
     conversationMenu: target
       ? { context: conversationActions, target }
       : undefined,
-    visible: surface === 'main' && options?.header?.enabled !== false,
+    visible: options?.header?.enabled !== false,
     columnRef: chatColumnRef,
     style: chatColumnStyle,
     characterPresentation,
-    showIdentity: options?.header?.identity?.enabled === true,
+    showIdentity:
+      surface === 'main' && options?.header?.identity?.enabled === true,
     newThread:
-      history?.enabled !== false
+      surface === 'main' && history?.enabled !== false
         ? {
             label: t(
               activeProjectId
@@ -245,126 +247,139 @@ export function getAssistantHeaderProps({
       </div>
     ),
     title: assistantTitle,
-    conversationTitle: target ? (
-      <ConversationTitle
-        key={stream.conversationId ?? stream.threadId ?? 'new'}
-        title={target.title}
-        variant="toolbar"
-        onSave={
-          target && inlineRename?.visible && !inlineRename.disabled
-            ? async (nextTitle) => {
-                await conversationActions.rename(target, nextTitle);
-              }
-            : undefined
-        }
-      />
-    ) : undefined,
+    conversationTitle:
+      surface === 'main' && target ? (
+        <ConversationTitle
+          key={stream.conversationId ?? stream.threadId ?? 'new'}
+          title={target.title}
+          variant="toolbar"
+          onSave={
+            target && inlineRename?.visible && !inlineRename.disabled
+              ? async (nextTitle) => {
+                  await conversationActions.rename(target, nextTitle);
+                }
+              : undefined
+          }
+        />
+      ) : undefined,
     subtitle: !target ? (
       <ConversationTitle title={assistantStatusText} />
     ) : undefined,
-    actions: (
-      <>
-        <ChatHeaderActions
-          conversationMenu={
-            target ? { context: conversationActions, target } : undefined
-          }
-          moreButtonRef={headerMoreButtonRef}
-          onMenuCloseAutoFocus={(event) => {
-            if (petSettingsOpen || historyOpen) event.preventDefault();
-          }}
-          menu={
-            !petDisabled || history?.enabled !== false || canStopRun ? (
-              <>
-                {!petDisabled && (
-                  <DropdownMenuItem
-                    className={conversationMenuItemClassName}
-                    onSelect={() => setPetSettingsOpen(true)}
-                  >
-                    <Settings />
-                    {t('settings.open')}
-                  </DropdownMenuItem>
-                )}
-                {history?.enabled !== false && (
-                  <DropdownMenuItem
-                    className={conversationMenuItemClassName}
-                    onSelect={() => setHistoryOpen(true)}
-                    disabled={missingConfig || isHistoryLoading}
-                  >
-                    <History />
-                    {t('history.threadHistory')}
-                  </DropdownMenuItem>
-                )}
-                {canStopRun && (
-                  <DropdownMenuItem
-                    className={conversationMenuItemClassName}
-                    disabled={
-                      isChangingBranch || isResumingRun || isStoppingRun
-                    }
-                    onSelect={() => void handleComposerRunControl('stop')}
-                  >
-                    <Square />
-                    {t('threadControl.terminate')}
-                  </DropdownMenuItem>
-                )}
-              </>
-            ) : undefined
-          }
-          summary={
-            taskSummaryAvailable ? (
-              <TaskSummaryTrigger
-                {...taskSummaryProps}
-                displayMode={taskSummaryDocked ? 'docked' : 'popover'}
-                open={taskSummaryOpen}
-                onOpenChange={handleTaskSummaryOpenChange}
-              />
-            ) : undefined
-          }
-          onMinimize={canMinimizeToPet ? handleMinimizeToPet : undefined}
-        />
-
-        {history?.enabled !== false && (
-          <HistorySidebar
-            open={historyOpen}
-            onOpenChange={setHistoryOpen}
-            showTrigger={false}
-            onCloseAutoFocus={restoreHeaderFocus}
-            threads={messageHistory.threads}
-            total={messageHistory.total}
-            archived={historyArchived}
-            onArchivedChange={
-              messageHistory.sidebarSupported || historyArchived
-                ? setHistoryArchived
-                : undefined
+    actions:
+      surface === 'side' ? (
+        <SideChatHeaderActions>
+          {taskSummaryAvailable && (
+            <TaskSummaryTrigger
+              {...taskSummaryProps}
+              displayMode={taskSummaryDocked ? 'docked' : 'popover'}
+              open={taskSummaryOpen}
+              onOpenChange={handleTaskSummaryOpenChange}
+            />
+          )}
+        </SideChatHeaderActions>
+      ) : (
+        <>
+          <ChatHeaderActions
+            conversationMenu={
+              target ? { context: conversationActions, target } : undefined
             }
-            query={historyQuery}
-            onQueryChange={setHistoryQuery}
-            hasMore={messageHistory.hasMore}
-            onLoadMore={messageHistory.loadMore}
-            isLoadingMore={messageHistory.isLoadingMore}
-            error={messageHistory.error}
-            loadMoreError={messageHistory.loadMoreError}
-            scope={effectiveHistoryScope}
-            onScopeChange={setHistoryScope}
-            projectFilter={historyProjectFilter}
-            onProjectFilterChange={setHistoryProjectFilter}
-            hasCurrentProject={Boolean(activeProjectId)}
-            currentThreadId={stream.threadId ?? undefined}
-            onNewThread={handleNewThread}
-            newThreadLabel={t(
-              activeProjectId
-                ? 'history.newThreadInProject'
-                : 'history.newThread',
-            )}
-            onRefresh={messageHistory.refresh}
-            onSelectThread={handleSelectThread}
-            onDeleteThread={handleDeleteThread}
-            conversationActions={conversationActions}
-            isRefreshing={messageHistory.isLoading}
-            showDelete={history?.showDelete !== false}
-            disabled={missingConfig || isHistoryLoading}
+            moreButtonRef={headerMoreButtonRef}
+            onMenuCloseAutoFocus={(event) => {
+              if (petSettingsOpen || historyOpen) event.preventDefault();
+            }}
+            menu={
+              !petDisabled || history?.enabled !== false || canStopRun ? (
+                <>
+                  {!petDisabled && (
+                    <DropdownMenuItem
+                      className={conversationMenuItemClassName}
+                      onSelect={() => setPetSettingsOpen(true)}
+                    >
+                      <Settings />
+                      {t('settings.open')}
+                    </DropdownMenuItem>
+                  )}
+                  {history?.enabled !== false && (
+                    <DropdownMenuItem
+                      className={conversationMenuItemClassName}
+                      onSelect={() => setHistoryOpen(true)}
+                      disabled={missingConfig || isHistoryLoading}
+                    >
+                      <History />
+                      {t('history.threadHistory')}
+                    </DropdownMenuItem>
+                  )}
+                  {canStopRun && (
+                    <DropdownMenuItem
+                      className={conversationMenuItemClassName}
+                      disabled={
+                        isChangingBranch || isResumingRun || isStoppingRun
+                      }
+                      onSelect={() => void handleComposerRunControl('stop')}
+                    >
+                      <Square />
+                      {t('threadControl.terminate')}
+                    </DropdownMenuItem>
+                  )}
+                </>
+              ) : undefined
+            }
+            summary={
+              taskSummaryAvailable ? (
+                <TaskSummaryTrigger
+                  {...taskSummaryProps}
+                  displayMode={taskSummaryDocked ? 'docked' : 'popover'}
+                  open={taskSummaryOpen}
+                  onOpenChange={handleTaskSummaryOpenChange}
+                />
+              ) : undefined
+            }
+            onMinimize={canMinimizeToPet ? handleMinimizeToPet : undefined}
           />
-        )}
-      </>
-    ),
+
+          {history?.enabled !== false && (
+            <HistorySidebar
+              open={historyOpen}
+              onOpenChange={setHistoryOpen}
+              showTrigger={false}
+              onCloseAutoFocus={restoreHeaderFocus}
+              threads={messageHistory.threads}
+              total={messageHistory.total}
+              archived={historyArchived}
+              onArchivedChange={
+                messageHistory.sidebarSupported || historyArchived
+                  ? setHistoryArchived
+                  : undefined
+              }
+              query={historyQuery}
+              onQueryChange={setHistoryQuery}
+              hasMore={messageHistory.hasMore}
+              onLoadMore={messageHistory.loadMore}
+              isLoadingMore={messageHistory.isLoadingMore}
+              error={messageHistory.error}
+              loadMoreError={messageHistory.loadMoreError}
+              scope={effectiveHistoryScope}
+              onScopeChange={setHistoryScope}
+              projectFilter={historyProjectFilter}
+              onProjectFilterChange={setHistoryProjectFilter}
+              hasCurrentProject={Boolean(activeProjectId)}
+              currentThreadId={stream.threadId ?? undefined}
+              onNewThread={handleNewThread}
+              newThreadLabel={t(
+                activeProjectId
+                  ? 'history.newThreadInProject'
+                  : 'history.newThread',
+              )}
+              onRefresh={messageHistory.refresh}
+              onSelectThread={handleSelectThread}
+              onDeleteThread={handleDeleteThread}
+              conversationActions={conversationActions}
+              isRefreshing={messageHistory.isLoading}
+              showDelete={history?.showDelete !== false}
+              disabled={missingConfig || isHistoryLoading}
+            />
+          )}
+        </>
+      ),
   };
 }

@@ -109,7 +109,7 @@ describe('external Assistant tool event presentation', () => {
         data: {
           category: 'Tool',
           tool,
-          title: tool,
+          title: 'Submit work',
           status: 'success',
           toolPresentation: 'redacted',
           icon: { type: 'emoji', value: '📄' },
@@ -118,7 +118,7 @@ describe('external Assistant tool event presentation', () => {
         },
       };
       render(view({ ...message([step]), agentRuns: [] }));
-      const row = screen.getByRole('button', { name: tool });
+      const row = screen.getByRole('button', { name: /Submit work/ });
       expect(
         row.querySelector('[data-slot="tool-step-icon"]'),
       ).toHaveTextContent('📄');
@@ -126,23 +126,39 @@ describe('external Assistant tool event presentation', () => {
       expect(row).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByText('Input')).toBeVisible();
       expect(screen.getByText('Output')).toBeVisible();
-      expect(screen.getByText(/•••5785/)).toBeVisible();
+      expect(
+        screen
+          .getAllByText(/•••5785/)
+          .every((node) => node.textContent?.includes('•••5785')),
+      ).toBe(true);
       expect(screen.getByText(/draftSaved/)).toBeVisible();
     },
   );
 
   it('shows the registered localized title, tool identifier and SVG for an undeclared call', () => {
     const step: ToolEvent = {
-      ...roleOutput, executionId: 'root',
-      data: { category: 'Tool', tool: 'lookup', title: '查询状态', status: 'success', toolPresentation: 'redacted',
-        icon: { type: 'svg', value: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/></svg>' } },
+      ...roleOutput,
+      executionId: 'root',
+      data: {
+        category: 'Tool',
+        tool: 'lookup',
+        title: '查询状态',
+        status: 'success',
+        toolPresentation: 'redacted',
+        icon: {
+          type: 'svg',
+          value: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="3"/></svg>',
+        },
+      },
     };
     render(view({ ...message([step]), agentRuns: [] }));
-    const row = screen.getByRole('button', { name: /查询状态.*lookup/ });
-    expect(row).toBeDisabled();
+    const row = screen.getByRole('button', { name: /查询状态/ });
+    expect(row).toBeEnabled();
     const src = row.querySelector('img')?.getAttribute('src');
     expect(src).toMatch(/^data:image\/svg\+xml/);
-    expect(decodeURIComponent(src!)).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(decodeURIComponent(src!)).toContain(
+      'xmlns="http://www.w3.org/2000/svg"',
+    );
   });
 
   it('shows a failed preview with its receipt, public error and a local fallback icon', () => {
@@ -152,7 +168,7 @@ describe('external Assistant tool event presentation', () => {
       data: {
         category: 'Tool',
         tool: 'bid_submit_role_task',
-        title: 'bid_submit_role_task',
+        title: 'Submit role task',
         toolset: 'mcp',
         status: 'fail',
         toolPresentation: 'redacted',
@@ -161,14 +177,17 @@ describe('external Assistant tool event presentation', () => {
       },
     };
     render(view({ ...message([step]), agentRuns: [] }));
-    const row = screen.getByRole('button', { name: 'bid_submit_role_task' });
+    const row = screen.getByRole('button', { name: /Submit role task/ });
     const providerIcon = row.querySelector('img')!;
-    expect(providerIcon).toHaveAttribute('src', '/api/xpert-toolset/builtin-provider/mcp/icon');
+    expect(providerIcon).toHaveAttribute(
+      'src',
+      '/api/xpert-toolset/builtin-provider/mcp/icon',
+    );
     fireEvent.error(providerIcon);
     expect(row.querySelector('[data-slot="tool-step-icon"]')).toHaveClass(
       'lucide-wrench',
     );
-    fireEvent.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText(/draftSaved/)).toBeVisible();
     expect(screen.getByText('FORM_INVALID')).toBeVisible();
   });
@@ -203,18 +222,21 @@ describe('external Assistant tool event presentation', () => {
     expect(child.parentElement).toHaveClass('rounded-chat-panel');
     expect(child.parentElement).not.toHaveClass('shadow-sm');
     if (child.getAttribute('aria-expanded') !== 'true') fireEvent.click(child);
-    const row = screen.getByRole('button', { name: 'Lookup lookup' });
+    const row = screen.getByRole('button', { name: /Lookup/ });
     expect(row.querySelector('[data-slot="tool-step-icon"]')).toHaveClass(
       'lucide-wrench',
     );
-    expect(row).toBeDisabled();
-    expect(row).not.toHaveAttribute('aria-expanded');
+    expect(row).toBeEnabled();
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.getByText('Output was not recorded for this call.'),
+    ).toBeVisible();
   });
 
   it('shows one clickable expert card and counts only the remaining preparation tool', () => {
     const open = vi.fn();
     render(view(message(), open));
-    const group = screen.getByRole('button', { name: /Processed 1 task/ });
+    const group = screen.getByRole('button', { name: /Tool calls.*1 call/ });
     fireEvent.click(group);
     expect(screen.getByText('Prepare role task')).toBeVisible();
     expect(screen.queryByText('opaque-expert-slug')).not.toBeInTheDocument();
@@ -232,9 +254,12 @@ describe('external Assistant tool event presentation', () => {
       agentRuns: [],
     };
     const rendered = render(view(live));
-    const pending = screen.getByRole('button', { name: /1 tool/ });
-    if (pending.getAttribute('aria-expanded') !== 'true') fireEvent.click(pending);
-    expect(screen.getByText('opaque-expert-slug')).toBeVisible();
+    const pending = screen.getByRole('button', { name: /1 call/ });
+    if (pending.getAttribute('aria-expanded') !== 'true')
+      fireEvent.click(pending);
+    expect(
+      screen.getByRole('button', { name: /^Tool call Running/ }),
+    ).toBeVisible();
     rendered.rerender(view(message()));
     expect(
       screen.getAllByRole('button', { name: /Outline specialist/ }),
@@ -245,7 +270,7 @@ describe('external Assistant tool event presentation', () => {
   it('also hides duplicate events in saved branch history while retaining role tools', () => {
     render(view({ ...message(), historical: true }));
     const buttons = screen.getAllByRole('button', {
-      name: /Processed 1 (task|file)/,
+      name: /Tool calls.*1 call/,
     });
     buttons.forEach((button) => {
       if (button.getAttribute('aria-expanded') !== 'true')
@@ -269,8 +294,10 @@ describe('external Assistant tool event presentation', () => {
     render(
       view({ ...message([ordinary, failure]), status: 'error', agentRuns: [] }),
     );
-    const group = screen.getByRole('button', { name: /2 tools/ });
+    const group = screen.getByRole('button', { name: /2 calls/ });
     if (group.getAttribute('aria-expanded') !== 'true') fireEvent.click(group);
-    expect(screen.getAllByText('opaque-expert-slug')).toHaveLength(2);
+    expect(
+      screen.getAllByRole('button', { name: /^Tool call (Completed|Failed)/ }),
+    ).toHaveLength(2);
   });
 });

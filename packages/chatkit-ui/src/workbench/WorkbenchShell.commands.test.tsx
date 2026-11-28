@@ -231,20 +231,20 @@ describe('WorkbenchShell', () => {
     );
     setObservedWidth(1200);
     fireEvent.click(screen.getByRole('button', { name: 'First' }));
-    await screen.findByRole('tab', { name: 'First topic' });
+    await screen.findByRole('tab', { name: 'Side chat 1' });
     fireEvent.click(screen.getByRole('button', { name: 'Second' }));
-    await screen.findByRole('tab', { name: 'Second topic' });
+    await screen.findByRole('tab', { name: 'Side chat 2' });
     expect(mocks.copyThread).toHaveBeenCalledTimes(2);
     expect(mocks.sideChatMounts).toBe(2);
-    fireEvent.click(screen.getByLabelText('Close views: First topic'));
+    fireEvent.click(screen.getByLabelText('Close views: Side chat 1'));
     expect(
-      screen.queryByRole('tab', { name: 'First topic' }),
+      screen.queryByRole('tab', { name: 'Side chat 1' }),
     ).not.toBeInTheDocument();
     expect(mocks.sideChatUnmounts).toBe(0);
     expect(mocks.deleteThread).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Reopen first' }));
     expect(
-      await screen.findByRole('tab', { name: 'First topic' }),
+      await screen.findByRole('tab', { name: 'Side chat 1' }),
     ).toHaveAttribute('aria-selected', 'true');
     expect(mocks.copyThread).toHaveBeenCalledTimes(2);
     expect(mocks.sideChatMounts).toBe(2);
@@ -252,9 +252,9 @@ describe('WorkbenchShell', () => {
       screen.getByRole('button', { name: 'Collapse first from summary' }),
     );
     expect(
-      screen.queryByRole('tab', { name: 'First topic' }),
+      screen.queryByRole('tab', { name: 'Side chat 1' }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Second topic' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Side chat 2' })).toHaveAttribute(
       'aria-selected',
       'true',
     );

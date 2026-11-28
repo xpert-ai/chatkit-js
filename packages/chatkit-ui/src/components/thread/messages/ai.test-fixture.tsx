@@ -5,6 +5,8 @@ import {
   type TMessageContentComponent,
 } from '@xpert-ai/chatkit-types';
 import React from 'react';
+import en from '../../../i18n/locales/en-US.json';
+import zh from '../../../i18n/locales/zh-CN.json';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { type AgentRunInfo } from '../../../lib/agent-runs';
 import { ThemeProvider } from '../../../providers/Theme';
@@ -122,6 +124,30 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return 'Processed';
         case 'message.toolGroup.status.fail':
           return 'Processing failed';
+        case 'message.toolGroup.paused':
+          return 'Paused';
+        case 'message.toolGroup.failedCount':
+          return `${count} failed`;
+        case 'message.toolGroup.callStatus.running':
+          return 'Running';
+        case 'message.toolGroup.callStatus.success':
+          return 'Completed';
+        case 'message.toolGroup.callStatus.fail':
+          return 'Failed';
+        case 'message.toolGroup.callStatus.paused':
+          return 'Paused';
+        case 'message.toolGroup.detailsTitle':
+          return 'Tool call details';
+        case 'message.toolGroup.inputUnavailable':
+          return 'Input was not recorded for this call.';
+        case 'message.toolGroup.outputUnavailable':
+          return 'Output was not recorded for this call.';
+        case 'message.toolGroup.outputPending':
+          return 'Waiting for tool output…';
+        case 'message.toolGroup.outputPaused':
+          return 'Paused; waiting to resume.';
+        case 'message.toolGroup.emptyValue':
+          return 'Empty content';
         case 'message.toolGroup.inputTitle':
           return 'Input';
         case 'message.toolGroup.outputTitle':
@@ -184,10 +210,25 @@ vi.mock('../../../i18n/useChatkitTranslation', () => ({
           return `${count} tool`;
         case 'message.toolGroup.categories.tools.other':
           return `${count} tools`;
-        default:
+        default: {
+          const path =
+            key === 'message.toolGroup.callCount'
+              ? `${key}_${count === 1 ? 'one' : 'other'}`
+              : key;
+          let value: unknown = isZh ? zh : en;
+          for (const part of path.split('.'))
+            value =
+              value && typeof value === 'object' && part in value
+                ? value[part as keyof typeof value]
+                : undefined;
+          if (key.startsWith('message.toolGroup.') && typeof value === 'string')
+            return value.replace(/{{(\w+)}}/g, (_, name) =>
+              String(values?.[name] ?? ''),
+            );
           return typeof values?.defaultValue === 'string'
             ? values.defaultValue
             : key;
+        }
       }
     },
   }),

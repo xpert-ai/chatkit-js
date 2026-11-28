@@ -26,6 +26,7 @@ type ChatViewportOptions = Pick<
   Pick<ReturnType<typeof useChatQuotes>, 'clearQuoteSelection'> & {
     messagePresentation?: ChatKitOptions['messagePresentation'];
     messages: ReturnType<typeof useStreamContext>['messages'];
+    historyBoundaryReached?: boolean;
     viewportRef: React.RefObject<HTMLDivElement | null>;
   };
 
@@ -35,6 +36,7 @@ export function useChatViewport({
   messageNavigationEnabled,
   messagePresentation,
   messages,
+  historyBoundaryReached = false,
   i18n,
   stream,
   viewportRef,
@@ -108,7 +110,8 @@ export function useChatViewport({
     historyMessagePagination?.isLoadingMore,
   );
 
-  const canLoadMoreMessages = Boolean(historyMessagePagination?.hasMore);
+  const canLoadMoreMessages =
+    !historyBoundaryReached && Boolean(historyMessagePagination?.hasMore);
   const cancelPendingAutoScroll = React.useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
       cancelAnimationFrame(autoScrollFrameRef.current);
@@ -230,6 +233,17 @@ export function useChatViewport({
       isPointerDownRef.current = true;
     };
 
+    // Inspecting a tool is an explicit reading action, including keyboard clicks.
+    // Do not let the next streamed event pull its expanded details out of view.
+    const handleTimelineInteraction = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[data-tool-timeline]')
+      ) {
+        disableAutoFollow();
+      }
+    };
+
     const handleTouchStart = (event: TouchEvent) => {
       lastTouchYRef.current = event.touches[0]?.clientY ?? null;
     };
@@ -254,6 +268,7 @@ export function useChatViewport({
 
     updateAutoScrollState();
     viewport.addEventListener('wheel', handleWheel, { passive: true });
+    viewport.addEventListener('click', handleTimelineInteraction);
     viewport.addEventListener('pointerdown', handlePointerDown, {
       passive: true,
     });
@@ -275,6 +290,7 @@ export function useChatViewport({
     return () => {
       cancelPendingAutoScroll();
       viewport.removeEventListener('wheel', handleWheel);
+      viewport.removeEventListener('click', handleTimelineInteraction);
       viewport.removeEventListener('pointerdown', handlePointerDown);
       viewport.removeEventListener('scroll', updateAutoScrollState);
       viewport.removeEventListener('touchstart', handleTouchStart);

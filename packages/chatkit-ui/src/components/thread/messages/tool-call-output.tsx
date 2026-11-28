@@ -18,9 +18,11 @@ import { prepareToolOutputDisplay } from './tool-output-display';
 function ToolCallCopyButton({
   value,
   className,
+  label: copyLabel,
 }: {
   value: string;
   className?: string;
+  label?: string;
 }) {
   const { t } = useChatkitTranslation();
   const [isCopied, setIsCopied] = React.useState(false);
@@ -52,7 +54,7 @@ function ToolCallCopyButton({
 
   const label = isCopied
     ? t('message.toolGroup.copied')
-    : t('message.toolGroup.copy');
+    : (copyLabel ?? t('message.toolGroup.copy'));
 
   return (
     <button
@@ -74,9 +76,17 @@ function ToolCallCopyButton({
 export function ToolCallValueBlock({
   value,
   destructive = false,
+  copyLabel,
+  header,
+  description,
+  bounded = false,
 }: {
   value: unknown;
   destructive?: boolean;
+  copyLabel?: string;
+  header?: React.ReactNode;
+  description?: React.ReactNode;
+  bounded?: boolean;
 }) {
   const { t } = useChatkitTranslation();
   const { display: detected, omittedImageCount } = React.useMemo(
@@ -95,15 +105,34 @@ export function ToolCallValueBlock({
       })}
     </p>
   ) : null;
+  const toolbarClassName =
+    'flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-1';
+  const previewClassName = bounded
+    ? 'max-h-[6lh] overflow-auto [overflow-wrap:anywhere]'
+    : undefined;
 
   if (detected.kind === 'text') {
+    if (!detected.text.trim())
+      return (
+        <div className="space-y-1">
+          {header}
+          {description}
+          <p className="text-muted-foreground">
+            {t('message.toolGroup.emptyValue')}
+          </p>
+        </div>
+      );
     return (
       <div className="min-w-0 space-y-1">
         {imageSummary}
-        <div className="flex justify-end">
-          <ToolCallCopyButton value={detected.text} />
+        <div className={toolbarClassName}>
+          {header ?? <span />}
+          <ToolCallCopyButton value={detected.text} label={copyLabel} />
         </div>
-        <PlainTextBlock value={detected.text} destructive={destructive} />
+        {description}
+        <div className={previewClassName}>
+          <PlainTextBlock value={detected.text} destructive={destructive} />
+        </div>
       </div>
     );
   }
@@ -111,14 +140,16 @@ export function ToolCallValueBlock({
   return (
     <Tabs defaultValue="tree" className="min-w-0">
       {imageSummary}
-      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-          {t('message.toolGroup.jsonTitle')} ·{' '}
-          {getJsonValueSummary(detected.value)}
-        </span>
+      <div className={cn(toolbarClassName, 'mb-1')}>
+        {header ?? (
+          <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+            {t('message.toolGroup.jsonTitle')} ·{' '}
+            {getJsonValueSummary(detected.value)}
+          </span>
+        )}
         <div className="flex shrink-0 items-center gap-1">
-          <ToolCallCopyButton value={detected.raw} />
-          <TabsList className="rounded-md p-0.5">
+          <ToolCallCopyButton value={detected.raw} label={copyLabel} />
+          <TabsList className="rounded-chat-item p-0.5">
             <TabsTrigger className="px-2 py-0.5 text-[11px]" value="tree">
               {t('message.toolGroup.jsonTree')}
             </TabsTrigger>
@@ -128,27 +159,43 @@ export function ToolCallValueBlock({
           </TabsList>
         </div>
       </div>
-      <TabsContent value="tree" className="mt-0">
+      {description}
+      <TabsContent
+        value="tree"
+        className={cn(
+          'mt-0',
+          bounded && 'max-h-[12lh] overflow-auto [overflow-wrap:anywhere]',
+        )}
+      >
         <JsonTreeView value={detected.value} />
       </TabsContent>
-      <TabsContent value="raw" className="mt-0">
+      <TabsContent value="raw" className={cn('mt-0', previewClassName)}>
         <RawJsonBlock raw={detected.raw} />
       </TabsContent>
     </Tabs>
   );
 }
 
-export function DefaultToolCallOutput({
-  data,
-}: ComponentMessageDetailsRendererProps) {
-  const { t } = useChatkitTranslation();
+export function getDefaultToolCallOutput(
+  data: ComponentMessageDetailsRendererProps['data'],
+) {
   // Image artifacts are retained for model input, but do not opt into UI display.
   const isPreview = data.toolPresentation === 'redacted';
   const attachmentOutput =
     isPreview || parseToolOutputPresentation(data.artifact)
       ? undefined
       : data.artifact;
-  const output = isPreview ? data.output : (data.output ?? attachmentOutput);
+  return isPreview || data.output !== undefined
+    ? data.output
+    : attachmentOutput;
+}
+
+export function DefaultToolCallOutput({
+  data,
+}: ComponentMessageDetailsRendererProps) {
+  const { t } = useChatkitTranslation();
+  const isPreview = data.toolPresentation === 'redacted';
+  const output = getDefaultToolCallOutput(data);
   const error = data.error ?? null;
 
   const errorDetails = error ? (
